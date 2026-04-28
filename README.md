@@ -11,6 +11,7 @@ Aruna Phase 1 is a monorepo and compiler MVP focused on static boundary checks f
 - deterministic compiler output
 - `aruna check`
 - `aruna inspect`
+- running `aruna` with no subcommand aliases to `aruna check`
 - fixture-based tests without Roblox Studio
 - `packages/compiler` loads the Rust native compiler
 - no TypeScript analyzer fallback
