@@ -1,0 +1,23 @@
+{
+  "name": "aruna-workspace",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build:native": "pnpm --filter @arunajs/compiler build:native",
+    "build": "pnpm build:native && turbo run build",
+    "check": "pnpm build:native && turbo run check",
+    "test": "pnpm build:native && turbo run test",
+    "lint": "pnpm build:native && turbo run lint",
+    "typecheck": "pnpm build:native && turbo run typecheck",
+    "aruna": "pnpm --filter aruna aruna"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "commander": "^12.1.0",
+    "gradient-string": "^2.0.2",
+    "picocolors": "^1.1.1",
+    "turbo": "^2.5.8",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
+  }
+}
