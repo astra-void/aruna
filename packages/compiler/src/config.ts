@@ -39,6 +39,12 @@ function createDiagnostic(
   };
 }
 
+function formatProjectRelativePath(projectRoot: string, absolutePath: string): string {
+  const relativePath = path.relative(projectRoot, absolutePath);
+  const candidatePath = relativePath.length > 0 ? relativePath : path.basename(absolutePath);
+  return candidatePath.split(path.sep).join("/");
+}
+
 function isRecord(value: unknown): value is RawConfigObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -266,7 +272,7 @@ function evaluateCommonJs(sourceText: string, filename: string): unknown {
   return module.exports;
 }
 
-function loadUserConfigFile(configFile: string): {
+function loadUserConfigFile(projectRoot: string, configFile: string): {
   config?: ArunaConfig;
   diagnostic?: ArunaDiagnostic;
 } {
@@ -280,7 +286,7 @@ function loadUserConfigFile(configFile: string): {
           "aruna::100",
           `Invalid Aruna configuration in ${path.basename(configFile)}.`,
           {
-            file: configFile,
+            file: formatProjectRelativePath(projectRoot, configFile),
             details: normalized.error,
             suggestion: "Export a plain object from aruna.config.ts or wrap it with defineConfig().",
           },
@@ -293,9 +299,9 @@ function loadUserConfigFile(configFile: string): {
     return {
       diagnostic: createDiagnostic(
         "aruna::100",
-        `Failed to read ${path.basename(configFile)}.`,
+        `Failed to load ${path.basename(configFile)}.`,
         {
-          file: configFile,
+          file: formatProjectRelativePath(projectRoot, configFile),
           details: message,
           suggestion: "Fix the configuration file syntax or export shape.",
         },
@@ -304,7 +310,7 @@ function loadUserConfigFile(configFile: string): {
   }
 }
 
-function loadTsConfig(tsconfigPath: string): {
+function loadTsConfig(projectRoot: string, tsconfigPath: string): {
   options: ts.CompilerOptions;
   diagnostic?: ArunaDiagnostic;
 } {
@@ -315,7 +321,8 @@ function loadTsConfig(tsconfigPath: string): {
         "aruna::102",
         `Missing TypeScript config at ${path.basename(tsconfigPath)}.`,
         {
-          file: tsconfigPath,
+          file: formatProjectRelativePath(projectRoot, tsconfigPath),
+          details: "Aruna looked for the TypeScript config at the resolved path but could not find it.",
           suggestion: "Create tsconfig.json or point aruna.config.ts to an existing tsconfig file.",
         },
       ),
@@ -331,7 +338,7 @@ function loadTsConfig(tsconfigPath: string): {
         "aruna::100",
         `Invalid TypeScript config at ${path.basename(tsconfigPath)}.`,
         {
-          file: tsconfigPath,
+          file: formatProjectRelativePath(projectRoot, tsconfigPath),
           details: message,
           suggestion: "Fix the tsconfig syntax or remove unsupported compiler options.",
         },
@@ -351,7 +358,7 @@ function loadTsConfig(tsconfigPath: string): {
         "aruna::100",
         `Invalid TypeScript config at ${path.basename(tsconfigPath)}.`,
         {
-          file: tsconfigPath,
+          file: formatProjectRelativePath(projectRoot, tsconfigPath),
           details,
           suggestion: "Fix the tsconfig syntax or remove unsupported compiler options.",
         },
@@ -380,7 +387,7 @@ export function loadProjectConfig(
       continue;
     }
 
-    const loaded = loadUserConfigFile(candidate);
+    const loaded = loadUserConfigFile(projectRoot, candidate);
     if (loaded.diagnostic) {
       diagnostics.push(loaded.diagnostic);
       discoveredConfigPath = candidate;
@@ -399,7 +406,7 @@ export function loadProjectConfig(
 
   const finalConfig = overrideConfig ? mergeConfig(merged, overrideConfig) : merged;
   const resolvedTsconfig = path.resolve(projectRoot, finalConfig.tsconfig ?? DEFAULT_ARUNA_CONFIG.tsconfig ?? "tsconfig.json");
-  const tsconfig = loadTsConfig(resolvedTsconfig);
+  const tsconfig = loadTsConfig(projectRoot, resolvedTsconfig);
   if (tsconfig.diagnostic) {
     diagnostics.push(tsconfig.diagnostic);
   }

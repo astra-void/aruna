@@ -20,8 +20,11 @@ const fixtureNames = [
   "feature-local-layout",
   "unknown-module-kind",
   "unresolved-import",
+  "missing-tsconfig",
+  "invalid-config",
   "tsconfig-path-alias",
   "ambiguous-convention-match",
+  "parse-failed",
 ] as const;
 
 const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
@@ -53,5 +56,19 @@ describe.each(fixtureNames)("%s", (fixtureName) => {
     expect(output.manifest).toEqual(snapshot.manifest);
     expect(output.manifest.modules).toEqual(snapshot.modules);
     expect(output.manifest.imports).toEqual(snapshot.graph);
+  });
+});
+
+describe("config diagnostics", () => {
+  it("treats warnings as errors in the summary", async () => {
+    const inputRoot = path.join(fixturesRoot, "missing-tsconfig", "input");
+    const output = await inspectProject({ root: inputRoot, warningsAsErrors: true });
+
+    expect(output.diagnostics).toHaveLength(1);
+    expect(output.diagnostics[0]?.code).toBe("aruna::102");
+    expect(output.diagnostics[0]?.severity).toBe("warning");
+    expect(output.summary.errors).toBe(1);
+    expect(output.summary.warnings).toBe(0);
+    expect(output.ok).toBe(false);
   });
 });
