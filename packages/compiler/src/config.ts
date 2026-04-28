@@ -19,9 +19,10 @@ type RawConfigObject = Record<string, unknown>;
 
 const requireForConfig = createRequire(import.meta.url);
 
-const DIAGNOSTIC_META: Record<"aruna::100" | "aruna::102", { name: string; severity: ArunaDiagnostic["severity"] }> = {
+const DIAGNOSTIC_META: Record<"aruna::100" | "aruna::102" | "aruna::103", { name: string; severity: ArunaDiagnostic["severity"] }> = {
   "aruna::100": { name: "invalid-config", severity: "error" },
   "aruna::102": { name: "missing-tsconfig", severity: "warning" },
+  "aruna::103": { name: "invalid-tsconfig", severity: "error" },
 };
 
 function createDiagnostic(
@@ -314,6 +315,17 @@ function loadTsConfig(projectRoot: string, tsconfigPath: string): {
   options: ts.CompilerOptions;
   diagnostic?: ArunaDiagnostic;
 } {
+  const invalidTsconfigDiagnostic = (details: string): ArunaDiagnostic =>
+    createDiagnostic(
+      "aruna::103",
+      `Malformed TypeScript config at ${path.basename(tsconfigPath)}.`,
+      {
+        file: formatProjectRelativePath(projectRoot, tsconfigPath),
+        details,
+        suggestion: "Fix the tsconfig JSON syntax or use a supported top-level object shape.",
+      },
+    );
+
   if (!fs.existsSync(tsconfigPath)) {
     return {
       options: {},
@@ -331,38 +343,24 @@ function loadTsConfig(projectRoot: string, tsconfigPath: string): {
 
   const result = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
   if (result.error) {
-    const message = ts.flattenDiagnosticMessageText(result.error.messageText, "\n");
     return {
       options: {},
-      diagnostic: createDiagnostic(
-        "aruna::100",
-        `Invalid TypeScript config at ${path.basename(tsconfigPath)}.`,
-        {
-          file: formatProjectRelativePath(projectRoot, tsconfigPath),
-          details: message,
-          suggestion: "Fix the tsconfig syntax or remove unsupported compiler options.",
-        },
-      ),
+      diagnostic: invalidTsconfigDiagnostic("tsconfig.json could not be parsed as valid JSON."),
+    };
+  }
+
+  if (typeof result.config !== "object" || result.config === null || Array.isArray(result.config)) {
+    return {
+      options: {},
+      diagnostic: invalidTsconfigDiagnostic("tsconfig.json must contain a JSON object at the top level."),
     };
   }
 
   const parsed = ts.parseJsonConfigFileContent(result.config, ts.sys, path.dirname(tsconfigPath));
-  const details = parsed.errors.length > 0
-    ? parsed.errors.map((entry) => ts.flattenDiagnosticMessageText(entry.messageText, "\n")).join("\n")
-    : undefined;
-
-  if (details) {
+  if (parsed.errors.length > 0) {
     return {
-      options: parsed.options,
-      diagnostic: createDiagnostic(
-        "aruna::100",
-        `Invalid TypeScript config at ${path.basename(tsconfigPath)}.`,
-        {
-          file: formatProjectRelativePath(projectRoot, tsconfigPath),
-          details,
-          suggestion: "Fix the tsconfig syntax or remove unsupported compiler options.",
-        },
-      ),
+      options: {},
+      diagnostic: invalidTsconfigDiagnostic("tsconfig.json uses an unsupported object shape or compiler option."),
     };
   }
 

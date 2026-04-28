@@ -22,6 +22,7 @@ const fixtureNames = [
   "unresolved-import",
   "missing-tsconfig",
   "invalid-config",
+  "invalid-tsconfig",
   "tsconfig-path-alias",
   "ambiguous-convention-match",
   "parse-failed",
@@ -69,6 +70,19 @@ describe("config diagnostics", () => {
     expect(output.diagnostics[0]?.severity).toBe("warning");
     expect(output.summary.errors).toBe(1);
     expect(output.summary.warnings).toBe(0);
+    expect(output.ok).toBe(false);
+  });
+
+  it("reports malformed tsconfig files with aruna::103", async () => {
+    const inputRoot = path.join(fixturesRoot, "invalid-tsconfig", "input");
+    const output = await inspectProject({ root: inputRoot });
+
+    expect(output.diagnostics).toHaveLength(1);
+    expect(output.diagnostics[0]?.code).toBe("aruna::103");
+    expect(output.diagnostics[0]?.name).toBe("invalid-tsconfig");
+    expect(output.diagnostics[0]?.severity).toBe("error");
+    expect(output.diagnostics.some((diagnostic) => diagnostic.code === "aruna::900")).toBe(false);
+    expect(output.summary.errors).toBe(1);
     expect(output.ok).toBe(false);
   });
 });
