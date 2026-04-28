@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import pc from "picocolors";
 import type { ArunaCompilerOutput } from "@arunajs/core";
 import { checkProject, inspectProject } from "@arunajs/compiler";
-import { formatDiagnostics, formatGraphInspection, formatModuleInspection, formatSummary, type CliColorMode } from "./format.js";
+import {
+  formatDiagnostics,
+  formatDurationLine,
+  formatGraphInspection,
+  formatModuleInspection,
+  formatSummary,
+  type CliColorMode,
+} from "./format.js";
 
 type CliOptions = {
   project?: string;
@@ -16,13 +24,16 @@ type CliOptions = {
   warningsAsErrors?: boolean;
 };
 
-function colorMode(options: CliOptions): CliColorMode {
-  const disabled =
-    options.noColor ||
-    process.env["NO_COLOR"] !== undefined ||
-    process.env["CI"] === "true" ||
-    !process.stdout.isTTY ||
-    Boolean(options.json);
+function isCI(env: NodeJS.ProcessEnv): boolean {
+  return env["CI"] !== undefined;
+}
+
+export function resolveColorMode(
+  options: Pick<CliOptions, "json" | "noColor">,
+  env: NodeJS.ProcessEnv = process.env,
+  isTTY = Boolean(process.stdout.isTTY),
+): CliColorMode {
+  const disabled = options.noColor || env["NO_COLOR"] !== undefined || isCI(env) || !isTTY || Boolean(options.json);
   return { enabled: !disabled };
 }
 
@@ -42,39 +53,79 @@ function compilerInput(options: CliOptions) {
   };
 }
 
+export function serializeJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
 function writeJson(value: unknown): void {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+  process.stdout.write(`${serializeJson(value)}\n`);
 }
 
 function writeText(output: string): void {
   process.stdout.write(`${output}\n`);
 }
 
-function renderCompilerOutput(command: string, output: ArunaCompilerOutput, options: CliOptions): void {
-  const colors = colorMode(options);
+function renderCheckOutput(output: ArunaCompilerOutput, options: CliOptions, durationMs: number): void {
+  const colors = resolveColorMode(options);
   if (options.json) {
     writeJson(output);
     return;
   }
 
-  writeText(formatSummary(output, command, colors));
-  if (!options.quiet) {
+  const hasDiagnostics = output.diagnostics.length > 0;
+  writeText(formatSummary(output, "check", { colors, durationMs, includeDuration: !hasDiagnostics }));
+  if (!options.quiet && hasDiagnostics) {
     const diagnostics = formatDiagnostics(output, colors);
     if (diagnostics.length > 0) {
       writeText(diagnostics);
     }
   }
-  if (options.verbose && output.manifestPath) {
-    writeText("");
-    writeText(`  manifest written to ${output.manifestPath}`);
+  if (hasDiagnostics) {
+    const duration = formatDurationLine(durationMs);
+    if (duration) {
+      writeText("");
+      writeText(duration);
+    }
   }
 }
 
-async function main(): Promise<number> {
+function renderInspectOutput(output: ArunaCompilerOutput, options: CliOptions, durationMs: number): void {
+  const colors = resolveColorMode(options);
+  if (options.json) {
+    writeJson(output);
+    return;
+  }
+
+  const hasDiagnostics = output.diagnostics.length > 0;
+  writeText(formatSummary(output, "inspect", { colors, durationMs, includeDuration: !hasDiagnostics }));
+  if (!options.quiet && hasDiagnostics) {
+    const diagnostics = formatDiagnostics(output, colors);
+    if (diagnostics.length > 0) {
+      writeText(diagnostics);
+    }
+  }
+  if (hasDiagnostics) {
+    const duration = formatDurationLine(durationMs);
+    if (duration) {
+      writeText("");
+      writeText(duration);
+    }
+  }
+}
+
+async function runCheck(options: CliOptions): Promise<ArunaCompilerOutput> {
+  return checkProject(compilerInput(options));
+}
+
+async function runInspect(options: CliOptions): Promise<ArunaCompilerOutput> {
+  return inspectProject(compilerInput(options));
+}
+
+export async function main(): Promise<number> {
   const program = new Command();
   program
     .name("aruna")
-    .description("Aruna compiler and boundary checker")
+    .description("Aruna compiler and boundary checker. Running `aruna` without a subcommand aliases to `aruna check`.")
     .option("--project <path>", "project root")
     .option("--config <path>", "config file path")
     .option("--json", "emit JSON")
@@ -85,21 +136,18 @@ async function main(): Promise<number> {
 
   program.action(async () => {
     const options = program.optsWithGlobals<CliOptions>();
-    const output = await checkProject(compilerInput(options));
-    renderCompilerOutput("check", output, options);
+    const startedAt = Date.now();
+    const output = await runCheck(options);
+    renderCheckOutput(output, options, Date.now() - startedAt);
     process.exitCode = output.ok ? 0 : 1;
   });
 
   const inspect = program.command("inspect").description("inspect the project");
   inspect.action(async () => {
     const options = program.optsWithGlobals<CliOptions>();
-    const output = await inspectProject(compilerInput(options));
-    if (options.json) {
-      writeJson(output);
-      process.exitCode = output.ok ? 0 : 1;
-      return;
-    }
-    renderCompilerOutput("inspect", output, options);
+    const startedAt = Date.now();
+    const output = await runInspect(options);
+    renderInspectOutput(output, options, Date.now() - startedAt);
     process.exitCode = output.ok ? 0 : 1;
   });
 
@@ -108,7 +156,7 @@ async function main(): Promise<number> {
     .description("print module classification")
     .action(async () => {
       const options = program.optsWithGlobals<CliOptions>();
-      const output = await inspectProject(compilerInput(options));
+      const output = await runInspect(options);
       if (options.json) {
         writeJson({
           modules: output.manifest.modules,
@@ -118,7 +166,7 @@ async function main(): Promise<number> {
         process.exitCode = output.ok ? 0 : 1;
         return;
       }
-      writeText(formatModuleInspection(output, colorMode(options)));
+      writeText(formatModuleInspection(output, resolveColorMode(options), Boolean(options.verbose)));
       process.exitCode = output.ok ? 0 : 1;
     });
 
@@ -127,7 +175,7 @@ async function main(): Promise<number> {
     .description("print import graph")
     .action(async () => {
       const options = program.optsWithGlobals<CliOptions>();
-      const output = await inspectProject(compilerInput(options));
+      const output = await runInspect(options);
       if (options.json) {
         writeJson({
           imports: output.manifest.imports,
@@ -137,7 +185,7 @@ async function main(): Promise<number> {
         process.exitCode = output.ok ? 0 : 1;
         return;
       }
-      writeText(formatGraphInspection(output, colorMode(options)));
+      writeText(formatGraphInspection(output, resolveColorMode(options)));
       process.exitCode = output.ok ? 0 : 1;
     });
 
@@ -146,17 +194,22 @@ async function main(): Promise<number> {
     .description("check the project")
     .action(async () => {
       const options = program.optsWithGlobals<CliOptions>();
-      const output = await checkProject(compilerInput(options));
-      renderCompilerOutput("check", output, options);
+      const startedAt = Date.now();
+      const output = await runCheck(options);
+      renderCheckOutput(output, options, Date.now() - startedAt);
       process.exitCode = output.ok ? 0 : 1;
-  });
+    });
 
   await program.parseAsync(process.argv);
   return typeof process.exitCode === "number" ? process.exitCode : 0;
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
-  process.stderr.write(`${pc.red(message)}\n`);
-  process.exitCode = 3;
-});
+const isDirectExecution = process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectExecution) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    process.stderr.write(`${pc.red(message)}\n`);
+    process.exitCode = 3;
+  });
+}
