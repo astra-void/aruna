@@ -5,6 +5,7 @@ export type ArunaDiagnosticSeverity = "error" | "warning" | "info";
 export type ArunaDiagnosticCode =
   | "aruna::100"
   | "aruna::102"
+  | "aruna::103"
   | "aruna::106"
   | "aruna::105"
   | "aruna::200"
