@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [],
+  "imports": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "details": "diagnostics.warningsAsErrors must be a boolean",
+      "file": "aruna.config.ts",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "Export a plain object from aruna.config.ts or wrap it with defineConfig()."
+    }
+  ]
+}

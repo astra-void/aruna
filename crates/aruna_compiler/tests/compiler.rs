@@ -161,6 +161,61 @@ export const main = { schema, missing };
 }
 
 #[test]
+fn reports_parse_failures_without_stopping_other_files() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/client/main.ts",
+        r#"
+export const main = {
+"#,
+    );
+    write_file(
+        root,
+        "src/client/other.ts",
+        r#"
+import { schema } from "../shared/schema";
+
+export const other = schema;
+"#,
+    );
+    write_file(
+        root,
+        "src/shared/schema.ts",
+        "export const schema = { ok: true };\n",
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(!output.ok);
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::106".to_string()]);
+    assert_eq!(
+        output
+            .manifest
+            .modules
+            .iter()
+            .map(|module| module.path.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            "src/client/main.ts".to_string(),
+            "src/client/other.ts".to_string(),
+            "src/shared/schema.ts".to_string(),
+        ]
+    );
+    assert_eq!(
+        output
+            .manifest
+            .imports
+            .iter()
+            .map(|edge| edge.specifier.clone())
+            .collect::<Vec<_>>(),
+        vec!["../shared/schema".to_string()]
+    );
+}
+
+#[test]
 fn orders_manifest_deterministically() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

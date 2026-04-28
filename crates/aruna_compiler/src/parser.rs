@@ -91,7 +91,12 @@ pub fn collect_static_imports(
     source_text: &str,
 ) -> Result<Vec<StaticImportRecord>, String> {
     let source_map: Lrc<SourceMap> = Default::default();
-    let filename = FileName::Custom(path.to_string_lossy().to_string());
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| path.to_string_lossy().to_string());
+    let filename = FileName::Custom(filename);
     let source_file = source_map.new_source_file(filename.into(), source_text.to_string());
     let lexer = Lexer::new(
         syntax_for_path(path),

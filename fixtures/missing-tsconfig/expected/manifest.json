@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [],
+  "imports": [],
+  "diagnostics": [
+    {
+      "code": "aruna::102",
+      "details": "Aruna looked for the TypeScript config at the resolved path but could not find it.",
+      "file": "tsconfig.json",
+      "message": "Missing TypeScript config at tsconfig.json.",
+      "name": "missing-tsconfig",
+      "severity": "warning",
+      "suggestion": "Create tsconfig.json or point aruna.config.ts to an existing tsconfig file."
+    }
+  ]
+}

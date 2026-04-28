@@ -58,6 +58,7 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
     match code {
         "aruna::100" => Some(("invalid-config", DiagnosticSeverity::Error)),
         "aruna::102" => Some(("missing-tsconfig", DiagnosticSeverity::Warning)),
+        "aruna::106" => Some(("parse-failed", DiagnosticSeverity::Error)),
         "aruna::105" => Some(("unresolved-import", DiagnosticSeverity::Warning)),
         "aruna::200" => Some(("unknown-module-kind", DiagnosticSeverity::Warning)),
         "aruna::203" => Some(("ambiguous-convention-match", DiagnosticSeverity::Warning)),

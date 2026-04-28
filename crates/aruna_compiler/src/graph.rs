@@ -55,6 +55,17 @@ pub struct BuildGraphResult {
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
+fn create_parse_failed_diagnostic(relative_path: &str, error: String) -> ArunaDiagnostic {
+    create_diagnostic(
+        "aruna::106",
+        format!("Aruna could not parse {relative_path}."),
+        Some(relative_path.to_string()),
+        None,
+        Some(format!("SWC parser error: {error}")),
+        Some("Check the TypeScript/TSX syntax in this file.".to_string()),
+    )
+}
+
 pub fn build_project_graph(
     project_root: &Path,
     config: &ArunaConfig,
@@ -109,8 +120,13 @@ pub fn build_project_graph(
         let relative_from = project_relative(project_root, absolute_path);
         let importer_record = module_map.get(&relative_from);
         let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
-        let static_imports = collect_static_imports(absolute_path, &source_text)
-            .map_err(|error| format!("failed to parse {}: {error}", relative_from))?;
+        let static_imports = match collect_static_imports(absolute_path, &source_text) {
+            Ok(imports) => imports,
+            Err(error) => {
+                diagnostics.push(create_parse_failed_diagnostic(&relative_from, error));
+                continue;
+            }
+        };
 
         for entry in static_imports {
             let resolved = resolve_import_specifier(
