@@ -1,0 +1,11 @@
+[
+  {
+    "code": "aruna::103",
+    "details": "tsconfig.json could not be parsed as valid JSON.",
+    "file": "tsconfig.json",
+    "message": "Malformed TypeScript config at tsconfig.json.",
+    "name": "invalid-tsconfig",
+    "severity": "error",
+    "suggestion": "Fix the tsconfig JSON syntax or use a supported top-level object shape."
+  }
+]
