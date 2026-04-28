@@ -1,11 +1,19 @@
 import { spawnSync } from "node:child_process";
-import path from "node:path";
 import fs from "node:fs";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { inspectProject } from "@arunajs/compiler";
 import { formatGraphInspection, formatModuleInspection, formatSummary } from "../src/format.js";
 import { resolveColorMode, serializeJson } from "../src/cli.js";
+import {
+  ARUNA_CLI_PALETTES,
+  formatMuted,
+  formatSeverityLabel,
+  formatWarning,
+  formatError,
+  formatSuccess,
+} from "../src/theme.js";
 
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/;
 const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
@@ -24,6 +32,28 @@ describe("color policy", () => {
     expect(resolveColorMode({}, { CI: "1" }, true).enabled).toBe(false);
     expect(resolveColorMode({}, {}, false).enabled).toBe(false);
     expect(resolveColorMode({}, {}, true).enabled).toBe(true);
+  });
+});
+
+describe("theme", () => {
+  it("keeps the spec palette values unchanged", () => {
+    expect(ARUNA_CLI_PALETTES.sunrise).toEqual(["#f6c177", "#eb6f92", "#9ccfd8"]);
+    expect(ARUNA_CLI_PALETTES.softAurora).toEqual(["#c4a7e7", "#9ccfd8", "#f6c177"]);
+    expect(ARUNA_CLI_PALETTES.minimalCyan).toEqual(["#9ccfd8", "#31748f"]);
+  });
+
+  it("returns plain text for semantic helpers when colors are disabled", () => {
+    const colorMode = { enabled: false };
+
+    expect(formatSeverityLabel("error", "error", colorMode)).toBe("error");
+    expect(formatSeverityLabel("warning", "warning", colorMode)).toBe("warning");
+    expect(formatSeverityLabel("info", "info", colorMode)).toBe("info");
+    expect(formatSeverityLabel("success", "success", colorMode)).toBe("success");
+    expect(formatSeverityLabel("muted", "muted", colorMode)).toBe("muted");
+    expect(formatSuccess("ok", colorMode)).toBe("ok");
+    expect(formatWarning("warning", colorMode)).toBe("warning");
+    expect(formatError("error", colorMode)).toBe("error");
+    expect(formatMuted("done in 10ms", colorMode)).toBe("done in 10ms");
   });
 });
 
@@ -49,6 +79,24 @@ describe("cli integration", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("aruna check");
+    expect(result.stdout).not.toMatch(ANSI_PATTERN);
+    expect(result.stderr).toBe("");
+  });
+
+  it("keeps built CLI JSON output free of ANSI escape codes", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+
+    const result = spawnSync(process.execPath, [builtCliPath, "check", "--json", "--project", path.join("fixtures", "valid-client-imports-shared", "input")], {
+      encoding: "utf8",
+      env,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/^\s*\{/);
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
     expect(result.stderr).toBe("");
   });

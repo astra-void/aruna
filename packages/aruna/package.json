@@ -19,18 +19,18 @@
   "dependencies": {
     "@arunajs/compiler": "workspace:*",
     "@arunajs/core": "workspace:*",
-    "commander": "^12.1.0",
-    "gradient-string": "^2.0.2",
+    "commander": "^14.0.3",
+    "gradient-string": "^3.0.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.5"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "pnpm --dir ../.. exec vitest run --root packages/aruna",
     "lint": "pnpm typecheck",
     "aruna": "node ./dist/cli.js"
   }

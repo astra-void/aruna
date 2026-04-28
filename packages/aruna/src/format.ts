@@ -1,6 +1,12 @@
-import pc from "picocolors";
 import type { ArunaCompilerOutput, ArunaDiagnostic, ArunaDiagnosticSeverity } from "@arunajs/core";
-import { ARUNA_CLI_DEFAULT_PALETTE, brandText } from "./theme.js";
+import {
+  formatBrandTitle,
+  formatSectionTitle,
+  formatSeverityLabel,
+  formatStrong,
+  formatSuccess,
+  formatWarning,
+} from "./theme.js";
 
 export type CliColorMode = {
   enabled: boolean;
@@ -13,31 +19,19 @@ type HumanFormatOptions = {
 };
 
 function commandTitle(command: string, colors: CliColorMode): string {
-  return brandText(ARUNA_CLI_DEFAULT_PALETTE, `aruna ${command}`, colors.enabled);
+  return formatBrandTitle(`aruna ${command}`, colors);
 }
 
 function sectionTitle(title: string, colors: CliColorMode): string {
-  return brandText("minimalCyan", title, colors.enabled);
+  return formatSectionTitle(title, colors);
 }
 
 function statusLabel(severity: ArunaDiagnosticSeverity, colors: CliColorMode): string {
-  if (!colors.enabled) {
-    return severity;
-  }
-
-  switch (severity) {
-    case "error":
-      return pc.red(severity);
-    case "warning":
-      return pc.yellow(severity);
-    case "info":
-      return pc.cyan(severity);
-  }
+  return formatSeverityLabel(severity, severity, colors);
 }
 
 function summaryLine(count: number, noun: string, suffix: string, colors: CliColorMode): string {
-  const prefix = colors.enabled ? pc.green("✓") : "✓";
-  return `  ${prefix} ${count} ${count === 1 ? noun : `${noun}s`} ${suffix}`;
+  return `  ${formatSuccess("✓", colors)} ${count} ${count === 1 ? noun : `${noun}s`} ${suffix}`;
 }
 
 export function formatDurationLine(durationMs?: number): string {
@@ -49,7 +43,7 @@ export function formatDurationLine(durationMs?: number): string {
 }
 
 function formatGroupTitle(label: string, colors: CliColorMode): string {
-  return colors.enabled ? pc.bold(label) : label;
+  return formatStrong(label, colors);
 }
 
 export function formatSummary(output: ArunaCompilerOutput, command: string, options: HumanFormatOptions): string {
@@ -58,7 +52,7 @@ export function formatSummary(output: ArunaCompilerOutput, command: string, opti
   if (output.summary.errors === 0 && output.summary.warnings === 0) {
     lines.push(summaryLine(output.summary.modules, "module", "analyzed", options.colors));
     lines.push(summaryLine(output.summary.resolvedImports, "import", "resolved", options.colors));
-    lines.push(`  ${options.colors.enabled ? pc.green("✓") : "✓"} no boundary errors found`);
+    lines.push(`  ${formatSuccess("✓", options.colors)} no boundary errors found`);
   } else {
     lines.push(`  ${output.summary.modules} ${output.summary.modules === 1 ? "module" : "modules"} analyzed`);
     lines.push(`  ${output.summary.resolvedImports} ${output.summary.resolvedImports === 1 ? "import" : "imports"} resolved`);
@@ -177,22 +171,11 @@ function diagnosticForGraphEdge(output: ArunaCompilerOutput, from: string, to?: 
 
 function graphStatusLabel(diagnostic: ArunaDiagnostic | undefined, resolved: boolean, colors: CliColorMode): string {
   if (!diagnostic) {
-    return resolved ? (colors.enabled ? pc.green("ok") : "ok") : colors.enabled ? pc.yellow("warning") : "warning";
+    return resolved ? formatSuccess("ok", colors) : formatWarning("warning", colors);
   }
 
   const label = diagnostic.severity === "error" ? "error" : diagnostic.severity === "warning" ? "warning" : "ok";
-  if (!colors.enabled) {
-    return label;
-  }
-
-  switch (label) {
-    case "error":
-      return pc.red(label);
-    case "warning":
-      return pc.yellow(label);
-    default:
-      return pc.green(label);
-  }
+  return formatSeverityLabel(diagnostic.severity, label, colors);
 }
 
 export function formatGraphInspection(output: ArunaCompilerOutput, colors: CliColorMode): string {

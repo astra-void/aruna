@@ -2,7 +2,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import pc from "picocolors";
 import type { ArunaCompilerOutput } from "@arunajs/core";
 import { checkProject, inspectProject } from "@arunajs/compiler";
 import {
@@ -13,6 +12,7 @@ import {
   formatSummary,
   type CliColorMode,
 } from "./format.js";
+import { formatError, formatMuted } from "./theme.js";
 
 type CliOptions = {
   project?: string;
@@ -91,7 +91,7 @@ function renderCheckOutput(output: ArunaCompilerOutput, options: CliOptions, dur
     const duration = formatDurationLine(durationMs);
     if (duration) {
       writeText("");
-      writeText(duration);
+      writeText(formatMuted(duration, colors));
     }
   }
 }
@@ -115,7 +115,7 @@ function renderInspectOutput(output: ArunaCompilerOutput, options: CliOptions, d
     const duration = formatDurationLine(durationMs);
     if (duration) {
       writeText("");
-      writeText(duration);
+      writeText(formatMuted(duration, colors));
     }
   }
 }
@@ -216,7 +216,7 @@ const isDirectExecution = process.argv[1] !== undefined && path.resolve(process.
 if (isDirectExecution) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    process.stderr.write(`${pc.red(message)}\n`);
+    process.stderr.write(`${formatError(message, resolveColorMode({}, process.env, Boolean(process.stderr.isTTY)))}\n`);
     process.exitCode = 3;
   });
 }
