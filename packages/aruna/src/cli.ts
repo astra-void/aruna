@@ -21,6 +21,7 @@ type CliOptions = {
   quiet?: boolean;
   verbose?: boolean;
   noColor?: boolean;
+  color?: boolean;
   warningsAsErrors?: boolean;
 };
 
@@ -29,11 +30,17 @@ function isCI(env: NodeJS.ProcessEnv): boolean {
 }
 
 export function resolveColorMode(
-  options: Pick<CliOptions, "json" | "noColor">,
+  options: Pick<CliOptions, "json" | "noColor" | "color">,
   env: NodeJS.ProcessEnv = process.env,
   isTTY = Boolean(process.stdout.isTTY),
 ): CliColorMode {
-  const disabled = options.noColor || env["NO_COLOR"] !== undefined || isCI(env) || !isTTY || Boolean(options.json);
+  const disabled =
+    options.noColor === true ||
+    options.color === false ||
+    env["NO_COLOR"] !== undefined ||
+    isCI(env) ||
+    !isTTY ||
+    Boolean(options.json);
   return { enabled: !disabled };
 }
 
