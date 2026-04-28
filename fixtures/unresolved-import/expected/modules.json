@@ -1,0 +1,8 @@
+[
+  {
+    "id": "src/client/main.ts",
+    "path": "src/client/main.ts",
+    "kind": "client",
+    "reason": "path"
+  }
+]

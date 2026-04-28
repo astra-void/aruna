@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/client/main.ts",
+      "path": "src/client/main.ts",
+      "kind": "client",
+      "reason": "path"
+    },
+    {
+      "id": "src/utils/debug.ts",
+      "path": "src/utils/debug.ts",
+      "kind": "unknown",
+      "reason": "fallback"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/client/main.ts",
+      "to": "src/utils/debug.ts",
+      "specifier": "../utils/debug",
+      "resolved": true,
+      "kind": "static"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::200",
+      "name": "unknown-module-kind",
+      "severity": "warning",
+      "message": "src/utils/debug.ts could not be classified as client, server, or shared.",
+      "file": "src/utils/debug.ts",
+      "details": "The module participates in a resolved import edge, so its boundary role matters.",
+      "suggestion": "Place the file under client/, server/, or shared/, or adjust the convention patterns."
+    }
+  ]
+}

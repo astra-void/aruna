@@ -1,0 +1,15 @@
+[
+  {
+    "code": "aruna::105",
+    "name": "unresolved-import",
+    "severity": "warning",
+    "message": "src/client/main.ts imports ../shared/missing, but Aruna could not resolve it.",
+    "file": "src/client/main.ts",
+    "span": {
+      "start": 24,
+      "end": 43
+    },
+    "details": "importer kind: client",
+    "suggestion": "Check the relative path, tsconfig paths mapping, and file extension support."
+  }
+]

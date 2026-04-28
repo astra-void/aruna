@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/client/main.ts",
+      "path": "src/client/main.ts",
+      "kind": "client",
+      "reason": "path"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/client/main.ts",
+      "specifier": "../shared/missing",
+      "resolved": false,
+      "kind": "static"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::105",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "message": "src/client/main.ts imports ../shared/missing, but Aruna could not resolve it.",
+      "file": "src/client/main.ts",
+      "span": {
+        "start": 24,
+        "end": 43
+      },
+      "details": "importer kind: client",
+      "suggestion": "Check the relative path, tsconfig paths mapping, and file extension support."
+    }
+  ]
+}

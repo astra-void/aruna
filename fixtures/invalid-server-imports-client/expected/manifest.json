@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/client/ui.ts",
+      "path": "src/client/ui.ts",
+      "kind": "client",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/main.ts",
+      "path": "src/server/main.ts",
+      "kind": "server",
+      "reason": "path"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/server/main.ts",
+      "to": "src/client/ui.ts",
+      "specifier": "../client/ui",
+      "resolved": true,
+      "kind": "static"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "name": "server-imports-client",
+      "severity": "error",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "file": "src/server/main.ts",
+      "span": {
+        "start": 19,
+        "end": 33
+      },
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ]
+}

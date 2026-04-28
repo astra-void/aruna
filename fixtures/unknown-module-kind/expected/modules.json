@@ -1,0 +1,14 @@
+[
+  {
+    "id": "src/client/main.ts",
+    "path": "src/client/main.ts",
+    "kind": "client",
+    "reason": "path"
+  },
+  {
+    "id": "src/utils/debug.ts",
+    "path": "src/utils/debug.ts",
+    "kind": "unknown",
+    "reason": "fallback"
+  }
+]

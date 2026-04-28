@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/client/main.ts",
+      "path": "src/client/main.ts",
+      "kind": "client",
+      "reason": "path"
+    },
+    {
+      "id": "src/shared/schema.ts",
+      "path": "src/shared/schema.ts",
+      "kind": "shared",
+      "reason": "path"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/client/main.ts",
+      "to": "src/shared/schema.ts",
+      "specifier": "../shared/schema",
+      "resolved": true,
+      "kind": "static"
+    }
+  ],
+  "diagnostics": []
+}

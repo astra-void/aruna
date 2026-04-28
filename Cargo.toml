@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/aruna_compiler", "crates/aruna_napi"]
+resolver = "2"

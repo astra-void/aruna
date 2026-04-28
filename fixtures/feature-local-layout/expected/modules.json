@@ -1,0 +1,20 @@
+[
+  {
+    "id": "src/features/shop/client/panel.ts",
+    "path": "src/features/shop/client/panel.ts",
+    "kind": "client",
+    "reason": "path"
+  },
+  {
+    "id": "src/features/shop/server/pricing.ts",
+    "path": "src/features/shop/server/pricing.ts",
+    "kind": "server",
+    "reason": "path"
+  },
+  {
+    "id": "src/features/shop/shared/schema.ts",
+    "path": "src/features/shop/shared/schema.ts",
+    "kind": "shared",
+    "reason": "path"
+  }
+]

@@ -1,0 +1,16 @@
+[
+  {
+    "from": "src/features/shop/client/panel.ts",
+    "to": "src/features/shop/shared/schema.ts",
+    "specifier": "../shared/schema",
+    "resolved": true,
+    "kind": "static"
+  },
+  {
+    "from": "src/features/shop/server/pricing.ts",
+    "to": "src/features/shop/shared/schema.ts",
+    "specifier": "../shared/schema",
+    "resolved": true,
+    "kind": "static"
+  }
+]

@@ -1,0 +1,8 @@
+[
+  {
+    "from": "src/client/main.ts",
+    "specifier": "../shared/missing",
+    "resolved": false,
+    "kind": "static"
+  }
+]

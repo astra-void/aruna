@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/server/secret.ts",
+      "path": "src/server/secret.ts",
+      "kind": "server",
+      "reason": "path"
+    },
+    {
+      "id": "src/shared/schema.ts",
+      "path": "src/shared/schema.ts",
+      "kind": "shared",
+      "reason": "path"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/shared/schema.ts",
+      "to": "src/server/secret.ts",
+      "specifier": "../server/secret",
+      "resolved": true,
+      "kind": "static"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "file": "src/shared/schema.ts",
+      "span": {
+        "start": 23,
+        "end": 41
+      },
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ]
+}

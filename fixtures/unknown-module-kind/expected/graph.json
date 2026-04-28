@@ -1,0 +1,9 @@
+[
+  {
+    "from": "src/client/main.ts",
+    "to": "src/utils/debug.ts",
+    "specifier": "../utils/debug",
+    "resolved": true,
+    "kind": "static"
+  }
+]

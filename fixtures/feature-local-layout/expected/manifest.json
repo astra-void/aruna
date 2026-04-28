@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/features/shop/client/panel.ts",
+      "path": "src/features/shop/client/panel.ts",
+      "kind": "client",
+      "reason": "path"
+    },
+    {
+      "id": "src/features/shop/server/pricing.ts",
+      "path": "src/features/shop/server/pricing.ts",
+      "kind": "server",
+      "reason": "path"
+    },
+    {
+      "id": "src/features/shop/shared/schema.ts",
+      "path": "src/features/shop/shared/schema.ts",
+      "kind": "shared",
+      "reason": "path"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/features/shop/client/panel.ts",
+      "to": "src/features/shop/shared/schema.ts",
+      "specifier": "../shared/schema",
+      "resolved": true,
+      "kind": "static"
+    },
+    {
+      "from": "src/features/shop/server/pricing.ts",
+      "to": "src/features/shop/shared/schema.ts",
+      "specifier": "../shared/schema",
+      "resolved": true,
+      "kind": "static"
+    }
+  ],
+  "diagnostics": []
+}

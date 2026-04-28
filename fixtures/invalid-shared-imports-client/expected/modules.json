@@ -1,0 +1,14 @@
+[
+  {
+    "id": "src/client/ui.ts",
+    "path": "src/client/ui.ts",
+    "kind": "client",
+    "reason": "path"
+  },
+  {
+    "id": "src/shared/schema.ts",
+    "path": "src/shared/schema.ts",
+    "kind": "shared",
+    "reason": "path"
+  }
+]

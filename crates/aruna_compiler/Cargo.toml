@@ -1,0 +1,19 @@
+[package]
+name = "aruna_compiler"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+globset = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+swc_common = "19.0.0"
+swc_ecma_ast = "21.0.0"
+swc_ecma_parser = { version = "35.0.0", features = ["typescript"] }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"

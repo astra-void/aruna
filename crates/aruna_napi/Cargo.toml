@@ -1,0 +1,21 @@
+[package]
+name = "aruna_napi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[features]
+default = []
+napi-addon = []
+
+[dependencies]
+aruna_compiler = { path = "../aruna_compiler" }
+napi = { version = "2", features = ["serde-json"] }
+napi-derive = "2"
+serde_json = "1"
+
+[build-dependencies]
+napi-build = "2"

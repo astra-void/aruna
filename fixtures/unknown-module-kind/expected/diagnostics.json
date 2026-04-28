@@ -1,0 +1,11 @@
+[
+  {
+    "code": "aruna::200",
+    "name": "unknown-module-kind",
+    "severity": "warning",
+    "message": "src/utils/debug.ts could not be classified as client, server, or shared.",
+    "file": "src/utils/debug.ts",
+    "details": "The module participates in a resolved import edge, so its boundary role matters.",
+    "suggestion": "Place the file under client/, server/, or shared/, or adjust the convention patterns."
+  }
+]

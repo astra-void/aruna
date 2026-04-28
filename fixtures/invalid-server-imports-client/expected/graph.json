@@ -1,0 +1,9 @@
+[
+  {
+    "from": "src/server/main.ts",
+    "to": "src/client/ui.ts",
+    "specifier": "../client/ui",
+    "resolved": true,
+    "kind": "static"
+  }
+]

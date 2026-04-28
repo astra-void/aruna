@@ -1,0 +1,14 @@
+[
+  {
+    "id": "src/server/secret.ts",
+    "path": "src/server/secret.ts",
+    "kind": "server",
+    "reason": "path"
+  },
+  {
+    "id": "src/shared/schema.ts",
+    "path": "src/shared/schema.ts",
+    "kind": "shared",
+    "reason": "path"
+  }
+]

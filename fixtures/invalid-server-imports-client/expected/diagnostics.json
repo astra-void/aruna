@@ -1,0 +1,15 @@
+[
+  {
+    "code": "aruna::301",
+    "name": "server-imports-client",
+    "severity": "error",
+    "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+    "file": "src/server/main.ts",
+    "span": {
+      "start": 19,
+      "end": 33
+    },
+    "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+    "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+  }
+]

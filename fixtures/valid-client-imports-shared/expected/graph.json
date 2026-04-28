@@ -1,0 +1,9 @@
+[
+  {
+    "from": "src/client/main.ts",
+    "to": "src/shared/schema.ts",
+    "specifier": "../shared/schema",
+    "resolved": true,
+    "kind": "static"
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "from": "src/shared/schema.ts",
+    "to": "src/server/secret.ts",
+    "specifier": "../server/secret",
+    "resolved": true,
+    "kind": "static"
+  }
+]

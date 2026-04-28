@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/shared/mixed.ts",
+      "path": "src/shared/mixed.ts",
+      "kind": "unknown",
+      "reason": "path",
+      "reasonDetail": "matched multiple conventions: client, shared"
+    }
+  ],
+  "imports": [],
+  "diagnostics": [
+    {
+      "code": "aruna::203",
+      "name": "ambiguous-convention-match",
+      "severity": "warning",
+      "message": "src/shared/mixed.ts matches more than one module convention.",
+      "file": "src/shared/mixed.ts",
+      "details": "matched multiple conventions: client, shared",
+      "suggestion": "Narrow the matching conventions so each file maps to exactly one module kind."
+    }
+  ]
+}

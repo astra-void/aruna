@@ -1,0 +1,15 @@
+[
+  {
+    "code": "aruna::302",
+    "name": "shared-imports-client",
+    "severity": "error",
+    "message": "src/shared/schema.ts is classified as shared. It imports src/client/ui.ts, which is classified as client.",
+    "file": "src/shared/schema.ts",
+    "span": {
+      "start": 19,
+      "end": 33
+    },
+    "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/client/ui.ts\nimported kind: client",
+    "suggestion": "Keep shared modules free of client-only imports, or split client code into client/."
+  }
+]
