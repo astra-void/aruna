@@ -354,9 +354,17 @@ fn run_project_inner(
 }
 
 fn run_project(input: CompilerInput, write_manifest: bool) -> CompilerOutput {
-    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_project_inner(&input, write_manifest)
-    })) {
+    run_project_with(input, write_manifest, |input, write_manifest| {
+        run_project_inner(input, write_manifest)
+    })
+}
+
+fn run_project_with(
+    input: CompilerInput,
+    write_manifest: bool,
+    runner: impl FnOnce(&CompilerInput, bool) -> Result<CompilerOutput, String> + std::panic::UnwindSafe,
+) -> CompilerOutput {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runner(&input, write_manifest))) {
         Ok(Ok(output)) => output,
         Ok(Err(error)) => internal_error_output(&input, error),
         Err(payload) => {
@@ -378,4 +386,78 @@ pub fn check_project(input: CompilerInput) -> CompilerOutput {
 
 pub fn inspect_project(input: CompilerInput) -> CompilerOutput {
     run_project(input, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{ArunaConfig, ManifestConfig};
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn converts_panics_into_aruna_900_diagnostics() {
+        let temp = TempDir::new().unwrap();
+        let input = CompilerInput {
+            project_root: temp.path().to_string_lossy().to_string(),
+            ..CompilerInput::default()
+        };
+
+        let output = run_project_with(input, false, |_input, _write_manifest| -> Result<CompilerOutput, String> {
+            panic!("forced internal error");
+        });
+
+        assert!(!output.ok);
+        assert_eq!(output.diagnostics, output.manifest.diagnostics);
+        assert_eq!(output.diagnostics[0].code, "aruna::900");
+        assert_eq!(output.diagnostics[0].name, "internal-compiler-error");
+        assert_eq!(output.diagnostics[0].severity, crate::diagnostics::DiagnosticSeverity::Error);
+        assert_eq!(
+            output.diagnostics[0].message,
+            "Aruna encountered an internal compiler error."
+        );
+        assert_eq!(
+            output.diagnostics[0].suggestion.as_deref(),
+            Some("File a bug report with the project input and the stack trace.")
+        );
+        assert_eq!(output.summary.errors, 1);
+    }
+
+    #[test]
+    fn converts_manifest_write_failures_into_aruna_700_diagnostics() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+        let manifest_output = project_root.join(".aruna");
+        fs::write(&manifest_output, "occupied").unwrap();
+
+        let input = CompilerInput {
+            project_root: project_root.to_string_lossy().to_string(),
+            config: ArunaConfig {
+                manifest: ManifestConfig {
+                    output: ".aruna/manifest.json".to_string(),
+                    ..ManifestConfig::default()
+                },
+                ..ArunaConfig::default()
+            },
+            ..CompilerInput::default()
+        };
+
+        let source = project_root.join("src/client/main.ts");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(source, "export const main = 1;\n").unwrap();
+        fs::write(project_root.join("tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n").unwrap();
+
+        let output = check_project(input);
+
+        assert!(!output.ok);
+        assert_eq!(output.diagnostics[0].code, "aruna::700");
+        assert_eq!(output.diagnostics[0].name, "manifest-write-failed");
+        assert_eq!(output.diagnostics[0].severity, crate::diagnostics::DiagnosticSeverity::Error);
+        assert_eq!(output.diagnostics[0].message, "Failed to write the Aruna manifest.");
+        assert!(!output.diagnostics[0].details.as_deref().unwrap_or("").is_empty());
+        assert_eq!(
+            output.diagnostics[0].suggestion.as_deref(),
+            Some("Check the destination directory permissions or disable manifest emission.")
+        );
+    }
 }
