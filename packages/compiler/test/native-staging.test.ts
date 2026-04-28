@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   stagedCompilerPackageDirectory,
@@ -13,6 +14,12 @@ import { stageNativePackage } from "../scripts/stage-native-package.ts";
 import { nativePackageName } from "../src/native-platform.ts";
 
 describe("native staging helpers", () => {
+  it("keeps .npm ignored at the repository root", async () => {
+    const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+    const gitignore = await fs.readFile(path.join(workspaceRoot, ".gitignore"), "utf8");
+    expect(gitignore).toContain(".npm");
+  });
+
   it("generates target-qualified staging paths", () => {
     const workspaceRoot = "/tmp/aruna";
     expect(stagedNativePackageDirectory(workspaceRoot, "darwin-arm64")).toBe("/tmp/aruna/.npm/compiler-darwin-arm64");
@@ -35,6 +42,7 @@ describe("native staging helpers", () => {
     });
 
     expect(staged.packageDirectory).toBe(path.join(workspaceRoot, ".npm", "compiler-darwin-arm64"));
+    expect(staged.packageJsonPath).toBe(path.join(workspaceRoot, ".npm", "compiler-darwin-arm64", "package.json"));
     expect(staged.artifactPath).toBe(path.join(workspaceRoot, ".npm", "compiler-darwin-arm64", "compiler.darwin-arm64.node"));
 
     expect(await fs.readFile(staged.artifactPath, "utf8")).toBe("native-binary");
@@ -45,12 +53,14 @@ describe("native staging helpers", () => {
       main: string;
       files: string[];
     };
+    const packageJsonText = await fs.readFile(staged.packageJsonPath, "utf8");
     expect(packageJson).toEqual({
       name: "@arunajs/compiler-darwin-arm64",
       version: "0.1.0",
       main: "./compiler.darwin-arm64.node",
       files: ["compiler.darwin-arm64.node"],
     });
+    expect(packageJsonText).not.toContain("workspace:*");
   });
 
   it("stages the compiler manifest with real semver optional dependencies", async () => {
@@ -61,16 +71,19 @@ describe("native staging helpers", () => {
     });
 
     expect(staged.packageDirectory).toBe(path.join(workspaceRoot, ".npm", "compiler"));
+    expect(staged.packageJsonPath).toBe(path.join(workspaceRoot, ".npm", "compiler", "package.json"));
 
     const packageJson = JSON.parse(await fs.readFile(staged.packageJsonPath, "utf8")) as {
       name: string;
       version: string;
       optionalDependencies: Record<string, string>;
     };
+    const packageJsonText = await fs.readFile(staged.packageJsonPath, "utf8");
 
     expect(packageJson.name).toBe("@arunajs/compiler");
     expect(packageJson.version).toBe("0.1.0");
     expect(Object.keys(packageJson.optionalDependencies)).toEqual(SUPPORTED_NATIVE_TARGETS.map(nativePackageName));
     expect(Object.values(packageJson.optionalDependencies)).toEqual(Array(SUPPORTED_NATIVE_TARGETS.length).fill("0.1.0"));
+    expect(packageJsonText).not.toContain("workspace:*");
   });
 });

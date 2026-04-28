@@ -16,6 +16,7 @@ describe("loadNativeCompiler", () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    mockRequire.mockReset();
     vi.spyOn(fs, "existsSync").mockReturnValue(false);
     ({ loadNativeCompiler } = await import("../src/native.ts"));
     mockRequire.mockImplementation(() => {
@@ -52,6 +53,82 @@ describe("loadNativeCompiler", () => {
       );
       expect(message).toContain("There is no TypeScript analyzer fallback.");
     }
+  });
+
+  it("prefers the installed native package over local fallbacks", () => {
+    const target = resolveNativeTarget();
+    const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
+    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+    mockRequire.mockImplementationOnce((specifier: string) => {
+      expect(specifier).toContain(expectedPackage);
+      return loadedCompiler;
+    });
+
+    const result = loadNativeCompiler();
+
+    expect(result).toBe(loadedCompiler);
+    expect(fs.existsSync).not.toHaveBeenCalled();
+    expect(mockRequire).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the staged native package before workspace build outputs", () => {
+    const target = resolveNativeTarget();
+    const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
+    const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const debugFallback = "target/debug/aruna_napi.node";
+    const releaseFallback = "target/release/aruna_napi.node";
+    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+
+    mockRequire
+      .mockImplementationOnce(() => {
+        throw new Error("installed package missing");
+      })
+      .mockImplementationOnce((specifier: string) => {
+        expect(specifier).toContain(localFallback);
+        return loadedCompiler;
+      });
+
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => candidate.endsWith(localFallback));
+
+    const result = loadNativeCompiler();
+
+    expect(result).toBe(loadedCompiler);
+    expect(mockRequire.mock.calls[0]?.[0]).toBe(expectedPackage);
+    expect(mockRequire.mock.calls[1]?.[0]).toContain(localFallback);
+    expect(mockRequire).toHaveBeenCalledTimes(2);
+  });
+
+  it("tries debug and then release workspace outputs when the staged package is absent", () => {
+    const target = resolveNativeTarget();
+    const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
+    const debugFallback = "target/debug/aruna_napi.node";
+    const releaseFallback = "target/release/aruna_napi.node";
+    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+
+    mockRequire
+      .mockImplementationOnce(() => {
+        throw new Error("installed package missing");
+      })
+      .mockImplementationOnce((specifier: string) => {
+        expect(specifier).toContain(debugFallback);
+        throw new Error("debug build missing");
+      })
+      .mockImplementationOnce((specifier: string) => {
+        expect(specifier).toContain(releaseFallback);
+        return loadedCompiler;
+      });
+
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => {
+      return candidate.endsWith(debugFallback) || candidate.endsWith(releaseFallback);
+    });
+
+    const result = loadNativeCompiler();
+
+    expect(result).toBe(loadedCompiler);
+    expect(mockRequire.mock.calls[0]?.[0]).toBe(expectedPackage);
+    expect(mockRequire.mock.calls[1]?.[0]).toContain(debugFallback);
+    expect(mockRequire.mock.calls[2]?.[0]).toContain(releaseFallback);
+    expect(mockRequire).toHaveBeenCalledTimes(3);
   });
 
   it("does not contain an analyzer fallback path in the loader source", async () => {
