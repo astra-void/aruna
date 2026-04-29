@@ -3,8 +3,11 @@ dist
 coverage
 .turbo
 .npm
+.npm-pack
 .DS_Store
 .aruna
 target
 
 .env
+
+.pnpm-store
