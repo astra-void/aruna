@@ -28,9 +28,39 @@ Phase 1 prepares native packages through generated `.npm/` staging directories.
 
 `pnpm build:native` builds and stages the current host target only.
 
-Staged native artifacts use target-qualified names such as `compiler.darwin-arm64.node`.
+`pnpm release:prepare` is the release orchestrator entrypoint:
 
-Aruna never fakes platform support by renaming a binary built for another target.
+```bash
+pnpm release:prepare --mode local
+pnpm release:pack --mode local
+pnpm release:publish --mode local --dry-run
+
+pnpm release:prepare --mode cross --targets linux-x64-gnu --zig auto
+pnpm release:prepare --mode cross --targets linux-x64-gnu --zig always
+pnpm release:prepare --mode cross --targets linux-x64-gnu --zig never
+pnpm release:prepare --mode cross --targets linux-x64-gnu --allow-missing-tools
+
+pnpm release:pack --mode cross --targets linux-x64-gnu --zig auto
+```
+
+Local mode builds the current host target only and uses `cargo` by default. Cross mode evaluates each requested target independently:
+
+- `--zig auto` uses `cargo` for the host target and `cargo zigbuild` for Linux cross targets when `cargo-zigbuild` and `zig` are available.
+- `--zig always` requires `cargo-zigbuild` for Linux cross targets.
+- `--zig never` never calls `cargo zigbuild` and fails for targets that need it.
+- Missing `cargo-zigbuild` or `zig` fails by default.
+- `--allow-missing-tools` skips requested cross targets when the required tools are unavailable.
+
+Skipped targets are not staged, are not added to `.npm/compiler/package.json` `optionalDependencies`, and never produce fake platform packages.
+
+Full mode is reserved for CI/public release validation and builds every target that the current host can actually stage with the selected tools.
+Unsupported cross targets are not faked or substituted.
+
+Staged native artifacts use target-qualified names such as `compiler.darwin-arm64.node` and are copied from the real Rust output only.
+
+Packages are staged under `.npm/`, then packed and published from `.npm/` rather than `packages/*`.
+
+Aruna never fakes platform support by renaming a binary built for another target or by staging placeholder packages for skipped targets.
 
 Packaging automation is TypeScript-based and executed with `tsx`.
 
@@ -47,7 +77,7 @@ pnpm aruna check --no-color --project fixtures/invalid-client-imports-server/inp
 
 `packages/compiler` loads the native Rust compiler directly. There is no TypeScript analyzer fallback in Phase 1.
 
-Future Linux cross-compiles are expected to use `cargo-zigbuild --target x86_64-unknown-linux-gnu`, `cargo-zigbuild --target aarch64-unknown-linux-gnu`, `cargo-zigbuild --target x86_64-unknown-linux-musl`, and `cargo-zigbuild --target aarch64-unknown-linux-musl` instead of staged fake packages.
+Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-linux-gnu`, `cargo zigbuild --target aarch64-unknown-linux-gnu`, `cargo zigbuild --target x86_64-unknown-linux-musl`, and `cargo zigbuild --target aarch64-unknown-linux-musl` builds instead of staged fake packages.
 
 ## Intentionally not implemented
 
