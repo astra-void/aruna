@@ -12,10 +12,11 @@ export type NativeTargetInfo = {
   target: NativeTarget;
   npmPackageName: string;
   artifactName: string;
-  rustTarget?: string | undefined;
-  os: NodeJS.Platform;
-  arch: NodeJS.Architecture;
+  rustTarget: string;
+  os: "darwin" | "win32" | "linux";
+  arch: "arm64" | "x64";
   libc?: "gnu" | "musl" | undefined;
+  buildTool: "cargo" | "cargo-zigbuild";
 };
 
 export type RuntimeInfo = {
@@ -57,29 +58,37 @@ const NATIVE_TARGETS: NativeTargetMap = {
     target: "darwin-arm64",
     npmPackageName: "@arunajs/compiler-darwin-arm64",
     artifactName: "compiler.darwin-arm64.node",
+    rustTarget: "aarch64-apple-darwin",
     os: "darwin",
     arch: "arm64",
+    buildTool: "cargo",
   },
   "darwin-x64": {
     target: "darwin-x64",
     npmPackageName: "@arunajs/compiler-darwin-x64",
     artifactName: "compiler.darwin-x64.node",
+    rustTarget: "x86_64-apple-darwin",
     os: "darwin",
     arch: "x64",
+    buildTool: "cargo",
   },
   "win32-x64-msvc": {
     target: "win32-x64-msvc",
     npmPackageName: "@arunajs/compiler-win32-x64-msvc",
     artifactName: "compiler.win32-x64-msvc.node",
+    rustTarget: "x86_64-pc-windows-msvc",
     os: "win32",
     arch: "x64",
+    buildTool: "cargo",
   },
   "win32-arm64-msvc": {
     target: "win32-arm64-msvc",
     npmPackageName: "@arunajs/compiler-win32-arm64-msvc",
     artifactName: "compiler.win32-arm64-msvc.node",
+    rustTarget: "aarch64-pc-windows-msvc",
     os: "win32",
     arch: "arm64",
+    buildTool: "cargo",
   },
   "linux-x64-gnu": {
     target: "linux-x64-gnu",
@@ -89,6 +98,7 @@ const NATIVE_TARGETS: NativeTargetMap = {
     os: "linux",
     arch: "x64",
     libc: "gnu",
+    buildTool: "cargo-zigbuild",
   },
   "linux-arm64-gnu": {
     target: "linux-arm64-gnu",
@@ -98,6 +108,7 @@ const NATIVE_TARGETS: NativeTargetMap = {
     os: "linux",
     arch: "arm64",
     libc: "gnu",
+    buildTool: "cargo-zigbuild",
   },
   "linux-x64-musl": {
     target: "linux-x64-musl",
@@ -107,6 +118,7 @@ const NATIVE_TARGETS: NativeTargetMap = {
     os: "linux",
     arch: "x64",
     libc: "musl",
+    buildTool: "cargo-zigbuild",
   },
   "linux-arm64-musl": {
     target: "linux-arm64-musl",
@@ -116,6 +128,7 @@ const NATIVE_TARGETS: NativeTargetMap = {
     os: "linux",
     arch: "arm64",
     libc: "musl",
+    buildTool: "cargo-zigbuild",
   },
 };
 
@@ -177,6 +190,26 @@ export function nativeArtifactName(target: NativeTarget): string {
 export function nativeTargetInfo(target: NativeTarget): NativeTargetInfo {
   return NATIVE_TARGETS[target];
 }
+
+export function nativeBuildOutputName(target: NativeTarget): string {
+  const info = nativeTargetInfo(target);
+
+  if (info.os === "darwin") {
+    return "libaruna_napi.dylib";
+  }
+
+  if (info.os === "linux") {
+    return "libaruna_napi.so";
+  }
+
+  if (info.os === "win32") {
+    return "aruna_napi.dll";
+  }
+
+  return "aruna_napi.node";
+}
+
+export const SUPPORTED_NATIVE_TARGET_INFOS = SUPPORTED_NATIVE_TARGETS.map((target) => nativeTargetInfo(target));
 
 export function resolveNativeTarget(runtime: RuntimeInfo = { platform: process.platform, arch: process.arch }): NativeTarget {
   const { platform, arch } = runtime;

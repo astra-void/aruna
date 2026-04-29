@@ -4,7 +4,9 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import {
   nativeArtifactName,
+  nativeBuildOutputName,
   nativePackageName,
+  nativeTargetInfo,
   resolveNativeTarget,
   type NativeTarget,
 } from "./native-platform.js";
@@ -37,7 +39,17 @@ function resolveNativeTargetPath(target: NativeTarget): string {
 
 function workspaceCandidatePaths(): string[] {
   const targetDir = targetRoot();
-  return [path.join(targetDir, "debug", "aruna_napi.node"), path.join(targetDir, "release", "aruna_napi.node")];
+  const target = resolveNativeTarget();
+  const rustTarget = nativeTargetInfo(target).rustTarget;
+  const buildOutputName = nativeBuildOutputName(target);
+  return [
+    path.join(targetDir, rustTarget, "debug", buildOutputName),
+    path.join(targetDir, rustTarget, "debug", "aruna_napi.node"),
+    path.join(targetDir, rustTarget, "release", buildOutputName),
+    path.join(targetDir, rustTarget, "release", "aruna_napi.node"),
+    path.join(targetDir, "debug", "aruna_napi.node"),
+    path.join(targetDir, "release", "aruna_napi.node"),
+  ];
 }
 
 function formatDisplayPath(candidatePath: string): string {

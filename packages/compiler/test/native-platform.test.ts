@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nativeArtifactName, nativePackageName, resolveNativeTarget } from "../src/native-platform.ts";
+import { nativeArtifactName, nativePackageName, nativeTargetInfo, resolveNativeTarget } from "../src/native-platform.ts";
 
 describe("native target helpers", () => {
   it.each([
@@ -24,17 +24,36 @@ describe("native target helpers", () => {
   });
 
   it.each([
-    ["darwin-arm64", "@arunajs/compiler-darwin-arm64", "compiler.darwin-arm64.node"],
-    ["darwin-x64", "@arunajs/compiler-darwin-x64", "compiler.darwin-x64.node"],
-    ["win32-x64-msvc", "@arunajs/compiler-win32-x64-msvc", "compiler.win32-x64-msvc.node"],
-    ["win32-arm64-msvc", "@arunajs/compiler-win32-arm64-msvc", "compiler.win32-arm64-msvc.node"],
-    ["linux-x64-gnu", "@arunajs/compiler-linux-x64-gnu", "compiler.linux-x64-gnu.node"],
-    ["linux-arm64-gnu", "@arunajs/compiler-linux-arm64-gnu", "compiler.linux-arm64-gnu.node"],
-    ["linux-x64-musl", "@arunajs/compiler-linux-x64-musl", "compiler.linux-x64-musl.node"],
-    ["linux-arm64-musl", "@arunajs/compiler-linux-arm64-musl", "compiler.linux-arm64-musl.node"],
-  ])("maps %s to package and artifact names", (target, expectedPackage, expectedArtifact) => {
-    expect(nativePackageName(target)).toBe(expectedPackage);
-    expect(nativeArtifactName(target)).toBe(expectedArtifact);
+    ["darwin-arm64", "@arunajs/compiler-darwin-arm64", "compiler.darwin-arm64.node", "aarch64-apple-darwin", "cargo"],
+    ["darwin-x64", "@arunajs/compiler-darwin-x64", "compiler.darwin-x64.node", "x86_64-apple-darwin", "cargo"],
+    ["win32-x64-msvc", "@arunajs/compiler-win32-x64-msvc", "compiler.win32-x64-msvc.node", "x86_64-pc-windows-msvc", "cargo"],
+    ["win32-arm64-msvc", "@arunajs/compiler-win32-arm64-msvc", "compiler.win32-arm64-msvc.node", "aarch64-pc-windows-msvc", "cargo"],
+    ["linux-x64-gnu", "@arunajs/compiler-linux-x64-gnu", "compiler.linux-x64-gnu.node", "x86_64-unknown-linux-gnu", "cargo-zigbuild"],
+    ["linux-arm64-gnu", "@arunajs/compiler-linux-arm64-gnu", "compiler.linux-arm64-gnu.node", "aarch64-unknown-linux-gnu", "cargo-zigbuild"],
+    ["linux-x64-musl", "@arunajs/compiler-linux-x64-musl", "compiler.linux-x64-musl.node", "x86_64-unknown-linux-musl", "cargo-zigbuild"],
+    ["linux-arm64-musl", "@arunajs/compiler-linux-arm64-musl", "compiler.linux-arm64-musl.node", "aarch64-unknown-linux-musl", "cargo-zigbuild"],
+  ])(
+    "maps %s to package, artifact, rust target, and build tool",
+    (target, expectedPackage, expectedArtifact, expectedRustTarget, expectedBuildTool) => {
+      const info = nativeTargetInfo(target);
+      expect(nativePackageName(target)).toBe(expectedPackage);
+      expect(nativeArtifactName(target)).toBe(expectedArtifact);
+      expect(info.rustTarget).toBe(expectedRustTarget);
+      expect(info.buildTool).toBe(expectedBuildTool);
+    },
+  );
+
+  it.each([
+    ["darwin-arm64", "darwin"],
+    ["darwin-x64", "darwin"],
+    ["win32-x64-msvc", "win32"],
+    ["win32-arm64-msvc", "win32"],
+    ["linux-x64-gnu", "linux"],
+    ["linux-arm64-gnu", "linux"],
+    ["linux-x64-musl", "linux"],
+    ["linux-arm64-musl", "linux"],
+  ])("maps %s to os families", (target, expectedOs) => {
+    expect(nativeTargetInfo(target).os).toBe(expectedOs);
   });
 
   it("throws a useful error for unsupported arches", () => {

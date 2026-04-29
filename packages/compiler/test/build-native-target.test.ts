@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { nativeBuildOutputName, nativeTargetInfo } from "../src/native-platform.ts";
 import {
   findNativeBuildArtifact,
   hostBuildOutputName,
@@ -29,10 +30,13 @@ describe("build-native-target core", () => {
 
   it("keeps native staging on the current host target", async () => {
     const hostTarget = resolveHostNativeTarget();
-    const spawnSync = vi.fn(() => ({ status: 0, error: undefined }));
-    const access = vi.fn().mockResolvedValue(undefined);
-    const copyFile = vi.fn().mockResolvedValue(undefined);
-    const mkdir = vi.fn().mockResolvedValue(undefined);
+    const buildNativeArtifact = vi.fn().mockResolvedValue({
+      targetInfo: nativeTargetInfo(hostTarget),
+      profile: "debug",
+      sourceArtifactPath: findNativeBuildArtifact(),
+      command: "cargo",
+      args: [],
+    });
     const stageNativePackage = vi.fn().mockResolvedValue({
       packageDirectory: "/tmp/native/package",
       packageJsonPath: "/tmp/native/package/package.json",
@@ -45,10 +49,7 @@ describe("build-native-target core", () => {
     const readVersion = vi.fn().mockResolvedValue("0.1.0");
 
     const result = await runBuildNativeTarget({
-      spawnSync,
-      access,
-      copyFile,
-      mkdir,
+      buildNativeArtifact,
       stageNativePackage,
       stageCompilerPackage,
       readVersion,
@@ -57,12 +58,14 @@ describe("build-native-target core", () => {
     expect(result.hostTarget).toBe(hostTarget);
     expect(result.version).toBe("0.1.0");
     expect(result.sourceArtifactPath).toBe(findNativeBuildArtifact());
-    expect(spawnSync).toHaveBeenCalledTimes(1);
-    expect(spawnSync.mock.calls[0]?.[0]).toBe("cargo");
-    expect(spawnSync.mock.calls[0]?.[1]).toContain("--package");
-    expect(spawnSync.mock.calls[0]?.[1]).toContain("aruna_napi");
-    expect(access).toHaveBeenCalledWith(findNativeBuildArtifact());
-    expect(copyFile).toHaveBeenCalledWith(findNativeBuildArtifact(), expect.stringContaining(`aruna_napi.node`));
+    expect(buildNativeArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: hostTarget,
+        hostTarget,
+        profile: "debug",
+        manifestPath: expect.stringContaining("crates/aruna_napi/Cargo.toml"),
+      }),
+    );
     expect(stageNativePackage).toHaveBeenCalledWith(
       expect.objectContaining({
         target: hostTarget,
@@ -73,6 +76,7 @@ describe("build-native-target core", () => {
     expect(stageCompilerPackage).toHaveBeenCalledWith(
       expect.objectContaining({
         version: "0.1.0",
+        nativeTargets: [hostTarget],
       }),
     );
   });
@@ -81,17 +85,14 @@ describe("build-native-target core", () => {
     const hostTarget = resolveHostNativeTarget();
     const requestedTarget = hostTarget === "darwin-arm64" ? "darwin-x64" : "darwin-arm64";
     process.env.ARUNA_NATIVE_TARGET = requestedTarget;
-    const spawnSync = vi.fn();
 
     await expect(
       runBuildNativeTarget({
-        spawnSync,
         readVersion: vi.fn().mockResolvedValue("0.1.0"),
       }),
     ).rejects.toThrow(
       `Explicit native target "${requestedTarget}" does not match the current host target "${hostTarget}".`,
     );
-    expect(spawnSync).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported explicit native targets", () => {
@@ -103,15 +104,13 @@ describe("build-native-target core", () => {
   });
 
   it("stops before staging when the native build output is missing", async () => {
-    const spawnSync = vi.fn(() => ({ status: 0, error: undefined }));
-    const access = vi.fn().mockRejectedValue(new Error("missing native build output"));
+    const buildNativeArtifact = vi.fn().mockRejectedValue(new Error("missing native build output"));
     const stageNativePackage = vi.fn();
     const stageCompilerPackage = vi.fn();
 
     await expect(
       runBuildNativeTarget({
-        spawnSync,
-        access,
+        buildNativeArtifact,
         stageNativePackage,
         stageCompilerPackage,
         readVersion: vi.fn().mockResolvedValue("0.1.0"),
@@ -123,6 +122,6 @@ describe("build-native-target core", () => {
   });
 
   it("uses the platform-specific native build output name", () => {
-    expect(hostBuildOutputName()).toMatch(/aruna_napi\.(dll|dylib|so)$/);
+    expect(hostBuildOutputName()).toBe(nativeBuildOutputName(resolveHostNativeTarget()));
   });
 });

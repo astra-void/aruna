@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import { vi, describe, expect, it, beforeEach, afterEach } from "vitest";
-import { nativeArtifactName, nativePackageName, resolveNativeTarget } from "../src/native-platform.ts";
+import {
+  nativeArtifactName,
+  nativeBuildOutputName,
+  nativePackageName,
+  nativeTargetInfo,
+  resolveNativeTarget,
+} from "../src/native-platform.ts";
 
 const mockRequire = vi.fn(() => {
   throw new Error("mock native load failure");
@@ -30,6 +36,8 @@ describe("loadNativeCompiler", () => {
 
   it("includes the expected package and local fallback paths in the failure message", () => {
     const target = resolveNativeTarget();
+    const rustTarget = nativeTargetInfo(target).rustTarget;
+    const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
 
@@ -46,6 +54,8 @@ describe("loadNativeCompiler", () => {
       expect(message).toContain("Searched:");
       expect(message).toContain(`- ${expectedPackage}`);
       expect(message).toContain(`- ${localFallback}`);
+      expect(message).toContain(`- target/${rustTarget}/debug/${buildOutputName}`);
+      expect(message).toContain(`- target/${rustTarget}/release/${buildOutputName}`);
       expect(message).toContain("- target/debug/aruna_napi.node");
       expect(message).toContain("- target/release/aruna_napi.node");
       expect(message).toContain(
@@ -73,10 +83,12 @@ describe("loadNativeCompiler", () => {
 
   it("falls back to the staged native package before workspace build outputs", () => {
     const target = resolveNativeTarget();
+    const rustTarget = nativeTargetInfo(target).rustTarget;
+    const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
-    const debugFallback = "target/debug/aruna_napi.node";
-    const releaseFallback = "target/release/aruna_napi.node";
+    const debugFallback = `target/${rustTarget}/debug/${buildOutputName}`;
+    const releaseFallback = `target/${rustTarget}/release/${buildOutputName}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
 
     mockRequire
@@ -100,9 +112,11 @@ describe("loadNativeCompiler", () => {
 
   it("tries debug and then release workspace outputs when the staged package is absent", () => {
     const target = resolveNativeTarget();
+    const rustTarget = nativeTargetInfo(target).rustTarget;
+    const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const debugFallback = "target/debug/aruna_napi.node";
-    const releaseFallback = "target/release/aruna_napi.node";
+    const debugFallback = `target/${rustTarget}/debug/${buildOutputName}`;
+    const releaseFallback = `target/${rustTarget}/release/${buildOutputName}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
 
     mockRequire

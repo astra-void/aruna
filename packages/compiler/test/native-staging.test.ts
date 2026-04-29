@@ -65,18 +65,52 @@ describe("native staging helpers", () => {
 
   it("stages the compiler manifest with real semver optional dependencies", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-compiler-"));
+    await fs.mkdir(path.join(workspaceRoot, "packages", "compiler", "dist"), { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceRoot, "packages", "compiler", "package.json"),
+      JSON.stringify(
+        {
+          name: "@arunajs/compiler",
+          version: "0.1.0",
+          type: "module",
+          main: "./dist/index.js",
+          module: "./dist/index.js",
+          types: "./dist/index.d.ts",
+          exports: {
+            ".": {
+              types: "./dist/index.d.ts",
+              import: "./dist/index.js",
+            },
+          },
+          files: ["dist"],
+          dependencies: {
+            "@arunajs/core": "workspace:*",
+            typescript: "^5.8.3",
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    await fs.writeFile(path.join(workspaceRoot, "packages", "compiler", "dist", "index.js"), "export {};\n");
+    await fs.writeFile(path.join(workspaceRoot, "packages", "compiler", "dist", "index.d.ts"), "export {};\n");
     const staged = await stageCompilerPackage({
       workspaceRoot,
       version: "0.1.0",
+      nativeTargets: SUPPORTED_NATIVE_TARGETS,
     });
 
     expect(staged.packageDirectory).toBe(path.join(workspaceRoot, ".npm", "compiler"));
     expect(staged.packageJsonPath).toBe(path.join(workspaceRoot, ".npm", "compiler", "package.json"));
+    expect(await fs.readFile(path.join(workspaceRoot, ".npm", "compiler", "dist", "index.js"), "utf8")).toBe(
+      "export {};\n",
+    );
 
     const packageJson = JSON.parse(await fs.readFile(staged.packageJsonPath, "utf8")) as {
       name: string;
       version: string;
       optionalDependencies: Record<string, string>;
+      dependencies: Record<string, string>;
     };
     const packageJsonText = await fs.readFile(staged.packageJsonPath, "utf8");
 
@@ -84,6 +118,7 @@ describe("native staging helpers", () => {
     expect(packageJson.version).toBe("0.1.0");
     expect(Object.keys(packageJson.optionalDependencies)).toEqual(SUPPORTED_NATIVE_TARGETS.map(nativePackageName));
     expect(Object.values(packageJson.optionalDependencies)).toEqual(Array(SUPPORTED_NATIVE_TARGETS.length).fill("0.1.0"));
+    expect(packageJson.dependencies["@arunajs/core"]).toBe("0.1.0");
     expect(packageJsonText).not.toContain("workspace:*");
   });
 });
