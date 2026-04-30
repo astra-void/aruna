@@ -19,6 +19,7 @@
     "@types/node": "^24.12.2",
     "commander": "^12.1.0",
     "gradient-string": "^3.0.0",
+    "oxfmt": "^0.47.0",
     "oxlint": "^1.62.0",
     "picocolors": "^1.1.1",
     "tsx": "^4.21.0",
