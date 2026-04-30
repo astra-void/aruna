@@ -122,7 +122,7 @@ describe("native build tool selection", () => {
     const cargoPath = "/Users/returnf4lse/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo";
     const rustcPath = "/Users/returnf4lse/.rustup/toolchains/stable-aarch64-apple-darwin/bin/rustc";
 
-    const spawnSync = vi.fn((command: string, args: string[], options: { cwd: string }) => {
+    const spawnSync = vi.fn((command: string, args: string[], _options: { cwd: string }) => {
       if (command === "rustup" && args[0] === "show" && args[1] === "active-toolchain") {
         return { status: 0, error: undefined, stdout: "stable-aarch64-apple-darwin (default)\n" };
       }

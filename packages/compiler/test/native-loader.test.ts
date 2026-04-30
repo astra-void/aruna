@@ -36,8 +36,6 @@ describe("loadNativeCompiler", () => {
 
   it("includes the expected package and local fallback paths in the failure message", () => {
     const target = resolveNativeTarget();
-    const rustTarget = nativeTargetInfo(target).rustTarget;
-    const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
 
@@ -83,12 +81,8 @@ describe("loadNativeCompiler", () => {
 
   it("falls back to the staged native package before workspace build outputs", () => {
     const target = resolveNativeTarget();
-    const rustTarget = nativeTargetInfo(target).rustTarget;
-    const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
-    const debugFallback = `target/${rustTarget}/debug/${buildOutputName}`;
-    const releaseFallback = `target/${rustTarget}/release/${buildOutputName}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
 
     mockRequire

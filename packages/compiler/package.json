@@ -27,6 +27,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:release": "vitest run test/build-native-target.test.ts test/native-build.test.ts test/native-loader.test.ts test/native-staging.test.ts test/release.test.ts",
-    "lint": "pnpm typecheck"
+    "lint": "pnpm exec oxlint src scripts test",
+    "lint:fix": "pnpm exec oxlint src scripts test --fix"
   }
 }
