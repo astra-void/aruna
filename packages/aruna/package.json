@@ -31,7 +31,8 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm --dir ../.. exec vitest run --root packages/aruna",
-    "lint": "pnpm typecheck",
+    "lint": "pnpm exec oxlint src test",
+    "lint:fix": "pnpm exec oxlint src test --fix",
     "aruna": "node ./dist/cli.js"
   }
 }

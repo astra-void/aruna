@@ -15,7 +15,7 @@ import {
   formatSuccess,
 } from "../src/theme.js";
 
-const ANSI_PATTERN = /\x1b\[[0-9;]*m/;
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`);
 const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
 const builtCliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist/cli.js");
 
