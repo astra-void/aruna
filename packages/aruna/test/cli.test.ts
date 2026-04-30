@@ -16,7 +16,10 @@ import {
 } from "../src/theme.js";
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`);
-const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
+const fixturesRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../fixtures",
+);
 const builtCliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist/cli.js");
 
 async function loadFixtureOutput(name: string) {
@@ -72,10 +75,20 @@ describe("cli integration", () => {
     delete env.CI;
     delete env.NO_COLOR;
 
-    const result = spawnSync(process.execPath, [builtCliPath, "check", "--no-color", "--project", path.join("fixtures", "valid-client-imports-shared", "input")], {
-      encoding: "utf8",
-      env,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "check",
+        "--no-color",
+        "--project",
+        path.join("fixtures", "valid-client-imports-shared", "input"),
+      ],
+      {
+        encoding: "utf8",
+        env,
+      },
+    );
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("aruna check");
@@ -90,10 +103,20 @@ describe("cli integration", () => {
     delete env.CI;
     delete env.NO_COLOR;
 
-    const result = spawnSync(process.execPath, [builtCliPath, "check", "--json", "--project", path.join("fixtures", "valid-client-imports-shared", "input")], {
-      encoding: "utf8",
-      env,
-    });
+    const result = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "check",
+        "--json",
+        "--project",
+        path.join("fixtures", "valid-client-imports-shared", "input"),
+      ],
+      {
+        encoding: "utf8",
+        env,
+      },
+    );
 
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/^\s*\{/);

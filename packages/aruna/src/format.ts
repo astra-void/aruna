@@ -46,7 +46,11 @@ function formatGroupTitle(label: string, colors: CliColorMode): string {
   return formatStrong(label, colors);
 }
 
-export function formatSummary(output: ArunaCompilerOutput, command: string, options: HumanFormatOptions): string {
+export function formatSummary(
+  output: ArunaCompilerOutput,
+  command: string,
+  options: HumanFormatOptions,
+): string {
   const lines: string[] = [commandTitle(command, options.colors), ""];
 
   if (output.summary.errors === 0 && output.summary.warnings === 0) {
@@ -54,15 +58,24 @@ export function formatSummary(output: ArunaCompilerOutput, command: string, opti
     lines.push(summaryLine(output.summary.resolvedImports, "import", "resolved", options.colors));
     lines.push(`  ${formatSuccess("✓", options.colors)} no boundary errors found`);
   } else {
-    lines.push(`  ${output.summary.modules} ${output.summary.modules === 1 ? "module" : "modules"} analyzed`);
-    lines.push(`  ${output.summary.resolvedImports} ${output.summary.resolvedImports === 1 ? "import" : "imports"} resolved`);
-    lines.push(`  ${output.summary.errors} ${output.summary.errors === 1 ? "error" : "errors"} found`);
+    lines.push(
+      `  ${output.summary.modules} ${output.summary.modules === 1 ? "module" : "modules"} analyzed`,
+    );
+    lines.push(
+      `  ${output.summary.resolvedImports} ${output.summary.resolvedImports === 1 ? "import" : "imports"} resolved`,
+    );
+    lines.push(
+      `  ${output.summary.errors} ${output.summary.errors === 1 ? "error" : "errors"} found`,
+    );
     if (output.summary.warnings > 0) {
-      lines.push(`  ${output.summary.warnings} ${output.summary.warnings === 1 ? "warning" : "warnings"} found`);
+      lines.push(
+        `  ${output.summary.warnings} ${output.summary.warnings === 1 ? "warning" : "warnings"} found`,
+      );
     }
   }
 
-  const durationLine = options.includeDuration === false ? "" : formatDurationLine(options.durationMs);
+  const durationLine =
+    options.includeDuration === false ? "" : formatDurationLine(options.durationMs);
   if (durationLine) {
     lines.push("");
     lines.push(durationLine);
@@ -72,7 +85,10 @@ export function formatSummary(output: ArunaCompilerOutput, command: string, opti
 }
 
 function renderDiagnosticBlock(diagnostic: ArunaDiagnostic, colors: CliColorMode): string[] {
-  const lines: string[] = [`${statusLabel(diagnostic.severity, colors)} ${diagnostic.code} ${diagnostic.name}`, ""];
+  const lines: string[] = [
+    `${statusLabel(diagnostic.severity, colors)} ${diagnostic.code} ${diagnostic.name}`,
+    "",
+  ];
 
   if (diagnostic.file) {
     lines.push(`  ${diagnostic.file}`);
@@ -134,7 +150,12 @@ export function formatModuleInspection(
     groups[module.kind].push(module.path);
   }
 
-  const lines: string[] = [commandTitle("inspect modules", colors), "", sectionTitle("module classification", colors), ""];
+  const lines: string[] = [
+    commandTitle("inspect modules", colors),
+    "",
+    sectionTitle("module classification", colors),
+    "",
+  ];
   for (const kind of ["client", "server", "shared", "unknown"] as const) {
     const files = groups[kind];
     if (files.length === 0 && !verbose) {
@@ -155,7 +176,11 @@ export function formatModuleInspection(
   return lines.join("\n").trimEnd();
 }
 
-function diagnosticForGraphEdge(output: ArunaCompilerOutput, from: string, to?: string): ArunaDiagnostic | undefined {
+function diagnosticForGraphEdge(
+  output: ArunaCompilerOutput,
+  from: string,
+  to?: string,
+): ArunaDiagnostic | undefined {
   return output.diagnostics.find((diagnostic) => {
     if (diagnostic.file !== from) {
       return false;
@@ -169,18 +194,34 @@ function diagnosticForGraphEdge(output: ArunaCompilerOutput, from: string, to?: 
   });
 }
 
-function graphStatusLabel(diagnostic: ArunaDiagnostic | undefined, resolved: boolean, colors: CliColorMode): string {
+function graphStatusLabel(
+  diagnostic: ArunaDiagnostic | undefined,
+  resolved: boolean,
+  colors: CliColorMode,
+): string {
   if (!diagnostic) {
     return resolved ? formatSuccess("ok", colors) : formatWarning("warning", colors);
   }
 
-  const label = diagnostic.severity === "error" ? "error" : diagnostic.severity === "warning" ? "warning" : "ok";
+  const label =
+    diagnostic.severity === "error"
+      ? "error"
+      : diagnostic.severity === "warning"
+        ? "warning"
+        : "ok";
   return formatSeverityLabel(diagnostic.severity, label, colors);
 }
 
 export function formatGraphInspection(output: ArunaCompilerOutput, colors: CliColorMode): string {
-  const moduleByPath = new Map(output.manifest.modules.map((module) => [module.path, module] as const));
-  const lines: string[] = [commandTitle("inspect graph", colors), "", sectionTitle("import graph", colors), ""];
+  const moduleByPath = new Map(
+    output.manifest.modules.map((module) => [module.path, module] as const),
+  );
+  const lines: string[] = [
+    commandTitle("inspect graph", colors),
+    "",
+    sectionTitle("import graph", colors),
+    "",
+  ];
 
   for (const module of output.manifest.modules) {
     lines.push(formatGroupTitle(`${module.path} [${module.kind}]`, colors));

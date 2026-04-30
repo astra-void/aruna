@@ -72,7 +72,11 @@ function writeText(output: string): void {
   process.stdout.write(`${output}\n`);
 }
 
-function renderCheckOutput(output: ArunaCompilerOutput, options: CliOptions, durationMs: number): void {
+function renderCheckOutput(
+  output: ArunaCompilerOutput,
+  options: CliOptions,
+  durationMs: number,
+): void {
   const colors = resolveColorMode(options);
   if (options.json) {
     writeJson(output);
@@ -80,7 +84,9 @@ function renderCheckOutput(output: ArunaCompilerOutput, options: CliOptions, dur
   }
 
   const hasDiagnostics = output.diagnostics.length > 0;
-  writeText(formatSummary(output, "check", { colors, durationMs, includeDuration: !hasDiagnostics }));
+  writeText(
+    formatSummary(output, "check", { colors, durationMs, includeDuration: !hasDiagnostics }),
+  );
   if (!options.quiet && hasDiagnostics) {
     const diagnostics = formatDiagnostics(output, colors);
     if (diagnostics.length > 0) {
@@ -96,7 +102,11 @@ function renderCheckOutput(output: ArunaCompilerOutput, options: CliOptions, dur
   }
 }
 
-function renderInspectOutput(output: ArunaCompilerOutput, options: CliOptions, durationMs: number): void {
+function renderInspectOutput(
+  output: ArunaCompilerOutput,
+  options: CliOptions,
+  durationMs: number,
+): void {
   const colors = resolveColorMode(options);
   if (options.json) {
     writeJson(output);
@@ -104,7 +114,9 @@ function renderInspectOutput(output: ArunaCompilerOutput, options: CliOptions, d
   }
 
   const hasDiagnostics = output.diagnostics.length > 0;
-  writeText(formatSummary(output, "inspect", { colors, durationMs, includeDuration: !hasDiagnostics }));
+  writeText(
+    formatSummary(output, "inspect", { colors, durationMs, includeDuration: !hasDiagnostics }),
+  );
   if (!options.quiet && hasDiagnostics) {
     const diagnostics = formatDiagnostics(output, colors);
     if (diagnostics.length > 0) {
@@ -132,7 +144,9 @@ export async function main(): Promise<number> {
   const program = new Command();
   program
     .name("aruna")
-    .description("Aruna compiler and boundary checker. Running `aruna` without a subcommand aliases to `aruna check`.")
+    .description(
+      "Aruna compiler and boundary checker. Running `aruna` without a subcommand aliases to `aruna check`.",
+    )
     .option("--project <path>", "project root")
     .option("--config <path>", "config file path")
     .option("--json", "emit JSON")
@@ -173,7 +187,9 @@ export async function main(): Promise<number> {
         process.exitCode = output.ok ? 0 : 1;
         return;
       }
-      writeText(formatModuleInspection(output, resolveColorMode(options), Boolean(options.verbose)));
+      writeText(
+        formatModuleInspection(output, resolveColorMode(options), Boolean(options.verbose)),
+      );
       process.exitCode = output.ok ? 0 : 1;
     });
 
@@ -211,12 +227,15 @@ export async function main(): Promise<number> {
   return typeof process.exitCode === "number" ? process.exitCode : 0;
 }
 
-const isDirectExecution = process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isDirectExecution =
+  process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isDirectExecution) {
   main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
-    process.stderr.write(`${formatError(message, resolveColorMode({}, process.env, Boolean(process.stderr.isTTY)))}\n`);
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(
+      `${formatError(message, resolveColorMode({}, process.env, Boolean(process.stderr.isTTY)))}\n`,
+    );
     process.exitCode = 3;
   });
 }

@@ -16,11 +16,18 @@ export const ARUNA_CLI_PALETTES = {
 
 export const ARUNA_CLI_DEFAULT_PALETTE: ArunaCliPaletteName = "softAurora";
 
-function withColor(colorMode: ArunaCliColorMode, apply: (input: string) => string, text: string): string {
+function withColor(
+  colorMode: ArunaCliColorMode,
+  apply: (input: string) => string,
+  text: string,
+): string {
   return colorMode.enabled ? apply(text) : text;
 }
 
-export function brandGradient(name: ArunaCliPaletteName, enabled: boolean): (input: string) => string {
+export function brandGradient(
+  name: ArunaCliPaletteName,
+  enabled: boolean,
+): (input: string) => string {
   if (!enabled) {
     return (input: string) => input;
   }
