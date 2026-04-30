@@ -27,7 +27,10 @@ export function stagedNativePackageDirectory(workspaceRoot: string, target: Nati
   return path.join(workspaceRoot, ".npm", nativePackageDirectoryName(target));
 }
 
-export function stagedNativePackageArtifactPath(workspaceRoot: string, target: NativeTarget): string {
+export function stagedNativePackageArtifactPath(
+  workspaceRoot: string,
+  target: NativeTarget,
+): string {
   return path.join(stagedNativePackageDirectory(workspaceRoot, target), nativeArtifactName(target));
 }
 

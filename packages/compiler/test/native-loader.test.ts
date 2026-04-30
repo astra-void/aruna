@@ -45,7 +45,9 @@ describe("loadNativeCompiler", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       const message = (error as Error).message;
-      expect(message).toContain(`Aruna native compiler could not be loaded for ${process.platform}/${process.arch}.`);
+      expect(message).toContain(
+        `Aruna native compiler could not be loaded for ${process.platform}/${process.arch}.`,
+      );
       expect(message).toContain(`Resolved native target: ${target}`);
       expect(message).toContain(`Expected native package: ${expectedPackage}`);
       expect(message).toContain(`Expected native artifact: ${nativeArtifactName(target)}`);
@@ -94,7 +96,9 @@ describe("loadNativeCompiler", () => {
         return loadedCompiler;
       });
 
-    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => candidate.endsWith(localFallback));
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) =>
+      candidate.endsWith(localFallback),
+    );
 
     const result = loadNativeCompiler();
 

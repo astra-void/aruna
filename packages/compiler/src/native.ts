@@ -71,12 +71,19 @@ function validateNativeCompiler(value: unknown): asserts value is NativeCompiler
     throw new Error(NATIVE_MODULE_SHAPE_ERROR);
   }
   const candidate = value as Partial<NativeCompiler>;
-  if (typeof candidate.checkProject !== "function" || typeof candidate.inspectProject !== "function") {
+  if (
+    typeof candidate.checkProject !== "function" ||
+    typeof candidate.inspectProject !== "function"
+  ) {
     throw new Error(NATIVE_MODULE_SHAPE_ERROR);
   }
 }
 
-function createLoadFailureMessage(target: NativeTarget, expectedPackage: string, searchedPaths: string[]): string {
+function createLoadFailureMessage(
+  target: NativeTarget,
+  expectedPackage: string,
+  searchedPaths: string[],
+): string {
   return [
     `Aruna native compiler could not be loaded for ${process.platform}/${process.arch}.`,
     `Resolved native target: ${target}`,

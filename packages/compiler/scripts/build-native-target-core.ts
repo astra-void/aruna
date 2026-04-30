@@ -38,7 +38,10 @@ function detectHostLibc(): "gnu" | "musl" | undefined {
   }
 
   const sharedObjects = report?.sharedObjects;
-  if (Array.isArray(sharedObjects) && sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
+  if (
+    Array.isArray(sharedObjects) &&
+    sharedObjects.some((sharedObject) => sharedObject.includes("musl"))
+  ) {
     return "musl";
   }
 
@@ -48,7 +51,9 @@ function detectHostLibc(): "gnu" | "musl" | undefined {
 async function ensureVersion(readVersion: () => Promise<string>): Promise<string> {
   const version = await readVersion();
   if (typeof version !== "string" || version.length === 0) {
-    throw new Error(`Could not determine package version from ${path.join(packageRoot, "package.json")}`);
+    throw new Error(
+      `Could not determine package version from ${path.join(packageRoot, "package.json")}`,
+    );
   }
 
   return version;
@@ -56,7 +61,9 @@ async function ensureVersion(readVersion: () => Promise<string>): Promise<string
 
 async function readPackageVersion(): Promise<string> {
   const packageJsonPath = path.join(packageRoot, "package.json");
-  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as { version?: string };
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as {
+    version?: string;
+  };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
     throw new Error(`Could not determine package version from ${packageJsonPath}`);
   }
@@ -108,10 +115,18 @@ export function readRequestedTarget(): NativeTarget | null {
 
 export function findNativeBuildArtifact(): string {
   const hostTarget = resolveHostNativeTarget();
-  return path.join(workspaceRoot, "target", nativeTargetInfo(hostTarget).rustTarget, profile, hostBuildOutputName());
+  return path.join(
+    workspaceRoot,
+    "target",
+    nativeTargetInfo(hostTarget).rustTarget,
+    profile,
+    hostBuildOutputName(),
+  );
 }
 
-export async function runBuildNativeTarget(deps: BuildNativeTargetDeps = {}): Promise<BuildNativeTargetResult> {
+export async function runBuildNativeTarget(
+  deps: BuildNativeTargetDeps = {},
+): Promise<BuildNativeTargetResult> {
   const buildNativeArtifactFn = deps.buildNativeArtifact ?? buildNativeArtifact;
   const stageNativePackageFn = deps.stageNativePackage ?? stageNativePackage;
   const stageCompilerPackageFn = deps.stageCompilerPackage ?? stageCompilerPackage;

@@ -22,12 +22,16 @@ export type NativeTargetInfo = {
 export type RuntimeInfo = {
   platform: NodeJS.Platform;
   arch: NodeJS.Architecture;
-  report?: {
-    header?: {
-      glibcVersionRuntime?: string | undefined;
-    } | undefined;
-    sharedObjects?: string[] | undefined;
-  } | undefined;
+  report?:
+    | {
+        header?:
+          | {
+              glibcVersionRuntime?: string | undefined;
+            }
+          | undefined;
+        sharedObjects?: string[] | undefined;
+      }
+    | undefined;
   libc?: "gnu" | "musl" | undefined;
 };
 
@@ -47,9 +51,11 @@ type LinuxLibc = "gnu" | "musl";
 type NativeTargetMap = Record<NativeTarget, NativeTargetInfo>;
 
 type NodeReport = {
-  header?: {
-    glibcVersionRuntime?: string | undefined;
-  } | undefined;
+  header?:
+    | {
+        glibcVersionRuntime?: string | undefined;
+      }
+    | undefined;
   sharedObjects?: string[] | undefined;
 };
 
@@ -146,14 +152,20 @@ function detectRuntimeLibc(runtime?: RuntimeInfo): LinuxLibc | null {
   }
 
   const report =
-    runtime?.report ?? (typeof process.report?.getReport === "function" ? (process.report.getReport() as NodeReport) : null);
+    runtime?.report ??
+    (typeof process.report?.getReport === "function"
+      ? (process.report.getReport() as NodeReport)
+      : null);
   const glibcVersionRuntime = report?.header?.glibcVersionRuntime;
   if (typeof glibcVersionRuntime === "string" && glibcVersionRuntime.length > 0) {
     return "gnu";
   }
 
   const sharedObjects = report?.sharedObjects;
-  if (Array.isArray(sharedObjects) && sharedObjects.some((sharedObject) => sharedObject.includes("musl"))) {
+  if (
+    Array.isArray(sharedObjects) &&
+    sharedObjects.some((sharedObject) => sharedObject.includes("musl"))
+  ) {
     return "musl";
   }
 
@@ -209,9 +221,13 @@ export function nativeBuildOutputName(target: NativeTarget): string {
   return "aruna_napi.node";
 }
 
-export const SUPPORTED_NATIVE_TARGET_INFOS = SUPPORTED_NATIVE_TARGETS.map((target) => nativeTargetInfo(target));
+export const SUPPORTED_NATIVE_TARGET_INFOS = SUPPORTED_NATIVE_TARGETS.map((target) =>
+  nativeTargetInfo(target),
+);
 
-export function resolveNativeTarget(runtime: RuntimeInfo = { platform: process.platform, arch: process.arch }): NativeTarget {
+export function resolveNativeTarget(
+  runtime: RuntimeInfo = { platform: process.platform, arch: process.arch },
+): NativeTarget {
   const { platform, arch } = runtime;
 
   if (platform === "darwin") {

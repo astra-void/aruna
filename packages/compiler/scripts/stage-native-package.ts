@@ -21,7 +21,9 @@ export type StagedNativePackage = {
   artifactPath: string;
 };
 
-export async function stageNativePackage(options: StageNativePackageOptions): Promise<StagedNativePackage> {
+export async function stageNativePackage(
+  options: StageNativePackageOptions,
+): Promise<StagedNativePackage> {
   const packageDirectory = stagedNativePackageDirectory(options.workspaceRoot, options.target);
   const artifactPath = stagedNativePackageArtifactPath(options.workspaceRoot, options.target);
   const packageJsonPath = path.join(packageDirectory, "package.json");

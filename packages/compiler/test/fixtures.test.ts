@@ -28,7 +28,10 @@ const fixtureNames = [
   "parse-failed",
 ] as const;
 
-const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
+const fixturesRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../fixtures",
+);
 
 async function readSnapshot(fixtureName: string): Promise<Snapshot> {
   const expectedRoot = path.join(fixturesRoot, fixtureName, "expected");

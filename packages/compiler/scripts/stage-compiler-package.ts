@@ -30,11 +30,16 @@ function sanitizeDependencies(
   }
 
   return Object.fromEntries(
-    Object.entries(dependencies).map(([name, version]) => [name, replaceWorkspaceProtocol(version, replacement)]),
+    Object.entries(dependencies).map(([name, version]) => [
+      name,
+      replaceWorkspaceProtocol(version, replacement),
+    ]),
   );
 }
 
-export async function stageCompilerPackage(options: StageCompilerPackageOptions): Promise<StagedCompilerPackage> {
+export async function stageCompilerPackage(
+  options: StageCompilerPackageOptions,
+): Promise<StagedCompilerPackage> {
   const packageDirectory = stagedCompilerPackageDirectory(options.workspaceRoot);
   const packageJsonPath = path.join(packageDirectory, "package.json");
   const sourcePackageDirectory = path.join(options.workspaceRoot, "packages", "compiler");
@@ -71,11 +76,7 @@ export async function stageCompilerPackage(options: StageCompilerPackageOptions)
     ),
   };
 
-  await fs.writeFile(
-    packageJsonPath,
-    `${JSON.stringify(stagedPackageJson, null, 2)}\n`,
-    "utf8",
-  );
+  await fs.writeFile(packageJsonPath, `${JSON.stringify(stagedPackageJson, null, 2)}\n`, "utf8");
 
   return {
     packageDirectory,

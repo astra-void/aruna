@@ -19,7 +19,10 @@ type RawConfigObject = Record<string, unknown>;
 
 const requireForConfig = createRequire(import.meta.url);
 
-const DIAGNOSTIC_META: Record<"aruna::100" | "aruna::102" | "aruna::103", { name: string; severity: ArunaDiagnostic["severity"] }> = {
+const DIAGNOSTIC_META: Record<
+  "aruna::100" | "aruna::102" | "aruna::103",
+  { name: string; severity: ArunaDiagnostic["severity"] }
+> = {
   "aruna::100": { name: "invalid-config", severity: "error" },
   "aruna::102": { name: "missing-tsconfig", severity: "warning" },
   "aruna::103": { name: "invalid-tsconfig", severity: "error" },
@@ -54,7 +57,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
-function mergeArray<T>(base: readonly T[] | undefined, override: readonly T[] | undefined): T[] | undefined {
+function mergeArray<T>(
+  base: readonly T[] | undefined,
+  override: readonly T[] | undefined,
+): T[] | undefined {
   if (override !== undefined) {
     return [...override];
   }
@@ -273,7 +279,10 @@ function evaluateCommonJs(sourceText: string, filename: string): unknown {
   return module.exports;
 }
 
-function loadUserConfigFile(projectRoot: string, configFile: string): {
+function loadUserConfigFile(
+  projectRoot: string,
+  configFile: string,
+): {
   config?: ArunaConfig;
   diagnostic?: ArunaDiagnostic;
 } {
@@ -289,7 +298,8 @@ function loadUserConfigFile(projectRoot: string, configFile: string): {
           {
             file: formatProjectRelativePath(projectRoot, configFile),
             details: normalized.error,
-            suggestion: "Export a plain object from aruna.config.ts or wrap it with defineConfig().",
+            suggestion:
+              "Export a plain object from aruna.config.ts or wrap it with defineConfig().",
           },
         ),
       };
@@ -298,20 +308,19 @@ function loadUserConfigFile(projectRoot: string, configFile: string): {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return {
-      diagnostic: createDiagnostic(
-        "aruna::100",
-        `Failed to load ${path.basename(configFile)}.`,
-        {
-          file: formatProjectRelativePath(projectRoot, configFile),
-          details: message,
-          suggestion: "Fix the configuration file syntax or export shape.",
-        },
-      ),
+      diagnostic: createDiagnostic("aruna::100", `Failed to load ${path.basename(configFile)}.`, {
+        file: formatProjectRelativePath(projectRoot, configFile),
+        details: message,
+        suggestion: "Fix the configuration file syntax or export shape.",
+      }),
     };
   }
 }
 
-function loadTsConfig(projectRoot: string, tsconfigPath: string): {
+function loadTsConfig(
+  projectRoot: string,
+  tsconfigPath: string,
+): {
   options: ts.CompilerOptions;
   diagnostic?: ArunaDiagnostic;
 } {
@@ -334,7 +343,8 @@ function loadTsConfig(projectRoot: string, tsconfigPath: string): {
         `Missing TypeScript config at ${path.basename(tsconfigPath)}.`,
         {
           file: formatProjectRelativePath(projectRoot, tsconfigPath),
-          details: "Aruna looked for the TypeScript config at the resolved path but could not find it.",
+          details:
+            "Aruna looked for the TypeScript config at the resolved path but could not find it.",
           suggestion: "Create tsconfig.json or point aruna.config.ts to an existing tsconfig file.",
         },
       ),
@@ -352,7 +362,9 @@ function loadTsConfig(projectRoot: string, tsconfigPath: string): {
   if (typeof result.config !== "object" || result.config === null || Array.isArray(result.config)) {
     return {
       options: {},
-      diagnostic: invalidTsconfigDiagnostic("tsconfig.json must contain a JSON object at the top level."),
+      diagnostic: invalidTsconfigDiagnostic(
+        "tsconfig.json must contain a JSON object at the top level.",
+      ),
     };
   }
 
@@ -360,7 +372,9 @@ function loadTsConfig(projectRoot: string, tsconfigPath: string): {
   if (parsed.errors.length > 0) {
     return {
       options: {},
-      diagnostic: invalidTsconfigDiagnostic("tsconfig.json uses an unsupported object shape or compiler option."),
+      diagnostic: invalidTsconfigDiagnostic(
+        "tsconfig.json uses an unsupported object shape or compiler option.",
+      ),
     };
   }
 
@@ -397,13 +411,13 @@ export function loadProjectConfig(
     break;
   }
 
-  const merged = mergeConfig(
-    DEFAULT_ARUNA_CONFIG,
-    loadedConfig ?? {},
-  );
+  const merged = mergeConfig(DEFAULT_ARUNA_CONFIG, loadedConfig ?? {});
 
   const finalConfig = overrideConfig ? mergeConfig(merged, overrideConfig) : merged;
-  const resolvedTsconfig = path.resolve(projectRoot, finalConfig.tsconfig ?? DEFAULT_ARUNA_CONFIG.tsconfig ?? "tsconfig.json");
+  const resolvedTsconfig = path.resolve(
+    projectRoot,
+    finalConfig.tsconfig ?? DEFAULT_ARUNA_CONFIG.tsconfig ?? "tsconfig.json",
+  );
   const tsconfig = loadTsConfig(projectRoot, resolvedTsconfig);
   if (tsconfig.diagnostic) {
     diagnostics.push(tsconfig.diagnostic);

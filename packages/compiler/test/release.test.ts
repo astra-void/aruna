@@ -70,7 +70,9 @@ async function stageCompilerPackageStub({
           "@arunajs/core": version,
           typescript: "^5.8.3",
         },
-        optionalDependencies: Object.fromEntries(nativeTargets.map((target) => [nativePackageName(target), version])),
+        optionalDependencies: Object.fromEntries(
+          nativeTargets.map((target) => [nativePackageName(target), version]),
+        ),
       },
       null,
       2,
@@ -94,23 +96,36 @@ describe("release orchestrator", () => {
 
   it("selects the current host target in local mode", () => {
     expect(resolveTargetsForMode("local", hostTarget, [])).toEqual([hostTarget]);
-    expect(parseTargetList("linux-x64-gnu, linux-arm64-gnu")).toEqual(["linux-x64-gnu", "linux-arm64-gnu"]);
+    expect(parseTargetList("linux-x64-gnu, linux-arm64-gnu")).toEqual([
+      "linux-x64-gnu",
+      "linux-arm64-gnu",
+    ]);
   });
 
   it("parses cross mode targets and rejects missing or unsupported target lists", () => {
-    expect(() => resolveTargetsForMode("cross", hostTarget, [])).toThrow("Cross mode requires --targets.");
+    expect(() => resolveTargetsForMode("cross", hostTarget, [])).toThrow(
+      "Cross mode requires --targets.",
+    );
 
-    const unsupportedTarget = hostTarget === "darwin-arm64" || hostTarget === "darwin-x64" ? "win32-x64-msvc" : "darwin-arm64";
+    const unsupportedTarget =
+      hostTarget === "darwin-arm64" || hostTarget === "darwin-x64"
+        ? "win32-x64-msvc"
+        : "darwin-arm64";
     expect(canBuildTargetOnHost(hostTarget, "linux-x64-gnu")).toBe(true);
     expect(canBuildTargetOnHost(hostTarget, "linux-x64-musl")).toBe(false);
     expect(canBuildTargetOnHost(hostTarget, unsupportedTarget as NativeTarget)).toBe(false);
-    expect(() => resolveTargetsForMode("cross", hostTarget, [unsupportedTarget as NativeTarget])).toThrow(
-      /Unsupported cross target\(s\)/,
-    );
+    expect(() =>
+      resolveTargetsForMode("cross", hostTarget, [unsupportedTarget as NativeTarget]),
+    ).toThrow(/Unsupported cross target\(s\)/);
   });
 
   it("maps Linux targets to cargo-zigbuild and real rust triples", () => {
-    const linuxTargets = ["linux-x64-gnu", "linux-arm64-gnu", "linux-x64-musl", "linux-arm64-musl"] as const;
+    const linuxTargets = [
+      "linux-x64-gnu",
+      "linux-arm64-gnu",
+      "linux-x64-musl",
+      "linux-arm64-musl",
+    ] as const;
     for (const target of linuxTargets) {
       const info = nativeTargetInfo(target);
       expect(info.rustTarget).toMatch(/unknown-linux-(gnu|musl)$/);
@@ -119,16 +134,18 @@ describe("release orchestrator", () => {
   });
 
   it("stages local mode with host-only optional dependencies and no workspace protocols", async () => {
-    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget; [key: string]: unknown }) => {
-      const sourceArtifactPath = await createNativeArtifact(options.target);
-      return {
-        targetInfo: nativeTargetInfo(options.target),
-        profile: "release",
-        sourceArtifactPath,
-        command: "cargo",
-        args: [],
-      };
-    });
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo",
+          args: [],
+        };
+      },
+    );
     const spawnSync = vi.fn(() => ({ status: 0, error: undefined }));
 
     const prepared = await prepareRelease(
@@ -161,9 +178,10 @@ describe("release orchestrator", () => {
     });
 
     const stagedPackageJsons = await Promise.all(
-      [path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`, "package.json"), path.join(workspaceRoot, ".npm", "compiler", "package.json")].map(
-        async (packageJsonPath) => fsp.readFile(packageJsonPath, "utf8"),
-      ),
+      [
+        path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`, "package.json"),
+        path.join(workspaceRoot, ".npm", "compiler", "package.json"),
+      ].map(async (packageJsonPath) => fsp.readFile(packageJsonPath, "utf8")),
     );
     for (const packageJsonText of stagedPackageJsons) {
       expect(packageJsonText).not.toContain("workspace:*");
@@ -214,23 +232,29 @@ describe("release orchestrator", () => {
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({});
 
-    await expect(fsp.access(path.join(workspaceRoot, ".npm", "compiler-linux-x64-gnu"))).rejects.toThrow();
-    const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter((entry) => !entry.startsWith("."));
+    await expect(
+      fsp.access(path.join(workspaceRoot, ".npm", "compiler-linux-x64-gnu")),
+    ).rejects.toThrow();
+    const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter(
+      (entry) => !entry.startsWith("."),
+    );
     expect(rootEntries).toEqual(["compiler"]);
   });
 
   it("stages cross mode targets with target-qualified artifacts", async () => {
     const targets = ["linux-x64-gnu", "linux-arm64-gnu"] as const;
-    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget; [key: string]: unknown }) => {
-      const sourceArtifactPath = await createNativeArtifact(options.target);
-      return {
-        targetInfo: nativeTargetInfo(options.target),
-        profile: "release",
-        sourceArtifactPath,
-        command: "cargo-zigbuild",
-        args: [],
-      };
-    });
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo-zigbuild",
+          args: [],
+        };
+      },
+    );
     const spawnSync = vi.fn(() => ({ status: 0, error: undefined }));
 
     const prepared = await prepareRelease(
@@ -251,7 +275,12 @@ describe("release orchestrator", () => {
     );
 
     for (const target of targets) {
-      const artifactPath = path.join(workspaceRoot, ".npm", `compiler-${target}`, `compiler.${target}.node`);
+      const artifactPath = path.join(
+        workspaceRoot,
+        ".npm",
+        `compiler-${target}`,
+        `compiler.${target}.node`,
+      );
       expect(await fsp.readFile(artifactPath, "utf8")).toBe(`artifact:${target}`);
     }
     const compilerPackageJson = JSON.parse(
@@ -266,19 +295,21 @@ describe("release orchestrator", () => {
   });
 
   it("fails full mode when a required target cannot be staged", async () => {
-    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget; [key: string]: unknown }) => {
-      if (options.target === "linux-arm64-gnu") {
-        throw new Error("missing native build output");
-      }
-      const sourceArtifactPath = await createNativeArtifact(options.target);
-      return {
-        targetInfo: nativeTargetInfo(options.target),
-        profile: "release",
-        sourceArtifactPath,
-        command: "cargo-zigbuild",
-        args: [],
-      };
-    });
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        if (options.target === "linux-arm64-gnu") {
+          throw new Error("missing native build output");
+        }
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo-zigbuild",
+          args: [],
+        };
+      },
+    );
 
     await expect(
       prepareRelease(
@@ -294,16 +325,18 @@ describe("release orchestrator", () => {
 
   it("packs native packages before the compiler package", async () => {
     const packDestination = path.join(workspaceRoot, ".npm-pack");
-    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget; [key: string]: unknown }) => {
-      const sourceArtifactPath = await createNativeArtifact(options.target);
-      return {
-        targetInfo: nativeTargetInfo(options.target),
-        profile: "release",
-        sourceArtifactPath,
-        command: "cargo",
-        args: [],
-      };
-    });
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo",
+          args: [],
+        };
+      },
+    );
     const spawnCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
     const spawnSync = vi.fn((command: string, args: string[], options: { cwd: string }) => {
       spawnCalls.push({ command, args, cwd: options.cwd });
@@ -332,16 +365,18 @@ describe("release orchestrator", () => {
   });
 
   it("publishes from staged packages only during dry-run", async () => {
-    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget; [key: string]: unknown }) => {
-      const sourceArtifactPath = await createNativeArtifact(options.target);
-      return {
-        targetInfo: nativeTargetInfo(options.target),
-        profile: "release",
-        sourceArtifactPath,
-        command: "cargo",
-        args: [],
-      };
-    });
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo",
+          args: [],
+        };
+      },
+    );
     const spawnCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
     const spawnSync = vi.fn((command: string, args: string[], options: { cwd: string }) => {
       spawnCalls.push({ command, args, cwd: options.cwd });

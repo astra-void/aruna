@@ -56,7 +56,9 @@ function zigCacheHome(): string {
 }
 
 function zigBuildHome(): string {
-  return process.platform === "darwin" ? "/private/tmp/aruna-zigbuild-home" : path.join(os.tmpdir(), "aruna-zigbuild-home");
+  return process.platform === "darwin"
+    ? "/private/tmp/aruna-zigbuild-home"
+    : path.join(os.tmpdir(), "aruna-zigbuild-home");
 }
 
 function zigCacheEnv(): Record<string, string> {
@@ -73,7 +75,9 @@ async function withRustupPath(extraEnv: Record<string, string> = {}): Promise<No
   return {
     ...process.env,
     ...extraEnv,
-    PATH: [rustupBinDirectory(), currentPath].filter((entry) => entry.length > 0).join(path.delimiter),
+    PATH: [rustupBinDirectory(), currentPath]
+      .filter((entry) => entry.length > 0)
+      .join(path.delimiter),
   };
 }
 
@@ -89,7 +93,9 @@ function resolveRustupToolchain(spawn: typeof spawnSync): string {
   });
 
   if (result.error || result.status !== 0 || typeof result.stdout !== "string") {
-    throw new Error("Failed to determine the active rustup toolchain. Set RUSTUP_TOOLCHAIN and retry.");
+    throw new Error(
+      "Failed to determine the active rustup toolchain. Set RUSTUP_TOOLCHAIN and retry.",
+    );
   }
 
   const toolchain = result.stdout.trim().split(/\s+/)[0];
@@ -100,7 +106,11 @@ function resolveRustupToolchain(spawn: typeof spawnSync): string {
   return toolchain;
 }
 
-function resolveRustupToolchainBinary(spawn: typeof spawnSync, toolchain: string, command: "cargo" | "rustc"): string {
+function resolveRustupToolchainBinary(
+  spawn: typeof spawnSync,
+  toolchain: string,
+  command: "cargo" | "rustc",
+): string {
   const result = spawn("rustup", ["which", command, "--toolchain", toolchain], {
     stdio: "pipe",
     encoding: "utf8",
@@ -268,7 +278,9 @@ export function resolveNativeArtifactCandidates(
   return targetArtifactCandidates(workspaceRoot, nativeTargetInfo(target), profile);
 }
 
-export async function buildNativeArtifact(options: BuildNativeArtifactOptions): Promise<BuildNativeArtifactResult> {
+export async function buildNativeArtifact(
+  options: BuildNativeArtifactOptions,
+): Promise<BuildNativeArtifactResult> {
   const spawn = options.spawnSync ?? spawnSync;
   const access = options.access ?? fs.access;
   const profile = options.profile ?? "debug";
@@ -351,7 +363,12 @@ export async function buildNativeArtifact(options: BuildNativeArtifactOptions): 
     );
   }
 
-  const sourceArtifactPath = await resolveArtifactPath(options.workspaceRoot, options.target, profile, access);
+  const sourceArtifactPath = await resolveArtifactPath(
+    options.workspaceRoot,
+    options.target,
+    profile,
+    access,
+  );
 
   return {
     targetInfo,

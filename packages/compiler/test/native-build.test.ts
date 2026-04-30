@@ -16,9 +16,17 @@ import type { NativeTarget } from "../src/native-platform.ts";
 describe("native build tool selection", () => {
   const hostTarget = "darwin-arm64" as NativeTarget;
   const linuxTarget = "linux-x64-gnu" as NativeTarget;
-  const zigBuildHome = process.platform === "darwin" ? "/private/tmp/aruna-zigbuild-home" : path.join(os.tmpdir(), "aruna-zigbuild-home");
+  const zigBuildHome =
+    process.platform === "darwin"
+      ? "/private/tmp/aruna-zigbuild-home"
+      : path.join(os.tmpdir(), "aruna-zigbuild-home");
 
-  function select(target: NativeTarget, policy: ZigPolicy, tools: ToolAvailability, allowMissingTools = false): NativeBuildToolSelection {
+  function select(
+    target: NativeTarget,
+    policy: ZigPolicy,
+    tools: ToolAvailability,
+    allowMissingTools = false,
+  ): NativeBuildToolSelection {
     return selectNativeBuildTool({
       target,
       hostTarget,
@@ -59,11 +67,16 @@ describe("native build tool selection", () => {
   });
 
   it("skips a Linux cross target when cargo-zigbuild is missing and allow-missing-tools is set", () => {
-    const selection = select(linuxTarget, "auto", {
-      cargo: true,
-      cargoZigbuild: false,
-      zig: true,
-    }, true);
+    const selection = select(
+      linuxTarget,
+      "auto",
+      {
+        cargo: true,
+        cargoZigbuild: false,
+        zig: true,
+      },
+      true,
+    );
 
     expect(selection).toMatchObject({
       skip: true,
@@ -97,7 +110,10 @@ describe("native build tool selection", () => {
         return { status: 0, error: undefined };
       }
 
-      if ((command === "cargo" && args[0] === "--version") || (command === "zig" && args[0] === "version")) {
+      if (
+        (command === "cargo" && args[0] === "--version") ||
+        (command === "zig" && args[0] === "version")
+      ) {
         return { status: 0, error: undefined };
       }
 
@@ -110,13 +126,24 @@ describe("native build tool selection", () => {
       zig: true,
     });
     expect(spawnSync).toHaveBeenNthCalledWith(1, "cargo", ["--version"], expect.any(Object));
-    expect(spawnSync).toHaveBeenNthCalledWith(2, "cargo-zigbuild", ["--version"], expect.any(Object));
+    expect(spawnSync).toHaveBeenNthCalledWith(
+      2,
+      "cargo-zigbuild",
+      ["--version"],
+      expect.any(Object),
+    );
     expect(spawnSync).toHaveBeenNthCalledWith(3, "zig", ["version"], expect.any(Object));
   });
 
   it("installs the Rust target before running cargo-zigbuild", async () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-build-"));
-    const artifactPath = path.join(workspaceRoot, "target", "x86_64-unknown-linux-gnu", "release", "libaruna_napi.so");
+    const artifactPath = path.join(
+      workspaceRoot,
+      "target",
+      "x86_64-unknown-linux-gnu",
+      "release",
+      "libaruna_napi.so",
+    );
     await fs.mkdir(path.dirname(artifactPath), { recursive: true });
     await fs.writeFile(artifactPath, "artifact");
     const cargoPath = "/Users/returnf4lse/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo";
@@ -135,11 +162,21 @@ describe("native build tool selection", () => {
         return { status: 0, error: undefined, stdout: `${rustcPath}\n` };
       }
 
-      if (command === "rustup" && args[0] === "target" && args[1] === "add" && args[2] === "x86_64-unknown-linux-gnu") {
+      if (
+        command === "rustup" &&
+        args[0] === "target" &&
+        args[1] === "add" &&
+        args[2] === "x86_64-unknown-linux-gnu"
+      ) {
         return { status: 0, error: undefined };
       }
 
-      if (command === "rustup" && args[0] === "run" && args[2] === "cargo" && args[3] === "zigbuild") {
+      if (
+        command === "rustup" &&
+        args[0] === "run" &&
+        args[2] === "cargo" &&
+        args[3] === "zigbuild"
+      ) {
         return { status: 0, error: undefined };
       }
 
@@ -183,7 +220,11 @@ describe("native build tool selection", () => {
         cwd: workspaceRoot,
         stdio: "inherit",
         env: expect.objectContaining({
-          PATH: expect.stringMatching(new RegExp(`^${path.join(os.homedir(), ".cargo", "bin").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)),
+          PATH: expect.stringMatching(
+            new RegExp(
+              `^${path.join(os.homedir(), ".cargo", "bin").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+            ),
+          ),
         }),
       }),
     );
@@ -214,7 +255,11 @@ describe("native build tool selection", () => {
           HOME: zigBuildHome,
           RUSTUP_HOME: path.join(os.homedir(), ".rustup"),
           RUSTC: rustcPath,
-          PATH: expect.stringMatching(new RegExp(`^${path.join(os.homedir(), ".cargo", "bin").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`)),
+          PATH: expect.stringMatching(
+            new RegExp(
+              `^${path.join(os.homedir(), ".cargo", "bin").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+            ),
+          ),
         }),
       }),
     );

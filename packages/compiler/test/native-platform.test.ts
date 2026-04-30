@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { nativeArtifactName, nativePackageName, nativeTargetInfo, resolveNativeTarget } from "../src/native-platform.ts";
+import {
+  nativeArtifactName,
+  nativePackageName,
+  nativeTargetInfo,
+  resolveNativeTarget,
+} from "../src/native-platform.ts";
 
 describe("native target helpers", () => {
   it.each([
@@ -24,14 +29,62 @@ describe("native target helpers", () => {
   });
 
   it.each([
-    ["darwin-arm64", "@arunajs/compiler-darwin-arm64", "compiler.darwin-arm64.node", "aarch64-apple-darwin", "cargo"],
-    ["darwin-x64", "@arunajs/compiler-darwin-x64", "compiler.darwin-x64.node", "x86_64-apple-darwin", "cargo"],
-    ["win32-x64-msvc", "@arunajs/compiler-win32-x64-msvc", "compiler.win32-x64-msvc.node", "x86_64-pc-windows-msvc", "cargo"],
-    ["win32-arm64-msvc", "@arunajs/compiler-win32-arm64-msvc", "compiler.win32-arm64-msvc.node", "aarch64-pc-windows-msvc", "cargo"],
-    ["linux-x64-gnu", "@arunajs/compiler-linux-x64-gnu", "compiler.linux-x64-gnu.node", "x86_64-unknown-linux-gnu", "cargo-zigbuild"],
-    ["linux-arm64-gnu", "@arunajs/compiler-linux-arm64-gnu", "compiler.linux-arm64-gnu.node", "aarch64-unknown-linux-gnu", "cargo-zigbuild"],
-    ["linux-x64-musl", "@arunajs/compiler-linux-x64-musl", "compiler.linux-x64-musl.node", "x86_64-unknown-linux-musl", "cargo-zigbuild"],
-    ["linux-arm64-musl", "@arunajs/compiler-linux-arm64-musl", "compiler.linux-arm64-musl.node", "aarch64-unknown-linux-musl", "cargo-zigbuild"],
+    [
+      "darwin-arm64",
+      "@arunajs/compiler-darwin-arm64",
+      "compiler.darwin-arm64.node",
+      "aarch64-apple-darwin",
+      "cargo",
+    ],
+    [
+      "darwin-x64",
+      "@arunajs/compiler-darwin-x64",
+      "compiler.darwin-x64.node",
+      "x86_64-apple-darwin",
+      "cargo",
+    ],
+    [
+      "win32-x64-msvc",
+      "@arunajs/compiler-win32-x64-msvc",
+      "compiler.win32-x64-msvc.node",
+      "x86_64-pc-windows-msvc",
+      "cargo",
+    ],
+    [
+      "win32-arm64-msvc",
+      "@arunajs/compiler-win32-arm64-msvc",
+      "compiler.win32-arm64-msvc.node",
+      "aarch64-pc-windows-msvc",
+      "cargo",
+    ],
+    [
+      "linux-x64-gnu",
+      "@arunajs/compiler-linux-x64-gnu",
+      "compiler.linux-x64-gnu.node",
+      "x86_64-unknown-linux-gnu",
+      "cargo-zigbuild",
+    ],
+    [
+      "linux-arm64-gnu",
+      "@arunajs/compiler-linux-arm64-gnu",
+      "compiler.linux-arm64-gnu.node",
+      "aarch64-unknown-linux-gnu",
+      "cargo-zigbuild",
+    ],
+    [
+      "linux-x64-musl",
+      "@arunajs/compiler-linux-x64-musl",
+      "compiler.linux-x64-musl.node",
+      "x86_64-unknown-linux-musl",
+      "cargo-zigbuild",
+    ],
+    [
+      "linux-arm64-musl",
+      "@arunajs/compiler-linux-arm64-musl",
+      "compiler.linux-arm64-musl.node",
+      "aarch64-unknown-linux-musl",
+      "cargo-zigbuild",
+    ],
   ])(
     "maps %s to package, artifact, rust target, and build tool",
     (target, expectedPackage, expectedArtifact, expectedRustTarget, expectedBuildTool) => {
@@ -64,7 +117,10 @@ describe("native target helpers", () => {
 
   it("throws a useful error for unsupported platforms", () => {
     expect(() =>
-      resolveNativeTarget({ platform: "freebsd" as NodeJS.Platform, arch: "x64" as NodeJS.Architecture }),
+      resolveNativeTarget({
+        platform: "freebsd" as NodeJS.Platform,
+        arch: "x64" as NodeJS.Architecture,
+      }),
     ).toThrow(/freebsd\/x64/);
   });
 });
