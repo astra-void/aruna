@@ -23,10 +23,12 @@ export type ArunaDiagnostic = {
   severity: ArunaDiagnosticSeverity;
   message: string;
   file?: string | undefined;
-  span?: {
-    start: number;
-    end: number;
-  } | undefined;
+  span?:
+    | {
+        start: number;
+        end: number;
+      }
+    | undefined;
   details?: string | undefined;
   suggestion?: string | undefined;
   docsUrl?: string | undefined;
@@ -60,26 +62,36 @@ export type ArunaManifest = {
 export type ArunaConfig = {
   root?: string | undefined;
   tsconfig?: string | undefined;
-  source?: {
-    include?: string[] | undefined;
-    exclude?: string[] | undefined;
-  } | undefined;
-  conventions?: {
-    client?: string[] | undefined;
-    server?: string[] | undefined;
-    shared?: string[] | undefined;
-  } | undefined;
-  diagnostics?: {
-    warningsAsErrors?: boolean | undefined;
-    ignore?: string[] | undefined;
-  } | undefined;
-  security?: {
-    mode?: "recommended" | "strict" | "audit" | "off" | undefined;
-  } | undefined;
-  manifest?: {
-    enabled?: boolean | undefined;
-    output?: string | undefined;
-  } | undefined;
+  source?:
+    | {
+        include?: string[] | undefined;
+        exclude?: string[] | undefined;
+      }
+    | undefined;
+  conventions?:
+    | {
+        client?: string[] | undefined;
+        server?: string[] | undefined;
+        shared?: string[] | undefined;
+      }
+    | undefined;
+  diagnostics?:
+    | {
+        warningsAsErrors?: boolean | undefined;
+        ignore?: string[] | undefined;
+      }
+    | undefined;
+  security?:
+    | {
+        mode?: "recommended" | "strict" | "audit" | "off" | undefined;
+      }
+    | undefined;
+  manifest?:
+    | {
+        enabled?: boolean | undefined;
+        output?: string | undefined;
+      }
+    | undefined;
 };
 
 export type ArunaCompilerInput = {
@@ -112,30 +124,29 @@ export type ArunaCompilerOutput = {
   manifestPath?: string | undefined;
 };
 
-export const DEFAULT_ARUNA_CONFIG: Required<Pick<
-  ArunaConfig,
-  "tsconfig" | "source" | "conventions" | "diagnostics" | "security" | "manifest"
->> = {
+export const DEFAULT_ARUNA_CONFIG: Required<
+  Pick<ArunaConfig, "tsconfig" | "source" | "conventions" | "diagnostics" | "security" | "manifest">
+> = {
   tsconfig: "tsconfig.json",
   source: {
     include: ["src/**/*.ts", "src/**/*.tsx"],
-    exclude: ["node_modules/**", "out/**", ".aruna/**"]
+    exclude: ["node_modules/**", "out/**", ".aruna/**"],
   },
   conventions: {
     client: ["**/client/**"],
     server: ["**/server/**"],
-    shared: ["**/shared/**"]
+    shared: ["**/shared/**"],
   },
   diagnostics: {
-    warningsAsErrors: false
+    warningsAsErrors: false,
   },
   security: {
-    mode: "recommended"
+    mode: "recommended",
   },
   manifest: {
     enabled: true,
-    output: ".aruna/manifest.json"
-  }
+    output: ".aruna/manifest.json",
+  },
 };
 
 export function defineConfig<T extends ArunaConfig>(config: T): T {
