@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { ArunaCompilerOutput } from "@arunajs/core";
-import { checkProject, inspectProject } from "@arunajs/compiler";
+import { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
 import {
   formatDiagnostics,
   formatDurationLine,
@@ -72,10 +72,11 @@ function writeText(output: string): void {
   process.stdout.write(`${output}\n`);
 }
 
-function renderCheckOutput(
+function renderCompilerOutput(
   output: ArunaCompilerOutput,
   options: CliOptions,
   durationMs: number,
+  command: "check" | "inspect" | "build",
 ): void {
   const colors = resolveColorMode(options);
   if (options.json) {
@@ -85,37 +86,7 @@ function renderCheckOutput(
 
   const hasDiagnostics = output.diagnostics.length > 0;
   writeText(
-    formatSummary(output, "check", { colors, durationMs, includeDuration: !hasDiagnostics }),
-  );
-  if (!options.quiet && hasDiagnostics) {
-    const diagnostics = formatDiagnostics(output, colors);
-    if (diagnostics.length > 0) {
-      writeText(diagnostics);
-    }
-  }
-  if (hasDiagnostics) {
-    const duration = formatDurationLine(durationMs);
-    if (duration) {
-      writeText("");
-      writeText(formatMuted(duration, colors));
-    }
-  }
-}
-
-function renderInspectOutput(
-  output: ArunaCompilerOutput,
-  options: CliOptions,
-  durationMs: number,
-): void {
-  const colors = resolveColorMode(options);
-  if (options.json) {
-    writeJson(output);
-    return;
-  }
-
-  const hasDiagnostics = output.diagnostics.length > 0;
-  writeText(
-    formatSummary(output, "inspect", { colors, durationMs, includeDuration: !hasDiagnostics }),
+    formatSummary(output, command, { colors, durationMs, includeDuration: !hasDiagnostics }),
   );
   if (!options.quiet && hasDiagnostics) {
     const diagnostics = formatDiagnostics(output, colors);
@@ -140,6 +111,10 @@ async function runInspect(options: CliOptions): Promise<ArunaCompilerOutput> {
   return inspectProject(compilerInput(options));
 }
 
+async function runBuild(options: CliOptions): Promise<ArunaCompilerOutput> {
+  return buildProject(compilerInput(options));
+}
+
 export async function main(): Promise<number> {
   const program = new Command();
   program
@@ -159,7 +134,7 @@ export async function main(): Promise<number> {
     const options = program.optsWithGlobals<CliOptions>();
     const startedAt = Date.now();
     const output = await runCheck(options);
-    renderCheckOutput(output, options, Date.now() - startedAt);
+    renderCompilerOutput(output, options, Date.now() - startedAt, "check");
     process.exitCode = output.ok ? 0 : 1;
   });
 
@@ -168,7 +143,7 @@ export async function main(): Promise<number> {
     const options = program.optsWithGlobals<CliOptions>();
     const startedAt = Date.now();
     const output = await runInspect(options);
-    renderInspectOutput(output, options, Date.now() - startedAt);
+    renderCompilerOutput(output, options, Date.now() - startedAt, "inspect");
     process.exitCode = output.ok ? 0 : 1;
   });
 
@@ -219,7 +194,18 @@ export async function main(): Promise<number> {
       const options = program.optsWithGlobals<CliOptions>();
       const startedAt = Date.now();
       const output = await runCheck(options);
-      renderCheckOutput(output, options, Date.now() - startedAt);
+      renderCompilerOutput(output, options, Date.now() - startedAt, "check");
+      process.exitCode = output.ok ? 0 : 1;
+    });
+
+  program
+    .command("build")
+    .description("build the project and write generated output")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const startedAt = Date.now();
+      const output = await runBuild(options);
+      renderCompilerOutput(output, options, Date.now() - startedAt, "build");
       process.exitCode = output.ok ? 0 : 1;
     });
 

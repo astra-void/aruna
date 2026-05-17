@@ -141,7 +141,10 @@ export function formatModuleInspection(
 ): string {
   const groups: Record<ArunaCompilerOutput["manifest"]["modules"][number]["kind"], string[]> = {
     client: [],
+    clientEntry: [],
     server: [],
+    serverEntry: [],
+    serverAction: [],
     shared: [],
     unknown: [],
   };
@@ -156,7 +159,15 @@ export function formatModuleInspection(
     sectionTitle("module classification", colors),
     "",
   ];
-  for (const kind of ["client", "server", "shared", "unknown"] as const) {
+  for (const kind of [
+    "client",
+    "clientEntry",
+    "server",
+    "serverEntry",
+    "serverAction",
+    "shared",
+    "unknown",
+  ] as const) {
     const files = groups[kind];
     if (files.length === 0 && !verbose) {
       continue;
