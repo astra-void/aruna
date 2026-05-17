@@ -1,13 +1,74 @@
 # aruna
 
-Aruna Phase 1 is a monorepo and compiler MVP focused on static boundary checks for rbxts projects.
+Aruna is a compiler-first Roblox framework for server-authoritative games.
+
+The model is intentionally closer to Svelte-style compile-time transforms than to a heavy OOP framework. Classes are allowed. Services are not the framework model. Actions are.
+
+Aruna owns boundaries, actions, generated output, and diagnostics. Users own domain taxonomy.
+
+## Recommended Layout v0
+
+This is the recommended project shape for starters, examples, docs, and MVP fixtures:
+
+```text
+src/
+  client.tsx
+  server.ts
+
+  app/
+    bootstrap.ts
+    providers.ts
+
+  domains/
+    shop/
+      actions.ts
+      schema.ts
+      model.ts
+      ui.tsx
+
+    inventory/
+      actions.ts
+      schema.ts
+      model.ts
+      ui.tsx
+
+    combat/
+      model.ts
+      runtime.ts
+
+    waves/
+      actions.ts
+      schema.ts
+      model.ts
+      runtime.ts
+
+  shared/
+    constants.ts
+    ids.ts
+    result.ts
+
+  .aruna/
+    actions.client.generated.ts
+    actions.server.generated.ts
+    manifest.json
+```
+
+Policy notes:
+
+- `src/client.ts` and `src/client.tsx` are default client entries.
+- `src/server.ts` and `src/server.tsx` are default server entries.
+- `domains/` is a recommended organization pattern, not a boundary kind.
+- `shared/` is reserved for cross-domain shared-safe code.
+- `.aruna/` is generated output and can be deleted and regenerated safely.
+- Do not require every client-only or server-only module to use `.client.ts` or `.server.ts`.
+- Reserve `.client` and `.server` suffixes for explicit runtime entry hints, not broad folder conventions.
 
 ## Phase 1 scope
 
 - project config loading from `aruna.config.ts`
 - Rust-owned compiler core in `crates/aruna_compiler` and N-API binding in `crates/aruna_napi`
 - TypeScript CLI and package wrappers
-- source discovery, module classification, import graph construction, boundary validation, diagnostics, and manifest generation in Rust
+- source discovery, entry classification, module classification, import graph construction, action discovery, boundary validation, diagnostics, and manifest generation in Rust
 - deterministic compiler output
 - `aruna check`
 - `aruna inspect`
@@ -73,17 +134,26 @@ pnpm aruna inspect modules --project fixtures/feature-local-layout/input
 pnpm aruna inspect graph --project fixtures/invalid-client-imports-server/input
 pnpm aruna check --json --project fixtures/invalid-client-imports-server/input
 pnpm aruna check --no-color --project fixtures/invalid-client-imports-server/input
+pnpm aruna build --project fixtures/action-generated-output/input
 ```
 
 `packages/compiler` loads the native Rust compiler directly. There is no TypeScript analyzer fallback in Phase 1.
 
 Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-linux-gnu`, `cargo zigbuild --target aarch64-unknown-linux-gnu`, `cargo zigbuild --target x86_64-unknown-linux-musl`, and `cargo zigbuild --target aarch64-unknown-linux-musl` builds instead of staged fake packages.
 
+## Generated action foundation
+
+- server action discovery exists in Rust
+- `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
+- the generated files are safe to delete and regenerate
+- runtime transport is still intentionally not implemented
+- runtime schema validation is still intentionally not implemented
+
 ## Intentionally not implemented
 
-- typed remotes
-- server actions
-- runtime schema DSL
+- runtime remoting transport
+- runtime schema validation
+- full schema compiler
 - remote/action codegen
 - Roblox `RemoteEvent` generation
 - runtime dispatch
@@ -91,7 +161,5 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - VSCode extension
 - create-app scaffolding
 - plugin API
-- server components
 - custom Luau emitter
 - full roblox-ts build orchestration
-- typed remotes/actions/schema runtime are intentionally deferred
