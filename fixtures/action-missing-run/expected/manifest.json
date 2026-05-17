@@ -1,0 +1,46 @@
+{
+  "actions": [
+    {
+      "exportName": "purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": false,
+      "id": "shop.purchaseItem"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::551",
+      "details": "export name: purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem is missing a run handler.",
+      "name": "action-missing-run",
+      "severity": "error",
+      "span": {
+        "end": 117,
+        "start": 87
+      },
+      "suggestion": "Add a run(ctx, input) function to the defineAction object."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

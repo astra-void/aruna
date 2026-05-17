@@ -1,7 +1,7 @@
 [
   {
     "code": "aruna::106",
-    "details": "SWC parser error: Error { error: (23..23, Unexpected { got: \"<eof>\", expected: \"identifier, string literal, numeric literal or [ for the computed key\" }) }",
+    "details": "Oxc parser error: Expected `}` but found `EOF`",
     "file": "src/client/main.ts",
     "message": "Aruna could not parse src/client/main.ts.",
     "name": "parse-failed",

@@ -3,6 +3,7 @@
   "projectRoot": ".",
   "modules": [],
   "imports": [],
+  "actions": [],
   "diagnostics": [
     {
       "code": "aruna::100",

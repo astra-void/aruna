@@ -1,0 +1,52 @@
+{
+  "actions": [
+    {
+      "exportName": "purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "id": "shop.purchaseItem"
+    }
+  ],
+  "diagnostics": [],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/client.tsx",
+      "kind": "clientEntry",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

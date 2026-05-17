@@ -1,0 +1,16 @@
+[
+  {
+    "id": "src/domains/inventory/actions.ts",
+    "kind": "serverAction",
+    "path": "src/domains/inventory/actions.ts",
+    "reason": "directive",
+    "reasonDetail": "defineAction(...) export detected"
+  },
+  {
+    "id": "src/domains/shop/actions.ts",
+    "kind": "serverAction",
+    "path": "src/domains/shop/actions.ts",
+    "reason": "directive",
+    "reasonDetail": "defineAction(...) export detected"
+  }
+]

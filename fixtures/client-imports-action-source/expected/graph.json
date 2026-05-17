@@ -1,0 +1,21 @@
+[
+  {
+    "from": "src/client.tsx",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./domains/shop/actions",
+    "to": "src/domains/shop/actions.ts"
+  },
+  {
+    "from": "src/domains/shop/actions.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/schema"
+  },
+  {
+    "from": "src/domains/shop/actions.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  }
+]

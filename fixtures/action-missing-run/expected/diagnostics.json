@@ -1,0 +1,15 @@
+[
+  {
+    "code": "aruna::551",
+    "details": "export name: purchaseItem",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.purchaseItem is missing a run handler.",
+    "name": "action-missing-run",
+    "severity": "error",
+    "span": {
+      "end": 117,
+      "start": 87
+    },
+    "suggestion": "Add a run(ctx, input) function to the defineAction object."
+  }
+]

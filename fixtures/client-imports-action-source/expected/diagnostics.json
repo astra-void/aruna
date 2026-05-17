@@ -1,0 +1,15 @@
+[
+  {
+    "code": "aruna::556",
+    "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/shop/actions.ts\nimported kind: server action",
+    "file": "src/client.tsx",
+    "message": "src/client.tsx is classified as client entry. It imports src/domains/shop/actions.ts, which is classified as server action.",
+    "name": "action-imported-from-invalid-environment",
+    "severity": "error",
+    "span": {
+      "end": 53,
+      "start": 29
+    },
+    "suggestion": "Keep server actions on the server side, and import them from client-safe generated stubs later."
+  }
+]

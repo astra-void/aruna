@@ -1,0 +1,9 @@
+[
+  {
+    "id": "src/domains/shop/actions.ts",
+    "kind": "serverAction",
+    "path": "src/domains/shop/actions.ts",
+    "reason": "directive",
+    "reasonDetail": "defineAction(...) export detected"
+  }
+]

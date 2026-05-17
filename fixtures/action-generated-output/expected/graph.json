@@ -1,0 +1,14 @@
+[
+  {
+    "from": "src/domains/inventory/actions.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  },
+  {
+    "from": "src/domains/shop/actions.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  }
+]

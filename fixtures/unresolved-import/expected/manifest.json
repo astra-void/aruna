@@ -17,6 +17,7 @@
       "kind": "static"
     }
   ],
+  "actions": [],
   "diagnostics": [
     {
       "code": "aruna::105",

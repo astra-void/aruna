@@ -1,0 +1,11 @@
+[
+  {
+    "code": "aruna::555",
+    "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action id shop.purchaseItem is defined more than once.",
+    "name": "duplicate-action-id",
+    "severity": "error",
+    "suggestion": "Use globally unique action ids such as domain.actionName."
+  }
+]
