@@ -138,6 +138,14 @@ function normalizeConfigObject(value: unknown): {
     }
   }
 
+  if (candidateRecord["generatedDir"] !== undefined) {
+    if (typeof candidateRecord["generatedDir"] !== "string") {
+      diagnostics.push("generatedDir must be a string");
+    } else {
+      config.generatedDir = candidateRecord["generatedDir"];
+    }
+  }
+
   if (candidateRecord["source"] !== undefined) {
     const sourceValue = candidateRecord["source"];
     if (!isRecord(sourceValue)) {

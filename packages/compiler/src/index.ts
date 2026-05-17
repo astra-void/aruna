@@ -20,6 +20,7 @@ type NativeCompilerInput = {
   configDiagnostics: ArunaDiagnostic[];
   tsconfigOptions: NativeTsconfigOptions;
   writeManifest: boolean;
+  writeGenerated: boolean;
 };
 
 type NativeCompiler = {
@@ -56,7 +57,11 @@ function normalizeConfig(config: ArunaConfig, warningsAsErrors?: boolean): Aruna
   };
 }
 
-function buildNativeInput(input: ArunaCompilerInput, writeManifest: boolean): NativeCompilerInput {
+function buildNativeInput(
+  input: ArunaCompilerInput,
+  writeManifest: boolean,
+  writeGenerated: boolean,
+): NativeCompilerInput {
   const projectRoot = resolveProjectRoot(input);
   const loadedConfig = loadProjectConfig(projectRoot, input.configPath, input.config);
   return {
@@ -65,6 +70,7 @@ function buildNativeInput(input: ArunaCompilerInput, writeManifest: boolean): Na
     configDiagnostics: loadedConfig.diagnostics,
     tsconfigOptions: normalizeTsconfigOptions(loadedConfig.tsconfigOptions),
     writeManifest,
+    writeGenerated,
   };
 }
 
@@ -72,17 +78,22 @@ async function runNative<T extends keyof NativeCompiler>(
   method: T,
   input: ArunaCompilerInput,
   writeManifest: boolean,
+  writeGenerated: boolean,
 ): Promise<ArunaCompilerOutput> {
   const native = loadNativeCompiler();
-  return native[method](buildNativeInput(input, writeManifest)) as ArunaCompilerOutput;
+  return native[method](buildNativeInput(input, writeManifest, writeGenerated)) as ArunaCompilerOutput;
 }
 
 export async function checkProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {
-  return runNative("checkProject", input, true);
+  return runNative("checkProject", input, true, false);
+}
+
+export async function buildProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {
+  return runNative("checkProject", input, true, true);
 }
 
 export async function inspectProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {
-  return runNative("inspectProject", input, false);
+  return runNative("inspectProject", input, false, false);
 }
 
 export { loadNativeCompiler } from "./native.js";

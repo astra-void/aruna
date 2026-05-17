@@ -47,7 +47,9 @@ function workspaceCandidatePaths(): string[] {
     path.join(targetDir, rustTarget, "debug", "aruna_napi.node"),
     path.join(targetDir, rustTarget, "release", buildOutputName),
     path.join(targetDir, rustTarget, "release", "aruna_napi.node"),
+    path.join(targetDir, "debug", buildOutputName),
     path.join(targetDir, "debug", "aruna_napi.node"),
+    path.join(targetDir, "release", buildOutputName),
     path.join(targetDir, "release", "aruna_napi.node"),
   ];
 }
@@ -77,6 +79,17 @@ function validateNativeCompiler(value: unknown): asserts value is NativeCompiler
   ) {
     throw new Error(NATIVE_MODULE_SHAPE_ERROR);
   }
+}
+
+function loadNativeAddon(candidatePath: string, require: NodeRequire): unknown {
+  const extension = path.extname(candidatePath);
+  if (extension === ".node") {
+    return require(candidatePath);
+  }
+
+  const addon = { exports: {}, filename: candidatePath };
+  process.dlopen(addon as never, candidatePath);
+  return addon.exports;
 }
 
 function createLoadFailureMessage(
@@ -140,7 +153,7 @@ export function loadNativeCompiler(): NativeCompiler {
     }
 
     try {
-      const loaded = require(candidatePath);
+      const loaded = loadNativeAddon(candidatePath, require);
       validateNativeCompiler(loaded);
       cachedCompiler = loaded;
       return loaded;

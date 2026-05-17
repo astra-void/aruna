@@ -9,6 +9,12 @@ import {
   resolveNativeTarget,
 } from "../src/native-platform.ts";
 
+type DlopenModule = {
+  exports: unknown;
+  filename?: string | undefined;
+  paths?: string[] | undefined;
+};
+
 const mockRequire = vi.fn(() => {
   throw new Error("mock native load failure");
 });
@@ -36,6 +42,8 @@ describe("loadNativeCompiler", () => {
 
   it("includes the expected package and local fallback paths in the failure message", () => {
     const target = resolveNativeTarget();
+    const rustTarget = nativeTargetInfo(target).rustTarget;
+    const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
 
@@ -49,15 +57,17 @@ describe("loadNativeCompiler", () => {
         `Aruna native compiler could not be loaded for ${process.platform}/${process.arch}.`,
       );
       expect(message).toContain(`Resolved native target: ${target}`);
-      expect(message).toContain(`Expected native package: ${expectedPackage}`);
-      expect(message).toContain(`Expected native artifact: ${nativeArtifactName(target)}`);
-      expect(message).toContain("Searched:");
-      expect(message).toContain(`- ${expectedPackage}`);
-      expect(message).toContain(`- ${localFallback}`);
-      expect(message).toContain(`- target/${rustTarget}/debug/${buildOutputName}`);
-      expect(message).toContain(`- target/${rustTarget}/release/${buildOutputName}`);
-      expect(message).toContain("- target/debug/aruna_napi.node");
-      expect(message).toContain("- target/release/aruna_napi.node");
+    expect(message).toContain(`Expected native package: ${expectedPackage}`);
+    expect(message).toContain(`Expected native artifact: ${nativeArtifactName(target)}`);
+    expect(message).toContain("Searched:");
+    expect(message).toContain(`- ${expectedPackage}`);
+    expect(message).toContain(`- ${localFallback}`);
+    expect(message).toContain(`- target/${rustTarget}/debug/${buildOutputName}`);
+    expect(message).toContain(`- target/${rustTarget}/release/${buildOutputName}`);
+    expect(message).toContain(`- target/debug/${buildOutputName}`);
+    expect(message).toContain(`- target/release/${buildOutputName}`);
+    expect(message).toContain("- target/debug/aruna_napi.node");
+    expect(message).toContain("- target/release/aruna_napi.node");
       expect(message).toContain(
         "Run pnpm build:native for local development, reinstall dependencies, or verify platform support.",
       );
@@ -110,37 +120,35 @@ describe("loadNativeCompiler", () => {
 
   it("tries debug and then release workspace outputs when the staged package is absent", () => {
     const target = resolveNativeTarget();
-    const rustTarget = nativeTargetInfo(target).rustTarget;
     const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const debugFallback = `target/${rustTarget}/debug/${buildOutputName}`;
-    const releaseFallback = `target/${rustTarget}/release/${buildOutputName}`;
+    const debugFallback = `target/debug/${buildOutputName}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
 
     mockRequire
       .mockImplementationOnce(() => {
         throw new Error("installed package missing");
       })
-      .mockImplementationOnce((specifier: string) => {
-        expect(specifier).toContain(debugFallback);
-        throw new Error("debug build missing");
-      })
-      .mockImplementationOnce((specifier: string) => {
-        expect(specifier).toContain(releaseFallback);
-        return loadedCompiler;
+      .mockImplementationOnce(() => {
+        throw new Error("staged package missing");
       });
 
     vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => {
-      return candidate.endsWith(debugFallback) || candidate.endsWith(releaseFallback);
+      return candidate.endsWith(debugFallback);
+    });
+
+    const dlopen = vi.spyOn(process, "dlopen");
+    dlopen.mockImplementation((module: DlopenModule) => {
+      module.exports = loadedCompiler;
     });
 
     const result = loadNativeCompiler();
 
     expect(result).toBe(loadedCompiler);
     expect(mockRequire.mock.calls[0]?.[0]).toBe(expectedPackage);
-    expect(mockRequire.mock.calls[1]?.[0]).toContain(debugFallback);
-    expect(mockRequire.mock.calls[2]?.[0]).toContain(releaseFallback);
-    expect(mockRequire).toHaveBeenCalledTimes(3);
+    expect(mockRequire).toHaveBeenCalledTimes(1);
+    expect(dlopen).toHaveBeenCalledTimes(1);
+    expect(dlopen.mock.calls[0]?.[1]).toContain(debugFallback);
   });
 
   it("does not contain an analyzer fallback path in the loader source", async () => {
