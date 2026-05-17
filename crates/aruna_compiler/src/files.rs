@@ -1,4 +1,4 @@
-use crate::config::SourceConfig;
+use crate::config::ArunaConfig;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
@@ -54,8 +54,9 @@ fn build_globset(patterns: &[String]) -> Result<GlobSet, String> {
 
 pub fn discover_source_files(
     project_root: &Path,
-    source: &SourceConfig,
+    config: &ArunaConfig,
 ) -> Result<Vec<PathBuf>, String> {
+    let source = &config.source;
     let includes = if source.include.is_empty() {
         vec!["src/**/*.ts".to_string(), "src/**/*.tsx".to_string()]
     } else {
@@ -73,6 +74,17 @@ pub fn discover_source_files(
 
     let include_set = build_globset(&includes)?;
     let exclude_set = build_globset(&excludes)?;
+    let generated_dir = normalize_path(
+        &project_relative(
+            project_root,
+            &project_absolute(project_root, &config.generated_dir),
+        ),
+    );
+    let generated_dir_prefix = if generated_dir.is_empty() {
+        None
+    } else {
+        Some(format!("{generated_dir}/"))
+    };
     let mut files = Vec::new();
 
     for entry in WalkDir::new(project_root)
@@ -91,6 +103,13 @@ pub fn discover_source_files(
         let relative_text = normalize_path(&relative.to_string_lossy());
 
         if relative_text.ends_with(".d.ts") {
+            continue;
+        }
+        if relative_text == generated_dir
+            || generated_dir_prefix
+                .as_ref()
+                .is_some_and(|prefix| relative_text.starts_with(prefix))
+        {
             continue;
         }
         if exclude_set.is_match(relative) {

@@ -1,3 +1,5 @@
+pub mod codegen;
+pub mod actions;
 pub mod compiler;
 pub mod config;
 pub mod diagnostics;
@@ -11,6 +13,10 @@ pub mod rules;
 
 pub use compiler::{
     check_project, inspect_project, CompilerInput, CompilerOutput, CompilerSummary,
+};
+pub use codegen::{generate_action_files, GeneratedActionOutput, GeneratedFile};
+pub use actions::{
+    collect_action_definitions, ActionDiscoveryResult, ArunaActionRecord,
 };
 pub use config::{
     ArunaConfig, ConventionConfig, DiagnosticsConfig, ManifestConfig, SecurityConfig, SourceConfig,

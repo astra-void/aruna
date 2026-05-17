@@ -1,4 +1,5 @@
 use crate::diagnostics::{stable_sort_diagnostics, ArunaDiagnostic};
+use crate::actions::ArunaActionRecord;
 use crate::files::normalize_path;
 use crate::graph::ArunaImportEdge;
 use crate::module_kind::{ModuleKind, ModuleReason};
@@ -22,6 +23,7 @@ pub struct ArunaManifest {
     pub project_root: String,
     pub modules: Vec<ArunaModuleRecord>,
     pub imports: Vec<ArunaImportEdge>,
+    pub actions: Vec<ArunaActionRecord>,
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
@@ -51,10 +53,22 @@ fn sort_imports(imports: &[ArunaImportEdge]) -> Vec<ArunaImportEdge> {
     sorted
 }
 
+fn sort_actions(actions: &[ArunaActionRecord]) -> Vec<ArunaActionRecord> {
+    let mut sorted = actions.to_vec();
+    sorted.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+    sorted
+}
+
 pub fn create_manifest(
     project_root: &str,
     modules: &[ArunaModuleRecord],
     imports: &[ArunaImportEdge],
+    actions: &[ArunaActionRecord],
     diagnostics: &[ArunaDiagnostic],
 ) -> ArunaManifest {
     ArunaManifest {
@@ -62,6 +76,7 @@ pub fn create_manifest(
         project_root: project_root.to_string(),
         modules: sort_modules(modules),
         imports: sort_imports(imports),
+        actions: sort_actions(actions),
         diagnostics: stable_sort_diagnostics(diagnostics),
     }
 }

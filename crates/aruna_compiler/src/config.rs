@@ -75,6 +75,8 @@ pub struct ArunaConfig {
     pub root: Option<String>,
     #[serde(default = "default_tsconfig")]
     pub tsconfig: String,
+    #[serde(default = "default_generated_dir")]
+    pub generated_dir: String,
     #[serde(default)]
     pub source: SourceConfig,
     #[serde(default)]
@@ -91,6 +93,10 @@ fn default_tsconfig() -> String {
     "tsconfig.json".to_string()
 }
 
+fn default_generated_dir() -> String {
+    "src/.aruna".to_string()
+}
+
 impl Default for SourceConfig {
     fn default() -> Self {
         Self {
@@ -99,6 +105,7 @@ impl Default for SourceConfig {
                 "node_modules/**".to_string(),
                 "out/**".to_string(),
                 ".aruna/**".to_string(),
+                "**/.aruna/**".to_string(),
             ],
         }
     }
@@ -135,6 +142,7 @@ impl Default for ArunaConfig {
         Self {
             root: None,
             tsconfig: default_tsconfig(),
+            generated_dir: default_generated_dir(),
             source: SourceConfig::default(),
             conventions: ConventionConfig::default(),
             diagnostics: DiagnosticsConfig::default(),

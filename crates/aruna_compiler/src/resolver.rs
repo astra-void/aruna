@@ -175,6 +175,10 @@ fn is_relative_specifier(specifier: &str) -> bool {
         || specifier == ".."
 }
 
+pub fn is_bare_specifier(specifier: &str) -> bool {
+    !is_relative_specifier(specifier) && !specifier.starts_with('/')
+}
+
 pub fn resolve_import_specifier(
     project_root: &Path,
     importer_path: &Path,

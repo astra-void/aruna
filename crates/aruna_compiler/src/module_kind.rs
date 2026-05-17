@@ -4,11 +4,14 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum ModuleKind {
     Client,
     Server,
     Shared,
+    ClientEntry,
+    ServerEntry,
+    ServerAction,
     Unknown,
 }
 
@@ -63,16 +66,20 @@ fn matches_any(patterns: &[String], path: &str) -> bool {
 fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
     let defaults = ConventionSet::default();
     let convention = match kind {
-        ModuleKind::Client => config.conventions.client.clone(),
-        ModuleKind::Server => config.conventions.server.clone(),
+        ModuleKind::Client | ModuleKind::ClientEntry => config.conventions.client.clone(),
+        ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
+            config.conventions.server.clone()
+        }
         ModuleKind::Shared => config.conventions.shared.clone(),
         ModuleKind::Unknown => Vec::new(),
     };
 
     if convention.is_empty() {
         match kind {
-            ModuleKind::Client => defaults.client,
-            ModuleKind::Server => defaults.server,
+            ModuleKind::Client | ModuleKind::ClientEntry => defaults.client,
+            ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
+                defaults.server
+            }
             ModuleKind::Shared => defaults.shared,
             ModuleKind::Unknown => Vec::new(),
         }
@@ -117,12 +124,23 @@ pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> Module
                         ModuleKind::Client => "client",
                         ModuleKind::Server => "server",
                         ModuleKind::Shared => "shared",
+                        ModuleKind::ClientEntry => "client entry",
+                        ModuleKind::ServerEntry => "server entry",
+                        ModuleKind::ServerAction => "server action",
                         ModuleKind::Unknown => "unknown",
                     })
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
         },
+    }
+}
+
+fn classify_entry_path(relative_path: &str) -> Option<ModuleKind> {
+    match relative_path {
+        "src/client.ts" | "src/client.tsx" => Some(ModuleKind::ClientEntry),
+        "src/server.ts" | "src/server.tsx" => Some(ModuleKind::ServerEntry),
+        _ => None,
     }
 }
 
@@ -135,6 +153,14 @@ pub fn classify_module(
         .strip_prefix(project_root)
         .map(|value| normalize_path(&value.to_string_lossy()))
         .unwrap_or_else(|_| normalize_path(&absolute_path.to_string_lossy()));
+
+    if let Some(kind) = classify_entry_path(&relative) {
+        return ModuleClassification {
+            kind,
+            matched_kinds: Vec::new(),
+            reason_detail: Some("matched recommended entry file".to_string()),
+        };
+    }
 
     let convention_set = ConventionSet {
         client: convention_patterns(config, &ModuleKind::Client),
@@ -167,6 +193,29 @@ mod tests {
         assert_eq!(
             classify_relative_path("src/utils/debug.ts", &conventions).kind,
             ModuleKind::Unknown
+        );
+    }
+
+    #[test]
+    fn classifies_recommended_entry_files() {
+        let config = ArunaConfig::default();
+        assert_eq!(
+            classify_module(
+                std::path::Path::new("/workspace"),
+                std::path::Path::new("/workspace/src/client.tsx"),
+                &config,
+            )
+            .kind,
+            ModuleKind::ClientEntry
+        );
+        assert_eq!(
+            classify_module(
+                std::path::Path::new("/workspace"),
+                std::path::Path::new("/workspace/src/server.ts"),
+                &config,
+            )
+            .kind,
+            ModuleKind::ServerEntry
         );
     }
 

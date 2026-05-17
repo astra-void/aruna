@@ -1,4 +1,5 @@
 use crate::config::ArunaConfig;
+use crate::codegen::{generate_action_files, GeneratedFile};
 use crate::diagnostics::{
     create_diagnostic, strip_ignored_diagnostics, summarize_diagnostics, ArunaDiagnostic,
 };
@@ -6,7 +7,7 @@ use crate::files::discover_source_files;
 use crate::graph::{build_project_graph, ArunaImportEdge, GraphImportRecord};
 use crate::manifest::{create_manifest, ArunaManifest, ArunaModuleRecord};
 use crate::module_kind::ModuleKind;
-use crate::resolver::TsconfigResolverOptions;
+use crate::resolver::{is_bare_specifier, TsconfigResolverOptions};
 use crate::rules::boundary_code;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -25,6 +26,8 @@ pub struct CompilerInput {
     pub tsconfig_options: TsconfigResolverOptions,
     #[serde(default)]
     pub write_manifest: bool,
+    #[serde(default)]
+    pub write_generated: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -46,6 +49,8 @@ pub struct CompilerOutput {
     pub config: ArunaConfig,
     pub diagnostics: Vec<ArunaDiagnostic>,
     pub manifest: ArunaManifest,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_files: Option<Vec<GeneratedFile>>,
     pub summary: CompilerSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub manifest_path: Option<String>,
@@ -74,8 +79,10 @@ fn internal_error_output(input: &CompilerInput, message: String) -> CompilerOutp
             project_root: ".".to_string(),
             modules: Vec::new(),
             imports: Vec::new(),
+            actions: Vec::new(),
             diagnostics: vec![diagnostic],
         },
+        generated_files: None,
         summary: CompilerSummary {
             modules: 0,
             imports: 0,
@@ -94,6 +101,7 @@ fn boundary_suggestion(code: &str) -> &'static str {
         "aruna::301" => "Move shared logic into shared/, or pass data from the client into a server entrypoint later.",
         "aruna::302" => "Keep shared modules free of client-only imports, or split client code into client/.",
         "aruna::303" => "Keep shared modules free of server-only imports, or split server code into server/.",
+        "aruna::556" => "Keep server actions on the server side, and import them from client-safe generated stubs later.",
         _ => "Refactor the import so each module only reaches the boundaries it is allowed to use.",
     }
 }
@@ -116,8 +124,18 @@ fn module_kind_label(kind: ModuleKind) -> &'static str {
         ModuleKind::Client => "client",
         ModuleKind::Server => "server",
         ModuleKind::Shared => "shared",
+        ModuleKind::ClientEntry => "client entry",
+        ModuleKind::ServerEntry => "server entry",
+        ModuleKind::ServerAction => "server action",
         ModuleKind::Unknown => "unknown",
     }
+}
+
+fn write_text_file(absolute_path: &Path, contents: &str) -> Result<(), String> {
+    if let Some(parent) = absolute_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    fs::write(absolute_path, contents).map_err(|error| error.to_string())
 }
 
 fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnostic> {
@@ -148,7 +166,11 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
 }
 
 fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnostic> {
-    if edge.edge.resolved || matches!(edge.importer_kind, ModuleKind::Unknown) {
+    if edge.edge.resolved
+        || matches!(edge.importer_kind, ModuleKind::Unknown)
+        || is_bare_specifier(&edge.edge.specifier)
+        || Path::new(&edge.edge.specifier).is_absolute()
+    {
         return None;
     }
 
@@ -256,12 +278,25 @@ fn write_manifest_file(
     Ok(absolute_path.to_string_lossy().to_string())
 }
 
+fn write_generated_files(project_root: &Path, generated_files: &[GeneratedFile]) -> Result<(), String> {
+    for generated_file in generated_files {
+        let absolute_path = if Path::new(&generated_file.path).is_absolute() {
+            PathBuf::from(&generated_file.path)
+        } else {
+            project_root.join(&generated_file.path)
+        };
+        write_text_file(&absolute_path, &generated_file.contents)?;
+    }
+
+    Ok(())
+}
+
 fn run_project_inner(
     input: &CompilerInput,
     write_manifest: bool,
 ) -> Result<CompilerOutput, String> {
     let project_root = resolve_project_root(input);
-    let files = discover_source_files(&project_root, &input.config.source)?;
+    let files = discover_source_files(&project_root, &input.config)?;
     let graph = build_project_graph(
         &project_root,
         &input.config,
@@ -285,7 +320,36 @@ fn run_project_inner(
     let warnings_as_errors = input.config.diagnostics.warnings_as_errors;
 
     let mut mutable_diagnostics = diagnostics.clone();
-    let manifest_for_output = create_manifest(
+    let generated_output = if input.write_generated {
+        let generated = generate_action_files(&input.config.generated_dir, &graph.actions);
+        mutable_diagnostics.extend(strip_ignored_diagnostics(
+            &generated.diagnostics,
+            &ignore,
+        ));
+        Some(generated)
+    } else {
+        None
+    };
+
+    if let Some(generated_output) = &generated_output {
+        if input.write_generated {
+            if let Err(error) = write_generated_files(&project_root, &generated_output.files) {
+                mutable_diagnostics.push(create_diagnostic(
+                    "aruna::701",
+                    "Failed to write generated Aruna action files.",
+                    None,
+                    None,
+                    Some(error),
+                    Some(
+                        "Check the destination directory permissions or disable generated output emission."
+                            .to_string(),
+                    ),
+                ));
+            }
+        }
+    }
+
+    let final_manifest = create_manifest(
         ".",
         &graph.modules,
         &graph
@@ -293,6 +357,7 @@ fn run_project_inner(
             .iter()
             .map(|edge| edge.edge.clone())
             .collect::<Vec<ArunaImportEdge>>(),
+        &graph.actions,
         &mutable_diagnostics,
     );
 
@@ -303,7 +368,7 @@ fn run_project_inner(
         } else {
             input.config.manifest.output.clone()
         };
-        match write_manifest_file(&project_root, &output_path, &manifest_for_output) {
+        match write_manifest_file(&project_root, &output_path, &final_manifest) {
             Ok(path) => {
                 manifest_path = Some(path);
             }
@@ -331,6 +396,7 @@ fn run_project_inner(
             .iter()
             .map(|edge| edge.edge.clone())
             .collect::<Vec<ArunaImportEdge>>(),
+        &graph.actions,
         &mutable_diagnostics,
     );
     let summary = summarize_diagnostics(&mutable_diagnostics, warnings_as_errors);
@@ -341,6 +407,7 @@ fn run_project_inner(
         config: input.config.clone(),
         diagnostics: mutable_diagnostics,
         manifest: final_manifest,
+        generated_files: generated_output.map(|generated| generated.files),
         summary: CompilerSummary {
             modules: graph.modules.len(),
             imports: graph.imports.len(),
@@ -459,5 +526,86 @@ mod tests {
             output.diagnostics[0].suggestion.as_deref(),
             Some("Check the destination directory permissions or disable manifest emission.")
         );
+    }
+
+    #[test]
+    fn writes_generated_action_files_when_requested() {
+        let temp = TempDir::new().unwrap();
+        let project_root = temp.path();
+
+        let source_root = project_root.join("src/domains");
+        fs::create_dir_all(source_root.join("shop")).unwrap();
+        fs::create_dir_all(source_root.join("inventory")).unwrap();
+        fs::write(
+            project_root.join("src/client.tsx"),
+            "export const client = 1;\n",
+        )
+        .unwrap();
+        fs::write(
+            project_root.join("src/server.ts"),
+            "export const server = 1;\n",
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("shop/actions.ts"),
+            r#"
+import { defineAction } from "aruna/server";
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  run(ctx, input) {
+    return { ctx, input };
+  },
+});
+"#,
+        )
+        .unwrap();
+        fs::write(
+            source_root.join("inventory/actions.ts"),
+            r#"
+import { defineAction } from "aruna/server";
+
+export const restockItem = defineAction({
+  id: "inventory.restockItem",
+  run(ctx, input) {
+    return { ctx, input };
+  },
+});
+"#,
+        )
+        .unwrap();
+        fs::write(project_root.join("tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n").unwrap();
+
+        let output = check_project(CompilerInput {
+            project_root: project_root.to_string_lossy().to_string(),
+            write_generated: true,
+            ..CompilerInput::default()
+        });
+
+        assert!(output.ok);
+        let generated = output.generated_files.as_ref().expect("generated files");
+        assert_eq!(generated.len(), 2);
+        assert_eq!(generated[0].path, "src/.aruna/actions.client.generated.ts");
+        assert_eq!(generated[1].path, "src/.aruna/actions.server.generated.ts");
+        assert_eq!(
+            generated[0].contents,
+            fs::read_to_string(project_root.join("src/.aruna/actions.client.generated.ts")).unwrap()
+        );
+        assert_eq!(
+            generated[1].contents,
+            fs::read_to_string(project_root.join("src/.aruna/actions.server.generated.ts")).unwrap()
+        );
+        assert!(generated[0]
+            .contents
+            .contains("invokeAction(\"inventory.restockItem\", input);"));
+        assert!(generated[0]
+            .contents
+            .contains("invokeAction(\"shop.purchaseItem\", input);"));
+        assert!(generated[1]
+            .contents
+            .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../domains/inventory/actions\";"));
+        assert!(generated[1]
+            .contents
+            .contains("import { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../domains/shop/actions\";"));
     }
 }

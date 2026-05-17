@@ -1,4 +1,5 @@
 use crate::config::ArunaConfig;
+use crate::actions::{collect_action_definitions, ArunaActionRecord};
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
 use crate::files::{normalize_path, project_relative};
 use crate::manifest::ArunaModuleRecord;
@@ -50,6 +51,7 @@ pub struct GraphImportRecord {
 pub struct BuildGraphResult {
     pub modules: Vec<ArunaModuleRecord>,
     pub imports: Vec<GraphImportRecord>,
+    pub actions: Vec<ArunaActionRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub module_map: BTreeMap<String, ArunaModuleRecord>,
     pub diagnostics: Vec<ArunaDiagnostic>,
@@ -61,9 +63,20 @@ fn create_parse_failed_diagnostic(relative_path: &str, error: String) -> ArunaDi
         format!("Aruna could not parse {relative_path}."),
         Some(relative_path.to_string()),
         None,
-        Some(format!("SWC parser error: {error}")),
+        Some(format!("Oxc parser error: {error}")),
         Some("Check the TypeScript/TSX syntax in this file.".to_string()),
     )
+}
+
+fn push_parse_failed_diagnostic(
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+    parse_failed_files: &mut BTreeSet<String>,
+    relative_path: &str,
+    error: String,
+) {
+    if parse_failed_files.insert(relative_path.to_string()) {
+        diagnostics.push(create_parse_failed_diagnostic(relative_path, error));
+    }
 }
 
 pub fn build_project_graph(
@@ -75,6 +88,7 @@ pub fn build_project_graph(
     let mut module_records = Vec::new();
     let mut module_map = BTreeMap::new();
     let mut diagnostics = Vec::new();
+    let mut parse_failed_files = BTreeSet::new();
     let discovered_files: BTreeSet<String> = files
         .iter()
         .map(|path| project_relative(project_root, path))
@@ -83,7 +97,9 @@ pub fn build_project_graph(
     for absolute_path in files {
         let classification = classify_module(project_root, absolute_path, config);
         let relative_path = project_relative(project_root, absolute_path);
-        let reason = if classification.matched_kinds.is_empty() {
+        let reason = if classification.kind == ModuleKind::Unknown
+            && classification.matched_kinds.is_empty()
+        {
             ModuleReason::Fallback
         } else {
             ModuleReason::Path
@@ -114,6 +130,68 @@ pub fn build_project_graph(
         module_records.push(record);
     }
 
+    let mut action_records = Vec::new();
+    let mut action_files = BTreeSet::new();
+
+    for absolute_path in files {
+        let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
+        match collect_action_definitions(project_root, absolute_path, &source_text) {
+            Ok(result) => {
+                action_records.extend(result.actions);
+                action_files.extend(result.action_files);
+                diagnostics.extend(result.diagnostics);
+            }
+            Err(error) => {
+                let relative_path = project_relative(project_root, absolute_path);
+                push_parse_failed_diagnostic(
+                    &mut diagnostics,
+                    &mut parse_failed_files,
+                    &relative_path,
+                    error,
+                );
+            }
+        }
+    }
+
+    action_records.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+
+    let mut seen_action_ids = BTreeMap::new();
+    for action in &action_records {
+        if let Some(previous_file) = seen_action_ids.insert(action.id.clone(), action.file.clone()) {
+            diagnostics.push(create_diagnostic(
+                "aruna::555",
+                format!("Server action id {} is defined more than once.", action.id),
+                Some(action.file.clone()),
+                None,
+                Some(format!(
+                    "First defined in {}, then again in {}.",
+                    previous_file, action.file
+                )),
+                Some("Use globally unique action ids such as domain.actionName.".to_string()),
+            ));
+        }
+    }
+
+    for module in &mut module_records {
+        if action_files.contains(&module.path) {
+            module.kind = ModuleKind::ServerAction;
+            module.reason = ModuleReason::Directive;
+            module.reason_detail = Some("defineAction(...) export detected".to_string());
+        }
+    }
+    for module in module_map.values_mut() {
+        if action_files.contains(&module.path) {
+            module.kind = ModuleKind::ServerAction;
+            module.reason = ModuleReason::Directive;
+            module.reason_detail = Some("defineAction(...) export detected".to_string());
+        }
+    }
+
     let mut imports = Vec::new();
 
     for absolute_path in files {
@@ -123,7 +201,12 @@ pub fn build_project_graph(
         let static_imports = match collect_static_imports(absolute_path, &source_text) {
             Ok(imports) => imports,
             Err(error) => {
-                diagnostics.push(create_parse_failed_diagnostic(&relative_from, error));
+                push_parse_failed_diagnostic(
+                    &mut diagnostics,
+                    &mut parse_failed_files,
+                    &relative_from,
+                    error,
+                );
                 continue;
             }
         };
@@ -219,6 +302,7 @@ pub fn build_project_graph(
     Ok(BuildGraphResult {
         modules: module_records,
         imports,
+        actions: action_records,
         module_map,
         diagnostics,
     })

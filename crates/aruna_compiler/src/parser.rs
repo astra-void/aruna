@@ -1,7 +1,11 @@
 use std::path::Path;
-use swc_common::{sync::Lrc, FileName, SourceMap};
-use swc_ecma_ast::{ExportAll, ImportDecl, Module, ModuleDecl, ModuleItem, NamedExport, Str};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsSyntax};
+
+use oxc_allocator::Allocator;
+use oxc_ast::ast::{
+    ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration, Statement, StringLiteral,
+};
+use oxc_parser::Parser;
+use oxc_span::SourceType;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StaticImportRecord {
@@ -10,116 +14,73 @@ pub struct StaticImportRecord {
     pub end: usize,
 }
 
-fn syntax_for_path(path: &Path) -> Syntax {
-    let is_tsx = path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("tsx"));
-    Syntax::Typescript(TsSyntax {
-        tsx: is_tsx,
-        ..Default::default()
-    })
+fn source_type_for_path(path: &Path) -> Result<SourceType, String> {
+    SourceType::from_path(path).map_err(|error| error.to_string())
 }
 
-fn span_to_record(source_map: &SourceMap, src: &Str) -> Result<StaticImportRecord, String> {
-    let start = source_map.lookup_byte_offset(src.span.lo()).pos.0 as usize;
-    let end = source_map.lookup_byte_offset(src.span.hi()).pos.0 as usize;
-    let specifier = src
-        .value
-        .as_str()
-        .map(|value| value.to_string())
-        .unwrap_or_else(|| src.value.to_string_lossy().to_string());
-    Ok(StaticImportRecord {
-        specifier,
-        start,
-        end,
-    })
-}
-
-fn collect_from_import_decl(
-    source_map: &SourceMap,
-    decl: &ImportDecl,
-) -> Result<StaticImportRecord, String> {
-    span_to_record(source_map, &decl.src)
-}
-
-fn collect_from_named_export(
-    source_map: &SourceMap,
-    decl: &NamedExport,
-) -> Result<Option<StaticImportRecord>, String> {
-    match &decl.src {
-        Some(src) => Ok(Some(span_to_record(source_map, src)?)),
-        None => Ok(None),
+fn span_to_record(src: &StringLiteral<'_>) -> StaticImportRecord {
+    StaticImportRecord {
+        specifier: src.value.to_string(),
+        start: src.span.start as usize,
+        end: src.span.end as usize,
     }
 }
 
-fn collect_from_export_all(
-    source_map: &SourceMap,
-    decl: &ExportAll,
-) -> Result<StaticImportRecord, String> {
-    span_to_record(source_map, &decl.src)
+fn collect_from_import_decl(decl: &ImportDeclaration<'_>) -> StaticImportRecord {
+    span_to_record(&decl.source)
 }
 
-fn collect_from_module(
-    source_map: &SourceMap,
-    module: &Module,
-) -> Result<Vec<StaticImportRecord>, String> {
+fn collect_from_named_export(decl: &ExportNamedDeclaration<'_>) -> Option<StaticImportRecord> {
+    decl.source.as_ref().map(span_to_record)
+}
+
+fn collect_from_export_all(decl: &ExportAllDeclaration<'_>) -> StaticImportRecord {
+    span_to_record(&decl.source)
+}
+
+fn collect_from_statement(statement: &Statement<'_>) -> Option<StaticImportRecord> {
+    match statement {
+        Statement::ImportDeclaration(decl) => Some(collect_from_import_decl(decl)),
+        Statement::ExportNamedDeclaration(decl) => collect_from_named_export(decl),
+        Statement::ExportAllDeclaration(decl) => Some(collect_from_export_all(decl)),
+        _ => None,
+    }
+}
+
+fn collect_from_program(program: &oxc_ast::ast::Program<'_>) -> Vec<StaticImportRecord> {
     let mut records = Vec::new();
 
-    for item in &module.body {
-        let ModuleItem::ModuleDecl(module_decl) = item else {
-            continue;
-        };
-
-        match module_decl {
-            ModuleDecl::Import(decl) => records.push(collect_from_import_decl(source_map, decl)?),
-            ModuleDecl::ExportNamed(decl) => {
-                if let Some(record) = collect_from_named_export(source_map, decl)? {
-                    records.push(record);
-                }
-            }
-            ModuleDecl::ExportAll(decl) => records.push(collect_from_export_all(source_map, decl)?),
-            _ => {}
+    for statement in &program.body {
+        if let Some(record) = collect_from_statement(statement) {
+            records.push(record);
         }
     }
 
-    Ok(records)
+    records
 }
 
 pub fn collect_static_imports(
     path: &Path,
     source_text: &str,
 ) -> Result<Vec<StaticImportRecord>, String> {
-    let source_map: Lrc<SourceMap> = Default::default();
-    let filename = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .map(|value| value.to_string())
-        .unwrap_or_else(|| path.to_string_lossy().to_string());
-    let filename = FileName::Custom(filename);
-    let source_file = source_map.new_source_file(filename.into(), source_text.to_string());
-    let lexer = Lexer::new(
-        syntax_for_path(path),
-        Default::default(),
-        StringInput::from(&*source_file),
-        None,
-    );
-    let mut parser = Parser::new_from(lexer);
+    let allocator = Allocator::default();
+    let source_type = source_type_for_path(path)?;
+    let parser_return = Parser::new(&allocator, source_text, source_type).parse();
 
-    let module = parser
-        .parse_module()
-        .map_err(|error| format!("{error:?}"))?;
-
-    let recoverable_errors = parser.take_errors();
-    if !recoverable_errors.is_empty() {
-        return Err(recoverable_errors
+    if parser_return.panicked || !parser_return.errors.is_empty() {
+        let errors = parser_return
+            .errors
             .into_iter()
-            .map(|error| format!("{error:?}"))
-            .collect::<Vec<_>>()
-            .join("\n"));
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        return Err(if errors.is_empty() {
+            "Oxc parser panicked without reporting a recoverable error.".to_string()
+        } else {
+            errors.join("\n")
+        });
     }
 
-    collect_from_module(&source_map, &module)
+    Ok(collect_from_program(&parser_return.program))
 }
 
 #[cfg(test)]

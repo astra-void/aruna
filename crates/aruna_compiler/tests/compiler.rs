@@ -22,6 +22,7 @@ fn compiler_input(root: &Path) -> CompilerInput {
         config_diagnostics: Vec::new(),
         tsconfig_options: TsconfigResolverOptions::default(),
         write_manifest: true,
+        write_generated: false,
     }
 }
 
