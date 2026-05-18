@@ -99,3 +99,4 @@ export async function inspectProject(input: ArunaCompilerInput): Promise<ArunaCo
 }
 
 export { loadNativeCompiler } from "./native.js";
+export { loadProjectConfig, type LoadedArunaConfig } from "./config.js";

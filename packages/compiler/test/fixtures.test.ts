@@ -34,6 +34,8 @@ const fixtureCases = [
   { name: "duplicate-action-id", mode: "inspect" },
   { name: "action-missing-run", mode: "inspect" },
   { name: "client-imports-action-source", mode: "inspect" },
+  { name: "virtual-generated-action-imports", mode: "inspect" },
+  { name: "invalid-virtual-generated-action-imports", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },
   { name: "action-generated-export-collision", mode: "build" },
 ] as const;

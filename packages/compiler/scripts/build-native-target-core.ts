@@ -8,7 +8,7 @@ import {
   type NativeTarget,
 } from "../src/native-platform";
 import { buildNativeArtifact } from "./native-build";
-import { stagedCompilerPackageDirectory } from "./native-targets.ts";
+import { stagedCompilerPackageDirectory } from "./native-targets";
 import { stageCompilerPackage } from "./stage-compiler-package";
 import { stageNativePackage } from "./stage-native-package";
 
@@ -32,7 +32,14 @@ export type BuildNativeTargetResult = {
 };
 
 function detectHostLibc(): "gnu" | "musl" | undefined {
-  const report = process.report?.getReport?.();
+  const report = process.report?.getReport?.() as
+    | {
+        header?: {
+          glibcVersionRuntime?: string;
+        };
+        sharedObjects?: string[];
+      }
+    | undefined;
   const glibcVersionRuntime = report?.header?.glibcVersionRuntime;
   if (typeof glibcVersionRuntime === "string" && glibcVersionRuntime.length > 0) {
     return "gnu";
