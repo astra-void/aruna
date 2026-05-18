@@ -1,11 +1,11 @@
 use crate::config::ArunaConfig;
 use crate::actions::{collect_action_definitions, ArunaActionRecord};
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
-use crate::files::{normalize_path, project_relative};
+use crate::files::{normalize_path, project_absolute, project_relative};
 use crate::manifest::ArunaModuleRecord;
 use crate::module_kind::{classify_module, ModuleKind, ModuleReason};
 use crate::parser::collect_static_imports;
-use crate::resolver::{resolve_import_specifier, TsconfigResolverOptions};
+use crate::resolver::{resolve_import_specifier, TsconfigResolverOptions, VirtualGeneratedActionModule};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -76,6 +76,25 @@ fn push_parse_failed_diagnostic(
 ) {
     if parse_failed_files.insert(relative_path.to_string()) {
         diagnostics.push(create_parse_failed_diagnostic(relative_path, error));
+    }
+}
+
+fn virtual_generated_action_module_record(
+    project_root: &Path,
+    generated_dir: &str,
+    module: VirtualGeneratedActionModule,
+) -> ArunaModuleRecord {
+    let absolute_path = project_absolute(project_root, generated_dir).join(module.filename());
+    let relative_path = project_relative(project_root, &absolute_path);
+    ArunaModuleRecord {
+        id: relative_path.clone(),
+        path: relative_path,
+        kind: match module {
+            VirtualGeneratedActionModule::Client => ModuleKind::Client,
+            VirtualGeneratedActionModule::Server => ModuleKind::ServerAction,
+        },
+        reason: ModuleReason::Directive,
+        reason_detail: Some("virtual $aruna/actions module".to_string()),
     }
 }
 
@@ -192,6 +211,21 @@ pub fn build_project_graph(
         }
     }
 
+    if !action_records.is_empty() {
+        for virtual_module in [
+            VirtualGeneratedActionModule::Client,
+            VirtualGeneratedActionModule::Server,
+        ] {
+            let record = virtual_generated_action_module_record(
+                project_root,
+                &config.generated_dir,
+                virtual_module,
+            );
+            module_map.insert(record.path.clone(), record.clone());
+            module_records.push(record);
+        }
+    }
+
     let mut imports = Vec::new();
 
     for absolute_path in files {
@@ -215,6 +249,7 @@ pub fn build_project_graph(
             let resolved = resolve_import_specifier(
                 project_root,
                 absolute_path,
+                &config.generated_dir,
                 &entry.specifier,
                 resolver_options,
                 &discovered_files,

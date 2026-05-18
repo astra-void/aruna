@@ -7,7 +7,9 @@ use crate::files::discover_source_files;
 use crate::graph::{build_project_graph, ArunaImportEdge, GraphImportRecord};
 use crate::manifest::{create_manifest, ArunaManifest, ArunaModuleRecord};
 use crate::module_kind::ModuleKind;
-use crate::resolver::{is_bare_specifier, TsconfigResolverOptions};
+use crate::resolver::{
+    is_bare_specifier, resolve_virtual_generated_action_module, TsconfigResolverOptions,
+};
 use crate::rules::boundary_code;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -101,7 +103,7 @@ fn boundary_suggestion(code: &str) -> &'static str {
         "aruna::301" => "Move shared logic into shared/, or pass data from the client into a server entrypoint later.",
         "aruna::302" => "Keep shared modules free of client-only imports, or split client code into client/.",
         "aruna::303" => "Keep shared modules free of server-only imports, or split server code into server/.",
-        "aruna::556" => "Keep server actions on the server side, and import them from client-safe generated stubs later.",
+        "aruna::556" => "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.",
         _ => "Refactor the import so each module only reaches the boundaries it is allowed to use.",
     }
 }
@@ -144,12 +146,17 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
     }
     let imported_kind = edge.imported_kind?;
     let code = boundary_code(edge.importer_kind, imported_kind)?;
+    let imported_display_path = if edge.edge.specifier.starts_with("$aruna/") {
+        edge.edge.specifier.as_str()
+    } else {
+        edge.edge.to.as_deref().unwrap_or("")
+    };
     Some(create_diagnostic(
         code,
         format_boundary_message(
             &edge.importer_path,
             edge.importer_kind,
-            edge.edge.to.as_deref().unwrap_or(""),
+            imported_display_path,
             imported_kind,
         ),
         Some(edge.importer_path.clone()),
@@ -158,7 +165,7 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
             "importer: {}\nimporter kind: {}\nimported: {}\nimported kind: {}",
             edge.importer_path,
             module_kind_label(edge.importer_kind),
-            edge.edge.to.as_deref().unwrap_or(""),
+            imported_display_path,
             module_kind_label(imported_kind)
         )),
         Some(boundary_suggestion(code).to_string()),
@@ -168,28 +175,55 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
 fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnostic> {
     if edge.edge.resolved
         || matches!(edge.importer_kind, ModuleKind::Unknown)
-        || is_bare_specifier(&edge.edge.specifier)
         || Path::new(&edge.edge.specifier).is_absolute()
     {
         return None;
     }
 
+    if is_bare_specifier(&edge.edge.specifier) && !edge.edge.specifier.starts_with("$aruna/") {
+        return None;
+    }
+
+    let (message, suggestion) = if edge.edge.specifier.starts_with("$aruna/") {
+        if resolve_virtual_generated_action_module(&edge.edge.specifier).is_some() {
+            (
+                format!(
+                    "{} imports {}, but Aruna could not resolve the virtual action module.",
+                    edge.importer_path, edge.edge.specifier
+                ),
+                "Verify the Aruna-generated module mapping or rebuild the project.".to_string(),
+            )
+        } else {
+            (
+                format!(
+                    "{} imports {}, but {} is not a known Aruna virtual module.",
+                    edge.importer_path, edge.edge.specifier, edge.edge.specifier
+                ),
+                "Use $aruna/actions/client or $aruna/actions/server, or import a real source file."
+                    .to_string(),
+            )
+        }
+    } else {
+        (
+            format!(
+                "{} imports {}, but Aruna could not resolve it.",
+                edge.importer_path, edge.edge.specifier
+            ),
+            "Check the relative path, tsconfig paths mapping, and file extension support."
+                .to_string(),
+        )
+    };
+
     Some(create_diagnostic(
         "aruna::105",
-        format!(
-            "{} imports {}, but Aruna could not resolve it.",
-            edge.importer_path, edge.edge.specifier
-        ),
+        message,
         Some(edge.importer_path.clone()),
         edge.span.clone(),
         Some(format!(
             "importer kind: {}",
             module_kind_label(edge.importer_kind)
         )),
-        Some(
-            "Check the relative path, tsconfig paths mapping, and file extension support."
-                .to_string(),
-        ),
+        Some(suggestion),
     ))
 }
 

@@ -18,6 +18,38 @@ pub struct ResolvedImport {
     pub absolute_path: Option<PathBuf>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VirtualGeneratedActionModule {
+    Client,
+    Server,
+}
+
+impl VirtualGeneratedActionModule {
+    pub fn specifier(self) -> &'static str {
+        match self {
+            VirtualGeneratedActionModule::Client => "$aruna/actions/client",
+            VirtualGeneratedActionModule::Server => "$aruna/actions/server",
+        }
+    }
+
+    pub fn filename(self) -> &'static str {
+        match self {
+            VirtualGeneratedActionModule::Client => "actions.client.generated.ts",
+            VirtualGeneratedActionModule::Server => "actions.server.generated.ts",
+        }
+    }
+}
+
+pub fn resolve_virtual_generated_action_module(
+    specifier: &str,
+) -> Option<VirtualGeneratedActionModule> {
+    match specifier {
+        "$aruna/actions/client" => Some(VirtualGeneratedActionModule::Client),
+        "$aruna/actions/server" => Some(VirtualGeneratedActionModule::Server),
+        _ => None,
+    }
+}
+
 fn is_ts_source_file(file_path: &Path) -> bool {
     let text = normalize_path(&file_path.to_string_lossy());
     (text.ends_with(".ts") || text.ends_with(".tsx")) && !text.ends_with(".d.ts")
@@ -182,10 +214,19 @@ pub fn is_bare_specifier(specifier: &str) -> bool {
 pub fn resolve_import_specifier(
     project_root: &Path,
     importer_path: &Path,
+    generated_dir: &str,
     specifier: &str,
     options: &TsconfigResolverOptions,
     discovered_files: &std::collections::BTreeSet<String>,
 ) -> ResolvedImport {
+    if let Some(virtual_module) = resolve_virtual_generated_action_module(specifier) {
+        let generated_path = project_absolute(project_root, generated_dir).join(virtual_module.filename());
+        return ResolvedImport {
+            resolved: true,
+            absolute_path: Some(normalize_path_buf(&generated_path)),
+        };
+    }
+
     let resolved = if is_relative_specifier(specifier) {
         let importer_dir = importer_path.parent().unwrap_or(importer_path);
         let absolute = importer_dir.join(specifier);
