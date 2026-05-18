@@ -14,7 +14,8 @@
     "release:publish": "tsx scripts/release.ts publish",
     "release:dry-run": "tsx scripts/release.ts publish --dry-run",
     "aruna": "pnpm --filter aruna aruna",
-    "harness:rbxts": "pnpm --filter @arunajs/rbxts-harness typecheck"
+    "harness:rbxts": "pnpm --filter @arunajs/rbxts-harness typecheck",
+    "harness:rbxts:compile": "pnpm --filter @arunajs/rbxts-harness rbxtsc"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
