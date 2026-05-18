@@ -1,0 +1,168 @@
+{
+  "actions": [
+    {
+      "exportName": "purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "id": "shop.purchaseItem",
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "kind": "object",
+        "properties": {
+          "ok": {
+            "kind": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client or $aruna/actions/server, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/app/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/server",
+      "to": "src/.aruna/actions.server.generated.ts"
+    },
+    {
+      "from": "src/app/client.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "$aruna/not-real"
+    },
+    {
+      "from": "src/app/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/client",
+      "to": "src/.aruna/actions.client.generated.ts"
+    },
+    {
+      "from": "src/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/client",
+      "to": "src/app/client.ts"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/server",
+      "to": "src/app/server.ts"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/.aruna/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/app/client.ts",
+      "kind": "client",
+      "path": "src/app/client.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/app/server.ts",
+      "kind": "server",
+      "path": "src/app/server.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/client.ts",
+      "kind": "clientEntry",
+      "path": "src/client.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

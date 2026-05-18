@@ -14,9 +14,21 @@
     "reasonDetail": "virtual $aruna/actions module"
   },
   {
-    "id": "src/client.tsx",
+    "id": "src/app/client.ts",
+    "kind": "client",
+    "path": "src/app/client.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/app/server.ts",
+    "kind": "server",
+    "path": "src/app/server.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/client.ts",
     "kind": "clientEntry",
-    "path": "src/client.tsx",
+    "path": "src/client.ts",
     "reason": "path",
     "reasonDetail": "matched recommended entry file"
   },
@@ -26,5 +38,12 @@
     "path": "src/domains/shop/actions.ts",
     "reason": "directive",
     "reasonDetail": "defineAction(...) export detected"
+  },
+  {
+    "id": "src/server.ts",
+    "kind": "serverEntry",
+    "path": "src/server.ts",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
   }
 ]

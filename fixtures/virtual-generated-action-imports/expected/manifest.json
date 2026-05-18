@@ -10,19 +10,7 @@
       "inputSchema": {
         "kind": "object",
         "properties": {
-          "itemId": {
-            "kind": "string"
-          },
-          "note": {
-            "inner": {
-              "kind": "string"
-            },
-            "kind": "optional"
-          },
-          "quantity": {
-            "kind": "number"
-          },
-          "tags": {
+          "itemIds": {
             "items": {
               "kind": "string"
             },
@@ -33,9 +21,6 @@
       "outputSchema": {
         "kind": "object",
         "properties": {
-          "ok": {
-            "kind": "boolean"
-          },
           "warnings": {
             "items": {
               "kind": "string"
@@ -57,6 +42,9 @@
         "properties": {
           "itemId": {
             "kind": "string"
+          },
+          "quantity": {
+            "kind": "number"
           }
         }
       },
@@ -73,6 +61,27 @@
   "diagnostics": [],
   "imports": [
     {
+      "from": "src/app/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/client",
+      "to": "src/.aruna/actions.client.generated.ts"
+    },
+    {
+      "from": "src/app/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/server",
+      "to": "src/.aruna/actions.server.generated.ts"
+    },
+    {
+      "from": "src/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/client",
+      "to": "src/app/client.ts"
+    },
+    {
       "from": "src/domains/inventory/actions.ts",
       "kind": "static",
       "resolved": false,
@@ -95,6 +104,13 @@
       "kind": "static",
       "resolved": false,
       "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/server",
+      "to": "src/app/server.ts"
     }
   ],
   "modules": [
@@ -113,9 +129,21 @@
       "reasonDetail": "virtual $aruna/actions module"
     },
     {
-      "id": "src/client.tsx",
+      "id": "src/app/client.ts",
+      "kind": "client",
+      "path": "src/app/client.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/app/server.ts",
+      "kind": "server",
+      "path": "src/app/server.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/client.ts",
       "kind": "clientEntry",
-      "path": "src/client.tsx",
+      "path": "src/client.ts",
       "reason": "path",
       "reasonDetail": "matched recommended entry file"
     },

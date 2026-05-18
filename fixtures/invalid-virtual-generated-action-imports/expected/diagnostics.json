@@ -1,0 +1,41 @@
+[
+  {
+    "code": "aruna::556",
+    "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+    "file": "src/app/client.ts",
+    "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+    "name": "action-imported-from-invalid-environment",
+    "severity": "error",
+    "span": {
+      "end": 47,
+      "start": 24
+    },
+    "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+  },
+  {
+    "code": "aruna::105",
+    "details": "importer kind: client",
+    "file": "src/app/client.ts",
+    "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+    "name": "unresolved-import",
+    "severity": "warning",
+    "span": {
+      "end": 87,
+      "start": 70
+    },
+    "suggestion": "Use $aruna/actions/client or $aruna/actions/server, or import a real source file."
+  },
+  {
+    "code": "aruna::301",
+    "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+    "file": "src/app/server.ts",
+    "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+    "name": "server-imports-client",
+    "severity": "error",
+    "span": {
+      "end": 52,
+      "start": 29
+    },
+    "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+  }
+]

@@ -10,6 +10,6 @@
       "end": 53,
       "start": 29
     },
-    "suggestion": "Keep server actions on the server side, and import them from client-safe generated stubs later."
+    "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
   }
 ]

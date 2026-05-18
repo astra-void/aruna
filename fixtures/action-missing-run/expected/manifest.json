@@ -34,6 +34,20 @@
   ],
   "modules": [
     {
+      "id": "src/.aruna/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
       "id": "src/domains/shop/actions.ts",
       "kind": "serverAction",
       "path": "src/domains/shop/actions.ts",

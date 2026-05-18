@@ -29,7 +29,7 @@
         "end": 53,
         "start": 29
       },
-      "suggestion": "Keep server actions on the server side, and import them from client-safe generated stubs later."
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
     }
   ],
   "imports": [
@@ -54,6 +54,20 @@
     }
   ],
   "modules": [
+    {
+      "id": "src/.aruna/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
     {
       "id": "src/client.tsx",
       "kind": "clientEntry",
