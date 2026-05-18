@@ -74,6 +74,10 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
             "duplicate-generated-action-export",
             DiagnosticSeverity::Error,
         )),
+        "aruna::558" => Some((
+            "generated-action-type-name-collision",
+            DiagnosticSeverity::Error,
+        )),
         "aruna::300" => Some(("client-imports-server", DiagnosticSeverity::Error)),
         "aruna::301" => Some(("server-imports-client", DiagnosticSeverity::Error)),
         "aruna::302" => Some(("shared-imports-client", DiagnosticSeverity::Error)),

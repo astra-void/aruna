@@ -13,6 +13,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ArunaSchemaLiteralMetadata {
+    String { value: String },
+    Number { value: String },
+    Boolean { value: bool },
+    Undefined,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaSchemaMetadata {
     pub kind: String,
@@ -21,9 +30,9 @@ pub struct ArunaSchemaMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub items: Option<Box<ArunaSchemaMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,
+    pub literal: Option<ArunaSchemaLiteralMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub values: Option<Vec<String>>,
+    pub values: Option<Vec<ArunaSchemaLiteralMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inner: Option<Box<ArunaSchemaMetadata>>,
 }
@@ -168,22 +177,40 @@ fn unwrap_schema_expression<'a>(expression: &'a Expression<'a>) -> &'a Expressio
     }
 }
 
-fn literal_value_from_argument(argument: &Argument<'_>) -> Option<String> {
+fn literal_metadata_from_argument(argument: &Argument<'_>) -> Option<ArunaSchemaLiteralMetadata> {
     match argument {
-        Argument::StringLiteral(literal) => Some(literal.value.to_string()),
-        Argument::NumericLiteral(literal) => Some(literal.value.to_string()),
-        Argument::BooleanLiteral(literal) => Some(literal.value.to_string()),
-        Argument::NullLiteral(_) => Some("null".to_string()),
+        Argument::StringLiteral(literal) => Some(ArunaSchemaLiteralMetadata::String {
+            value: literal.value.to_string(),
+        }),
+        Argument::NumericLiteral(literal) => Some(ArunaSchemaLiteralMetadata::Number {
+            value: literal.value.to_string(),
+        }),
+        Argument::BooleanLiteral(literal) => Some(ArunaSchemaLiteralMetadata::Boolean {
+            value: literal.value,
+        }),
+        Argument::Identifier(identifier) if identifier.name.as_str() == "undefined" => {
+            Some(ArunaSchemaLiteralMetadata::Undefined)
+        }
         _ => None,
     }
 }
 
-fn literal_value_from_array_element(element: &ArrayExpressionElement<'_>) -> Option<String> {
+fn literal_metadata_from_array_element(
+    element: &ArrayExpressionElement<'_>,
+) -> Option<ArunaSchemaLiteralMetadata> {
     match element {
-        ArrayExpressionElement::StringLiteral(literal) => Some(literal.value.to_string()),
-        ArrayExpressionElement::NumericLiteral(literal) => Some(literal.value.to_string()),
-        ArrayExpressionElement::BooleanLiteral(literal) => Some(literal.value.to_string()),
-        ArrayExpressionElement::NullLiteral(_) => Some("null".to_string()),
+        ArrayExpressionElement::StringLiteral(literal) => Some(ArunaSchemaLiteralMetadata::String {
+            value: literal.value.to_string(),
+        }),
+        ArrayExpressionElement::NumericLiteral(literal) => Some(ArunaSchemaLiteralMetadata::Number {
+            value: literal.value.to_string(),
+        }),
+        ArrayExpressionElement::BooleanLiteral(literal) => Some(ArunaSchemaLiteralMetadata::Boolean {
+            value: literal.value,
+        }),
+        ArrayExpressionElement::Identifier(identifier) if identifier.name.as_str() == "undefined" => {
+            Some(ArunaSchemaLiteralMetadata::Undefined)
+        }
         _ => None,
     }
 }
@@ -275,7 +302,7 @@ fn parse_schema_array_values(
     role: SchemaRole,
     array: &ArrayExpression<'_>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
-) -> Option<Vec<String>> {
+) -> Option<Vec<ArunaSchemaLiteralMetadata>> {
     let mut values = Vec::new();
 
     for element in &array.elements {
@@ -294,7 +321,7 @@ fn parse_schema_array_values(
                 ));
                 return None;
             }
-            _ => match literal_value_from_array_element(element) {
+            _ => match literal_metadata_from_array_element(element) {
                 Some(value) => value,
                 None => {
                     diagnostics.push(schema_invalid_diagnostic(
@@ -306,11 +333,11 @@ fn parse_schema_array_values(
                             start: element.span().start as usize,
                             end: element.span().end as usize,
                         },
-                        "Enum values must be literal values such as strings, numbers, booleans, or null."
+                    "Enum values must be literal values such as strings, numbers, booleans, or undefined."
                             .to_string(),
-                    ));
-                    return None;
-                }
+                ));
+                return None;
+            }
             },
         };
         values.push(value);
@@ -382,7 +409,7 @@ fn parse_schema_object(
         kind: "object".to_string(),
         properties: Some(properties),
         items: None,
-        value: None,
+        literal: None,
         values: None,
         inner: None,
     })
@@ -463,7 +490,7 @@ fn parse_schema_call(
                 kind: kind.to_string(),
                 properties: None,
                 items: None,
-                value: None,
+                literal: None,
                 values: None,
                 inner: None,
             })
@@ -499,7 +526,7 @@ fn parse_schema_call(
                 return None;
             }
 
-            let Some(value) = literal_value_from_argument(argument) else {
+            let Some(value) = literal_metadata_from_argument(argument) else {
                 diagnostics.push(schema_invalid_diagnostic(
                     file,
                     action_id,
@@ -509,7 +536,7 @@ fn parse_schema_call(
                         start: argument.span().start as usize,
                         end: argument.span().end as usize,
                     },
-                    "literal schemas only accept string, number, boolean, or null values."
+                    "literal schemas only accept string, number, boolean, or undefined values."
                         .to_string(),
                 ));
                 return None;
@@ -519,7 +546,7 @@ fn parse_schema_call(
                 kind: kind.to_string(),
                 properties: None,
                 items: None,
-                value: Some(value),
+                literal: Some(value),
                 values: None,
                 inner: None,
             })
@@ -570,7 +597,7 @@ fn parse_schema_call(
                 kind: kind.to_string(),
                 properties: None,
                 items: Some(Box::new(items)),
-                value: None,
+                literal: None,
                 values: None,
                 inner: None,
             })
@@ -669,7 +696,7 @@ fn parse_schema_call(
                 kind: kind.to_string(),
                 properties: None,
                 items: None,
-                value: None,
+                literal: None,
                 values: None,
                 inner: Some(Box::new(inner)),
             })
@@ -736,7 +763,7 @@ fn parse_schema_call(
                 kind: kind.to_string(),
                 properties: None,
                 items: None,
-                value: None,
+                literal: None,
                 values: Some(values),
                 inner: None,
             })
@@ -1062,7 +1089,7 @@ mod tests {
             kind: kind.to_string(),
             properties: None,
             items: None,
-            value: None,
+            literal: None,
             values: None,
             inner: None,
         }
@@ -1078,7 +1105,7 @@ mod tests {
                     .collect::<BTreeMap<_, _>>(),
             ),
             items: None,
-            value: None,
+            literal: None,
             values: None,
             inner: None,
         }
@@ -1213,7 +1240,7 @@ export const purchaseItem = defineAction({
                 kind: "array".to_string(),
                 properties: None,
                 items: Some(Box::new(schema("string"))),
-                value: None,
+                literal: None,
                 values: None,
                 inner: None,
             })

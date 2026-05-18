@@ -262,3 +262,90 @@ export const main = { a, b };
         vec!["./a".to_string(), "./b".to_string()]
     );
 }
+
+#[test]
+fn captures_undefined_literal_schema_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const demo = defineAction({
+  id: "demo.literal",
+  input: schema.literal(undefined),
+  output: schema.enum([undefined, "ready"]),
+  run() {
+    return undefined;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok);
+    let action = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.literal")
+        .expect("expected action metadata");
+
+    let input_schema = action.input_schema.as_ref().expect("expected input schema");
+    assert_eq!(input_schema.kind, "literal");
+    assert_eq!(
+        input_schema.literal.as_ref(),
+        Some(&aruna_compiler::ArunaSchemaLiteralMetadata::Undefined)
+    );
+
+    let output_schema = action.output_schema.as_ref().expect("expected output schema");
+    assert_eq!(output_schema.kind, "enum");
+    assert_eq!(
+        output_schema
+            .values
+            .as_ref()
+            .expect("expected enum values"),
+        &vec![
+            aruna_compiler::ArunaSchemaLiteralMetadata::Undefined,
+            aruna_compiler::ArunaSchemaLiteralMetadata::String {
+                value: "ready".to_string(),
+            },
+        ]
+    );
+}
+
+#[test]
+fn rejects_null_literal_schema_values() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const demo = defineAction({
+  id: "demo.literal",
+  input: schema.literal(null),
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::553".to_string()]);
+    assert_eq!(output.summary.errors, 0);
+    assert_eq!(output.summary.warnings, 1);
+    assert_eq!(output.manifest.actions.len(), 1);
+    assert!(output.manifest.actions[0].input_schema.is_none());
+}
