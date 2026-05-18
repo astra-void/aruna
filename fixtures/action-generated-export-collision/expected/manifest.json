@@ -1,76 +1,39 @@
 {
   "actions": [
     {
-      "exportName": "restockItem",
+      "exportName": "purchaseItem",
       "file": "src/domains/inventory/actions.ts",
-      "hasInputSchema": true,
-      "hasOutputSchema": true,
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
       "hasRun": true,
-      "id": "inventory.restockItem",
-      "inputSchema": {
-        "kind": "object",
-        "properties": {
-          "itemId": {
-            "kind": "string"
-          },
-          "quantity": {
-            "kind": "number"
-          }
-        }
-      },
-      "outputSchema": {
-        "kind": "object",
-        "properties": {
-          "ok": {
-            "kind": "boolean"
-          }
-        }
-      }
+      "id": "inventory.purchaseItem"
     },
     {
       "exportName": "purchaseItem",
       "file": "src/domains/shop/actions.ts",
-      "hasInputSchema": true,
-      "hasOutputSchema": true,
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
       "hasRun": true,
-      "id": "shop.purchaseItem",
-      "inputSchema": {
-        "kind": "object",
-        "properties": {
-          "itemId": {
-            "kind": "string"
-          }
-        }
-      },
-      "outputSchema": {
-        "kind": "object",
-        "properties": {
-          "ok": {
-            "kind": "boolean"
-          }
-        }
-      }
+      "id": "shop.purchaseItem"
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::557",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Generated action export name purchaseItem is used by more than one action.",
+      "name": "duplicate-generated-action-export",
+      "severity": "error",
+      "suggestion": "Rename one action export or import the generated action through a namespaced layout in a future release."
+    }
+  ],
   "imports": [
     {
       "from": "src/domains/inventory/actions.ts",
       "kind": "static",
       "resolved": false,
-      "specifier": "aruna/schema"
-    },
-    {
-      "from": "src/domains/inventory/actions.ts",
-      "kind": "static",
-      "resolved": false,
       "specifier": "aruna/server"
-    },
-    {
-      "from": "src/domains/shop/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/schema"
     },
     {
       "from": "src/domains/shop/actions.ts",

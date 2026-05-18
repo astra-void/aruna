@@ -6,7 +6,15 @@
       "hasInputSchema": true,
       "hasOutputSchema": false,
       "hasRun": true,
-      "id": "shop.purchaseItem"
+      "id": "shop.purchaseItem",
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string"
+          }
+        }
+      }
     }
   ],
   "diagnostics": [

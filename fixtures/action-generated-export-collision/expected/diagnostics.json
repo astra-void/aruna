@@ -1,0 +1,11 @@
+[
+  {
+    "code": "aruna::557",
+    "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Generated action export name purchaseItem is used by more than one action.",
+    "name": "duplicate-generated-action-export",
+    "severity": "error",
+    "suggestion": "Rename one action export or import the generated action through a namespaced layout in a future release."
+  }
+]
