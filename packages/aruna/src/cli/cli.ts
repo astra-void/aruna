@@ -12,6 +12,7 @@ import {
   formatSummary,
   type CliColorMode,
 } from "./format.js";
+import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { formatError, formatMuted } from "./theme.js";
 
 type CliOptions = {
@@ -23,6 +24,10 @@ type CliOptions = {
   noColor?: boolean;
   color?: boolean;
   warningsAsErrors?: boolean;
+};
+
+type DoctorCliOptions = CliOptions & {
+  fix?: boolean;
 };
 
 function isCI(env: NodeJS.ProcessEnv): boolean {
@@ -113,6 +118,30 @@ async function runInspect(options: CliOptions): Promise<ArunaCompilerOutput> {
 
 async function runBuild(options: CliOptions): Promise<ArunaCompilerOutput> {
   return buildProject(compilerInput(options));
+}
+
+async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
+  try {
+    const compilerOptions = compilerInput(options);
+    const report = runDoctor({
+      projectRoot: compilerOptions.root,
+      configPath: compilerOptions.configPath,
+      fix: options.fix,
+    });
+
+    if (options.json) {
+      writeJson(report);
+      process.exitCode = doctorExitCode(report);
+      return;
+    }
+
+    writeText(formatDoctorReport(report));
+    process.exitCode = doctorExitCode(report);
+  } catch (error) {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(`${formatError(message, resolveColorMode(options))}\n`);
+    process.exitCode = 1;
+  }
 }
 
 export async function main(): Promise<number> {
@@ -208,6 +237,16 @@ export async function main(): Promise<number> {
       renderCompilerOutput(output, options, Date.now() - startedAt, "build");
       process.exitCode = output.ok ? 0 : 1;
     });
+
+  const doctor = program
+    .command("doctor")
+    .description("inspect and optionally fix Aruna tsconfig path aliases")
+    .option("--fix", "write the required tsconfig path aliases");
+
+  doctor.action(async () => {
+    const options = doctor.optsWithGlobals<DoctorCliOptions>();
+    await runDoctorCli(options);
+  });
 
   await program.parseAsync(process.argv);
   return typeof process.exitCode === "number" ? process.exitCode : 0;
