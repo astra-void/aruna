@@ -191,7 +191,9 @@ For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install t
 ## Real app harness
 
 `apps/rbxts-harness` is a private roblox-ts-style app harness.
-It runs `aruna build` against a real app layout and typechecks generated action files, app bootstrap, schema inference, and structural RemoteEvent transport through public package exports.
+It runs `aruna build` against a real app layout, then validates the harness with both TypeScript and `rbxtsc`.
+Use `pnpm --filter @arunajs/rbxts-harness typecheck` for the TypeScript check and `pnpm --filter @arunajs/rbxts-harness rbxtsc` for the roblox-ts compile.
+The harness covers generated action files, app bootstrap, schema inference, structural RemoteEvent transport, and public Aruna runtime imports.
 It is not create-app, Rojo generation, generated Roblox Instance creation, or full Studio validation yet.
 
 ## Intentionally not implemented
