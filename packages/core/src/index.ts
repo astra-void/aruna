@@ -65,6 +65,17 @@ export type ArunaActionRecord = {
   hasInputSchema: boolean;
   hasOutputSchema: boolean;
   hasRun: boolean;
+  inputSchema?: ArunaSchemaMetadata | undefined;
+  outputSchema?: ArunaSchemaMetadata | undefined;
+};
+
+export type ArunaSchemaMetadata = {
+  kind: string;
+  properties?: Record<string, ArunaSchemaMetadata> | undefined;
+  items?: ArunaSchemaMetadata | undefined;
+  value?: string | undefined;
+  values?: string[] | undefined;
+  inner?: ArunaSchemaMetadata | undefined;
 };
 
 export type ArunaGeneratedFile = {
