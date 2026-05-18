@@ -87,7 +87,13 @@ pnpm build:native
 
 Phase 1 prepares native packages through generated `.npm/` staging directories.
 
-`pnpm build:native` builds and stages the current host target only.
+Raw Cargo artifacts are written under `target/**` and may be named `libaruna_napi.dylib`, `libaruna_napi.so`, `aruna_napi.dll`, or `aruna_napi.node` depending on platform and profile.
+
+`pnpm build:native` builds and stages the current host native package only. It always produces `.npm/compiler-<target>/compiler.<target>.node` and `.npm/compiler-<target>/package.json` when the Rust build succeeds. If `packages/compiler/dist` is missing, wrapper staging is skipped with a clear message instead of failing the native build.
+
+`pnpm --filter @arunajs/compiler verify:native` checks the staged native package for the current host target and fails if the `.npm/compiler-<target>/` artifact is missing or malformed.
+
+The wrapper package under `.npm/compiler/` is reserved for release packaging or for runs after the TypeScript build has produced `packages/compiler/dist`.
 
 `pnpm release:prepare` is the release orchestrator entrypoint:
 
@@ -120,6 +126,7 @@ Unsupported cross targets are not faked or substituted.
 Staged native artifacts use target-qualified names such as `compiler.darwin-arm64.node` and are copied from the real Rust output only.
 
 Packages are staged under `.npm/`, then packed and published from `.npm/` rather than `packages/*`.
+The generated `.npm/` output is ignored by git and can be regenerated at any time.
 
 Aruna never fakes platform support by renaming a binary built for another target or by staging placeholder packages for skipped targets.
 
@@ -144,7 +151,10 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 ## Generated action foundation
 
 - server action discovery exists in Rust
+- action manifest records now include basic schema metadata when `input` or `output` is declared
+- generated action files are snapshot-tested in the fixture suite
 - `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
+- generated client stubs still use `unknown` input and output types
 - the generated files are safe to delete and regenerate
 - runtime transport is still intentionally not implemented
 - runtime schema validation is still intentionally not implemented
