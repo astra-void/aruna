@@ -12,6 +12,7 @@ export {
   type ArunaManifest,
   type ArunaModuleKind,
   type ArunaModuleRecord,
+  type ArunaSchemaMetadata,
 } from "@arunajs/core";
 
 export { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
