@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
-import { vi, describe, expect, it, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   nativeArtifactName,
   nativeBuildOutputName,
@@ -40,12 +40,13 @@ describe("loadNativeCompiler", () => {
     vi.restoreAllMocks();
   });
 
-  it("includes the expected package and local fallback paths in the failure message", () => {
+  it("includes the staged package path, installed package path, and workspace outputs in failures", () => {
     const target = resolveNativeTarget();
     const rustTarget = nativeTargetInfo(target).rustTarget;
     const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const installedPackagePath = `node_modules/${nativePackageName(target)}/${nativeArtifactName(target)}`;
 
     try {
       loadNativeCompiler();
@@ -57,17 +58,15 @@ describe("loadNativeCompiler", () => {
         `Aruna native compiler could not be loaded for ${process.platform}/${process.arch}.`,
       );
       expect(message).toContain(`Resolved native target: ${target}`);
-    expect(message).toContain(`Expected native package: ${expectedPackage}`);
-    expect(message).toContain(`Expected native artifact: ${nativeArtifactName(target)}`);
-    expect(message).toContain("Searched:");
-    expect(message).toContain(`- ${expectedPackage}`);
-    expect(message).toContain(`- ${localFallback}`);
-    expect(message).toContain(`- target/${rustTarget}/debug/${buildOutputName}`);
-    expect(message).toContain(`- target/${rustTarget}/release/${buildOutputName}`);
-    expect(message).toContain(`- target/debug/${buildOutputName}`);
-    expect(message).toContain(`- target/release/${buildOutputName}`);
-    expect(message).toContain("- target/debug/aruna_napi.node");
-    expect(message).toContain("- target/release/aruna_napi.node");
+      expect(message).toContain(`Expected native package: ${expectedPackage}`);
+      expect(message).toContain(`Expected native artifact: ${nativeArtifactName(target)}`);
+      expect(message).toContain("Attempted paths:");
+      expect(message).toContain(`- ${stagedPackagePath}`);
+      expect(message).toContain(`- ${installedPackagePath}`);
+      expect(message).toContain(`- target/${rustTarget}/debug/${buildOutputName}`);
+      expect(message).toContain(`- target/release/${buildOutputName}`);
+      expect(message).toContain(`- target/debug/aruna_napi.node`);
+      expect(message).toContain(`- target/release/aruna_napi.node`);
       expect(message).toContain(
         "Run pnpm build:native for local development, reinstall dependencies, or verify platform support.",
       );
@@ -75,26 +74,48 @@ describe("loadNativeCompiler", () => {
     }
   });
 
-  it("prefers the installed native package over local fallbacks", () => {
+  it("loads the staged native artifact before package resolution", () => {
     const target = resolveNativeTarget();
-    const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
+    const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => candidate.endsWith(stagedPackagePath));
     mockRequire.mockImplementationOnce((specifier: string) => {
-      expect(specifier).toContain(expectedPackage);
+      expect(specifier).toContain(stagedPackagePath);
       return loadedCompiler;
     });
 
     const result = loadNativeCompiler();
 
     expect(result).toBe(loadedCompiler);
-    expect(fs.existsSync).not.toHaveBeenCalled();
     expect(mockRequire).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to the staged native package before workspace build outputs", () => {
+  it("falls back to the installed package when the staged artifact is missing", () => {
     const target = resolveNativeTarget();
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const localFallback = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+
+    mockRequire.mockImplementationOnce((specifier: string) => {
+      expect(specifier).toBe(expectedPackage);
+      return loadedCompiler;
+    });
+
+    const result = loadNativeCompiler();
+
+    expect(result).toBe(loadedCompiler);
+    expect(fs.existsSync).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining(stagedPackagePath));
+    expect(mockRequire).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the installed target path before workspace build outputs", () => {
+    const target = resolveNativeTarget();
+    const buildOutputName = nativeBuildOutputName(target);
+    const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
+    const installedPackagePath = `node_modules/${nativePackageName(target)}/${nativeArtifactName(target)}`;
+    const debugFallback = `target/debug/${buildOutputName}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
 
     mockRequire
@@ -102,20 +123,22 @@ describe("loadNativeCompiler", () => {
         throw new Error("installed package missing");
       })
       .mockImplementationOnce((specifier: string) => {
-        expect(specifier).toContain(localFallback);
+        expect(specifier).toContain(installedPackagePath);
         return loadedCompiler;
       });
 
     vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) =>
-      candidate.endsWith(localFallback),
+      candidate.endsWith(installedPackagePath),
     );
 
     const result = loadNativeCompiler();
 
     expect(result).toBe(loadedCompiler);
     expect(mockRequire.mock.calls[0]?.[0]).toBe(expectedPackage);
-    expect(mockRequire.mock.calls[1]?.[0]).toContain(localFallback);
+    expect(mockRequire.mock.calls[1]?.[0]).toContain(installedPackagePath);
     expect(mockRequire).toHaveBeenCalledTimes(2);
+    expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining(installedPackagePath));
+    expect(fs.existsSync).not.toHaveBeenCalledWith(expect.stringContaining(debugFallback));
   });
 
   it("tries debug and then release workspace outputs when the staged package is absent", () => {
@@ -130,7 +153,7 @@ describe("loadNativeCompiler", () => {
         throw new Error("installed package missing");
       })
       .mockImplementationOnce(() => {
-        throw new Error("staged package missing");
+        throw new Error("installed target path missing");
       });
 
     vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => {

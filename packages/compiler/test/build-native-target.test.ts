@@ -1,7 +1,9 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { nativeBuildOutputName, nativeTargetInfo } from "../src/native-platform.ts";
 import {
-  findNativeBuildArtifact,
   hostBuildOutputName,
   readRequestedTarget,
   resolveHostNativeTarget,
@@ -30,10 +32,19 @@ describe("build-native-target core", () => {
 
   it("keeps native staging on the current host target", async () => {
     const hostTarget = resolveHostNativeTarget();
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-build-core-"));
+    const sourceArtifactPath = path.join(
+      workspaceRoot,
+      "target",
+      "debug",
+      nativeBuildOutputName(hostTarget),
+    );
+    await fs.mkdir(path.dirname(sourceArtifactPath), { recursive: true });
+    await fs.writeFile(sourceArtifactPath, "native-binary");
     const buildNativeArtifact = vi.fn().mockResolvedValue({
       targetInfo: nativeTargetInfo(hostTarget),
       profile: "debug",
-      sourceArtifactPath: findNativeBuildArtifact(),
+      sourceArtifactPath,
       command: "cargo",
       args: [],
     });
@@ -47,6 +58,7 @@ describe("build-native-target core", () => {
       packageJsonPath: "/tmp/compiler/package.json",
     });
     const readVersion = vi.fn().mockResolvedValue("0.1.0");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
 
     const result = await runBuildNativeTarget({
       buildNativeArtifact,
@@ -57,7 +69,7 @@ describe("build-native-target core", () => {
 
     expect(result.hostTarget).toBe(hostTarget);
     expect(result.version).toBe("0.1.0");
-    expect(result.sourceArtifactPath).toBe(findNativeBuildArtifact());
+    expect(result.sourceArtifactPath).toBe(sourceArtifactPath);
     expect(buildNativeArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         target: hostTarget,
@@ -69,7 +81,7 @@ describe("build-native-target core", () => {
     expect(stageNativePackage).toHaveBeenCalledWith(
       expect.objectContaining({
         target: hostTarget,
-        sourceArtifactPath: findNativeBuildArtifact(),
+        sourceArtifactPath,
         version: "0.1.0",
       }),
     );
@@ -77,8 +89,59 @@ describe("build-native-target core", () => {
       expect.objectContaining({
         version: "0.1.0",
         nativeTargets: [hostTarget],
+        allowMissingDist: true,
       }),
     );
+    expect(info).toHaveBeenCalledWith("Staged wrapper package: /tmp/compiler/package");
+    expect(result.compilerPackageDirectory).toBe("/tmp/compiler/package");
+  });
+
+  it("skips wrapper staging when compiler dist is missing", async () => {
+    const hostTarget = resolveHostNativeTarget();
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-build-core-skip-"));
+    const sourceArtifactPath = path.join(
+      workspaceRoot,
+      "target",
+      "debug",
+      nativeBuildOutputName(hostTarget),
+    );
+    await fs.mkdir(path.dirname(sourceArtifactPath), { recursive: true });
+    await fs.writeFile(sourceArtifactPath, "native-binary");
+    const buildNativeArtifact = vi.fn().mockResolvedValue({
+      targetInfo: nativeTargetInfo(hostTarget),
+      profile: "debug",
+      sourceArtifactPath,
+      command: "cargo",
+      args: [],
+    });
+    const stageNativePackage = vi.fn().mockResolvedValue({
+      packageDirectory: "/tmp/native/package",
+      packageJsonPath: "/tmp/native/package/package.json",
+      artifactPath: "/tmp/native/package/artifact.node",
+    });
+    const stageCompilerPackage = vi.fn().mockResolvedValue(null);
+    const readVersion = vi.fn().mockResolvedValue("0.1.0");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const result = await runBuildNativeTarget({
+      buildNativeArtifact,
+      stageNativePackage,
+      stageCompilerPackage,
+      readVersion,
+    });
+
+    expect(stageNativePackage).toHaveBeenCalledTimes(1);
+    expect(stageCompilerPackage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: "0.1.0",
+        nativeTargets: [hostTarget],
+        allowMissingDist: true,
+      }),
+    );
+    expect(info).toHaveBeenCalledWith(
+      "Skipped wrapper package staging because packages/compiler/dist does not exist. Run pnpm build before release packaging.",
+    );
+    expect(result.compilerPackageDirectory).toBeNull();
   });
 
   it("refuses to fake a cross-target native build", async () => {

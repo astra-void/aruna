@@ -10,11 +10,24 @@ export type StageCompilerPackageOptions = {
   workspaceRoot: string;
   version: string;
   nativeTargets: readonly NativeTarget[];
+  allowMissingDist?: boolean;
 };
 
 export type StagedCompilerPackage = {
   packageDirectory: string;
   packageJsonPath: string;
+};
+
+type SourcePackageJson = {
+  name?: string;
+  version?: string;
+  type?: string;
+  main?: string;
+  module?: string;
+  types?: string;
+  exports?: unknown;
+  files?: string[];
+  dependencies?: Record<string, string>;
 };
 
 function replaceWorkspaceProtocol(value: string, replacement: string): string {
@@ -38,26 +51,32 @@ function sanitizeDependencies(
 }
 
 export async function stageCompilerPackage(
+  options: StageCompilerPackageOptions & { allowMissingDist: true },
+): Promise<StagedCompilerPackage | null>;
+export async function stageCompilerPackage(
   options: StageCompilerPackageOptions,
-): Promise<StagedCompilerPackage> {
+): Promise<StagedCompilerPackage>;
+export async function stageCompilerPackage(
+  options: StageCompilerPackageOptions,
+): Promise<StagedCompilerPackage | null> {
   const packageDirectory = stagedCompilerPackageDirectory(options.workspaceRoot);
   const packageJsonPath = path.join(packageDirectory, "package.json");
   const sourcePackageDirectory = path.join(options.workspaceRoot, "packages", "compiler");
   const sourcePackageJsonPath = path.join(sourcePackageDirectory, "package.json");
   const sourceDistDirectory = path.join(sourcePackageDirectory, "dist");
-  const sourcePackageJson = JSON.parse(await fs.readFile(sourcePackageJsonPath, "utf8")) as {
-    name?: string;
-    version?: string;
-    type?: string;
-    main?: string;
-    module?: string;
-    types?: string;
-    exports?: unknown;
-    files?: string[];
-    dependencies?: Record<string, string>;
-  };
+  const sourcePackageJson = JSON.parse(await fs.readFile(sourcePackageJsonPath, "utf8")) as SourcePackageJson;
 
-  await fs.access(sourceDistDirectory);
+  try {
+    await fs.access(sourceDistDirectory);
+  } catch {
+    if (options.allowMissingDist) {
+      return null;
+    }
+    throw new Error(
+      `Compiler package dist directory is missing: ${path.join(sourcePackageDirectory, "dist")}`,
+    );
+  }
+
   await fs.mkdir(packageDirectory, { recursive: true });
   await fs.cp(sourceDistDirectory, path.join(packageDirectory, "dist"), { recursive: true });
 
@@ -71,9 +90,13 @@ export async function stageCompilerPackage(
     exports: sourcePackageJson.exports,
     files: sourcePackageJson.files ?? ["dist"],
     dependencies: sanitizeDependencies(sourcePackageJson.dependencies, options.version),
-    optionalDependencies: Object.fromEntries(
-      options.nativeTargets.map((target) => [nativePackageName(target), options.version]),
-    ),
+    ...(options.nativeTargets.length > 0
+      ? {
+          optionalDependencies: Object.fromEntries(
+            options.nativeTargets.map((target) => [nativePackageName(target), options.version]),
+          ),
+        }
+      : {}),
   };
 
   await fs.writeFile(packageJsonPath, `${JSON.stringify(stagedPackageJson, null, 2)}\n`, "utf8");

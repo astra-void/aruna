@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   nativeArtifactName,
   nativePackageName,
+  nativeTargetInfo,
   stagedNativePackageArtifactPath,
   stagedNativePackageDirectory,
   type NativeTarget,
@@ -27,6 +28,15 @@ export async function stageNativePackage(
   const packageDirectory = stagedNativePackageDirectory(options.workspaceRoot, options.target);
   const artifactPath = stagedNativePackageArtifactPath(options.workspaceRoot, options.target);
   const packageJsonPath = path.join(packageDirectory, "package.json");
+  const targetInfo = nativeTargetInfo(options.target);
+
+  try {
+    await fs.access(options.sourceArtifactPath);
+  } catch {
+    throw new Error(
+      `Native build artifact is missing and cannot be staged: ${options.sourceArtifactPath}`,
+    );
+  }
 
   await fs.mkdir(packageDirectory, { recursive: true });
   await fs.copyFile(options.sourceArtifactPath, artifactPath);
@@ -38,6 +48,9 @@ export async function stageNativePackage(
         version: options.version,
         main: `./${nativeArtifactName(options.target)}`,
         files: [nativeArtifactName(options.target)],
+        os: [targetInfo.os],
+        cpu: [targetInfo.arch],
+        ...(targetInfo.libc ? { libc: targetInfo.libc } : {}),
       },
       null,
       2,

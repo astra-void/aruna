@@ -37,6 +37,10 @@ function resolveNativeTargetPath(target: NativeTarget): string {
   return path.join(workspaceRoot(), ".npm", `compiler-${target}`, nativeArtifactName(target));
 }
 
+function installedNativeTargetPath(target: NativeTarget): string {
+  return path.join(workspaceRoot(), "node_modules", nativePackageName(target), nativeArtifactName(target));
+}
+
 function workspaceCandidatePaths(): string[] {
   const targetDir = targetRoot();
   const target = resolveNativeTarget();
@@ -103,7 +107,7 @@ function createLoadFailureMessage(
     `Expected native package: ${expectedPackage}`,
     `Expected native artifact: ${nativeArtifactName(target)}`,
     "",
-    "Searched:",
+    "Attempted paths:",
     ...searchedPaths.map((candidate) => `- ${candidate}`),
     "",
     "Run pnpm build:native for local development, reinstall dependencies, or verify platform support.",
@@ -119,13 +123,25 @@ export function loadNativeCompiler(): NativeCompiler {
   const require = createRequire(import.meta.url);
   const target = resolveNativeTarget();
   const expectedPackage = packageSpecifier(target);
-  const localFallbackPath = resolveNativeTargetPath(target);
+  const stagedPackagePath = resolveNativeTargetPath(target);
+  const installedPackagePath = installedNativeTargetPath(target);
   const searchedPaths = [
-    expectedPackage,
-    formatDisplayPath(localFallbackPath),
+    formatDisplayPath(stagedPackagePath),
+    formatDisplayPath(installedPackagePath),
     ...workspaceCandidatePaths().map(formatDisplayPath),
   ];
   let lastError: unknown;
+
+  try {
+    if (fs.existsSync(stagedPackagePath)) {
+      const loaded = require(stagedPackagePath);
+      validateNativeCompiler(loaded);
+      cachedCompiler = loaded;
+      return loaded;
+    }
+  } catch (error) {
+    lastError = error;
+  }
 
   try {
     const loaded = require(expectedPackage);
@@ -136,9 +152,9 @@ export function loadNativeCompiler(): NativeCompiler {
     lastError = error;
   }
 
-  if (fs.existsSync(localFallbackPath)) {
+  if (fs.existsSync(installedPackagePath)) {
     try {
-      const loaded = require(localFallbackPath);
+      const loaded = require(installedPackagePath);
       validateNativeCompiler(loaded);
       cachedCompiler = loaded;
       return loaded;

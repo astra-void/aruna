@@ -3,14 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   nativeBuildOutputName,
-  nativeTargetInfo,
   resolveNativeTarget,
   SUPPORTED_NATIVE_TARGETS,
   type NativeTarget,
-} from "../src/native-platform.ts";
-import { buildNativeArtifact } from "./native-build.ts";
-import { stageCompilerPackage } from "./stage-compiler-package.ts";
-import { stageNativePackage } from "./stage-native-package.ts";
+} from "../src/native-platform";
+import { buildNativeArtifact } from "./native-build";
+import { stagedCompilerPackageDirectory } from "./native-targets.ts";
+import { stageCompilerPackage } from "./stage-compiler-package";
+import { stageNativePackage } from "./stage-native-package";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = path.resolve(packageRoot, "../..");
@@ -28,6 +28,7 @@ export type BuildNativeTargetResult = {
   hostTarget: NativeTarget;
   version: string;
   sourceArtifactPath: string;
+  compilerPackageDirectory: string | null;
 };
 
 function detectHostLibc(): "gnu" | "musl" | undefined {
@@ -113,17 +114,6 @@ export function readRequestedTarget(): NativeTarget | null {
   return requested as NativeTarget;
 }
 
-export function findNativeBuildArtifact(): string {
-  const hostTarget = resolveHostNativeTarget();
-  return path.join(
-    workspaceRoot,
-    "target",
-    nativeTargetInfo(hostTarget).rustTarget,
-    profile,
-    hostBuildOutputName(),
-  );
-}
-
 export async function runBuildNativeTarget(
   deps: BuildNativeTargetDeps = {},
 ): Promise<BuildNativeTargetResult> {
@@ -150,22 +140,35 @@ export async function runBuildNativeTarget(
     manifestPath,
   });
 
+  console.info(`Raw artifact: ${buildResult.sourceArtifactPath}`);
+
   const version = await ensureVersion(readVersion);
-  await stageNativePackageFn({
+  const stagedNativePackage = await stageNativePackageFn({
     workspaceRoot,
     version,
     target: hostTarget,
     sourceArtifactPath: buildResult.sourceArtifactPath,
   });
-  await stageCompilerPackageFn({
+  console.info(`Staged artifact: ${stagedNativePackage.artifactPath}`);
+  const stagedCompilerPackage = await stageCompilerPackageFn({
     workspaceRoot,
     version,
     nativeTargets: [hostTarget],
+    allowMissingDist: true,
   });
+  if (stagedCompilerPackage === null) {
+    await fs.rm(stagedCompilerPackageDirectory(workspaceRoot), { recursive: true, force: true });
+    console.info(
+      "Skipped wrapper package staging because packages/compiler/dist does not exist. Run pnpm build before release packaging.",
+    );
+  } else {
+    console.info(`Staged wrapper package: ${stagedCompilerPackage.packageDirectory}`);
+  }
 
   return {
     hostTarget,
     version,
     sourceArtifactPath: buildResult.sourceArtifactPath,
+    compilerPackageDirectory: stagedCompilerPackage?.packageDirectory ?? null,
   };
 }

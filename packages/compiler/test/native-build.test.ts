@@ -11,7 +11,11 @@ import {
   type ToolAvailability,
   type ZigPolicy,
 } from "../scripts/native-build.ts";
-import type { NativeTarget } from "../src/native-platform.ts";
+import {
+  nativeBuildOutputName,
+  resolveNativeTarget,
+  type NativeTarget,
+} from "../src/native-platform.ts";
 
 describe("native build tool selection", () => {
   const hostTarget = "darwin-arm64" as NativeTarget;
@@ -240,8 +244,6 @@ describe("native build tool selection", () => {
         path.join(workspaceRoot, "crates", "aruna_napi", "Cargo.toml"),
         "--package",
         "aruna_napi",
-        "--features",
-        "napi-addon",
         "--target",
         "x86_64-unknown-linux-gnu",
         "--release",
@@ -269,5 +271,97 @@ describe("native build tool selection", () => {
     const candidates = resolveNativeArtifactCandidates("/tmp/aruna", "darwin-arm64", "release");
     expect(candidates).toContain("/tmp/aruna/target/release/libaruna_napi.dylib");
     expect(candidates).toContain("/tmp/aruna/target/release/aruna_napi.node");
+  });
+
+  it("includes platform-specific raw library names for other native targets", () => {
+    expect(resolveNativeArtifactCandidates("/tmp/aruna", "linux-x64-gnu", "debug")).toContain(
+      "/tmp/aruna/target/debug/libaruna_napi.so",
+    );
+    expect(resolveNativeArtifactCandidates("/tmp/aruna", "win32-x64-msvc", "debug")).toContain(
+      "/tmp/aruna/target/debug/aruna_napi.dll",
+    );
+  });
+
+  it("resolves the real host cargo output from target/debug", async () => {
+    const hostTarget = resolveNativeTarget();
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-host-build-"));
+    const artifactPath = path.join(
+      workspaceRoot,
+      "target",
+      "debug",
+      nativeBuildOutputName(hostTarget),
+    );
+    await fs.mkdir(path.dirname(artifactPath), { recursive: true });
+    await fs.writeFile(artifactPath, "artifact");
+
+    const spawnSync = vi.fn((command: string, args: string[]) => {
+      if (command === "rustup" && args[0] === "show" && args[1] === "active-toolchain") {
+        return { status: 0, error: undefined, stdout: "stable-x86_64-apple-darwin (default)\n" };
+      }
+
+      if (command === "rustup" && args[0] === "which" && args[1] === "cargo") {
+        return { status: 0, error: undefined, stdout: "/tmp/cargo\n" };
+      }
+
+      if (command === "rustup" && args[0] === "which" && args[1] === "rustc") {
+        return { status: 0, error: undefined, stdout: "/tmp/rustc\n" };
+      }
+
+      if (command === "rustup" && args[0] === "run" && args[2] === "cargo" && args[3] === "build") {
+        return { status: 0, error: undefined };
+      }
+
+      return { status: 0, error: undefined };
+    });
+
+    const result = await buildNativeArtifact({
+      workspaceRoot,
+      target: hostTarget,
+      hostTarget,
+      profile: "debug",
+      buildTool: "cargo",
+      spawnSync: spawnSync as unknown as typeof import("node:child_process").spawnSync,
+      access: fs.access,
+    });
+
+    expect(result.sourceArtifactPath).toBe(artifactPath);
+    expect(result.command).toBe("cargo");
+  });
+
+  it("fails clearly when no real cargo artifact exists", async () => {
+    const hostTarget = resolveNativeTarget();
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-missing-"));
+
+    const spawnSync = vi.fn((command: string, args: string[]) => {
+      if (command === "rustup" && args[0] === "show" && args[1] === "active-toolchain") {
+        return { status: 0, error: undefined, stdout: "stable-x86_64-apple-darwin (default)\n" };
+      }
+
+      if (command === "rustup" && args[0] === "which" && args[1] === "cargo") {
+        return { status: 0, error: undefined, stdout: "/tmp/cargo\n" };
+      }
+
+      if (command === "rustup" && args[0] === "which" && args[1] === "rustc") {
+        return { status: 0, error: undefined, stdout: "/tmp/rustc\n" };
+      }
+
+      if (command === "rustup" && args[0] === "run" && args[2] === "cargo" && args[3] === "build") {
+        return { status: 0, error: undefined };
+      }
+
+      return { status: 0, error: undefined };
+    });
+
+    await expect(
+      buildNativeArtifact({
+        workspaceRoot,
+        target: hostTarget,
+        hostTarget,
+        profile: "debug",
+        buildTool: "cargo",
+        spawnSync: spawnSync as unknown as typeof import("node:child_process").spawnSync,
+        access: fs.access,
+      }),
+    ).rejects.toThrow(/Could not find the native build artifact/);
   });
 });

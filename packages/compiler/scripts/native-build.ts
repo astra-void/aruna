@@ -8,7 +8,7 @@ import {
   resolveNativeTarget,
   type NativeTarget,
   type NativeTargetInfo,
-} from "./native-targets.ts";
+} from "./native-targets";
 
 export type NativeBuildProfile = "debug" | "release";
 export type ZigPolicy = "auto" | "always" | "never";
@@ -149,14 +149,19 @@ function targetArtifactCandidates(
   workspaceRoot: string,
   targetInfo: NativeTargetInfo,
   profile: NativeBuildProfile,
+  buildTool: BuildTool = "cargo",
 ): string[] {
   const targetDir = path.join(workspaceRoot, "target");
-  const genericTargetDir = path.join(targetDir, profile);
+  const targetDirs =
+    buildTool === "cargo-zigbuild"
+      ? [path.join(targetDir, targetInfo.rustTarget, profile)]
+      : [path.join(targetDir, profile)];
+
   return [
-    path.join(targetDir, targetInfo.rustTarget, profile, nativeBuildOutputName(targetInfo.target)),
-    path.join(targetDir, targetInfo.rustTarget, profile, "aruna_napi.node"),
-    path.join(genericTargetDir, nativeBuildOutputName(targetInfo.target)),
-    path.join(genericTargetDir, "aruna_napi.node"),
+    ...targetDirs.flatMap((directory) => [
+      path.join(directory, nativeBuildOutputName(targetInfo.target)),
+      path.join(directory, "aruna_napi.node"),
+    ]),
   ];
 }
 
@@ -164,9 +169,10 @@ async function resolveArtifactPath(
   workspaceRoot: string,
   target: NativeTarget,
   profile: NativeBuildProfile,
+  buildTool: BuildTool,
   access: typeof fs.access,
 ): Promise<string> {
-  const candidates = targetArtifactCandidates(workspaceRoot, nativeTargetInfo(target), profile);
+  const candidates = targetArtifactCandidates(workspaceRoot, nativeTargetInfo(target), profile, buildTool);
   for (const candidate of candidates) {
     try {
       await access(candidate);
@@ -178,7 +184,7 @@ async function resolveArtifactPath(
 
   throw new Error(
     [
-      `Could not find the native build artifact for ${target}.`,
+      `Could not find the native build artifact for ${target} after a ${buildTool} ${profile} build.`,
       "Searched:",
       ...candidates.map((candidate) => `- ${candidate}`),
     ].join("\n"),
@@ -274,8 +280,9 @@ export function resolveNativeArtifactCandidates(
   workspaceRoot: string,
   target: NativeTarget,
   profile: NativeBuildProfile,
+  buildTool: BuildTool = "cargo",
 ): string[] {
-  return targetArtifactCandidates(workspaceRoot, nativeTargetInfo(target), profile);
+  return targetArtifactCandidates(workspaceRoot, nativeTargetInfo(target), profile, buildTool);
 }
 
 export async function buildNativeArtifact(
@@ -335,8 +342,6 @@ export async function buildNativeArtifact(
     options.manifestPath ?? path.join(options.workspaceRoot, "crates", "aruna_napi", "Cargo.toml"),
     "--package",
     "aruna_napi",
-    "--features",
-    "napi-addon",
     ...(buildTool === "cargo-zigbuild" ? ["--target", targetInfo.rustTarget] : []),
     ...profileArg(profile),
   ];
@@ -367,6 +372,7 @@ export async function buildNativeArtifact(
     options.workspaceRoot,
     options.target,
     profile,
+    buildTool,
     access,
   );
 

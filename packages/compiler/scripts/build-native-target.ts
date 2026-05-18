@@ -1,3 +1,3 @@
-import { runBuildNativeTarget } from "./build-native-target-core.ts";
+import { runBuildNativeTarget } from "./build-native-target-core";
 
 void runBuildNativeTarget();

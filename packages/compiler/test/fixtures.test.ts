@@ -13,6 +13,8 @@ type Snapshot = {
   generated?: Array<{ path: string; contents: string }>;
 };
 
+type FixtureMode = "inspect" | "build";
+
 const fixtureCases = [
   { name: "valid-client-imports-shared", mode: "inspect" },
   { name: "invalid-client-imports-server", mode: "inspect" },
@@ -33,6 +35,7 @@ const fixtureCases = [
   { name: "action-missing-run", mode: "inspect" },
   { name: "client-imports-action-source", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },
+  { name: "action-generated-export-collision", mode: "build" },
 ] as const;
 
 const fixturesRoot = path.resolve(
@@ -40,18 +43,30 @@ const fixturesRoot = path.resolve(
   "../../../fixtures",
 );
 
-async function readSnapshot(fixtureName: string): Promise<Snapshot> {
+async function readSnapshot(fixtureName: string, mode: FixtureMode): Promise<Snapshot> {
   const expectedRoot = path.join(fixturesRoot, fixtureName, "expected");
-  const [diagnostics, manifest, modules, graph, generated] = await Promise.all([
+  const generatedRoot = path.join(expectedRoot, "generated");
+  const [diagnostics, manifest, modules, graph] = await Promise.all([
     fs.readFile(path.join(expectedRoot, "diagnostics.json"), "utf8"),
     fs.readFile(path.join(expectedRoot, "manifest.json"), "utf8"),
     fs.readFile(path.join(expectedRoot, "modules.json"), "utf8"),
     fs.readFile(path.join(expectedRoot, "graph.json"), "utf8"),
-    fs
-      .stat(path.join(expectedRoot, "generated"))
-      .then(() => readGeneratedSnapshot(path.join(expectedRoot, "generated")))
-      .catch(() => undefined),
   ]);
+
+  let generated: Array<{ path: string; contents: string }> | undefined;
+  if (mode === "build") {
+    try {
+      await fs.stat(generatedRoot);
+      generated = await readGeneratedSnapshot(generatedRoot);
+    } catch {
+      throw new Error(`Build fixture "${fixtureName}" is missing expected/generated snapshots.`);
+    }
+  } else {
+    generated = await fs
+      .stat(generatedRoot)
+      .then(() => readGeneratedSnapshot(generatedRoot))
+      .catch(() => undefined);
+  }
 
   return {
     diagnostics: JSON.parse(diagnostics),
@@ -94,7 +109,7 @@ async function copyFixtureInput(sourceRoot: string): Promise<string> {
 describe.each(fixtureCases)("$name", ({ name, mode }) => {
   it("matches the stored snapshots", async () => {
     const inputRoot = path.join(fixturesRoot, name, "input");
-    const snapshot = await readSnapshot(name);
+    const snapshot = await readSnapshot(name, mode);
 
     if (mode === "build") {
       const tempRoot = await copyFixtureInput(inputRoot);

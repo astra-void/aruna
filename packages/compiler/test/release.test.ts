@@ -38,11 +38,14 @@ async function stageCompilerPackageStub({
   workspaceRoot,
   version,
   nativeTargets,
+  allowMissingDist,
 }: {
   workspaceRoot: string;
   version: string;
   nativeTargets: readonly NativeTarget[];
+  allowMissingDist?: boolean;
 }): Promise<{ packageDirectory: string; packageJsonPath: string }> {
+  void allowMissingDist;
   const packageDirectory = path.join(workspaceRoot, ".npm", "compiler");
   const distDirectory = path.join(packageDirectory, "dist");
   const packageJsonPath = path.join(packageDirectory, "package.json");
