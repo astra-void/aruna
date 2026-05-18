@@ -69,12 +69,29 @@ export type ArunaActionRecord = {
   outputSchema?: ArunaSchemaMetadata | undefined;
 };
 
+export type ArunaSchemaLiteralMetadata =
+  | {
+      kind: "string";
+      value: string;
+    }
+  | {
+      kind: "number";
+      value: string;
+    }
+  | {
+      kind: "boolean";
+      value: boolean;
+    }
+  | {
+      kind: "undefined";
+    };
+
 export type ArunaSchemaMetadata = {
   kind: string;
   properties?: Record<string, ArunaSchemaMetadata> | undefined;
   items?: ArunaSchemaMetadata | undefined;
-  value?: string | undefined;
-  values?: string[] | undefined;
+  literal?: ArunaSchemaLiteralMetadata | undefined;
+  values?: ArunaSchemaLiteralMetadata[] | undefined;
   inner?: ArunaSchemaMetadata | undefined;
 };
 
