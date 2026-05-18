@@ -154,19 +154,28 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - action manifest records now include basic schema metadata when `input` or `output` is declared
 - generated action files are snapshot-tested in the fixture suite
 - `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
-- generated client stubs still use `unknown` input and output types
+- generated client stubs are typed from schema metadata where the metadata is supported
+- generated client stubs now connect to a minimal action runtime contract
+- an in-memory action invoker exists for non-Roblox tests
+- thin client/server app bootstrap helpers at `aruna/client` and `aruna/server-app` wire the runtime invoker and server action registry
+- the bootstrap helpers are functional, disposable, and intentionally do not scan modules or register services
+- a structural Roblox `RemoteFunction` action transport adapter exists for tests and future Studio integration
+- a structural Roblox `RemoteEvent` request/response transport adapter exists for tests and future Studio integration
+- `packages/aruna` is organized internally into `cli/`, `runtime/`, `actions/`, and `schema/` implementations
+- the public subpath exports remain stable through top-level compatibility shims
+- `@rbxts/types` and `@rbxts/compiler-types` are used at typecheck time for Roblox-facing runtime types
+- runtime schema validation now runs on action input and output at dispatch time
+- the MVP schema helpers support string, number, boolean, and undefined literal values, plus array, object, optional, and enum validation
+- the schema DSL now has TypeScript inference for primitives, literals, arrays, objects, optionals, and enums
 - the generated files are safe to delete and regenerate
-- runtime transport is still intentionally not implemented
-- runtime schema validation is still intentionally not implemented
+- structural runtime remoting transport exists for tests and future integration; generated Roblox Instances, Rojo integration, create-app, and full Studio validation remain deferred
 
 ## Intentionally not implemented
 
-- runtime remoting transport
-- runtime schema validation
+- full runtime remoting transport
 - full schema compiler
 - remote/action codegen
-- Roblox `RemoteEvent` generation
-- runtime dispatch
+- generated Roblox Instance creation and Rojo integration
 - LSP
 - VSCode extension
 - create-app scaffolding
