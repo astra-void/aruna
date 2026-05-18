@@ -1,77 +1,77 @@
 {
-  "actions": [
-    {
-      "exportName": "purchaseItem",
-      "file": "src/domains/inventory/actions.ts",
-      "hasInputSchema": false,
-      "hasOutputSchema": false,
-      "hasRun": true,
-      "id": "inventory.purchaseItem"
-    },
-    {
-      "exportName": "purchaseItem",
-      "file": "src/domains/shop/actions.ts",
-      "hasInputSchema": false,
-      "hasOutputSchema": false,
-      "hasRun": true,
-      "id": "shop.purchaseItem"
-    }
-  ],
-  "diagnostics": [
-    {
-      "code": "aruna::557",
-      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
-      "file": "src/domains/shop/actions.ts",
-      "message": "Generated action export name purchaseItem is used by more than one action.",
-      "name": "duplicate-generated-action-export",
-      "severity": "error",
-      "suggestion": "Rename one action export or import the generated action through a namespaced layout in a future release."
-    }
-  ],
-  "imports": [
-    {
-      "from": "src/domains/inventory/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/server"
-    },
-    {
-      "from": "src/domains/shop/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/server"
-    }
-  ],
+  "version": 1,
+  "projectRoot": ".",
   "modules": [
     {
       "id": "src/client.tsx",
-      "kind": "clientEntry",
       "path": "src/client.tsx",
+      "kind": "clientEntry",
       "reason": "path",
       "reasonDetail": "matched recommended entry file"
     },
     {
       "id": "src/domains/inventory/actions.ts",
-      "kind": "serverAction",
       "path": "src/domains/inventory/actions.ts",
+      "kind": "serverAction",
       "reason": "directive",
       "reasonDetail": "defineAction(...) export detected"
     },
     {
       "id": "src/domains/shop/actions.ts",
-      "kind": "serverAction",
       "path": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
       "reason": "directive",
       "reasonDetail": "defineAction(...) export detected"
     },
     {
       "id": "src/server.ts",
-      "kind": "serverEntry",
       "path": "src/server.ts",
+      "kind": "serverEntry",
       "reason": "path",
       "reasonDetail": "matched recommended entry file"
     }
   ],
-  "projectRoot": ".",
-  "version": 1
+  "imports": [
+    {
+      "from": "src/domains/inventory/actions.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    }
+  ],
+  "actions": [
+    {
+      "id": "inventory.purchaseItem",
+      "file": "src/domains/inventory/actions.ts",
+      "exportName": "purchaseItem",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true
+    },
+    {
+      "id": "shop.purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "exportName": "purchaseItem",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::557",
+      "name": "duplicate-generated-action-export",
+      "severity": "error",
+      "message": "Generated action export name purchaseItem is used by more than one action.",
+      "file": "src/domains/shop/actions.ts",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "suggestion": "Rename one action export or import the generated action through a namespaced layout in a future release."
+    }
+  ]
 }

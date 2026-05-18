@@ -1,20 +1,90 @@
 {
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/client.tsx",
+      "path": "src/client.tsx",
+      "kind": "clientEntry",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/inventory/actions.ts",
+      "path": "src/domains/inventory/actions.ts",
+      "kind": "serverAction",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "path": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "path": "src/server.ts",
+      "kind": "serverEntry",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/inventory/actions.ts",
+      "specifier": "aruna/schema",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/domains/inventory/actions.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/schema",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    }
+  ],
   "actions": [
     {
-      "exportName": "restockItem",
+      "id": "inventory.restockItem",
       "file": "src/domains/inventory/actions.ts",
+      "exportName": "restockItem",
       "hasInputSchema": true,
       "hasOutputSchema": true,
       "hasRun": true,
-      "id": "inventory.restockItem",
       "inputSchema": {
         "kind": "object",
         "properties": {
           "itemId": {
             "kind": "string"
           },
+          "note": {
+            "kind": "optional",
+            "inner": {
+              "kind": "string"
+            }
+          },
           "quantity": {
             "kind": "number"
+          },
+          "tags": {
+            "kind": "array",
+            "items": {
+              "kind": "string"
+            }
           }
         }
       },
@@ -23,17 +93,23 @@
         "properties": {
           "ok": {
             "kind": "boolean"
+          },
+          "warnings": {
+            "kind": "array",
+            "items": {
+              "kind": "string"
+            }
           }
         }
       }
     },
     {
-      "exportName": "purchaseItem",
+      "id": "shop.purchaseItem",
       "file": "src/domains/shop/actions.ts",
+      "exportName": "purchaseItem",
       "hasInputSchema": true,
       "hasOutputSchema": true,
       "hasRun": true,
-      "id": "shop.purchaseItem",
       "inputSchema": {
         "kind": "object",
         "properties": {
@@ -52,63 +128,5 @@
       }
     }
   ],
-  "diagnostics": [],
-  "imports": [
-    {
-      "from": "src/domains/inventory/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/schema"
-    },
-    {
-      "from": "src/domains/inventory/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/server"
-    },
-    {
-      "from": "src/domains/shop/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/schema"
-    },
-    {
-      "from": "src/domains/shop/actions.ts",
-      "kind": "static",
-      "resolved": false,
-      "specifier": "aruna/server"
-    }
-  ],
-  "modules": [
-    {
-      "id": "src/client.tsx",
-      "kind": "clientEntry",
-      "path": "src/client.tsx",
-      "reason": "path",
-      "reasonDetail": "matched recommended entry file"
-    },
-    {
-      "id": "src/domains/inventory/actions.ts",
-      "kind": "serverAction",
-      "path": "src/domains/inventory/actions.ts",
-      "reason": "directive",
-      "reasonDetail": "defineAction(...) export detected"
-    },
-    {
-      "id": "src/domains/shop/actions.ts",
-      "kind": "serverAction",
-      "path": "src/domains/shop/actions.ts",
-      "reason": "directive",
-      "reasonDetail": "defineAction(...) export detected"
-    },
-    {
-      "id": "src/server.ts",
-      "kind": "serverEntry",
-      "path": "src/server.ts",
-      "reason": "path",
-      "reasonDetail": "matched recommended entry file"
-    }
-  ],
-  "projectRoot": ".",
-  "version": 1
+  "diagnostics": []
 }

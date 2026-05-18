@@ -1,5 +1,5 @@
 export default {
   diagnostics: {
-    warningsAsErrors: "yes"
-  }
+    warningsAsErrors: "yes",
+  },
 };

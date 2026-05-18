@@ -3,6 +3,10 @@
 
 import { invokeAction } from "aruna/client-runtime";
 
-export const purchaseItem = (input: unknown): Promise<unknown> => {
-  return invokeAction("inventory.purchaseItem", input);
+export type PurchaseItemInput = unknown;
+
+export type PurchaseItemOutput = unknown;
+
+export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
+  return invokeAction("inventory.purchaseItem", input) as Promise<PurchaseItemOutput>;
 };
