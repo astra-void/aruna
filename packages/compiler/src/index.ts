@@ -81,7 +81,9 @@ async function runNative<T extends keyof NativeCompiler>(
   writeGenerated: boolean,
 ): Promise<ArunaCompilerOutput> {
   const native = loadNativeCompiler();
-  return native[method](buildNativeInput(input, writeManifest, writeGenerated)) as ArunaCompilerOutput;
+  return native[method](
+    buildNativeInput(input, writeManifest, writeGenerated),
+  ) as ArunaCompilerOutput;
 }
 
 export async function checkProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {

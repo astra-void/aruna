@@ -64,7 +64,9 @@ export async function stageCompilerPackage(
   const sourcePackageDirectory = path.join(options.workspaceRoot, "packages", "compiler");
   const sourcePackageJsonPath = path.join(sourcePackageDirectory, "package.json");
   const sourceDistDirectory = path.join(sourcePackageDirectory, "dist");
-  const sourcePackageJson = JSON.parse(await fs.readFile(sourcePackageJsonPath, "utf8")) as SourcePackageJson;
+  const sourcePackageJson = JSON.parse(
+    await fs.readFile(sourcePackageJsonPath, "utf8"),
+  ) as SourcePackageJson;
 
   try {
     await fs.access(sourceDistDirectory);

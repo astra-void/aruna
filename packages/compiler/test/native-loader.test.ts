@@ -79,7 +79,9 @@ describe("loadNativeCompiler", () => {
     const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
     const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
 
-    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) => candidate.endsWith(stagedPackagePath));
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) =>
+      candidate.endsWith(stagedPackagePath),
+    );
     mockRequire.mockImplementationOnce((specifier: string) => {
       expect(specifier).toContain(stagedPackagePath);
       return loadedCompiler;

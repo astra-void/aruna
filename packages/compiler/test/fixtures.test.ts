@@ -38,6 +38,10 @@ const fixtureCases = [
   { name: "action-generated-export-collision", mode: "build" },
 ] as const;
 
+const buildFixtureCases = fixtureCases.filter(
+  (fixture): fixture is (typeof fixtureCases)[number] & { mode: "build" } => fixture.mode === "build",
+);
+
 const fixturesRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../fixtures",
@@ -77,7 +81,9 @@ async function readSnapshot(fixtureName: string, mode: FixtureMode): Promise<Sna
   };
 }
 
-async function readGeneratedSnapshot(generatedRoot: string): Promise<Array<{ path: string; contents: string }>> {
+async function readGeneratedSnapshot(
+  generatedRoot: string,
+): Promise<Array<{ path: string; contents: string }>> {
   const entries: Array<{ path: string; contents: string }> = [];
 
   async function walk(directory: string): Promise<void> {
@@ -100,11 +106,33 @@ async function readGeneratedSnapshot(generatedRoot: string): Promise<Array<{ pat
   return entries;
 }
 
+async function assertBuildFixtureGeneratedSnapshots(fixtureName: string): Promise<void> {
+  const generatedRoot = path.join(fixturesRoot, fixtureName, "expected", "generated");
+
+  try {
+    await fs.stat(generatedRoot);
+  } catch {
+    throw new Error(`Build fixture "${fixtureName}" is missing expected/generated snapshots.`);
+  }
+
+  const generated = await readGeneratedSnapshot(generatedRoot);
+  const generatedPaths = generated.map((entry) => entry.path);
+
+  expect(generatedPaths).toContain("src/.aruna/actions.client.generated.ts");
+  expect(generatedPaths).toContain("src/.aruna/actions.server.generated.ts");
+}
+
 async function copyFixtureInput(sourceRoot: string): Promise<string> {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-fixture-"));
   await fs.cp(sourceRoot, tempRoot, { recursive: true });
   return tempRoot;
 }
+
+describe.each(buildFixtureCases)("$name generated snapshots", ({ name }) => {
+  it("keeps expected/generated populated", async () => {
+    await assertBuildFixtureGeneratedSnapshots(name);
+  });
+});
 
 describe.each(fixtureCases)("$name", ({ name, mode }) => {
   it("matches the stored snapshots", async () => {

@@ -7,10 +7,7 @@ import {
   resolveNativeTarget,
   type NativeTarget,
 } from "../src/native-platform.ts";
-import {
-  stagedNativePackageArtifactPath,
-  stagedNativePackageDirectory,
-} from "./native-targets.ts";
+import { stagedNativePackageArtifactPath, stagedNativePackageDirectory } from "./native-targets.ts";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = path.resolve(packageRoot, "../..");
@@ -44,11 +41,19 @@ async function verifyPackageJson(packageJsonPath: string, target: NativeTarget):
   }
 
   if (packageJson.main !== `./${expectedArtifact}`) {
-    throw new Error(`Staged native package must point main at ./${expectedArtifact}: ${packageJsonPath}`);
+    throw new Error(
+      `Staged native package must point main at ./${expectedArtifact}: ${packageJsonPath}`,
+    );
   }
 
-  if (!Array.isArray(packageJson.files) || packageJson.files.length !== 1 || packageJson.files[0] !== expectedArtifact) {
-    throw new Error(`Staged native package must list only ${expectedArtifact} in files: ${packageJsonPath}`);
+  if (
+    !Array.isArray(packageJson.files) ||
+    packageJson.files.length !== 1 ||
+    packageJson.files[0] !== expectedArtifact
+  ) {
+    throw new Error(
+      `Staged native package must list only ${expectedArtifact} in files: ${packageJsonPath}`,
+    );
   }
 }
 
@@ -63,19 +68,25 @@ export async function verifyNativePackage(
   try {
     await fs.access(packageDirectory);
   } catch {
-    throw new Error(`Staged native package directory is missing: ${workspaceRelative(workspaceRoot, packageDirectory)}`);
+    throw new Error(
+      `Staged native package directory is missing: ${workspaceRelative(workspaceRoot, packageDirectory)}`,
+    );
   }
 
   try {
     await fs.access(packageJsonPath);
   } catch {
-    throw new Error(`Staged native package manifest is missing: ${workspaceRelative(workspaceRoot, packageJsonPath)}`);
+    throw new Error(
+      `Staged native package manifest is missing: ${workspaceRelative(workspaceRoot, packageJsonPath)}`,
+    );
   }
 
   try {
     await fs.access(artifactPath);
   } catch {
-    throw new Error(`Staged native artifact is missing: ${workspaceRelative(workspaceRoot, artifactPath)}`);
+    throw new Error(
+      `Staged native artifact is missing: ${workspaceRelative(workspaceRoot, artifactPath)}`,
+    );
   }
 
   await verifyPackageJson(packageJsonPath, target);

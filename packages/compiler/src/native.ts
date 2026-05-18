@@ -38,7 +38,12 @@ function resolveNativeTargetPath(target: NativeTarget): string {
 }
 
 function installedNativeTargetPath(target: NativeTarget): string {
-  return path.join(workspaceRoot(), "node_modules", nativePackageName(target), nativeArtifactName(target));
+  return path.join(
+    workspaceRoot(),
+    "node_modules",
+    nativePackageName(target),
+    nativeArtifactName(target),
+  );
 }
 
 function workspaceCandidatePaths(): string[] {

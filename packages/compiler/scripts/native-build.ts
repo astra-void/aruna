@@ -172,7 +172,12 @@ async function resolveArtifactPath(
   buildTool: BuildTool,
   access: typeof fs.access,
 ): Promise<string> {
-  const candidates = targetArtifactCandidates(workspaceRoot, nativeTargetInfo(target), profile, buildTool);
+  const candidates = targetArtifactCandidates(
+    workspaceRoot,
+    nativeTargetInfo(target),
+    profile,
+    buildTool,
+  );
   for (const candidate of candidates) {
     try {
       await access(candidate);
