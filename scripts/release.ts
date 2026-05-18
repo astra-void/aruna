@@ -86,7 +86,11 @@ export function canBuildTargetOnHost(hostTarget: NativeTarget, target: NativeTar
   return targetInfo.os === "linux" && targetInfo.libc === "gnu";
 }
 
-export function resolveTargetsForMode(mode: ReleaseMode, hostTarget: NativeTarget, targetList: NativeTarget[]): NativeTarget[] {
+export function resolveTargetsForMode(
+  mode: ReleaseMode,
+  hostTarget: NativeTarget,
+  targetList: NativeTarget[],
+): NativeTarget[] {
   if (mode === "local") {
     if (targetList.length > 0) {
       throw new Error("Local mode does not accept --targets.");
@@ -123,7 +127,15 @@ async function resolveNpmInvocation(): Promise<{ command: string; args: string[]
   const candidatePaths = [
     "/usr/local/lib/node_modules/npm/bin/npm-cli.js",
     "/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js",
-    path.resolve(path.dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    path.resolve(
+      path.dirname(process.execPath),
+      "..",
+      "lib",
+      "node_modules",
+      "npm",
+      "bin",
+      "npm-cli.js",
+    ),
   ];
 
   for (const candidatePath of candidatePaths) {
@@ -154,7 +166,9 @@ function hasWorkspaceProtocol(value: unknown): boolean {
   }
 
   if (value && typeof value === "object") {
-    return Object.values(value as Record<string, unknown>).some((entry) => hasWorkspaceProtocol(entry));
+    return Object.values(value as Record<string, unknown>).some((entry) =>
+      hasWorkspaceProtocol(entry),
+    );
   }
 
   return false;
@@ -166,9 +180,13 @@ async function cleanDirectory(directory: string): Promise<void> {
 }
 
 async function readCompilerVersion(): Promise<string> {
-  const packageJson = JSON.parse(await fs.readFile(compilerPackageJsonPath, "utf8")) as { version?: string };
+  const packageJson = JSON.parse(await fs.readFile(compilerPackageJsonPath, "utf8")) as {
+    version?: string;
+  };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
-    throw new Error(`Could not determine the compiler package version from ${compilerPackageJsonPath}`);
+    throw new Error(
+      `Could not determine the compiler package version from ${compilerPackageJsonPath}`,
+    );
   }
 
   return packageJson.version;
@@ -201,19 +219,30 @@ function runCommand(
 }
 
 async function ensureNoWorkspaceProtocols(packageJsonPath: string): Promise<void> {
-  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as Record<string, unknown>;
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as Record<
+    string,
+    unknown
+  >;
   if (hasWorkspaceProtocol(packageJson)) {
-    throw new Error(`Workspace protocols are not allowed in staged manifests: ${workspaceRelative(packageJsonPath)}`);
+    throw new Error(
+      `Workspace protocols are not allowed in staged manifests: ${workspaceRelative(packageJsonPath)}`,
+    );
   }
 }
 
-async function validateNativePackage(packageDirectory: string, target: NativeTarget): Promise<void> {
+async function validateNativePackage(
+  packageDirectory: string,
+  target: NativeTarget,
+): Promise<void> {
   const expectedArtifact = nativeTargetInfo(target).artifactName;
   const expectedTargetInfo = nativeTargetInfo(target);
   const entries = (await fs.readdir(packageDirectory)).filter((entry) => !entry.startsWith("."));
   const expectedEntries = ["package.json", expectedArtifact];
 
-  if (entries.length !== expectedEntries.length || !expectedEntries.every((entry) => entries.includes(entry))) {
+  if (
+    entries.length !== expectedEntries.length ||
+    !expectedEntries.every((entry) => entries.includes(entry))
+  ) {
     throw new Error(
       `Native staging for ${target} is invalid. Expected only ${expectedEntries.join(", ")} in ${workspaceRelative(
         packageDirectory,
@@ -221,7 +250,9 @@ async function validateNativePackage(packageDirectory: string, target: NativeTar
     );
   }
 
-  const packageJson = JSON.parse(await fs.readFile(path.join(packageDirectory, "package.json"), "utf8")) as {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(packageDirectory, "package.json"), "utf8"),
+  ) as {
     name?: string;
     version?: string;
     main?: string;
@@ -232,37 +263,66 @@ async function validateNativePackage(packageDirectory: string, target: NativeTar
   };
 
   if (packageJson.name !== nativePackageName(target)) {
-    throw new Error(`Native package ${workspaceRelative(packageDirectory)} has the wrong package name.`);
+    throw new Error(
+      `Native package ${workspaceRelative(packageDirectory)} has the wrong package name.`,
+    );
   }
 
   if (packageJson.main !== `./${expectedArtifact}`) {
-    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must point main at ./${expectedArtifact}.`);
+    throw new Error(
+      `Native package ${workspaceRelative(packageDirectory)} must point main at ./${expectedArtifact}.`,
+    );
   }
 
-  if (!Array.isArray(packageJson.files) || packageJson.files.length !== 1 || packageJson.files[0] !== expectedArtifact) {
-    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must list only ${expectedArtifact} in files.`);
+  if (
+    !Array.isArray(packageJson.files) ||
+    packageJson.files.length !== 1 ||
+    packageJson.files[0] !== expectedArtifact
+  ) {
+    throw new Error(
+      `Native package ${workspaceRelative(packageDirectory)} must list only ${expectedArtifact} in files.`,
+    );
   }
 
-  if (!Array.isArray(packageJson.os) || packageJson.os.length !== 1 || packageJson.os[0] !== expectedTargetInfo.os) {
-    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must restrict os to ${expectedTargetInfo.os}.`);
+  if (
+    !Array.isArray(packageJson.os) ||
+    packageJson.os.length !== 1 ||
+    packageJson.os[0] !== expectedTargetInfo.os
+  ) {
+    throw new Error(
+      `Native package ${workspaceRelative(packageDirectory)} must restrict os to ${expectedTargetInfo.os}.`,
+    );
   }
 
-  if (!Array.isArray(packageJson.cpu) || packageJson.cpu.length !== 1 || packageJson.cpu[0] !== expectedTargetInfo.arch) {
-    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must restrict cpu to ${expectedTargetInfo.arch}.`);
+  if (
+    !Array.isArray(packageJson.cpu) ||
+    packageJson.cpu.length !== 1 ||
+    packageJson.cpu[0] !== expectedTargetInfo.arch
+  ) {
+    throw new Error(
+      `Native package ${workspaceRelative(packageDirectory)} must restrict cpu to ${expectedTargetInfo.arch}.`,
+    );
   }
 
   if (expectedTargetInfo.libc) {
     if (packageJson.libc !== expectedTargetInfo.libc) {
-      throw new Error(`Native package ${workspaceRelative(packageDirectory)} must restrict libc to ${expectedTargetInfo.libc}.`);
+      throw new Error(
+        `Native package ${workspaceRelative(packageDirectory)} must restrict libc to ${expectedTargetInfo.libc}.`,
+      );
     }
   } else if (packageJson.libc !== undefined) {
-    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must not declare libc for ${target}.`);
+    throw new Error(
+      `Native package ${workspaceRelative(packageDirectory)} must not declare libc for ${target}.`,
+    );
   }
 
   await ensureNoWorkspaceProtocols(path.join(packageDirectory, "package.json"));
 }
 
-async function validateCompilerPackage(packageDirectory: string, expectedTargets: NativeTarget[]): Promise<void> {
+async function validateCompilerPackage(
+  packageDirectory: string,
+  expectedTargets: NativeTarget[],
+): Promise<void> {
   const packageJsonPath = path.join(packageDirectory, "package.json");
   const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8")) as {
     optionalDependencies?: Record<string, string>;
@@ -274,7 +334,10 @@ async function validateCompilerPackage(packageDirectory: string, expectedTargets
   const stagedKeys = Object.keys(stagedOptionalDependencies).sort();
   const expectedKeys = expectedTargets.map(nativePackageName).sort();
 
-  if (stagedKeys.length !== expectedKeys.length || !expectedKeys.every((entry) => stagedKeys.includes(entry))) {
+  if (
+    stagedKeys.length !== expectedKeys.length ||
+    !expectedKeys.every((entry) => stagedKeys.includes(entry))
+  ) {
     throw new Error(
       `Compiler package optionalDependencies do not match staged targets. Expected: ${expectedKeys.join(", ")}`,
     );
@@ -283,14 +346,18 @@ async function validateCompilerPackage(packageDirectory: string, expectedTargets
   const expectedVersion = await readCompilerVersion();
   for (const [name, version] of Object.entries(stagedOptionalDependencies)) {
     if (version !== expectedVersion) {
-      throw new Error(`Compiler package optionalDependency ${name} must be ${expectedVersion}, found ${version}.`);
+      throw new Error(
+        `Compiler package optionalDependency ${name} must be ${expectedVersion}, found ${version}.`,
+      );
     }
   }
 
   try {
     await fs.access(path.join(packageDirectory, "dist"));
   } catch {
-    throw new Error(`Compiler package dist directory is missing: ${workspaceRelative(path.join(packageDirectory, "dist"))}`);
+    throw new Error(
+      `Compiler package dist directory is missing: ${workspaceRelative(path.join(packageDirectory, "dist"))}`,
+    );
   }
 }
 
@@ -299,10 +366,18 @@ async function validateStagedRelease(
   compilerPackageDirectory: string,
   expectedTargets: NativeTarget[],
 ): Promise<void> {
-  const rootEntries = (await fs.readdir(path.join(workspaceRoot, ".npm"))).filter((entry) => !entry.startsWith("."));
-  const expectedRootEntries = [...stagedNativePackages.map((entry) => path.basename(entry.packageDirectory)), "compiler"];
+  const rootEntries = (await fs.readdir(path.join(workspaceRoot, ".npm"))).filter(
+    (entry) => !entry.startsWith("."),
+  );
+  const expectedRootEntries = [
+    ...stagedNativePackages.map((entry) => path.basename(entry.packageDirectory)),
+    "compiler",
+  ];
 
-  if (rootEntries.length !== expectedRootEntries.length || !expectedRootEntries.every((entry) => rootEntries.includes(entry))) {
+  if (
+    rootEntries.length !== expectedRootEntries.length ||
+    !expectedRootEntries.every((entry) => rootEntries.includes(entry))
+  ) {
     throw new Error(
       `Staged packages do not match the selected release targets. Expected only ${expectedRootEntries.join(", ")} under .npm/.`,
     );
@@ -334,7 +409,13 @@ async function stageReleasePackages(
   const allowMissingTools = options.allowMissingTools ?? false;
 
   await cleanDirectory(npmDirectory);
-  runCommand(spawn, "pnpm", ["exec", "turbo", "run", "build"], workspaceRoot, "Failed to build TypeScript packages");
+  runCommand(
+    spawn,
+    "pnpm",
+    ["exec", "turbo", "run", "build"],
+    workspaceRoot,
+    "Failed to build TypeScript packages",
+  );
 
   const stagedNativePackages: Array<{ packageDirectory: string; target: NativeTarget }> = [];
   for (const target of targets) {
@@ -374,7 +455,11 @@ async function stageReleasePackages(
     nativeTargets,
   });
 
-  await validateStagedRelease(stagedNativePackages, compilerPackage.packageDirectory, nativeTargets);
+  await validateStagedRelease(
+    stagedNativePackages,
+    compilerPackage.packageDirectory,
+    nativeTargets,
+  );
 
   return {
     workspaceRoot,
@@ -388,7 +473,11 @@ async function stageReleasePackages(
   };
 }
 
-async function packPackage(packageDirectory: string, packDestination: string, spawn: typeof spawnSync): Promise<string> {
+async function packPackage(
+  packageDirectory: string,
+  packDestination: string,
+  spawn: typeof spawnSync,
+): Promise<string> {
   const before = new Set(await fs.readdir(packDestination));
   const npmInvocation = await resolveNpmInvocation();
   runCommand(
@@ -402,7 +491,9 @@ async function packPackage(packageDirectory: string, packDestination: string, sp
   const after = await fs.readdir(packDestination);
   const newTarballs = after.filter((entry) => !before.has(entry) && entry.endsWith(".tgz"));
   if (newTarballs.length === 0) {
-    throw new Error(`npm pack did not produce a tarball for ${workspaceRelative(packageDirectory)}`);
+    throw new Error(
+      `npm pack did not produce a tarball for ${workspaceRelative(packageDirectory)}`,
+    );
   }
 
   return path.join(packDestination, newTarballs[0]);
@@ -433,7 +524,11 @@ async function ensurePublishCredentials(spawn: typeof spawnSync): Promise<void> 
   );
 }
 
-async function publishRelease(prepared: PreparedRelease, options: ReleaseOptions, deps: ReleaseDeps): Promise<void> {
+async function publishRelease(
+  prepared: PreparedRelease,
+  options: ReleaseOptions,
+  deps: ReleaseDeps,
+): Promise<void> {
   const spawn = deps.spawnSync ?? spawnSync;
   if (!options.dryRun) {
     await ensurePublishCredentials(spawn);
@@ -475,19 +570,28 @@ async function publishRelease(prepared: PreparedRelease, options: ReleaseOptions
   );
 }
 
-export async function prepareRelease(options: ReleaseOptions, deps: ReleaseDeps = {}): Promise<PreparedRelease> {
+export async function prepareRelease(
+  options: ReleaseOptions,
+  deps: ReleaseDeps = {},
+): Promise<PreparedRelease> {
   const hostTarget = resolveNativeTarget();
   const targetList = parseTargetList(options.targets);
   const targets = resolveTargetsForMode(options.mode, hostTarget, targetList);
   return stageReleasePackages(options, options.mode, targets, deps);
 }
 
-export async function packPreparedRelease(options: ReleaseOptions, deps: ReleaseDeps = {}): Promise<string[]> {
+export async function packPreparedRelease(
+  options: ReleaseOptions,
+  deps: ReleaseDeps = {},
+): Promise<string[]> {
   const prepared = await prepareRelease(options, deps);
   return packRelease(prepared, deps);
 }
 
-export async function publishPreparedRelease(options: ReleaseOptions, deps: ReleaseDeps = {}): Promise<void> {
+export async function publishPreparedRelease(
+  options: ReleaseOptions,
+  deps: ReleaseDeps = {},
+): Promise<void> {
   const prepared = await prepareRelease(options, deps);
   await publishRelease(prepared, options, deps);
 }
@@ -535,7 +639,12 @@ async function main(): Promise<void> {
 
   addModeOptions(
     program.command("prepare").action(async function (this: Command) {
-      const opts = this.opts<{ mode: ReleaseMode; targets?: string; zig?: ZigPolicy; allowMissingTools?: boolean }>();
+      const opts = this.opts<{
+        mode: ReleaseMode;
+        targets?: string;
+        zig?: ZigPolicy;
+        allowMissingTools?: boolean;
+      }>();
       await runCli("prepare", {
         mode: opts.mode,
         targets: opts.targets,
@@ -547,7 +656,12 @@ async function main(): Promise<void> {
 
   addModeOptions(
     program.command("pack").action(async function (this: Command) {
-      const opts = this.opts<{ mode: ReleaseMode; targets?: string; zig?: ZigPolicy; allowMissingTools?: boolean }>();
+      const opts = this.opts<{
+        mode: ReleaseMode;
+        targets?: string;
+        zig?: ZigPolicy;
+        allowMissingTools?: boolean;
+      }>();
       await runCli("pack", {
         mode: opts.mode,
         targets: opts.targets,

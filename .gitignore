@@ -12,4 +12,6 @@ digest.txt
 .pnpm-store
 
 !fixtures/**/expected/generated/src/.aruna/
+!fixtures/**/expected/generated/
+!fixtures/**/expected/generated/**
 !fixtures/**/expected/generated/src/.aruna/**
