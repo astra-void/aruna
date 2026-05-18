@@ -209,6 +209,7 @@ async function ensureNoWorkspaceProtocols(packageJsonPath: string): Promise<void
 
 async function validateNativePackage(packageDirectory: string, target: NativeTarget): Promise<void> {
   const expectedArtifact = nativeTargetInfo(target).artifactName;
+  const expectedTargetInfo = nativeTargetInfo(target);
   const entries = (await fs.readdir(packageDirectory)).filter((entry) => !entry.startsWith("."));
   const expectedEntries = ["package.json", expectedArtifact];
 
@@ -218,6 +219,44 @@ async function validateNativePackage(packageDirectory: string, target: NativeTar
         packageDirectory,
       )}.`,
     );
+  }
+
+  const packageJson = JSON.parse(await fs.readFile(path.join(packageDirectory, "package.json"), "utf8")) as {
+    name?: string;
+    version?: string;
+    main?: string;
+    files?: string[];
+    os?: string[];
+    cpu?: string[];
+    libc?: string;
+  };
+
+  if (packageJson.name !== nativePackageName(target)) {
+    throw new Error(`Native package ${workspaceRelative(packageDirectory)} has the wrong package name.`);
+  }
+
+  if (packageJson.main !== `./${expectedArtifact}`) {
+    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must point main at ./${expectedArtifact}.`);
+  }
+
+  if (!Array.isArray(packageJson.files) || packageJson.files.length !== 1 || packageJson.files[0] !== expectedArtifact) {
+    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must list only ${expectedArtifact} in files.`);
+  }
+
+  if (!Array.isArray(packageJson.os) || packageJson.os.length !== 1 || packageJson.os[0] !== expectedTargetInfo.os) {
+    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must restrict os to ${expectedTargetInfo.os}.`);
+  }
+
+  if (!Array.isArray(packageJson.cpu) || packageJson.cpu.length !== 1 || packageJson.cpu[0] !== expectedTargetInfo.arch) {
+    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must restrict cpu to ${expectedTargetInfo.arch}.`);
+  }
+
+  if (expectedTargetInfo.libc) {
+    if (packageJson.libc !== expectedTargetInfo.libc) {
+      throw new Error(`Native package ${workspaceRelative(packageDirectory)} must restrict libc to ${expectedTargetInfo.libc}.`);
+    }
+  } else if (packageJson.libc !== undefined) {
+    throw new Error(`Native package ${workspaceRelative(packageDirectory)} must not declare libc for ${target}.`);
   }
 
   await ensureNoWorkspaceProtocols(path.join(packageDirectory, "package.json"));

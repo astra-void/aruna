@@ -2,7 +2,7 @@
   "name": "aruna-workspace",
   "private": true,
   "scripts": {
-    "build:native": "pnpm --filter @arunajs/compiler build:native",
+    "build:native": "tsx packages/compiler/scripts/build-native-target.ts",
     "build": "pnpm build:native && turbo run build",
     "check": "pnpm build:native && turbo run check",
     "test": "pnpm build:native && turbo run test",
@@ -23,8 +23,9 @@
     "oxlint": "^1.65.0",
     "picocolors": "^1.1.1",
     "tsx": "^4.21.0",
-    "turbo": "^2.5.8",
+    "turbo": "^2.9.14",
     "typescript": "^5.8.3",
+    "vite": "^8.0.13",
     "vitest": "^4.1.6"
   },
   "packageManager": "pnpm@11.1.2"
