@@ -142,6 +142,8 @@ pnpm aruna inspect graph --project fixtures/invalid-client-imports-server/input
 pnpm aruna check --json --project fixtures/invalid-client-imports-server/input
 pnpm aruna check --no-color --project fixtures/invalid-client-imports-server/input
 pnpm aruna build --project fixtures/action-generated-output/input
+pnpm aruna doctor --project apps/rbxts-harness
+pnpm aruna doctor --fix --project apps/rbxts-harness
 ```
 
 `packages/compiler` loads the native Rust compiler directly. There is no TypeScript analyzer fallback in Phase 1.
@@ -153,6 +155,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - server action discovery exists in Rust
 - action manifest records now include basic schema metadata when `input` or `output` is declared
 - generated action files are snapshot-tested in the fixture suite
+- application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
 - `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
@@ -169,6 +172,27 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - the schema DSL now has TypeScript inference for primitives, literals, arrays, objects, optionals, and enums
 - the generated files are safe to delete and regenerate
 - structural runtime remoting transport exists for tests and future integration; generated Roblox Instances, Rojo integration, create-app, and full Studio validation remain deferred
+
+### Generated action imports
+
+Application code should import generated action APIs through Aruna virtual modules:
+
+```ts
+import { purchaseItem } from "$aruna/actions/client";
+import { actions } from "$aruna/actions/server";
+```
+
+Do not import the physical `../.aruna/*.generated` files directly in app code.
+Aruna owns the physical files under `src/.aruna/`.
+`aruna check` resolves these virtual modules without writing files.
+`aruna build` writes the physical generated files used by TypeScript and roblox-ts tooling.
+For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install the required tsconfig path aliases.
+
+## Real app harness
+
+`apps/rbxts-harness` is a private roblox-ts-style app harness.
+It runs `aruna build` against a real app layout and typechecks generated action files, app bootstrap, schema inference, and structural RemoteEvent transport through public package exports.
+It is not create-app, Rojo generation, generated Roblox Instance creation, or full Studio validation yet.
 
 ## Intentionally not implemented
 
