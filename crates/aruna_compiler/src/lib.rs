@@ -16,7 +16,7 @@ pub use compiler::{
 };
 pub use codegen::{generate_action_files, GeneratedActionOutput, GeneratedFile};
 pub use actions::{
-    collect_action_definitions, ActionDiscoveryResult, ArunaActionRecord,
+    collect_action_definitions, ActionDiscoveryResult, ArunaActionRecord, ArunaSchemaMetadata,
 };
 pub use config::{
     ArunaConfig, ConventionConfig, DiagnosticsConfig, ManifestConfig, SecurityConfig, SourceConfig,

@@ -234,6 +234,8 @@ mod tests {
             has_input_schema: false,
             has_output_schema: false,
             has_run: true,
+            input_schema: None,
+            output_schema: None,
         }
     }
 
