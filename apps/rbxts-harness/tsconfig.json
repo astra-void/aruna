@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "module": "CommonJS",
+    "moduleDetection": "force",
+    "moduleResolution": "Node",
+    "paths": {
+      "aruna": ["../../packages/aruna/dist/index.d.ts"],
+      "aruna/*": ["../../packages/aruna/dist/*.d.ts"],
+      "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
+      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"]
+    },
+    "noLib": true,
+    "outDir": "out",
+    "rootDir": "src",
+    "verbatimModuleSyntax": false,
+    "typeRoots": ["./node_modules", "./node_modules/@rbxts"],
+    "types": ["@rbxts/types", "@rbxts/compiler-types"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

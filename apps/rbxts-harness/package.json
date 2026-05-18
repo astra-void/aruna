@@ -1,0 +1,22 @@
+{
+  "name": "@arunajs/rbxts-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "aruna:build": "pnpm --filter aruna build && pnpm --filter aruna aruna build --project .",
+    "typecheck": "pnpm aruna:build && tsc -p tsconfig.typecheck.json --noEmit",
+    "rbxtsc": "pnpm aruna:build && rbxtsc --project .",
+    "build": "pnpm typecheck && pnpm rbxtsc",
+    "check": "pnpm typecheck",
+    "test": "pnpm typecheck"
+  },
+  "dependencies": {
+    "aruna": "workspace:*"
+  },
+  "devDependencies": {
+    "@rbxts/compiler-types": "3.0.0-types.0",
+    "@rbxts/types": "^1.0.920",
+    "roblox-ts": "3.0.0",
+    "typescript": "^5.8.3"
+  }
+}

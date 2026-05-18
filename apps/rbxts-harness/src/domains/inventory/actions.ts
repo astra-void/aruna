@@ -1,0 +1,35 @@
+import { defineAction, schema } from "aruna";
+import { createActionResult } from "../../shared/result";
+import { type RestockItemInput } from "./model";
+
+export const restockItem = defineAction({
+  id: "inventory.restockItem",
+  input: schema.object({
+    itemIds: schema.array(schema.string()),
+    warehouse: schema.literal("central"),
+    auditTag: schema.optional(schema.string()),
+  }),
+  output: schema.object({
+    result: schema.object({
+      ok: schema.boolean(),
+      reason: schema.optional(schema.string()),
+    }),
+    itemIds: schema.array(schema.string()),
+    warnings: schema.array(schema.string()),
+  }),
+  run(_ctx, input) {
+    const typedInput: RestockItemInput = input;
+    const warnings =
+      typedInput.auditTag === undefined ? [] : [`audit:${typedInput.auditTag}`];
+    const hasItems = typedInput.itemIds[0] !== undefined;
+
+    return {
+      result: createActionResult(
+        hasItems,
+        hasItems ? undefined : "no items to restock",
+      ),
+      itemIds: typedInput.itemIds,
+      warnings,
+    };
+  },
+});

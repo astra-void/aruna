@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "aruna": ["../../packages/aruna/dist/index.d.ts"],
+      "aruna/*": ["../../packages/aruna/dist/*.d.ts"],
+      "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
+      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"]
+    },
+    "noEmit": true,
+    "typeRoots": ["./node_modules", "./node_modules/@rbxts"],
+    "types": ["@rbxts/types", "@rbxts/compiler-types"]
+  },
+  "include": ["src/**/*.ts", "aruna.config.ts"],
+  "exclude": ["dist", "node_modules", "out"]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "ArunaHarness",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "TS": {
+        "$path": "out/shared"
+      },
+      "Domains": {
+        "$path": "out/domains"
+      },
+      "App": {
+        "$path": "out/app"
+      },
+      "ArunaGenerated": {
+        "$path": "out/.aruna"
+      },
+      "Packages": {
+        "Aruna": {
+          "$path": "../../packages/aruna/dist"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "Server": {
+        "$path": "out/server.luau"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "out/client.luau"
+        }
+      }
+    }
+  }
+}
