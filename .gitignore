@@ -16,3 +16,5 @@ digest.txt
 !fixtures/**/expected/generated/
 !fixtures/**/expected/generated/**
 !fixtures/**/expected/generated/src/.aruna/**
+
+.vscode/
