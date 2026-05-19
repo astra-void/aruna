@@ -5,10 +5,17 @@ import { clearActionInvoker, invokeAction } from "aruna/client-runtime";
 import { createInMemoryActionInvoker } from "aruna/runtime";
 import { createServerApp } from "aruna/server-app";
 import {
+  DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME,
+  DEFAULT_ARUNA_FOLDER_NAME,
+  bindDefaultRobloxActionRemoteEvent,
   bindRemoteEventActions,
   bindRemoteFunctionActions,
+  createDefaultRobloxActionInvoker,
   createRemoteEventActionInvoker,
   createRemoteFunctionActionInvoker,
+  ensureDefaultRobloxActionRemoteEvent,
+  getDefaultRobloxActionRemoteEvent,
+  waitForDefaultRobloxActionRemoteEvent,
   unbindRemoteFunctionActions,
   type RemoteEventActionRequest,
   type RemoteEventActionResponse,
@@ -158,5 +165,15 @@ describe("public exports", () => {
     clientApp.dispose();
     serverBinding.dispose();
     invoker.dispose();
+  });
+
+  it("exposes the default Roblox action remote helpers", () => {
+    expect(DEFAULT_ARUNA_FOLDER_NAME).toBe("Aruna");
+    expect(DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME).toBe("Actions");
+    expect(getDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
+    expect(ensureDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
+    expect(waitForDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
+    expect(createDefaultRobloxActionInvoker).toBeTypeOf("function");
+    expect(bindDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
   });
 });

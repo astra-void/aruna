@@ -1,11 +1,14 @@
 import { createClientApp } from "../src/client.js";
 import {
+  bindDefaultRobloxActionRemoteEvent,
   createRemoteEventActionInvoker,
+  createDefaultRobloxActionInvoker,
   type DisposableActionInvoker,
   type RemoteEventClientLike,
 } from "../src/roblox-runtime.js";
 import { createServerApp } from "../src/server-app.js";
 import { defineAction } from "../src/server.js";
+import { type ServerBinding } from "../src/runtime/binding.js";
 import { schema, type InferSchema } from "../src/schema.js";
 import { type InferInput, type InferOutput } from "../src/server-runtime.js";
 
@@ -137,6 +140,9 @@ type _ClientOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createClientApp>
 type _ServerOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createServerApp>[0]>, false>>;
 type _ServerDispatch = Expect<Equal<ReturnType<typeof serverApp.dispatch>, Promise<unknown>>>;
 type _RemoteEventInvoker = Expect<Equal<ReturnType<typeof createRemoteEventActionInvoker>, DisposableActionInvoker>>;
+type _DefaultRemoteEventInvoker = Expect<
+  Equal<ReturnType<typeof createDefaultRobloxActionInvoker>, DisposableActionInvoker>
+>;
 type _RemoteEventOptionsNoAny = Expect<
   Equal<IsAny<Parameters<typeof createRemoteEventActionInvoker>[1]>, false>
 >;
@@ -144,3 +150,12 @@ type _RemoteEventClientNoAny = Expect<
   Equal<IsAny<Parameters<typeof createRemoteEventActionInvoker>[0]>, false>
 >;
 type _RemoteEventInvokerDispose = Expect<Equal<typeof remoteEventInvoker.dispose, () => void>>;
+type _DefaultRemoteEventInvokerOptionsNoAny = Expect<
+  Equal<IsAny<Parameters<typeof createDefaultRobloxActionInvoker>[0]>, false>
+>;
+type _DefaultRemoteEventBinding = Expect<
+  Equal<ReturnType<typeof bindDefaultRobloxActionRemoteEvent>, ServerBinding>
+>;
+type _DefaultRemoteEventBindingOptionsNoAny = Expect<
+  Equal<IsAny<Parameters<typeof bindDefaultRobloxActionRemoteEvent>[1]>, false>
+>;

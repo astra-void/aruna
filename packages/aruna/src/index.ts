@@ -42,6 +42,16 @@ export {
   type RemoteEventSignalConnectionLike,
   type RemoteEventSignalLike,
 } from "./runtime/remote-event.js";
+export {
+  bindDefaultRobloxActionRemoteEvent,
+  createDefaultRobloxActionInvoker,
+  DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME,
+  DEFAULT_ARUNA_FOLDER_NAME,
+  ensureDefaultRobloxActionRemoteEvent,
+  getDefaultRobloxActionRemoteEvent,
+  type RobloxActionRemoteEventOptions,
+  waitForDefaultRobloxActionRemoteEvent,
+} from "./runtime/roblox-action-remote.js";
 export { invokeAction } from "./client-runtime.js";
 export { createInMemoryActionInvoker } from "./runtime.js";
 export {
