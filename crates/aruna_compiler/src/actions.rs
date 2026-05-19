@@ -13,6 +13,39 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ArunaSerializationPolicy {
+    PlainDataV1,
+}
+
+impl Default for ArunaSerializationPolicy {
+    fn default() -> Self {
+        Self::PlainDataV1
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArunaActionSerializationMetadata {
+    pub policy: ArunaSerializationPolicy,
+}
+
+impl Default for ArunaActionSerializationMetadata {
+    fn default() -> Self {
+        Self {
+            policy: ArunaSerializationPolicy::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArunaActionRateLimitMetadata {
+    pub limit: u32,
+    pub window_ms: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ArunaSchemaLiteralMetadata {
     String { value: String },
@@ -68,6 +101,9 @@ pub struct ArunaActionRecord {
     pub has_input_schema: bool,
     pub has_output_schema: bool,
     pub has_run: bool,
+    pub serialization: ArunaActionSerializationMetadata,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<ArunaActionRateLimitMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<ArunaSchemaMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,6 +170,26 @@ fn schema_invalid_diagnostic(
         Some(format!("export name: {export_name}\n{details}")),
         Some(
             "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), or schema.enum([...])."
+                .to_string(),
+        ),
+    )
+}
+
+fn rate_limit_invalid_diagnostic(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    span: DiagnosticSpan,
+    details: String,
+) -> ArunaDiagnostic {
+    create_diagnostic(
+        "aruna::560",
+        format!("Server action {action_id} has an invalid rateLimit declaration."),
+        Some(file.to_string()),
+        Some(span),
+        Some(format!("export name: {export_name}\n{details}")),
+        Some(
+            "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
                 .to_string(),
         ),
     )
@@ -829,6 +885,161 @@ fn find_object_property<'a>(
     })
 }
 
+fn positive_integer_from_numeric_literal(value: f64) -> Option<u32> {
+    if !value.is_finite() || value <= 0.0 || value.fract() != 0.0 || value > u32::MAX as f64 {
+        return None;
+    }
+
+    Some(value as u32)
+}
+
+fn parse_rate_limit_object(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<ArunaActionRateLimitMetadata> {
+    let mut limit: Option<u32> = None;
+    let mut window_ms: Option<u32> = None;
+
+    for property in &object.properties {
+        let ObjectPropertyKind::ObjectProperty(object_property) = property else {
+            diagnostics.push(rate_limit_invalid_diagnostic(
+                file,
+                action_id,
+                export_name,
+                DiagnosticSpan {
+                    start: property.span().start as usize,
+                    end: property.span().end as usize,
+                },
+                "rateLimit must be a plain object literal without spread properties.".to_string(),
+            ));
+            return None;
+        };
+
+        let Some(property_name) = property_name(&object_property.key) else {
+            diagnostics.push(rate_limit_invalid_diagnostic(
+                file,
+                action_id,
+                export_name,
+                DiagnosticSpan {
+                    start: object_property.span.start as usize,
+                    end: object_property.span.end as usize,
+                },
+                "rateLimit keys must be static identifiers or string literals.".to_string(),
+            ));
+            return None;
+        };
+
+        let Expression::NumericLiteral(numeric_literal) = &object_property.value else {
+            diagnostics.push(rate_limit_invalid_diagnostic(
+                file,
+                action_id,
+                export_name,
+                DiagnosticSpan {
+                    start: object_property.value.span().start as usize,
+                    end: object_property.value.span().end as usize,
+                },
+                format!(
+                    "rateLimit.{property_name} must be a positive integer numeric literal."
+                ),
+            ));
+            return None;
+        };
+
+        let Some(integer_value) = positive_integer_from_numeric_literal(numeric_literal.value) else {
+            diagnostics.push(rate_limit_invalid_diagnostic(
+                file,
+                action_id,
+                export_name,
+                DiagnosticSpan {
+                    start: object_property.value.span().start as usize,
+                    end: object_property.value.span().end as usize,
+                },
+                format!(
+                    "rateLimit.{property_name} must be a positive integer numeric literal."
+                ),
+            ));
+            return None;
+        };
+
+        match property_name.as_str() {
+            "limit" => {
+                limit = Some(integer_value);
+            }
+            "windowMs" => {
+                window_ms = Some(integer_value);
+            }
+            _ => {
+                diagnostics.push(rate_limit_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    DiagnosticSpan {
+                        start: object_property.span.start as usize,
+                        end: object_property.span.end as usize,
+                    },
+                    format!("rateLimit does not support the {property_name} key."),
+                ));
+                return None;
+            }
+        }
+    }
+
+    let Some(limit) = limit else {
+        diagnostics.push(rate_limit_invalid_diagnostic(
+            file,
+            action_id,
+            export_name,
+            object_span(object),
+            "Missing rateLimit.limit.".to_string(),
+        ));
+        return None;
+    };
+
+    let Some(window_ms) = window_ms else {
+        diagnostics.push(rate_limit_invalid_diagnostic(
+            file,
+            action_id,
+            export_name,
+            object_span(object),
+            "Missing rateLimit.windowMs.".to_string(),
+        ));
+        return None;
+    };
+
+    Some(ArunaActionRateLimitMetadata { limit, window_ms })
+}
+
+fn extract_action_rate_limit(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<ArunaActionRateLimitMetadata> {
+    let Some(property) = find_object_property(object, "rateLimit") else {
+        return None;
+    };
+
+    let Expression::ObjectExpression(rate_limit_object) = &property.value else {
+        diagnostics.push(rate_limit_invalid_diagnostic(
+            file,
+            action_id,
+            export_name,
+            DiagnosticSpan {
+                start: property.value.span().start as usize,
+                end: property.value.span().end as usize,
+            },
+            "rateLimit must be a plain object literal.".to_string(),
+        ));
+        return None;
+    };
+
+    parse_rate_limit_object(file, action_id, export_name, rate_limit_object, diagnostics)
+}
+
 fn analyze_define_action_call(
     file: &str,
     export_name: &str,
@@ -907,6 +1118,7 @@ fn analyze_define_action_call(
         "output",
         diagnostics,
     );
+    let rate_limit = extract_action_rate_limit(file, &id, export_name, object, diagnostics);
 
     let Some(run_property) = find_object_property(object, "run") else {
         diagnostics.push(create_diagnostic(
@@ -924,6 +1136,8 @@ fn analyze_define_action_call(
             has_input_schema,
             has_output_schema,
             has_run: false,
+            serialization: ArunaActionSerializationMetadata::default(),
+            rate_limit,
             input_schema,
             output_schema,
         });
@@ -951,6 +1165,8 @@ fn analyze_define_action_call(
         has_input_schema,
         has_output_schema,
         has_run,
+        serialization: ArunaActionSerializationMetadata::default(),
+        rate_limit,
         input_schema,
         output_schema,
     })

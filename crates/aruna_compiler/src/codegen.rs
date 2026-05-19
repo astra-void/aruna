@@ -470,6 +470,8 @@ mod tests {
             has_input_schema: false,
             has_output_schema: false,
             has_run: true,
+            serialization: Default::default(),
+            rate_limit: None,
             input_schema: None,
             output_schema: None,
         }
@@ -559,6 +561,8 @@ mod tests {
             has_input_schema: true,
             has_output_schema: true,
             has_run: true,
+            serialization: Default::default(),
+            rate_limit: None,
             input_schema: Some(ArunaSchemaMetadata {
                 kind: "object".to_string(),
                 properties: Some(BTreeMap::from([

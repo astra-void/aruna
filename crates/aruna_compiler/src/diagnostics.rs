@@ -68,6 +68,7 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::552" => Some(("action-run-not-function", DiagnosticSeverity::Error)),
         "aruna::553" => Some(("action-input-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::554" => Some(("action-output-schema-invalid", DiagnosticSeverity::Warning)),
+        "aruna::560" => Some(("invalid-action-rate-limit", DiagnosticSeverity::Error)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

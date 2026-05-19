@@ -349,3 +349,82 @@ export const demo = defineAction({
     assert_eq!(output.manifest.actions.len(), 1);
     assert!(output.manifest.actions[0].input_schema.is_none());
 }
+
+#[test]
+fn captures_rate_limit_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const demo = defineAction({
+  id: "demo.rateLimit",
+  rateLimit: {
+    limit: 5,
+    windowMs: 1000,
+  },
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok);
+    let action = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.rateLimit")
+        .expect("expected action metadata");
+
+    assert_eq!(
+        action.rate_limit.as_ref(),
+        Some(&aruna_compiler::ArunaActionRateLimitMetadata {
+            limit: 5,
+            window_ms: 1000,
+        })
+    );
+}
+
+#[test]
+fn rejects_invalid_rate_limit_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const demo = defineAction({
+  id: "demo.rateLimit",
+  rateLimit: {
+    windowMs: 1000,
+  },
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::560".to_string()]);
+    assert!(!output.ok);
+    let action = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.rateLimit")
+        .expect("expected action metadata");
+    assert!(action.rate_limit.is_none());
+}
