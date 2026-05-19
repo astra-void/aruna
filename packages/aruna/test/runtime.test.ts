@@ -117,6 +117,40 @@ describe("server runtime", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it("rejects unsafe input before running the action", async () => {
+    const run = vi.fn(() => ({ ok: true }));
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run,
+      }),
+    };
+
+    await expect(
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        {
+          player: {
+            ClassName: "Player",
+            IsA(className: string) {
+              return className === "Instance" || className === "Player";
+            },
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: "ActionSerializationError",
+      actionId: "shop.purchaseItem",
+      role: "input",
+      message:
+        "Action shop.purchaseItem input is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+    });
+
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("validates output after the action resolves", async () => {
     const registry: ActionRegistry = {
       "shop.purchaseItem": defineAction({
@@ -135,6 +169,38 @@ describe("server runtime", () => {
     ).rejects.toThrowError(
       "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
     );
+  });
+
+  it("rejects unsafe output after the action resolves", async () => {
+    const run = vi.fn(() => {
+      return {
+        ok: true,
+        player: {
+          ClassName: "Player",
+          IsA(className: string) {
+            return className === "Instance" || className === "Player";
+          },
+        },
+      };
+    });
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run,
+      }),
+    };
+
+    await expect(
+      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }),
+    ).rejects.toMatchObject({
+      name: "ActionSerializationError",
+      actionId: "shop.purchaseItem",
+      role: "output",
+      message:
+        "Action shop.purchaseItem output is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
   });
 
   it("includes the action id and role on validation errors", async () => {
@@ -197,6 +263,34 @@ describe("in-memory transport", () => {
     await expect(invokeAction("shop.purchaseItem", { itemId: 123 })).rejects.toThrowError(
       "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
     );
+  });
+
+  it("surfaces serialization policy errors", async () => {
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run(_ctx, input) {
+          return { ok: true, input };
+        },
+      }),
+    };
+
+    setActionInvoker(createInMemoryActionInvoker(registry));
+
+    await expect(
+      invokeAction("shop.purchaseItem", {
+        player: {
+          ClassName: "Player",
+          IsA(className: string) {
+            return className === "Instance" || className === "Player";
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "ActionSerializationError",
+      actionId: "shop.purchaseItem",
+      role: "input",
+    });
   });
 });
 

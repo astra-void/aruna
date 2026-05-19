@@ -358,6 +358,44 @@ describe("bindRemoteEventActions", () => {
     });
   });
 
+  it("turns unsafe input into error responses", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run() {
+          return { ok: true };
+        },
+      }),
+    };
+
+    bindRemoteEventActions(remote, registry);
+    remote.FireServer({
+      requestId: "request-1",
+      actionId: "shop.purchaseItem",
+      input: {
+        player: {
+          ClassName: "Player",
+          IsA(className: string) {
+            return className === "Instance" || className === "Player";
+          },
+        },
+      },
+    });
+
+    await flushMicrotasks();
+
+    expect(remote.responses[0]?.response).toEqual({
+      requestId: "request-1",
+      ok: false,
+      error: {
+        message:
+          "Action shop.purchaseItem input is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+        name: "ActionSerializationError",
+      },
+    });
+  });
+
   it("turns output validation failures into error responses", async () => {
     const remote = createFakeRemoteEvent({ name: "Ada" });
     const registry: ActionRegistry = {
@@ -387,6 +425,45 @@ describe("bindRemoteEventActions", () => {
       error: {
         message: "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
         name: "ArunaSchemaValidationError",
+      },
+    });
+  });
+
+  it("turns unsafe output into error responses", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run() {
+          return {
+            ok: true,
+            player: {
+              ClassName: "Player",
+              IsA(className: string) {
+                return className === "Instance" || className === "Player";
+              },
+            },
+          };
+        },
+      }),
+    };
+
+    bindRemoteEventActions(remote, registry);
+    remote.FireServer({
+      requestId: "request-1",
+      actionId: "shop.purchaseItem",
+      input: {},
+    });
+
+    await flushMicrotasks();
+
+    expect(remote.responses[0]?.response).toEqual({
+      requestId: "request-1",
+      ok: false,
+      error: {
+        message:
+          "Action shop.purchaseItem output is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+        name: "ActionSerializationError",
       },
     });
   });

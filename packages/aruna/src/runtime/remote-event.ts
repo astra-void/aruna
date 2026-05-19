@@ -1,6 +1,13 @@
-import type { ActionInvoker } from "./client.js";
 import { createServerBinding, type ServerBinding } from "./binding.js";
-import { dispatchAction, type ActionRegistry, type ActionRunContext } from "./server.js";
+import type { ActionInvoker } from "./client.js";
+import {
+  dispatchAction,
+  type ActionRateLimitKeyResolver,
+  type ActionRateLimiter,
+  type ActionRegistry,
+  type ActionRunContext,
+  type DispatchActionOptions,
+} from "./server.js";
 
 export type RemoteEventActionRequest = {
   readonly requestId: string;
@@ -59,6 +66,9 @@ export type RemoteEventActionContextFactory<TPlayer = unknown> = (
 
 export type BindRemoteEventActionsOptions<TPlayer = unknown> = {
   readonly createContext?: RemoteEventActionContextFactory<TPlayer>;
+  readonly rateLimiter?: ActionRateLimiter;
+  readonly rateLimitKey?: ActionRateLimitKeyResolver<TPlayer>;
+  readonly nowMs?: () => number;
 };
 
 let nextRequestId = 0;
@@ -180,7 +190,17 @@ export function bindRemoteEventActions<TPlayer = unknown>(
     const context = options?.createContext?.(player) ?? ({ player } as ActionRunContext<TPlayer>);
 
     try {
-      const output = await dispatchAction(registry, request.actionId, context, request.input);
+      const dispatchOptions =
+        options === undefined
+          ? undefined
+          : ({
+              ...(options.rateLimiter !== undefined ? { rateLimiter: options.rateLimiter } : {}),
+              ...(options.rateLimitKey !== undefined
+                ? { rateLimitKey: options.rateLimitKey }
+                : {}),
+              ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+            } satisfies DispatchActionOptions<TPlayer>);
+      const output = await dispatchAction(registry, request.actionId, context, request.input, dispatchOptions);
 
       remote.FireClient(player, {
         requestId: request.requestId,

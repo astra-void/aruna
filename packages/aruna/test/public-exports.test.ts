@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { defineAction as defineActionRoot, schema as schemaRoot } from "aruna";
+import {
+  ActionSerializationError,
+  ActionRateLimitError,
+  defineAction as defineActionRoot,
+  schema as schemaRoot,
+  createActionRateLimiter,
+  validateSerializableActionValue,
+} from "aruna";
 import { createClientApp } from "aruna/client";
 import { clearActionInvoker, invokeAction } from "aruna/client-runtime";
 import { createInMemoryActionInvoker } from "aruna/runtime";
@@ -110,6 +117,10 @@ describe("public exports", () => {
 
     expect(schema.string().kind).toBe("string");
     expect(schemaRoot.boolean().kind).toBe("boolean");
+    expect(validateSerializableActionValue(undefined)).toEqual({ ok: true });
+    expect(ActionSerializationError).toBeTypeOf("function");
+    expect(ActionRateLimitError).toBeTypeOf("function");
+    expect(createActionRateLimiter).toBeTypeOf("function");
     expect(
       defineActionRoot({
         id: "shop.purchaseItem",

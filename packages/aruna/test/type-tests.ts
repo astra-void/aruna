@@ -10,7 +10,20 @@ import { createServerApp } from "../src/server-app.js";
 import { defineAction } from "../src/server.js";
 import { type ServerBinding } from "../src/runtime/binding.js";
 import { schema, type InferSchema } from "../src/schema.js";
-import { type InferInput, type InferOutput } from "../src/server-runtime.js";
+import {
+  ActionRateLimitError,
+  ActionSerializationError,
+  createActionRateLimiter,
+  assertSerializableActionValue,
+  type ActionRateLimitKeyResolver,
+  type ActionRateLimitOptions,
+  type InferInput,
+  type InferOutput,
+  type SerializableActionValue,
+  type SerializationPolicyResult,
+  type SerializationPolicyViolation,
+  validateSerializableActionValue,
+} from "../src/server-runtime.js";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
   ? true
@@ -32,6 +45,22 @@ const objectSchema = schema.object({
   note: schema.optional(schema.string()),
 });
 
+const serializableValue: SerializableActionValue = {
+  itemId: "sword",
+  metadata: {
+    tags: ["rare"],
+    enabled: true,
+    optional: undefined,
+  },
+};
+
+const serializationResult: SerializationPolicyResult = validateSerializableActionValue(serializableValue);
+
+if (!serializationResult.ok) {
+  const firstViolation = serializationResult.violations[0];
+  void firstViolation;
+}
+
 type _StringSchema = Expect<Equal<InferSchema<typeof stringSchema>, string>>;
 type _NumberSchema = Expect<Equal<InferSchema<typeof numberSchema>, number>>;
 type _BooleanSchema = Expect<Equal<InferSchema<typeof booleanSchema>, boolean>>;
@@ -52,6 +81,10 @@ type _ObjectSchema = Expect<
 
 const purchaseItem = defineAction({
   id: "shop.purchaseItem",
+  rateLimit: {
+    limit: 5,
+    windowMs: 1000,
+  },
   input: schema.object({
     itemId: schema.string(),
     quantity: schema.number(),
@@ -139,6 +172,10 @@ type _ClientDispose = Expect<Equal<typeof clientApp.dispose, () => void>>;
 type _ClientOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createClientApp>[0]>, false>>;
 type _ServerOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createServerApp>[0]>, false>>;
 type _ServerDispatch = Expect<Equal<ReturnType<typeof serverApp.dispatch>, Promise<unknown>>>;
+type _RateLimitOptionsNoAny = Expect<Equal<IsAny<ActionRateLimitOptions>, false>>;
+type _RateLimitKeyResolverNoAny = Expect<Equal<IsAny<ActionRateLimitKeyResolver>, false>>;
+type _RateLimitErrorNoAny = Expect<Equal<IsAny<ActionRateLimitError>, false>>;
+type _RateLimiterNoAny = Expect<Equal<IsAny<typeof createActionRateLimiter>, false>>;
 type _RemoteEventInvoker = Expect<Equal<ReturnType<typeof createRemoteEventActionInvoker>, DisposableActionInvoker>>;
 type _DefaultRemoteEventInvoker = Expect<
   Equal<ReturnType<typeof createDefaultRobloxActionInvoker>, DisposableActionInvoker>
@@ -159,3 +196,9 @@ type _DefaultRemoteEventBinding = Expect<
 type _DefaultRemoteEventBindingOptionsNoAny = Expect<
   Equal<IsAny<Parameters<typeof bindDefaultRobloxActionRemoteEvent>[1]>, false>
 >;
+type _SerializableValueNoAny = Expect<Equal<IsAny<SerializableActionValue>, false>>;
+type _SerializationResultNoAny = Expect<Equal<IsAny<SerializationPolicyResult>, false>>;
+type _SerializationViolationNoAny = Expect<Equal<IsAny<SerializationPolicyViolation>, false>>;
+type _SerializationErrorNoAny = Expect<Equal<IsAny<ActionSerializationError>, false>>;
+type _SerializationHelpersNoAny = Expect<Equal<IsAny<typeof validateSerializableActionValue>, false>>;
+type _SerializationAssertNoAny = Expect<Equal<IsAny<typeof assertSerializableActionValue>, false>>;

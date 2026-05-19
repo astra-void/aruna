@@ -158,6 +158,38 @@ describe("remote function server adapter", () => {
       remote.InvokeServer("shop.purchaseItem", { itemId: "sword" }),
     ).rejects.toThrowError("Aruna action not found: shop.purchaseItem");
   });
+
+  it("surfaces serialization policy errors without changing the adapter shape", async () => {
+    const remote = createFakeRemote({ name: "Ada" });
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run() {
+          return {
+            ok: true,
+            player: {
+              ClassName: "Player",
+              IsA(className: string) {
+                return className === "Instance" || className === "Player";
+              },
+            },
+          };
+        },
+      }),
+    };
+
+    bindRemoteFunctionActions(remote, registry);
+
+    await expect(
+      remote.InvokeServer("shop.purchaseItem", { itemId: "sword" }),
+    ).rejects.toMatchObject({
+      name: "ActionSerializationError",
+      actionId: "shop.purchaseItem",
+      role: "output",
+      message:
+        "Action shop.purchaseItem output is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+    });
+  });
 });
 
 describe("generated-style remote stub", () => {
