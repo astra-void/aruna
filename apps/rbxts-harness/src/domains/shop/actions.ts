@@ -1,6 +1,7 @@
-import { defineAction, schema } from "aruna";
+import { defineAction } from "aruna";
+import { schema } from "aruna";
+import { type PurchaseItemInput, type PurchaseItemOutput } from "./schema";
 import { createActionResult } from "../../shared/result";
-import { type PurchaseItemInput } from "./model";
 
 export const purchaseItem = defineAction({
   id: "shop.purchaseItem",
@@ -19,7 +20,7 @@ export const purchaseItem = defineAction({
     total: schema.number(),
     currency: schema.literal("coins"),
   }),
-  run(_ctx, input) {
+  run(_ctx, input): PurchaseItemOutput {
     const typedInput: PurchaseItemInput = input;
     const total = typedInput.quantity * 50;
 
@@ -30,7 +31,7 @@ export const purchaseItem = defineAction({
       ),
       itemId: typedInput.itemId,
       total,
-      currency: typedInput.currency,
+      currency: "coins",
     };
   },
 });

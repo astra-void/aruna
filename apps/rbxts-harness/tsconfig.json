@@ -14,10 +14,11 @@
     "noLib": true,
     "outDir": "out",
     "rootDir": "src",
+    "jsx": "preserve",
     "verbatimModuleSyntax": false,
     "typeRoots": ["./node_modules", "./node_modules/@rbxts"],
     "types": ["@rbxts/types", "@rbxts/compiler-types"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["dist", "node_modules"]
 }

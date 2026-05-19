@@ -1,1 +1,3 @@
-import "./app/server";
+import { startServerApp } from "./app/server-runtime";
+
+startServerApp();

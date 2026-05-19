@@ -4,8 +4,15 @@ export default {
     output: "src/.aruna/manifest.json",
   },
   conventions: {
-    client: ["src/client.ts", "src/client.tsx", "src/app/client.ts", "src/app/client.tsx"],
-    server: ["src/server.ts", "src/server.tsx", "src/app/server.ts", "src/app/server.tsx"],
-    shared: ["src/shared/**", "src/domains/**/model.ts"],
+    client: ["src/client.tsx", "src/app/client-runtime.ts", "src/domains/**/ui.tsx"],
+    server: ["src/server.ts", "src/app/server-runtime.ts", "src/domains/**/actions.ts"],
+    shared: [
+      "src/app/bootstrap.ts",
+      "src/app/providers.ts",
+      "src/shared/**",
+      "src/domains/**/schema.ts",
+      "src/domains/**/model.ts",
+      "src/domains/**/runtime.ts",
+    ],
   },
 };

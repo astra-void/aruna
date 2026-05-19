@@ -1,6 +1,7 @@
-import { defineAction, schema } from "aruna";
+import { defineAction } from "aruna";
+import { schema } from "aruna";
+import { type RestockItemInput, type RestockItemOutput } from "./schema";
 import { createActionResult } from "../../shared/result";
-import { type RestockItemInput } from "./model";
 
 export const restockItem = defineAction({
   id: "inventory.restockItem",
@@ -17,7 +18,7 @@ export const restockItem = defineAction({
     itemIds: schema.array(schema.string()),
     warnings: schema.array(schema.string()),
   }),
-  run(_ctx, input) {
+  run(_ctx, input): RestockItemOutput {
     const typedInput: RestockItemInput = input;
     const warnings =
       typedInput.auditTag === undefined ? [] : [`audit:${typedInput.auditTag}`];
