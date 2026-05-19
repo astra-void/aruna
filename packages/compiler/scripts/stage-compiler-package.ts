@@ -4,7 +4,7 @@ import {
   nativePackageName,
   stagedCompilerPackageDirectory,
   type NativeTarget,
-} from "./native-targets.ts";
+} from "./native-targets.js";
 
 export type StageCompilerPackageOptions = {
   workspaceRoot: string;

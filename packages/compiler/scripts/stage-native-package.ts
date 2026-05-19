@@ -7,7 +7,7 @@ import {
   stagedNativePackageArtifactPath,
   stagedNativePackageDirectory,
   type NativeTarget,
-} from "./native-targets.ts";
+} from "./native-targets.js";
 
 export type StageNativePackageOptions = {
   workspaceRoot: string;

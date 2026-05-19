@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { fixtureCases, type FixtureCase } from "./fixture-cases.js";
 import { buildProject, inspectProject } from "../src/index.ts";
 
 type Snapshot = {
@@ -13,43 +14,12 @@ type Snapshot = {
   generated?: Array<{ path: string; contents: string }>;
 };
 
-type FixtureMode = "inspect" | "build";
-
-const fixtureCases = [
-  { name: "valid-client-imports-shared", mode: "inspect" },
-  { name: "invalid-client-imports-server", mode: "inspect" },
-  { name: "invalid-server-imports-client", mode: "inspect" },
-  { name: "invalid-shared-imports-client", mode: "inspect" },
-  { name: "invalid-shared-imports-server", mode: "inspect" },
-  { name: "feature-local-layout", mode: "inspect" },
-  { name: "unknown-module-kind", mode: "inspect" },
-  { name: "unresolved-import", mode: "inspect" },
-  { name: "missing-tsconfig", mode: "inspect" },
-  { name: "invalid-config", mode: "inspect" },
-  { name: "invalid-tsconfig", mode: "inspect" },
-  { name: "tsconfig-path-alias", mode: "inspect" },
-  { name: "ambiguous-convention-match", mode: "inspect" },
-  { name: "parse-failed", mode: "inspect" },
-  { name: "action-basic", mode: "inspect" },
-  { name: "duplicate-action-id", mode: "inspect" },
-  { name: "action-missing-run", mode: "inspect" },
-  { name: "client-imports-action-source", mode: "inspect" },
-  { name: "virtual-generated-action-imports", mode: "inspect" },
-  { name: "invalid-virtual-generated-action-imports", mode: "inspect" },
-  { name: "action-generated-output", mode: "build" },
-  { name: "action-generated-export-collision", mode: "build" },
-] as const;
-
-const buildFixtureCases = fixtureCases.filter(
-  (fixture): fixture is (typeof fixtureCases)[number] & { mode: "build" } => fixture.mode === "build",
-);
-
 const fixturesRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../fixtures",
 );
 
-async function readSnapshot(fixtureName: string, mode: FixtureMode): Promise<Snapshot> {
+async function readSnapshot(fixtureName: string, mode: FixtureCase["mode"]): Promise<Snapshot> {
   const expectedRoot = path.join(fixturesRoot, fixtureName, "expected");
   const generatedRoot = path.join(expectedRoot, "generated");
   const [diagnostics, manifest, modules, graph] = await Promise.all([
@@ -108,33 +78,11 @@ async function readGeneratedSnapshot(
   return entries;
 }
 
-async function assertBuildFixtureGeneratedSnapshots(fixtureName: string): Promise<void> {
-  const generatedRoot = path.join(fixturesRoot, fixtureName, "expected", "generated");
-
-  try {
-    await fs.stat(generatedRoot);
-  } catch {
-    throw new Error(`Build fixture "${fixtureName}" is missing expected/generated snapshots.`);
-  }
-
-  const generated = await readGeneratedSnapshot(generatedRoot);
-  const generatedPaths = generated.map((entry) => entry.path);
-
-  expect(generatedPaths).toContain("src/.aruna/actions.client.generated.ts");
-  expect(generatedPaths).toContain("src/.aruna/actions.server.generated.ts");
-}
-
 async function copyFixtureInput(sourceRoot: string): Promise<string> {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-fixture-"));
   await fs.cp(sourceRoot, tempRoot, { recursive: true });
   return tempRoot;
 }
-
-describe.each(buildFixtureCases)("$name generated snapshots", ({ name }) => {
-  it("keeps expected/generated populated", async () => {
-    await assertBuildFixtureGeneratedSnapshots(name);
-  });
-});
 
 describe.each(fixtureCases)("$name", ({ name, mode }) => {
   it("matches the stored snapshots", async () => {

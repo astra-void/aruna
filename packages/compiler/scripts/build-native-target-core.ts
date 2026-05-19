@@ -6,11 +6,11 @@ import {
   resolveNativeTarget,
   SUPPORTED_NATIVE_TARGETS,
   type NativeTarget,
-} from "../src/native-platform";
-import { buildNativeArtifact } from "./native-build";
-import { stagedCompilerPackageDirectory } from "./native-targets";
-import { stageCompilerPackage } from "./stage-compiler-package";
-import { stageNativePackage } from "./stage-native-package";
+} from "../src/native-platform.js";
+import { buildNativeArtifact } from "./native-build.js";
+import { stagedCompilerPackageDirectory } from "./native-targets.js";
+import { stageCompilerPackage } from "./stage-compiler-package.js";
+import { stageNativePackage } from "./stage-native-package.js";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = path.resolve(packageRoot, "../..");
@@ -94,6 +94,11 @@ export function resolveHostNativeTarget(): NativeTarget {
 export function readRequestedTarget(): NativeTarget | null {
   const flagIndex = process.argv.indexOf("--target");
   const cliTarget = flagIndex >= 0 ? process.argv[flagIndex + 1] : undefined;
+
+  if (flagIndex >= 0 && (typeof cliTarget === "undefined" || cliTarget.startsWith("-"))) {
+    throw new Error('Missing value for "--target" CLI flag.');
+  }
+
   const envTarget = process.env.ARUNA_NATIVE_TARGET;
   const requested = cliTarget ?? envTarget;
 

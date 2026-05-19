@@ -7,8 +7,8 @@ import {
   nativeTargetInfo,
   resolveNativeTarget,
   type NativeTarget,
-  type NativeTargetInfo,
-} from "./native-targets";
+} from "./native-targets.js";
+import { NativeTargetInfo } from "../src/native-platform.js";
 
 export type NativeBuildProfile = "debug" | "release";
 export type ZigPolicy = "auto" | "always" | "never";
@@ -157,12 +157,10 @@ function targetArtifactCandidates(
       ? [path.join(targetDir, targetInfo.rustTarget, profile)]
       : [path.join(targetDir, profile)];
 
-  return [
-    ...targetDirs.flatMap((directory) => [
+  return targetDirs.flatMap((directory) => [
       path.join(directory, nativeBuildOutputName(targetInfo.target)),
       path.join(directory, "aruna_napi.node"),
-    ]),
-  ];
+    ]);
 }
 
 async function resolveArtifactPath(

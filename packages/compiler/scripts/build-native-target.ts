@@ -1,3 +1,3 @@
-import { runBuildNativeTarget } from "./build-native-target-core";
+import { runBuildNativeTarget } from "./build-native-target-core.js";
 
 void runBuildNativeTarget();

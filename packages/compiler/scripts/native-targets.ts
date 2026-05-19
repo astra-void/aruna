@@ -9,7 +9,7 @@ import {
   SUPPORTED_NATIVE_TARGETS,
   SUPPORTED_NATIVE_TARGET_INFOS,
   type NativeTarget,
-} from "../src/native-platform.ts";
+} from "../src/native-platform.js";
 
 export type { NativeTarget };
 

@@ -6,8 +6,8 @@ import {
   nativePackageName,
   resolveNativeTarget,
   type NativeTarget,
-} from "../src/native-platform.ts";
-import { stagedNativePackageArtifactPath, stagedNativePackageDirectory } from "./native-targets.ts";
+} from "../src/native-platform.js";
+import { stagedNativePackageArtifactPath, stagedNativePackageDirectory } from "./native-targets.js";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = path.resolve(packageRoot, "../..");
