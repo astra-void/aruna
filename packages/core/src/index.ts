@@ -22,6 +22,7 @@ export type ArunaDiagnosticCode =
   | "aruna::552"
   | "aruna::553"
   | "aruna::554"
+  | "aruna::560"
   | "aruna::555"
   | "aruna::556"
   | "aruna::557"
@@ -65,6 +66,15 @@ export type ArunaActionRecord = {
   hasInputSchema: boolean;
   hasOutputSchema: boolean;
   hasRun: boolean;
+  serialization: {
+    policy: "plain-data-v1";
+  };
+  rateLimit?:
+    | {
+        limit: number;
+        windowMs: number;
+      }
+    | undefined;
   inputSchema?: ArunaSchemaMetadata | undefined;
   outputSchema?: ArunaSchemaMetadata | undefined;
 };
