@@ -1,11 +1,11 @@
 export default {
-  generatedDir: "src/.aruna",
+  generatedDir: "src/shared/.aruna",
   manifest: {
-    output: "src/.aruna/manifest.json",
+    output: "src/shared/.aruna/manifest.json",
   },
   conventions: {
-    client: ["src/client.tsx", "src/app/client-runtime.ts", "src/domains/**/ui.tsx"],
-    server: ["src/server.ts", "src/app/server-runtime.ts", "src/domains/**/actions.ts"],
+    client: ["src/client.tsx", "src/domains/**/ui.tsx"],
+    server: ["src/server.ts", "src/domains/**/actions.ts"],
     shared: [
       "src/app/bootstrap.ts",
       "src/app/providers.ts",

@@ -8,8 +8,8 @@
     "paths": {
       "aruna": ["../../packages/aruna/dist/index.d.ts"],
       "aruna/*": ["../../packages/aruna/dist/*.d.ts"],
-      "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
-      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"]
+      "$aruna/actions/client": ["src/shared/.aruna/actions.client.generated.ts"],
+      "$aruna/actions/server": ["src/shared/.aruna/actions.server.generated.ts"]
     },
     "noLib": true,
     "outDir": "out",

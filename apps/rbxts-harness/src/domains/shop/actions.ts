@@ -5,6 +5,10 @@ import { createActionResult } from "../../shared/result";
 
 export const purchaseItem = defineAction({
   id: "shop.purchaseItem",
+  rateLimit: {
+    limit: 5,
+    windowMs: 1000,
+  },
   input: schema.object({
     itemId: schema.string(),
     quantity: schema.number(),

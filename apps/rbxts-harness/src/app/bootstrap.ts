@@ -1,1 +1,1 @@
-export { createHarnessRequestId } from "./providers";
+export { createHarnessRequestId, harnessActionIds } from "./providers";

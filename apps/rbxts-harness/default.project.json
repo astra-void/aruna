@@ -1,36 +1,69 @@
 {
-  "name": "ArunaHarness",
+  "name": "roblox-ts-game",
+  "globIgnorePaths": ["**/package.json", "**/tsconfig.json"],
   "tree": {
     "$className": "DataModel",
-    "ReplicatedStorage": {
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
       "TS": {
-        "$path": "out/shared"
-      },
-      "Domains": {
-        "$path": "out/domains"
+        "$path": "out/server.luau"
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "rbxts_include": {
+        "$path": "include",
+        "node_modules": {
+          "$className": "Folder",
+          "aruna": {
+            "$path": "../../packages/aruna/dist"
+          },
+          "@rbxts": {
+            "$path": "node_modules/@rbxts"
+          },
+          "@rbxts-js": {
+            "$path": "node_modules/@rbxts-js"
+          },
+          "@flamework": {
+            "$path": "node_modules/@flamework"
+          }
+        }
       },
       "App": {
         "$path": "out/app"
       },
-      "ArunaGenerated": {
-        "$path": "out/.aruna"
+      "Domains": {
+        "$path": "out/domains"
       },
-      "Packages": {
-        "Aruna": {
-          "$path": "../../packages/aruna/dist"
-        }
-      }
-    },
-    "ServerScriptService": {
-      "Server": {
-        "$path": "out/server.luau"
+      "TS": {
+        "$path": "out/shared"
       }
     },
     "StarterPlayer": {
+      "$className": "StarterPlayer",
       "StarterPlayerScripts": {
-        "Client": {
+        "$className": "StarterPlayerScripts",
+        "TS": {
           "$path": "out/client.luau"
         }
+      }
+    },
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    },
+    "HttpService": {
+      "$className": "HttpService",
+      "$properties": {
+        "HttpEnabled": true
+      }
+    },
+    "SoundService": {
+      "$className": "SoundService",
+      "$properties": {
+        "RespectFilteringEnabled": true
       }
     }
   }
