@@ -1,20 +1,34 @@
-node_modules
-dist
-out
-coverage
-.turbo
+# macOS
+.DS_Store
+
+# Node / package managers
+node_modules/
+.pnpm-store
 .npm
 .npm-pack
-.DS_Store
-.aruna
-target
-digest.txt
-.env
-.pnpm-store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-!fixtures/**/expected/generated/src/.aruna/
+# Build / artifacts
+dist/
+out/
+coverage/
+target/
+
+# Tooling / cache
+.turbo/
+.aruna
+digest.txt
+
+# Environment
+.env
+
+# Keep generated fixtures used in tests
 !fixtures/**/expected/generated/
 !fixtures/**/expected/generated/**
+!fixtures/**/expected/generated/src/.aruna/
 !fixtures/**/expected/generated/src/.aruna/**
 
+# Editor
 .vscode/
