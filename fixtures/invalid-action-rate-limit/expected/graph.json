@@ -1,0 +1,8 @@
+[
+  {
+    "from": "src/domains/shop/actions.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  }
+]

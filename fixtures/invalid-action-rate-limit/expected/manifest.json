@@ -1,0 +1,197 @@
+{
+  "actions": [
+    {
+      "exportName": "limitZero",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true,
+      "id": "shop.limitZero",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "exportName": "missingLimit",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true,
+      "id": "shop.missingLimit",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "exportName": "missingWindowMs",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true,
+      "id": "shop.missingWindowMs",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "exportName": "nonIntegerLimit",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true,
+      "id": "shop.nonIntegerLimit",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "exportName": "nonLiteralValue",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true,
+      "id": "shop.nonLiteralValue",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "exportName": "windowZero",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": false,
+      "hasRun": true,
+      "id": "shop.windowZero",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingLimit\nMissing rateLimit.limit.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 185,
+        "start": 160
+      },
+      "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: limitZero\nrateLimit.limit must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.limitZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 315,
+        "start": 314
+      },
+      "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerLimit\nrateLimit.limit must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 484,
+        "start": 481
+      },
+      "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 656,
+        "start": 637
+      },
+      "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 805,
+        "start": 804
+      },
+      "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 983,
+        "start": 968
+      },
+      "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/.aruna/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/client.tsx",
+      "kind": "clientEntry",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

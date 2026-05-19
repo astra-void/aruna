@@ -2,44 +2,43 @@
   "actions": [
     {
       "exportName": "purchaseItem",
-      "file": "src/domains/inventory/actions.ts",
-      "hasInputSchema": false,
-      "hasOutputSchema": false,
-      "hasRun": true,
-      "id": "inventory.purchaseItem",
-      "serialization": {
-        "policy": "plain-data-v1"
-      }
-    },
-    {
-      "exportName": "purchaseItem",
       "file": "src/domains/shop/actions.ts",
-      "hasInputSchema": false,
-      "hasOutputSchema": false,
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
       "hasRun": true,
       "id": "shop.purchaseItem",
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "kind": "object",
+        "properties": {
+          "ok": {
+            "kind": "boolean"
+          }
+        }
+      },
+      "rateLimit": {
+        "limit": 5,
+        "windowMs": 1000
+      },
       "serialization": {
         "policy": "plain-data-v1"
       }
     }
   ],
-  "diagnostics": [
-    {
-      "code": "aruna::557",
-      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
-      "file": "src/domains/shop/actions.ts",
-      "message": "Generated action export name purchaseItem is used by more than one action.",
-      "name": "duplicate-generated-action-export",
-      "severity": "error",
-      "suggestion": "Rename one action export or import the generated action through a namespaced layout in a future release."
-    }
-  ],
+  "diagnostics": [],
   "imports": [
     {
-      "from": "src/domains/inventory/actions.ts",
+      "from": "src/domains/shop/actions.ts",
       "kind": "static",
       "resolved": false,
-      "specifier": "aruna/server"
+      "specifier": "aruna/schema"
     },
     {
       "from": "src/domains/shop/actions.ts",
@@ -69,13 +68,6 @@
       "path": "src/client.tsx",
       "reason": "path",
       "reasonDetail": "matched recommended entry file"
-    },
-    {
-      "id": "src/domains/inventory/actions.ts",
-      "kind": "serverAction",
-      "path": "src/domains/inventory/actions.ts",
-      "reason": "directive",
-      "reasonDetail": "defineAction(...) export detected"
     },
     {
       "id": "src/domains/shop/actions.ts",

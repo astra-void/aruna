@@ -1,0 +1,37 @@
+[
+  {
+    "id": "src/.aruna/actions.client.generated.ts",
+    "kind": "client",
+    "path": "src/.aruna/actions.client.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/actions module"
+  },
+  {
+    "id": "src/.aruna/actions.server.generated.ts",
+    "kind": "serverAction",
+    "path": "src/.aruna/actions.server.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/actions module"
+  },
+  {
+    "id": "src/client.tsx",
+    "kind": "clientEntry",
+    "path": "src/client.tsx",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
+  },
+  {
+    "id": "src/domains/shop/actions.ts",
+    "kind": "serverAction",
+    "path": "src/domains/shop/actions.ts",
+    "reason": "directive",
+    "reasonDetail": "defineAction(...) export detected"
+  },
+  {
+    "id": "src/server.ts",
+    "kind": "serverEntry",
+    "path": "src/server.ts",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
+  }
+]

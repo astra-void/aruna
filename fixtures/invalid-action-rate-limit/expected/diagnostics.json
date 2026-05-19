@@ -1,0 +1,80 @@
+[
+  {
+    "code": "aruna::560",
+    "details": "export name: missingLimit\nMissing rateLimit.limit.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.missingLimit has an invalid rateLimit declaration.",
+    "name": "invalid-action-rate-limit",
+    "severity": "error",
+    "span": {
+      "end": 185,
+      "start": 160
+    },
+    "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+  },
+  {
+    "code": "aruna::560",
+    "details": "export name: limitZero\nrateLimit.limit must be a positive integer numeric literal.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.limitZero has an invalid rateLimit declaration.",
+    "name": "invalid-action-rate-limit",
+    "severity": "error",
+    "span": {
+      "end": 315,
+      "start": 314
+    },
+    "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+  },
+  {
+    "code": "aruna::560",
+    "details": "export name: nonIntegerLimit\nrateLimit.limit must be a positive integer numeric literal.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.nonIntegerLimit has an invalid rateLimit declaration.",
+    "name": "invalid-action-rate-limit",
+    "severity": "error",
+    "span": {
+      "end": 484,
+      "start": 481
+    },
+    "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+  },
+  {
+    "code": "aruna::560",
+    "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+    "name": "invalid-action-rate-limit",
+    "severity": "error",
+    "span": {
+      "end": 656,
+      "start": 637
+    },
+    "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+  },
+  {
+    "code": "aruna::560",
+    "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+    "name": "invalid-action-rate-limit",
+    "severity": "error",
+    "span": {
+      "end": 805,
+      "start": 804
+    },
+    "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+  },
+  {
+    "code": "aruna::560",
+    "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal.",
+    "file": "src/domains/shop/actions.ts",
+    "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+    "name": "invalid-action-rate-limit",
+    "severity": "error",
+    "span": {
+      "end": 983,
+      "start": 968
+    },
+    "suggestion": "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+  }
+]

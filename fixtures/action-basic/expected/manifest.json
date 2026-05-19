@@ -22,6 +22,9 @@
             "kind": "boolean"
           }
         }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
       }
     }
   ],

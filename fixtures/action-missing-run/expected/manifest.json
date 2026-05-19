@@ -6,7 +6,10 @@
       "hasInputSchema": false,
       "hasOutputSchema": false,
       "hasRun": false,
-      "id": "shop.purchaseItem"
+      "id": "shop.purchaseItem",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
     }
   ],
   "diagnostics": [

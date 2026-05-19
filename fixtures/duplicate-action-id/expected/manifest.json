@@ -6,7 +6,10 @@
       "hasInputSchema": false,
       "hasOutputSchema": false,
       "hasRun": true,
-      "id": "shop.purchaseItem"
+      "id": "shop.purchaseItem",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
     },
     {
       "exportName": "purchaseItem",
@@ -14,7 +17,10 @@
       "hasInputSchema": false,
       "hasOutputSchema": false,
       "hasRun": true,
-      "id": "shop.purchaseItem"
+      "id": "shop.purchaseItem",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
     }
   ],
   "diagnostics": [

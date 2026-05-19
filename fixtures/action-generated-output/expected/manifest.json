@@ -43,6 +43,9 @@
             "kind": "array"
           }
         }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
       }
     },
     {
@@ -67,6 +70,9 @@
             "kind": "boolean"
           }
         }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
       }
     }
   ],
