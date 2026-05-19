@@ -159,7 +159,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - action manifest records now include basic schema metadata when `input` or `output` is declared
 - generated action files are snapshot-tested in the fixture suite
 - application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
-- `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
+- `aruna build` writes deterministic `src/shared/.aruna/actions.client.generated.ts` and `src/shared/.aruna/actions.server.generated.ts`
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
 - an in-memory action invoker exists for non-Roblox tests
@@ -172,6 +172,11 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - the public subpath exports remain stable through top-level compatibility shims
 - `@rbxts/types` and `@rbxts/compiler-types` are used at typecheck time for Roblox-facing runtime types
 - runtime schema validation now runs on action input and output at dispatch time
+- runtime serialization policy now runs on action input and output at dispatch time using the default `plain-data-v1` boundary
+- action input/output rejects `Instance`, `Player`, function, class-instance, cyclic, non-finite, and other non-plain values by default
+- basic fixed-window action rate limiting now runs per action and player/key before `run()`
+- invalid input and serialization failures do not consume quota
+- manifest action records now include serialization policy metadata and optional `rateLimit` metadata
 - the MVP schema helpers support string, number, boolean, and undefined literal values, plus array, object, optional, and enum validation
 - the schema DSL now has TypeScript inference for primitives, literals, arrays, objects, optionals, and enums
 - the generated files are safe to delete and regenerate
@@ -182,8 +187,15 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 The next MVP work should stay on contract and authority metadata, not more transport expansion:
 
 1. Stabilize current action runtime, compiler, and harness behavior.
-2. Add serialization boundary policy so Instance, Player, function, and thread-like values are rejected across action input/output by default, with manifest metadata and diagnostics.
-3. Add a basic action rate limit with action metadata parsing, manifest output, runtime per-player/action limiting, and a stable error shape.
+2. Serialization boundary policy is implemented as the default `plain-data-v1` action boundary:
+   - reject `Instance`, `Player`, function, class-instance, cyclic, non-finite, and other non-plain values across action input/output by default
+   - manifest action records now carry serialization policy metadata
+   - static serialization diagnostics remain limited for now
+3. Basic action rate limit is implemented as a manifest-visible fixed-window contract:
+   - action metadata parsing records `rateLimit` when declared with positive integer literals
+   - runtime enforces per-action/per-player or key buckets before `run()`
+   - invalid payloads and serialization failures do not consume quota
+   - the limiter is not a full anti-abuse or security system yet
 4. Add inspect actions that list client-callable actions, summarize input/output schemas, expose transport and rate-limit info, and surface serialization warnings.
 5. Add a contract snapshot foundation with a stable JSON snapshot of actions, schemas, and rate limits. Diffing can wait.
 
@@ -198,8 +210,8 @@ import { purchaseItem } from "$aruna/actions/client";
 import { actions } from "$aruna/actions/server";
 ```
 
-Do not import the physical `../.aruna/*.generated` files directly in app code.
-Aruna owns the physical files under `src/.aruna/`.
+Do not import the physical `../shared/.aruna/*.generated` files directly in app code.
+Aruna owns the physical files under `src/shared/.aruna/`.
 `aruna check` resolves these virtual modules without writing files.
 `aruna build` writes the physical generated files used by TypeScript and roblox-ts tooling.
 For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install the required tsconfig path aliases.
@@ -207,12 +219,16 @@ For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install t
 ## Real app harness
 
 `apps/rbxts-harness` is a private roblox-ts-style app harness.
-It now intentionally mirrors Recommended Layout v0 closely enough to act as the realistic app/starter reference while still remaining a harness rather than create-app output.
+It intentionally mirrors Recommended Layout v0 closely enough to act as the realistic app/starter reference while still remaining a harness rather than create-app output.
 It runs `aruna build` against a real app layout, then validates the harness with both TypeScript and `rbxtsc`.
 Use `pnpm --filter @arunajs/rbxts-harness typecheck` for the TypeScript check and `pnpm --filter @arunajs/rbxts-harness rbxtsc` for the roblox-ts compile.
 The harness covers generated action files, app bootstrap, schema inference, domain-local UI files, and public Aruna runtime imports.
-`default.project.json` is manual harness metadata, not generated Rojo integration.
-The current compiler still requires the actual client/server wiring to live in `src/app/client-runtime.ts` and `src/app/server-runtime.ts`; `src/app/bootstrap.ts` stays as a shared-safe shim until mixed bootstrap classification is improved.
+`default.project.json` now follows a conventional roblox-ts/Rojo-style tree with `ServerScriptService`, `ReplicatedStorage`, `StarterPlayer`, `Workspace`, `HttpService`, and `SoundService`.
+`rbxts_include` is used for roblox-ts package folders, and `out/server`, `out/shared`, and `out/client` are the intended Rojo mount points.
+Generated `.aruna` files remain compiler and TypeScript inputs, not a special replicated Rojo node.
+This is still manual harness metadata, not generated Rojo integration.
+The runtime entries `src/client.tsx` and `src/server.ts` perform the client/server wiring directly.
+`src/app/bootstrap.ts` and `src/app/providers.ts` stay shared-safe and model app composition helpers rather than hidden runtime entry files.
 It is not create-app, Rojo generation, generated Roblox Instance creation, or full Studio validation yet.
 
 ## Post-MVP
