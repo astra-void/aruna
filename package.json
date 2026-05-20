@@ -17,14 +17,16 @@
     "harness:rbxts": "pnpm --filter @arunajs/rbxts-harness typecheck",
     "harness:rbxts:compile": "pnpm --filter @arunajs/rbxts-harness rbxtsc",
     "harness:package": "pnpm --filter @arunajs/package-consumption-harness build",
-    "package-consumption": "pnpm --filter @arunajs/package-consumption-harness build"
+    "package-consumption": "pnpm --filter @arunajs/package-consumption-harness build",
+    "verify:package-consumption": "tsx scripts/verify-package-consumption.ts",
+    "verify:package-consumption:keep-temp": "tsx scripts/verify-package-consumption.ts --keep-temp"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
     "commander": "^14.0.3",
     "gradient-string": "^3.0.0",
-    "oxfmt": "^0.50.0",
-    "oxlint": "^1.65.0",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
     "picocolors": "^1.1.1",
     "tsx": "^4.21.0",
     "turbo": "^2.9.14",

@@ -15,6 +15,7 @@ dist/
 out/
 coverage/
 target/
+tmp/
 
 # Tooling / cache
 .turbo/
