@@ -26,7 +26,10 @@ function runContractInspect(args: string[]): ReturnType<typeof spawnSync> {
 }
 
 function relativeFixturePath(name: string): string {
-  return path.relative(process.cwd(), path.join(fixturesRoot, name, "input")).split(path.sep).join("/");
+  return path
+    .relative(process.cwd(), path.join(fixturesRoot, name, "input"))
+    .split(path.sep)
+    .join("/");
 }
 
 describe("inspect contract", () => {
@@ -39,8 +42,8 @@ describe("inspect contract", () => {
 
     const expected = JSON.parse(
       fs.readFileSync(
-      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
-      "utf8",
+        path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+        "utf8",
       ),
     ) as Record<string, unknown>;
     expected.project = {

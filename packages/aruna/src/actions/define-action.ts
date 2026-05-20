@@ -13,8 +13,6 @@ export function defineAction<
     TOutputSchema,
     TPlayer
   >,
->(
-  definition: ActionDefinition<TInputSchema, TOutputSchema, TPlayer> & TDefinition,
-): TDefinition {
+>(definition: ActionDefinition<TInputSchema, TOutputSchema, TPlayer> & TDefinition): TDefinition {
   return definition;
 }

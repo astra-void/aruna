@@ -46,7 +46,9 @@ function getFolderPath(folderName: string): string {
   return `ReplicatedStorage/${folderName}`;
 }
 
-function getOptions(options?: RobloxActionRemoteEventOptions): Required<RobloxActionRemoteEventOptions> {
+function getOptions(
+  options?: RobloxActionRemoteEventOptions,
+): Required<RobloxActionRemoteEventOptions> {
   return {
     folderName: options?.folderName ?? DEFAULT_ARUNA_FOLDER_NAME,
     remoteName: options?.remoteName ?? DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME,
@@ -147,7 +149,9 @@ function findRemoteEvent(parent: Folder, remoteName: string): RemoteEvent {
   const instance = parent.FindFirstChild(remoteName);
 
   if (instance === undefined) {
-    throw new Error(`Aruna Roblox action RemoteEvent not found: ${getRemotePath(parent.Name, remoteName)}`);
+    throw new Error(
+      `Aruna Roblox action RemoteEvent not found: ${getRemotePath(parent.Name, remoteName)}`,
+    );
   }
 
   if (!isRemoteEvent(instance)) {

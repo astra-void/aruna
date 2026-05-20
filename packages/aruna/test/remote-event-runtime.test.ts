@@ -26,7 +26,10 @@ type FakeRemoteEvent<TPlayer = unknown> = RemoteEventClientLike &
     readonly clientSignal: FakeSignal<[RemoteEventActionResponse]>;
     readonly serverSignal: FakeSignal<[TPlayer, RemoteEventActionRequest]>;
     readonly requests: RemoteEventActionRequest[];
-    readonly responses: Array<{ readonly player: TPlayer; readonly response: RemoteEventActionResponse }>;
+    readonly responses: Array<{
+      readonly player: TPlayer;
+      readonly response: RemoteEventActionResponse;
+    }>;
   };
 
 function createFakeSignal<TArgs extends readonly unknown[]>(): FakeSignal<TArgs> {
@@ -65,7 +68,10 @@ function createFakeRemoteEvent<TPlayer = unknown>(player: TPlayer): FakeRemoteEv
   const clientSignal = createFakeSignal<[RemoteEventActionResponse]>();
   const serverSignal = createFakeSignal<[TPlayer, RemoteEventActionRequest]>();
   const requests: RemoteEventActionRequest[] = [];
-  const responses: Array<{ readonly player: TPlayer; readonly response: RemoteEventActionResponse }> = [];
+  const responses: Array<{
+    readonly player: TPlayer;
+    readonly response: RemoteEventActionResponse;
+  }> = [];
 
   return {
     clientSignal,

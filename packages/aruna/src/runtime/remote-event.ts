@@ -195,12 +195,16 @@ export function bindRemoteEventActions<TPlayer = unknown>(
           ? undefined
           : ({
               ...(options.rateLimiter !== undefined ? { rateLimiter: options.rateLimiter } : {}),
-              ...(options.rateLimitKey !== undefined
-                ? { rateLimitKey: options.rateLimitKey }
-                : {}),
+              ...(options.rateLimitKey !== undefined ? { rateLimitKey: options.rateLimitKey } : {}),
               ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
             } satisfies DispatchActionOptions<TPlayer>);
-      const output = await dispatchAction(registry, request.actionId, context, request.input, dispatchOptions);
+      const output = await dispatchAction(
+        registry,
+        request.actionId,
+        context,
+        request.input,
+        dispatchOptions,
+      );
 
       remote.FireClient(player, {
         requestId: request.requestId,

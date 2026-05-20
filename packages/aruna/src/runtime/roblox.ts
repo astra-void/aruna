@@ -50,13 +50,16 @@ export function bindRemoteFunctionActions<
   registry: TActions,
   options?: BindRemoteFunctionActionsOptions<TPlayer> | RemoteActionContextFactory<TPlayer>,
 ): RemoteFunctionBinding {
-  const resolvedOptions =
-    typeof options === "function" ? { createContext: options } : options;
+  const resolvedOptions = typeof options === "function" ? { createContext: options } : options;
   const previousOnServerInvoke = remote.OnServerInvoke;
   let disposed = false;
 
   // Roblox RemoteFunction handlers may yield, so the async dispatch result is returned directly.
-  const onServerInvoke = async (player: RobloxPlayer, actionId: string, input: unknown): Promise<unknown> => {
+  const onServerInvoke = async (
+    player: RobloxPlayer,
+    actionId: string,
+    input: unknown,
+  ): Promise<unknown> => {
     const context =
       resolvedOptions?.createContext?.(player) ?? ({ player } as ActionRunContext<TPlayer>);
 

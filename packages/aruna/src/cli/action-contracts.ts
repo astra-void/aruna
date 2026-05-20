@@ -36,13 +36,11 @@ export type ActionContractRecord = {
   readonly serialization: {
     readonly policy: "plain-data-v1";
   };
-  readonly rateLimit:
-    | {
-        readonly key: "player";
-        readonly windowMs: number;
-        readonly max: number;
-      }
-    | null;
+  readonly rateLimit: {
+    readonly key: "player";
+    readonly windowMs: number;
+    readonly max: number;
+  } | null;
   readonly warnings: readonly string[];
 };
 
@@ -85,10 +83,7 @@ function sortDiagnostics(diagnostics: readonly ArunaDiagnostic[]): ArunaDiagnost
   });
 }
 
-function lookupModuleKind(
-  output: ArunaCompilerOutput,
-  file: string,
-): ArunaModuleRecord["kind"] {
+function lookupModuleKind(output: ArunaCompilerOutput, file: string): ArunaModuleRecord["kind"] {
   return output.manifest.modules.find((module) => module.path === file)?.kind ?? "unknown";
 }
 
@@ -96,7 +91,10 @@ function summarizeGeneratedExport(action: ArunaActionRecord): string | null {
   return action.exportName.length > 0 ? action.exportName : null;
 }
 
-function summarizeAction(output: ArunaCompilerOutput, action: ArunaActionRecord): ActionContractRecord {
+function summarizeAction(
+  output: ArunaCompilerOutput,
+  action: ArunaActionRecord,
+): ActionContractRecord {
   const input = formatActionSchemaSummary(action.inputSchema);
   const outputSchema = formatActionSchemaSummary(action.outputSchema);
   const warnings = sortWarnings([...input.warnings, ...outputSchema.warnings]);
@@ -129,15 +127,14 @@ function summarizeAction(output: ArunaCompilerOutput, action: ArunaActionRecord)
   };
 }
 
-export function buildActionContractSnapshot(
-  output: ArunaCompilerOutput,
-): ActionContractSnapshot {
+export function buildActionContractSnapshot(output: ArunaCompilerOutput): ActionContractSnapshot {
   const generatedDir = normalizePath(output.config.generatedDir);
   const actions = [...output.manifest.actions]
-    .sort((left, right) =>
-      compareStrings(left.id, right.id) ||
-      compareStrings(left.file, right.file) ||
-      compareStrings(left.exportName, right.exportName),
+    .sort(
+      (left, right) =>
+        compareStrings(left.id, right.id) ||
+        compareStrings(left.file, right.file) ||
+        compareStrings(left.exportName, right.exportName),
     )
     .map((action) => summarizeAction(output, action));
 

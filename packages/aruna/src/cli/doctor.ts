@@ -65,10 +65,7 @@ function readTsconfig(tsconfigPath: string): { value?: TsconfigJsonObject; error
   }
 }
 
-function createTsconfigDiagnostic(
-  tsconfigPath: string,
-  error: string,
-): ArunaDiagnostic {
+function createTsconfigDiagnostic(tsconfigPath: string, error: string): ArunaDiagnostic {
   const file = path.basename(tsconfigPath);
   if (error === "missing") {
     return {
@@ -174,7 +171,11 @@ export function formatDoctorReport(report: DoctorReport): string {
     } else {
       lines.push("tsconfig.json already matched the Aruna aliases");
     }
-  } else if (report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0 || needsFix) {
+  } else if (
+    report.configDiagnostics.length > 0 ||
+    report.tsconfigDiagnostics.length > 0 ||
+    needsFix
+  ) {
     lines.push("");
     if (report.fixable) {
       lines.push(
@@ -200,8 +201,8 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
   const tsconfigPath = loaded.tsconfigPath;
   const expectedPaths = resolveArunaActionPaths(tsconfigPath, generatedDir);
   const tsconfigResult = readTsconfig(tsconfigPath);
-  const tsconfigDiagnostics = loaded.diagnostics.filter((diagnostic) =>
-    diagnostic.code === "aruna::102" || diagnostic.code === "aruna::103",
+  const tsconfigDiagnostics = loaded.diagnostics.filter(
+    (diagnostic) => diagnostic.code === "aruna::102" || diagnostic.code === "aruna::103",
   );
   const configDiagnostics = loaded.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "aruna::102" && diagnostic.code !== "aruna::103",
@@ -265,7 +266,11 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
 
 export function fixDoctorProject(options: DoctorOptions): DoctorReport {
   const report = inspectDoctorProject(options);
-  if (!report.fixable || report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0) {
+  if (
+    !report.fixable ||
+    report.configDiagnostics.length > 0 ||
+    report.tsconfigDiagnostics.length > 0
+  ) {
     return report;
   }
 
@@ -288,7 +293,7 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
   fs.writeFileSync(report.tsconfigPath, updated.contents, "utf8");
   const fixChanges: string[] = [];
   if (!report.status.baseUrlPresent && report.status.baseUrlRequired) {
-    fixChanges.push("added compilerOptions.baseUrl = \".\"");
+    fixChanges.push('added compilerOptions.baseUrl = "."');
   }
   if (report.status.client !== "correct") {
     fixChanges.push(

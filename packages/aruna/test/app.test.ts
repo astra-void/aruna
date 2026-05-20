@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearActionInvoker, invokeAction } from "../src/client-runtime.js";
 import { createClientApp } from "../src/client.js";
-import { createRemoteFunctionActionInvoker, bindRemoteFunctionActions } from "../src/roblox-runtime.js";
+import {
+  createRemoteFunctionActionInvoker,
+  bindRemoteFunctionActions,
+} from "../src/roblox-runtime.js";
 import { createServerApp } from "../src/server-app.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
@@ -9,9 +12,7 @@ import { type ActionRegistry } from "../src/server-runtime.js";
 
 type FakeRemoteFunction = {
   InvokeServer: (actionId: string, input: unknown) => unknown;
-  OnServerInvoke?:
-    | ((player: unknown, actionId: string, input: unknown) => unknown)
-    | undefined;
+  OnServerInvoke?: ((player: unknown, actionId: string, input: unknown) => unknown) | undefined;
 };
 
 function createFakeRemote(player: unknown): FakeRemoteFunction {
@@ -113,9 +114,7 @@ describe("createServerApp", () => {
     };
     const app = createServerApp({ actions });
 
-    await expect(
-      app.dispatch("shop.purchaseItem", {}, { itemId: 123 }),
-    ).rejects.toThrowError(
+    await expect(app.dispatch("shop.purchaseItem", {}, { itemId: 123 })).rejects.toThrowError(
       "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
     );
 

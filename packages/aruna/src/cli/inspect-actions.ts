@@ -28,9 +28,7 @@ function warning(text: string, colors: CliColorMode): string {
   return formatWarning(text, colors);
 }
 
-export function buildActionInspectionReport(
-  output: ArunaCompilerOutput,
-): ActionInspectionReport {
+export function buildActionInspectionReport(output: ArunaCompilerOutput): ActionInspectionReport {
   const snapshot = buildActionContractSnapshot(output);
   const actions = snapshot.actions as ActionInspectionEntry[];
 
@@ -47,13 +45,14 @@ function renderActionWarnings(warnings: readonly string[], colors: CliColorMode)
   }
 
   return [
-    `    warnings: ${warnings
-      .map((warningText) => warning(warningText, colors))
-      .join(", ")}`,
+    `    warnings: ${warnings.map((warningText) => warning(warningText, colors)).join(", ")}`,
   ];
 }
 
-function renderRateLimit(rateLimit: ActionInspectionEntry["rateLimit"], colors: CliColorMode): string {
+function renderRateLimit(
+  rateLimit: ActionInspectionEntry["rateLimit"],
+  colors: CliColorMode,
+): string {
   if (!rateLimit) {
     return `    rate limit: ${success("none", colors)}`;
   }
@@ -76,10 +75,7 @@ function renderActionBlock(action: ActionInspectionEntry, colors: CliColorMode):
   return lines;
 }
 
-export function formatActionInspection(
-  output: ArunaCompilerOutput,
-  colors: CliColorMode,
-): string {
+export function formatActionInspection(output: ArunaCompilerOutput, colors: CliColorMode): string {
   const report = buildActionInspectionReport(output);
   const lines: string[] = [
     commandTitle("inspect actions", colors),

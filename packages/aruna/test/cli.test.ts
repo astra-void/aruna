@@ -82,6 +82,19 @@ describe("json output", () => {
 });
 
 describe("cli integration", () => {
+  function runContractDiff(args: string[]): ReturnType<typeof spawnSync> {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+
+    return spawnSync(process.execPath, [builtCliPath, "contract", "diff", ...args], {
+      encoding: "utf8",
+      env,
+    });
+  }
+
   it("disables ANSI output in the built CLI when Commander parses --no-color", () => {
     expect(fs.existsSync(builtCliPath)).toBe(true);
 
@@ -106,6 +119,80 @@ describe("cli integration", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("aruna check");
+    expect(result.stdout).not.toMatch(ANSI_PATTERN);
+    expect(result.stderr).toBe("");
+  });
+
+  it("prints contract diff output and honors no-color", () => {
+    const result = runContractDiff([
+      "--no-color",
+      "--from",
+      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+      "--to",
+      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("aruna contract diff");
+    expect(result.stdout).toContain("no contract changes");
+    expect(result.stdout).not.toMatch(ANSI_PATTERN);
+    expect(result.stderr).toBe("");
+  });
+
+  it("emits stable JSON for contract diff", () => {
+    const result = runContractDiff([
+      "--json",
+      "--from",
+      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+      "--to",
+      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/^\s*\{/);
+    expect(result.stdout).not.toMatch(ANSI_PATTERN);
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toMatchObject({
+      version: 1,
+      summary: {
+        breaking: 0,
+        nonBreaking: 0,
+        info: 0,
+      },
+      entries: [],
+    });
+    expect(result.stderr).toBe("");
+  });
+
+  it("compares a project snapshot against the baseline fixture", () => {
+    const result = runContractDiff([
+      "--no-color",
+      "--project",
+      path.join(fixturesRoot, "action-rate-limit", "input"),
+      "--baseline",
+      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("aruna contract diff");
+    expect(result.stdout).toContain("no contract changes");
+    expect(result.stdout).not.toMatch(ANSI_PATTERN);
+    expect(result.stderr).toBe("");
+  });
+
+  it("returns a clear failure when the current project has compiler errors", () => {
+    const result = runContractDiff([
+      "--no-color",
+      "--project",
+      path.join(fixturesRoot, "invalid-action-rate-limit", "input"),
+      "--baseline",
+      path.join(fixturesRoot, "action-rate-limit", "expected", "contract.snapshot.json"),
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain("aruna contract diff");
+    expect(result.stdout).toContain("unable to compare: current project has compiler errors.");
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
     expect(result.stderr).toBe("");
   });
@@ -361,7 +448,7 @@ export default defineConfig({
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("rateLimit.limit is not supported in the pre-public final API");
     expect(result.stdout).toContain('Only "player" is supported for now');
-    expect(result.stdout).toContain("Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 }");
+    expect(result.stdout).toContain('Use rateLimit: { key: "player", windowMs: 1000, max: 5 }');
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
     expect(result.stderr).toBe("");
   });

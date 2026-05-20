@@ -4,11 +4,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { doctorExitCode, formatDoctorReport, fixDoctorProject, inspectDoctorProject } from "../src/cli/doctor.js";
+import {
+  doctorExitCode,
+  formatDoctorReport,
+  fixDoctorProject,
+  inspectDoctorProject,
+} from "../src/cli/doctor.js";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const builtCliPath = path.resolve(packageRoot, "dist/cli.js");
-const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
+const fixturesRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../fixtures",
+);
 
 function makeTempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aruna-doctor-"));
@@ -85,7 +93,7 @@ describe("doctor", () => {
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
     expect(report.fixApplied).toBe(true);
-    expect(report.fixChanges).toContain("added compilerOptions.baseUrl = \".\"");
+    expect(report.fixChanges).toContain('added compilerOptions.baseUrl = "."');
     expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/.aruna/actions.client.generated.ts",
     ]);

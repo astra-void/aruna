@@ -74,7 +74,9 @@ function summarizeSchema(schema: ArunaSchemaMetadata | undefined): ActionSchemaS
       return { summary: "boolean", warnings: [] };
     case "literal":
       return {
-        summary: schema.literal ? renderLiteralMetadata(schema.literal) : "unknown (metadata unavailable)",
+        summary: schema.literal
+          ? renderLiteralMetadata(schema.literal)
+          : "unknown (metadata unavailable)",
         warnings: schema.literal ? [] : ["literal metadata missing"],
       };
     case "array": {
@@ -168,7 +170,9 @@ function summarizeSchema(schema: ArunaSchemaMetadata | undefined): ActionSchemaS
   }
 }
 
-export function formatActionSchemaSummary(schema: ArunaSchemaMetadata | undefined): ActionSchemaSummary {
+export function formatActionSchemaSummary(
+  schema: ArunaSchemaMetadata | undefined,
+): ActionSchemaSummary {
   const summary = summarizeSchema(schema);
   return {
     summary: summary.summary,

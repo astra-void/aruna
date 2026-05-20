@@ -27,9 +27,8 @@ import {
 } from "../src/server-runtime.js";
 import type { ArunaConfig } from "aruna";
 
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-  ? true
-  : false;
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 type Expect<T extends true> = T;
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -79,7 +78,8 @@ const serializableValue: SerializableActionValue = {
   },
 };
 
-const serializationResult: SerializationPolicyResult = validateSerializableActionValue(serializableValue);
+const serializationResult: SerializationPolicyResult =
+  validateSerializableActionValue(serializableValue);
 
 if (!serializationResult.ok) {
   const firstViolation = serializationResult.violations[0];
@@ -192,7 +192,7 @@ type _PurchaseItemOutput = Expect<
 
 type _NoSchemaActionInput = Expect<Equal<InferInput<typeof noSchemaAction>, unknown>>;
 type _NoSchemaActionOutput = Expect<Equal<InferOutput<typeof noSchemaAction>, unknown>>;
-type _RegistryAction = Expect<Equal<typeof actions["shop.purchaseItem"], typeof purchaseItem>>;
+type _RegistryAction = Expect<Equal<(typeof actions)["shop.purchaseItem"], typeof purchaseItem>>;
 type _AppActions = Expect<Equal<typeof serverApp.actions, typeof actions>>;
 type _ClientDispose = Expect<Equal<typeof clientApp.dispose, () => void>>;
 type _ClientOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createClientApp>[0]>, false>>;
@@ -202,7 +202,9 @@ type _RateLimitOptionsNoAny = Expect<Equal<IsAny<ActionRateLimitOptions>, false>
 type _RateLimitKeyResolverNoAny = Expect<Equal<IsAny<ActionRateLimitKeyResolver>, false>>;
 type _RateLimitErrorNoAny = Expect<Equal<IsAny<ActionRateLimitError>, false>>;
 type _RateLimiterNoAny = Expect<Equal<IsAny<typeof createActionRateLimiter>, false>>;
-type _RemoteEventInvoker = Expect<Equal<ReturnType<typeof createRemoteEventActionInvoker>, DisposableActionInvoker>>;
+type _RemoteEventInvoker = Expect<
+  Equal<ReturnType<typeof createRemoteEventActionInvoker>, DisposableActionInvoker>
+>;
 type _DefaultRemoteEventInvoker = Expect<
   Equal<ReturnType<typeof createDefaultRobloxActionInvoker>, DisposableActionInvoker>
 >;
@@ -226,5 +228,7 @@ type _SerializableValueNoAny = Expect<Equal<IsAny<SerializableActionValue>, fals
 type _SerializationResultNoAny = Expect<Equal<IsAny<SerializationPolicyResult>, false>>;
 type _SerializationViolationNoAny = Expect<Equal<IsAny<SerializationPolicyViolation>, false>>;
 type _SerializationErrorNoAny = Expect<Equal<IsAny<ActionSerializationError>, false>>;
-type _SerializationHelpersNoAny = Expect<Equal<IsAny<typeof validateSerializableActionValue>, false>>;
+type _SerializationHelpersNoAny = Expect<
+  Equal<IsAny<typeof validateSerializableActionValue>, false>
+>;
 type _SerializationAssertNoAny = Expect<Equal<IsAny<typeof assertSerializableActionValue>, false>>;

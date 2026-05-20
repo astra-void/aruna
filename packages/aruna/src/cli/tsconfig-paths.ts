@@ -37,11 +37,17 @@ export function resolveArunaActionPaths(
 ): ArunaActionPathMap {
   const tsconfigDir = path.dirname(tsconfigPath);
   const clientPath = path
-    .relative(tsconfigDir, path.resolve(path.dirname(tsconfigPath), generatedDir, "actions.client.generated.ts"))
+    .relative(
+      tsconfigDir,
+      path.resolve(path.dirname(tsconfigPath), generatedDir, "actions.client.generated.ts"),
+    )
     .split(path.sep)
     .join("/");
   const serverPath = path
-    .relative(tsconfigDir, path.resolve(path.dirname(tsconfigPath), generatedDir, "actions.server.generated.ts"))
+    .relative(
+      tsconfigDir,
+      path.resolve(path.dirname(tsconfigPath), generatedDir, "actions.server.generated.ts"),
+    )
     .split(path.sep)
     .join("/");
 
@@ -77,7 +83,8 @@ export function inspectArunaActionPaths(
   const compilerOptions = isRecord(tsconfig["compilerOptions"])
     ? tsconfig["compilerOptions"]
     : undefined;
-  const paths = compilerOptions && isRecord(compilerOptions["paths"]) ? compilerOptions["paths"] : undefined;
+  const paths =
+    compilerOptions && isRecord(compilerOptions["paths"]) ? compilerOptions["paths"] : undefined;
   const current: Partial<ArunaActionPathMap> = {};
   const status: Record<ArunaActionPathKey, "missing" | "correct" | "incorrect"> = {
     client: "missing",
@@ -91,10 +98,11 @@ export function inspectArunaActionPaths(
     }
 
     current[key] = normalized;
-    status[key] = normalized.length === expected[key].length
-      && normalized.every((entry, index) => entry === expected[key][index])
-      ? "correct"
-      : "incorrect";
+    status[key] =
+      normalized.length === expected[key].length &&
+      normalized.every((entry, index) => entry === expected[key][index])
+        ? "correct"
+        : "incorrect";
   }
 
   return {
@@ -123,7 +131,10 @@ export function updateArunaActionPaths(
     : (tsconfig["compilerOptions"] = {});
 
   if (options.requireBaseUrl === true) {
-    if (compilerOptions["baseUrl"] !== undefined && typeof compilerOptions["baseUrl"] !== "string") {
+    if (
+      compilerOptions["baseUrl"] !== undefined &&
+      typeof compilerOptions["baseUrl"] !== "string"
+    ) {
       throw new Error("compilerOptions.baseUrl must be a string.");
     }
     if (compilerOptions["baseUrl"] === undefined) {

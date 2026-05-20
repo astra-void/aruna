@@ -121,7 +121,11 @@ function valueKind(value: unknown): string {
   return isPlainObject(value) ? "plain object" : "non-plain object";
 }
 
-function createViolation(path: string, reason: string, value: unknown): SerializationPolicyViolation {
+function createViolation(
+  path: string,
+  reason: string,
+  value: unknown,
+): SerializationPolicyViolation {
   return {
     path,
     reason,

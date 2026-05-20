@@ -61,15 +61,17 @@ type Simplify<T> = {
   [TKey in keyof T]: T[TKey];
 };
 
-type InferObjectSchema<TShape extends SchemaShape> = Simplify<{
-  [TKey in RequiredKeys<TShape>]: InferSchema<TShape[TKey]>;
-} & {
-  [TKey in OptionalKeys<TShape>]?: TShape[TKey] extends OptionalSchema
-    ? TShape[TKey]["inner"] extends Schema
-      ? InferSchema<TShape[TKey]["inner"]> | undefined
-      : unknown
-    : never;
-}>;
+type InferObjectSchema<TShape extends SchemaShape> = Simplify<
+  {
+    [TKey in RequiredKeys<TShape>]: InferSchema<TShape[TKey]>;
+  } & {
+    [TKey in OptionalKeys<TShape>]?: TShape[TKey] extends OptionalSchema
+      ? TShape[TKey]["inner"] extends Schema
+        ? InferSchema<TShape[TKey]["inner"]> | undefined
+        : unknown
+      : never;
+  }
+>;
 
 export type InferSchema<TSchema extends Schema> = TSchema extends StringSchema
   ? string
@@ -77,7 +79,7 @@ export type InferSchema<TSchema extends Schema> = TSchema extends StringSchema
     ? number
     : TSchema extends BooleanSchema
       ? boolean
-        : TSchema extends LiteralSchema<infer TValue>
+      : TSchema extends LiteralSchema<infer TValue>
         ? TValue
         : TSchema extends ArraySchema
           ? TSchema["item"] extends Schema
@@ -213,7 +215,9 @@ function validateSchemaAtPath(
       const issues: SchemaValidationIssue[] = [];
 
       for (let index = 0; index < value.length; index += 1) {
-        issues.push(...validateSchemaAtPath(schema.item, value[index], appendIndexSegment(path, index)));
+        issues.push(
+          ...validateSchemaAtPath(schema.item, value[index], appendIndexSegment(path, index)),
+        );
       }
 
       return issues;
@@ -232,7 +236,9 @@ function validateSchemaAtPath(
           continue;
         }
 
-        issues.push(...validateSchemaAtPath(propertySchema, value[key], appendPathSegment(path, key)));
+        issues.push(
+          ...validateSchemaAtPath(propertySchema, value[key], appendPathSegment(path, key)),
+        );
       }
 
       return issues;
@@ -267,11 +273,12 @@ function buildValidationMessage(
 ): string {
   const actionId = options?.actionId;
   const role = options?.role;
-  const prefix = actionId === undefined
-    ? "Aruna schema validation failed"
-    : role === undefined
-      ? `Aruna action ${actionId} validation failed`
-      : `Aruna action ${actionId} ${role} validation failed`;
+  const prefix =
+    actionId === undefined
+      ? "Aruna schema validation failed"
+      : role === undefined
+        ? `Aruna action ${actionId} validation failed`
+        : `Aruna action ${actionId} ${role} validation failed`;
 
   return `${prefix}: ${issues.map(formatIssue).join("; ")}`;
 }
@@ -312,7 +319,10 @@ export function assertSchema(
     errorOptions.role = options.role;
   }
 
-  throw new ArunaSchemaValidationError(buildValidationMessage(result.issues, options), errorOptions);
+  throw new ArunaSchemaValidationError(
+    buildValidationMessage(result.issues, options),
+    errorOptions,
+  );
 }
 
 export const schema = {
@@ -340,7 +350,9 @@ export const schema = {
     return { kind: "object", shape };
   },
 
-  optional<const TInner extends Schema>(inner: TInner): OptionalSchema & {
+  optional<const TInner extends Schema>(
+    inner: TInner,
+  ): OptionalSchema & {
     readonly inner: TInner;
   } {
     return { kind: "optional", inner };

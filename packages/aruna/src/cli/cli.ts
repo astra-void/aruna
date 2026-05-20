@@ -16,6 +16,7 @@ import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
+import { runContractDiffCommand } from "./contract-diff.js";
 import { formatError, formatMuted } from "./theme.js";
 
 type CliOptions = {
@@ -93,7 +94,12 @@ function renderCompilerOutput(
   }
 
   const hasDiagnostics = output.diagnostics.length > 0;
-  if (command === "build" && output.ok && output.generatedFiles && output.generatedFiles.length > 0) {
+  if (
+    command === "build" &&
+    output.ok &&
+    output.generatedFiles &&
+    output.generatedFiles.length > 0
+  ) {
     writeText(formatBuildSummary(output, colors));
   } else {
     writeText(
@@ -302,6 +308,36 @@ export async function main(): Promise<number> {
     const options = doctor.optsWithGlobals<DoctorCliOptions>();
     await runDoctorCli(options);
   });
+
+  const contract = program.command("contract").description("compare action contract snapshots");
+  const contractDiff = contract
+    .command("diff")
+    .description("compare action contract snapshots")
+    .option("--baseline <path>", "baseline snapshot path")
+    .option("--from <path>", "source snapshot path")
+    .option("--to <path>", "target snapshot path")
+    .action(async () => {
+      const options = contractDiff.optsWithGlobals<CliOptions>() as CliOptions & {
+        readonly baseline?: string;
+        readonly from?: string;
+        readonly to?: string;
+      };
+
+      const result = await runContractDiffCommand({
+        ...options,
+        resolveColorMode: (input) =>
+          resolveColorMode(input, process.env, Boolean(process.stdout.isTTY)),
+        inspectProject: async () => inspectProject(compilerInput(options)),
+      });
+
+      if (result.stdout) {
+        process.stdout.write(result.stdout);
+      }
+      if (result.stderr) {
+        process.stderr.write(result.stderr);
+      }
+      process.exitCode = result.status;
+    });
 
   await program.parseAsync(process.argv);
   return typeof process.exitCode === "number" ? process.exitCode : 0;

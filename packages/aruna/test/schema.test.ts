@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ArunaSchemaValidationError,
-  assertSchema,
-  schema,
-  validateSchema,
-} from "../src/schema.js";
+import { ArunaSchemaValidationError, assertSchema, schema, validateSchema } from "../src/schema.js";
 
 describe("schema runtime", () => {
   it("validates strings", () => {

@@ -177,9 +177,7 @@ describe("public exports", () => {
       invoker,
     });
 
-    await expect(
-      invokeAction("shop.purchaseItem", { itemId: "sword" }),
-    ).resolves.toEqual({
+    await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({
       ok: true,
       input: { itemId: "sword" },
     });

@@ -27,7 +27,10 @@ type FakeRemoteEvent<TPlayer = unknown> = RemoteEventClientLike &
   RemoteEventServerLike<TPlayer> & {
     readonly clientSignal: FakeSignal<[RemoteEventActionResponse]>;
     readonly serverSignal: FakeSignal<[TPlayer, RemoteEventActionRequest]>;
-    readonly responses: Array<{ readonly player: TPlayer; readonly response: RemoteEventActionResponse }>;
+    readonly responses: Array<{
+      readonly player: TPlayer;
+      readonly response: RemoteEventActionResponse;
+    }>;
   };
 
 type FakeRemoteFunction = {
@@ -60,7 +63,10 @@ function createFakeSignal<TArgs extends readonly unknown[]>(): FakeSignal<TArgs>
 function createFakeRemoteEvent<TPlayer>(player: TPlayer): FakeRemoteEvent<TPlayer> {
   const clientSignal = createFakeSignal<[RemoteEventActionResponse]>();
   const serverSignal = createFakeSignal<[TPlayer, RemoteEventActionRequest]>();
-  const responses: Array<{ readonly player: TPlayer; readonly response: RemoteEventActionResponse }> = [];
+  const responses: Array<{
+    readonly player: TPlayer;
+    readonly response: RemoteEventActionResponse;
+  }> = [];
 
   return {
     clientSignal,
@@ -144,9 +150,15 @@ describe("action rate limits", () => {
       }),
     };
 
-    await expect(dispatchAction(registry, "shop.purchaseItem", {}, {})).resolves.toEqual({ ok: true });
-    await expect(dispatchAction(registry, "shop.purchaseItem", {}, {})).resolves.toEqual({ ok: true });
-    await expect(dispatchAction(registry, "shop.purchaseItem", {}, {})).resolves.toEqual({ ok: true });
+    await expect(dispatchAction(registry, "shop.purchaseItem", {}, {})).resolves.toEqual({
+      ok: true,
+    });
+    await expect(dispatchAction(registry, "shop.purchaseItem", {}, {})).resolves.toEqual({
+      ok: true,
+    });
+    await expect(dispatchAction(registry, "shop.purchaseItem", {}, {})).resolves.toEqual({
+      ok: true,
+    });
 
     expect(run).toHaveBeenCalledTimes(3);
   });
@@ -157,13 +169,31 @@ describe("action rate limits", () => {
     const nowMs = vi.fn(() => Date.now());
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).rejects.toMatchObject({
       name: "ActionRateLimitError",
       actionId: "shop.purchaseItem",
@@ -176,7 +206,13 @@ describe("action rate limits", () => {
     vi.setSystemTime(2000);
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "shield" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "shield" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     expect(run).toHaveBeenCalledTimes(3);
   });
@@ -202,10 +238,18 @@ describe("action rate limits", () => {
 
     await expect(
       dispatchAction(registry, "shop.purchaseItem", {}, { itemId: 123 }, { rateLimiter, nowMs }),
-    ).rejects.toThrowError("Aruna action shop.purchaseItem input validation failed: itemId: expected string");
+    ).rejects.toThrowError(
+      "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
+    );
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     expect(run).toHaveBeenCalledTimes(1);
   });
@@ -248,7 +292,13 @@ describe("action rate limits", () => {
     });
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     expect(run).toHaveBeenCalledTimes(1);
   });
@@ -270,10 +320,22 @@ describe("action rate limits", () => {
     const nowMs = vi.fn(() => Date.now());
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "shield" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "shield" },
+        { rateLimiter, nowMs },
+      ),
     ).rejects.toMatchObject({
       name: "ActionRateLimitError",
     });
@@ -307,10 +369,22 @@ describe("action rate limits", () => {
     const nowMs = vi.fn(() => Date.now());
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "shield" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "shield" },
+        { rateLimiter, nowMs },
+      ),
     ).rejects.toMatchObject({ name: "ActionRateLimitError" });
 
     await expect(
@@ -372,11 +446,23 @@ describe("action rate limits", () => {
     const nowMs = vi.fn(() => Date.now());
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }, { rateLimiter, nowMs }),
+      dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "sword" },
+        { rateLimiter, nowMs },
+      ),
     ).resolves.toEqual({ ok: true });
 
     try {
-      await dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "shield" }, { rateLimiter, nowMs });
+      await dispatchAction(
+        registry,
+        "shop.purchaseItem",
+        {},
+        { itemId: "shield" },
+        { rateLimiter, nowMs },
+      );
       throw new Error("expected rate limit error");
     } catch (error) {
       expect(error).toBeInstanceOf(ActionRateLimitError);
@@ -425,19 +511,26 @@ describe("action rate limits", () => {
     bindRemoteEventActions(remote, registry, {
       rateLimiter,
       nowMs,
-      rateLimitKey: (_actionId, ctx) => (ctx.player as { readonly bucket?: string } | undefined)?.bucket ?? "anonymous",
+      rateLimitKey: (_actionId, ctx) =>
+        (ctx.player as { readonly bucket?: string } | undefined)?.bucket ?? "anonymous",
     });
 
-    serverSignal.emit({ bucket: "alpha" }, {
-      requestId: "request-1",
-      actionId: "shop.purchaseItem",
-      input: { itemId: "sword" },
-    });
-    serverSignal.emit({ bucket: "alpha" }, {
-      requestId: "request-2",
-      actionId: "shop.purchaseItem",
-      input: { itemId: "shield" },
-    });
+    serverSignal.emit(
+      { bucket: "alpha" },
+      {
+        requestId: "request-1",
+        actionId: "shop.purchaseItem",
+        input: { itemId: "sword" },
+      },
+    );
+    serverSignal.emit(
+      { bucket: "alpha" },
+      {
+        requestId: "request-2",
+        actionId: "shop.purchaseItem",
+        input: { itemId: "shield" },
+      },
+    );
 
     await flushMicrotasks();
 
@@ -473,7 +566,8 @@ describe("action rate limits", () => {
     bindRemoteFunctionActions(remote, registry, {
       rateLimiter,
       nowMs,
-      rateLimitKey: (_actionId, ctx) => (ctx.player as { readonly bucket?: string } | undefined)?.bucket ?? "anonymous",
+      rateLimitKey: (_actionId, ctx) =>
+        (ctx.player as { readonly bucket?: string } | undefined)?.bucket ?? "anonymous",
     });
 
     await expect(remote.InvokeServer("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({
@@ -481,7 +575,9 @@ describe("action rate limits", () => {
       input: { itemId: "sword" },
     });
 
-    await expect(remote.InvokeServer("shop.purchaseItem", { itemId: "shield" })).rejects.toMatchObject({
+    await expect(
+      remote.InvokeServer("shop.purchaseItem", { itemId: "shield" }),
+    ).rejects.toMatchObject({
       name: "ActionRateLimitError",
       message: "Aruna action shop.purchaseItem is rate limited. Retry after 1000ms.",
     });
@@ -508,9 +604,13 @@ describe("action rate limits", () => {
       nowMs,
     });
 
-    await expect(app.dispatch("shop.purchaseItem", {}, { itemId: "sword" })).resolves.toEqual({ ok: true });
-    await expect(app.dispatch("shop.purchaseItem", {}, { itemId: "shield" })).rejects.toMatchObject({
-      name: "ActionRateLimitError",
+    await expect(app.dispatch("shop.purchaseItem", {}, { itemId: "sword" })).resolves.toEqual({
+      ok: true,
     });
+    await expect(app.dispatch("shop.purchaseItem", {}, { itemId: "shield" })).rejects.toMatchObject(
+      {
+        name: "ActionRateLimitError",
+      },
+    );
   });
 });

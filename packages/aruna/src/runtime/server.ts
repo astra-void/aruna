@@ -9,7 +9,11 @@ import {
   type ActionRateLimiter,
 } from "./rate-limit.js";
 
-export { ActionRateLimitError, createActionRateLimiter, defaultActionRateLimitKeyResolver } from "./rate-limit.js";
+export {
+  ActionRateLimitError,
+  createActionRateLimiter,
+  defaultActionRateLimitKeyResolver,
+} from "./rate-limit.js";
 export type {
   ActionRateLimitConfig,
   ActionRateLimitKeyResolver,
@@ -47,15 +51,17 @@ export type ActionDefinition<
 
 export type InferInput<
   TAction extends ActionDefinition<Schema | undefined, Schema | undefined, unknown>,
-> = TAction extends ActionDefinition<infer TInputSchema, infer _TOutputSchema, infer _TPlayer>
-  ? ActionSchemaInput<TInputSchema>
-  : never;
+> =
+  TAction extends ActionDefinition<infer TInputSchema, infer _TOutputSchema, infer _TPlayer>
+    ? ActionSchemaInput<TInputSchema>
+    : never;
 
 export type InferOutput<
   TAction extends ActionDefinition<Schema | undefined, Schema | undefined, unknown>,
-> = TAction extends ActionDefinition<infer _TInputSchema, infer TOutputSchema, infer _TPlayer>
-  ? ActionSchemaOutput<TOutputSchema>
-  : never;
+> =
+  TAction extends ActionDefinition<infer _TInputSchema, infer TOutputSchema, infer _TPlayer>
+    ? ActionSchemaOutput<TOutputSchema>
+    : never;
 
 export type ActionRegistry<TPlayer = unknown> = Record<
   string,
@@ -91,8 +97,7 @@ export async function dispatchAction<TPlayer = unknown>(
 
   if (action.rateLimit !== undefined) {
     const rateLimiter = options?.rateLimiter ?? defaultActionRateLimiter;
-    const rateLimitKey =
-      options?.rateLimitKey ?? defaultActionRateLimitKeyResolver<TPlayer>;
+    const rateLimitKey = options?.rateLimitKey ?? defaultActionRateLimitKeyResolver<TPlayer>;
     const result = rateLimiter.check(
       actionId,
       rateLimitKey(actionId, ctx),
