@@ -41,8 +41,9 @@ impl Default for ArunaActionSerializationMetadata {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaActionRateLimitMetadata {
-    pub limit: u32,
+    pub key: String,
     pub window_ms: u32,
+    pub max: u32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -189,10 +190,20 @@ fn rate_limit_invalid_diagnostic(
         Some(span),
         Some(format!("export name: {export_name}\n{details}")),
         Some(
-            "Use rateLimit: { limit: 5, windowMs: 1000 } with positive integer literals."
+            "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
                 .to_string(),
         ),
     )
+}
+
+fn rate_limit_positive_integer_message(property_name: &str, compiler_discovery: bool) -> String {
+    if compiler_discovery {
+        format!(
+            "rateLimit.{property_name} must be a positive integer numeric literal. The current compiler discovery path only reads literal values."
+        )
+    } else {
+        format!("rateLimit.{property_name} must be a positive integer numeric literal.")
+    }
 }
 
 fn schema_span_from_expression(expression: &Expression<'_>) -> DiagnosticSpan {
@@ -900,8 +911,9 @@ fn parse_rate_limit_object(
     object: &ObjectExpression<'_>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaActionRateLimitMetadata> {
-    let mut limit: Option<u32> = None;
+    let mut key: Option<String> = None;
     let mut window_ms: Option<u32> = None;
+    let mut max: Option<u32> = None;
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(object_property) = property else {
@@ -932,46 +944,82 @@ fn parse_rate_limit_object(
             return None;
         };
 
-        let Expression::NumericLiteral(numeric_literal) = &object_property.value else {
-            diagnostics.push(rate_limit_invalid_diagnostic(
-                file,
-                action_id,
-                export_name,
-                DiagnosticSpan {
-                    start: object_property.value.span().start as usize,
-                    end: object_property.value.span().end as usize,
-                },
-                format!(
-                    "rateLimit.{property_name} must be a positive integer numeric literal."
-                ),
-            ));
-            return None;
-        };
-
-        let Some(integer_value) = positive_integer_from_numeric_literal(numeric_literal.value) else {
-            diagnostics.push(rate_limit_invalid_diagnostic(
-                file,
-                action_id,
-                export_name,
-                DiagnosticSpan {
-                    start: object_property.value.span().start as usize,
-                    end: object_property.value.span().end as usize,
-                },
-                format!(
-                    "rateLimit.{property_name} must be a positive integer numeric literal."
-                ),
-            ));
-            return None;
-        };
-
         match property_name.as_str() {
-            "limit" => {
-                limit = Some(integer_value);
+            "key" => {
+                let Expression::StringLiteral(string_literal) = &object_property.value else {
+                    diagnostics.push(rate_limit_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        DiagnosticSpan {
+                            start: object_property.value.span().start as usize,
+                            end: object_property.value.span().end as usize,
+                        },
+                        "rateLimit.key must be the string literal \"player\". Only \"player\" is supported for now."
+                            .to_string(),
+                    ));
+                    return None;
+                };
+
+                if string_literal.value.as_str() != "player" {
+                    diagnostics.push(rate_limit_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        DiagnosticSpan {
+                            start: object_property.value.span().start as usize,
+                            end: object_property.value.span().end as usize,
+                        },
+                        "rateLimit.key must be the string literal \"player\". Only \"player\" is supported for now."
+                            .to_string(),
+                    ));
+                    return None;
+                }
+
+                key = Some("player".to_string());
             }
-            "windowMs" => {
-                window_ms = Some(integer_value);
+            "windowMs" | "max" => {
+                let Expression::NumericLiteral(numeric_literal) = &object_property.value else {
+                    diagnostics.push(rate_limit_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        DiagnosticSpan {
+                            start: object_property.value.span().start as usize,
+                            end: object_property.value.span().end as usize,
+                        },
+                        rate_limit_positive_integer_message(&property_name, true),
+                    ));
+                    return None;
+                };
+
+                let Some(integer_value) = positive_integer_from_numeric_literal(numeric_literal.value) else {
+                    diagnostics.push(rate_limit_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        DiagnosticSpan {
+                            start: object_property.value.span().start as usize,
+                            end: object_property.value.span().end as usize,
+                        },
+                        rate_limit_positive_integer_message(&property_name, false),
+                    ));
+                    return None;
+                };
+
+                if property_name == "windowMs" {
+                    window_ms = Some(integer_value);
+                } else {
+                    max = Some(integer_value);
+                }
             }
             _ => {
+                let details = if property_name == "limit" {
+                    "rateLimit.limit is not supported in the pre-public final API. Use max instead."
+                        .to_string()
+                } else {
+                    format!("rateLimit does not support the {property_name} key.")
+                };
                 diagnostics.push(rate_limit_invalid_diagnostic(
                     file,
                     action_id,
@@ -980,20 +1028,31 @@ fn parse_rate_limit_object(
                         start: object_property.span.start as usize,
                         end: object_property.span.end as usize,
                     },
-                    format!("rateLimit does not support the {property_name} key."),
+                    details,
                 ));
                 return None;
             }
         }
     }
 
-    let Some(limit) = limit else {
+    let Some(key) = key else {
         diagnostics.push(rate_limit_invalid_diagnostic(
             file,
             action_id,
             export_name,
             object_span(object),
-            "Missing rateLimit.limit.".to_string(),
+            "Missing rateLimit.key. Only \"player\" is supported for now.".to_string(),
+        ));
+        return None;
+    };
+
+    let Some(max) = max else {
+        diagnostics.push(rate_limit_invalid_diagnostic(
+            file,
+            action_id,
+            export_name,
+            object_span(object),
+            "Missing rateLimit.max.".to_string(),
         ));
         return None;
     };
@@ -1009,7 +1068,11 @@ fn parse_rate_limit_object(
         return None;
     };
 
-    Some(ArunaActionRateLimitMetadata { limit, window_ms })
+    Some(ArunaActionRateLimitMetadata {
+        key,
+        window_ms,
+        max,
+    })
 }
 
 fn extract_action_rate_limit(

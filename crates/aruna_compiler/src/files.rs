@@ -56,21 +56,21 @@ pub fn discover_source_files(
     project_root: &Path,
     config: &ArunaConfig,
 ) -> Result<Vec<PathBuf>, String> {
-    let source = &config.source;
-    let includes = if source.include.is_empty() {
-        vec!["src/**/*.ts".to_string(), "src/**/*.tsx".to_string()]
+    let source_root = if config.root.is_empty() {
+        "src"
     } else {
-        source.include.clone()
+        config.root.as_str()
     };
-    let excludes = if source.exclude.is_empty() {
-        vec![
-            "node_modules/**".to_string(),
-            "out/**".to_string(),
-            ".aruna/**".to_string(),
-        ]
-    } else {
-        source.exclude.clone()
-    };
+    let includes = vec![
+        format!("{source_root}/**/*.ts"),
+        format!("{source_root}/**/*.tsx"),
+    ];
+    let excludes = vec![
+        "node_modules/**".to_string(),
+        "out/**".to_string(),
+        ".aruna/**".to_string(),
+        "**/.aruna/**".to_string(),
+    ];
 
     let include_set = build_globset(&includes)?;
     let exclude_set = build_globset(&excludes)?;

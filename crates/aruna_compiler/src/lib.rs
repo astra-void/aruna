@@ -20,7 +20,8 @@ pub use actions::{
     ArunaActionRecord, ArunaSchemaLiteralMetadata, ArunaSchemaMetadata,
 };
 pub use config::{
-    ArunaConfig, ConventionConfig, DiagnosticsConfig, ManifestConfig, SecurityConfig, SourceConfig,
+    ActionRateLimitConfig, ActionTransport, ArunaConfig, CompilerConfig, ConventionConfig,
+    StrictConfig, StrictSeverity,
 };
 pub use diagnostics::{
     create_diagnostic, diagnostic_meta, is_error_severity, stable_sort_diagnostics,

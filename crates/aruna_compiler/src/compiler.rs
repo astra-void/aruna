@@ -12,6 +12,7 @@ use crate::resolver::{
 };
 use crate::rules::boundary_code;
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -30,6 +31,8 @@ pub struct CompilerInput {
     pub write_manifest: bool,
     #[serde(default)]
     pub write_generated: bool,
+    #[serde(default)]
+    pub warnings_as_errors: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -312,6 +315,15 @@ fn write_manifest_file(
     Ok(absolute_path.to_string_lossy().to_string())
 }
 
+fn create_manifest_generated_file(manifest_path: &str, manifest: &ArunaManifest) -> Result<GeneratedFile, String> {
+    let contents = serde_json::to_string_pretty(manifest).map_err(|error| error.to_string())?;
+
+    Ok(GeneratedFile {
+        path: manifest_path.to_string(),
+        contents: format!("{contents}\n"),
+    })
+}
+
 fn write_generated_files(project_root: &Path, generated_files: &[GeneratedFile]) -> Result<(), String> {
     for generated_file in generated_files {
         let absolute_path = if Path::new(&generated_file.path).is_absolute() {
@@ -338,7 +350,7 @@ fn run_project_inner(
         &input.tsconfig_options,
     )?;
 
-    let ignore = input.config.diagnostics.ignore.clone();
+    let ignore: Vec<String> = Vec::new();
     let diagnostics = build_diagnostics(
         &graph.diagnostics,
         &graph.imports,
@@ -351,11 +363,15 @@ fn run_project_inner(
         .iter()
         .filter(|edge| edge.edge.resolved)
         .count();
-    let warnings_as_errors = input.config.diagnostics.warnings_as_errors;
+    let warnings_as_errors = input.warnings_as_errors;
 
     let mut mutable_diagnostics = diagnostics.clone();
     let generated_output = if input.write_generated {
-        let generated = generate_action_files(&input.config.generated_dir, &graph.actions);
+        let generated = generate_action_files(
+            &input.config.generated_dir,
+            &graph.actions,
+            input.config.compiler.preserve_generated_comments,
+        );
         mutable_diagnostics.extend(strip_ignored_diagnostics(
             &generated.diagnostics,
             &ignore,
@@ -396,12 +412,33 @@ fn run_project_inner(
     );
 
     let mut manifest_path = None;
-    if write_manifest && input.config.manifest.enabled {
-        let output_path = if input.config.manifest.output.is_empty() {
+    let mut generated_files = generated_output.map(|generated| generated.files);
+    if write_manifest {
+        let output_path = if input.config.manifest_output.is_empty() {
             ".aruna/manifest.json".to_string()
         } else {
-            input.config.manifest.output.clone()
+            input.config.manifest_output.clone()
         };
+        if input.write_generated {
+            if let Some(files) = generated_files.as_mut() {
+                match create_manifest_generated_file(&output_path, &final_manifest) {
+                    Ok(file) => files.push(file),
+                    Err(error) => {
+                        mutable_diagnostics.push(create_diagnostic(
+                            "aruna::700",
+                            "Failed to write the Aruna manifest.",
+                            None,
+                            None,
+                            Some(error),
+                            Some(
+                                "Check the destination directory permissions or disable manifest emission."
+                                    .to_string(),
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
         match write_manifest_file(&project_root, &output_path, &final_manifest) {
             Ok(path) => {
                 manifest_path = Some(path);
@@ -441,7 +478,7 @@ fn run_project_inner(
         config: input.config.clone(),
         diagnostics: mutable_diagnostics,
         manifest: final_manifest,
-        generated_files: generated_output.map(|generated| generated.files),
+        generated_files,
         summary: CompilerSummary {
             modules: graph.modules.len(),
             imports: graph.imports.len(),
@@ -492,7 +529,7 @@ pub fn inspect_project(input: CompilerInput) -> CompilerOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ArunaConfig, ManifestConfig};
+    use crate::config::{ArunaConfig, CompilerConfig};
     use std::fs;
     use tempfile::TempDir;
 
@@ -534,9 +571,9 @@ mod tests {
         let input = CompilerInput {
             project_root: project_root.to_string_lossy().to_string(),
             config: ArunaConfig {
-                manifest: ManifestConfig {
-                    output: ".aruna/manifest.json".to_string(),
-                    ..ManifestConfig::default()
+                manifest_output: ".aruna/manifest.json".to_string(),
+                compiler: CompilerConfig {
+                    preserve_generated_comments: true,
                 },
                 ..ArunaConfig::default()
             },
@@ -618,9 +655,10 @@ export const restockItem = defineAction({
 
         assert!(output.ok);
         let generated = output.generated_files.as_ref().expect("generated files");
-        assert_eq!(generated.len(), 2);
+        assert_eq!(generated.len(), 3);
         assert_eq!(generated[0].path, "src/.aruna/actions.client.generated.ts");
         assert_eq!(generated[1].path, "src/.aruna/actions.server.generated.ts");
+        assert_eq!(generated[2].path, "src/.aruna/manifest.json");
         assert_eq!(
             generated[0].contents,
             fs::read_to_string(project_root.join("src/.aruna/actions.client.generated.ts")).unwrap()
@@ -628,6 +666,10 @@ export const restockItem = defineAction({
         assert_eq!(
             generated[1].contents,
             fs::read_to_string(project_root.join("src/.aruna/actions.server.generated.ts")).unwrap()
+        );
+        assert_eq!(
+            generated[2].contents,
+            fs::read_to_string(project_root.join("src/.aruna/manifest.json")).unwrap()
         );
         assert!(generated[0]
             .contents

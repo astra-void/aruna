@@ -136,10 +136,20 @@ pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> Module
     }
 }
 
-fn classify_entry_path(relative_path: &str) -> Option<ModuleKind> {
+fn classify_entry_path(root: &str, relative_path: &str) -> Option<ModuleKind> {
+    let root = if root.is_empty() { "src" } else { root };
+    let client_entry = format!("{root}/client.ts");
+    let client_entry_tsx = format!("{root}/client.tsx");
+    let server_entry = format!("{root}/server.ts");
+    let server_entry_tsx = format!("{root}/server.tsx");
+
     match relative_path {
-        "src/client.ts" | "src/client.tsx" => Some(ModuleKind::ClientEntry),
-        "src/server.ts" | "src/server.tsx" => Some(ModuleKind::ServerEntry),
+        _ if relative_path == client_entry || relative_path == client_entry_tsx => {
+            Some(ModuleKind::ClientEntry)
+        }
+        _ if relative_path == server_entry || relative_path == server_entry_tsx => {
+            Some(ModuleKind::ServerEntry)
+        }
         _ => None,
     }
 }
@@ -154,7 +164,7 @@ pub fn classify_module(
         .map(|value| normalize_path(&value.to_string_lossy()))
         .unwrap_or_else(|_| normalize_path(&absolute_path.to_string_lossy()));
 
-    if let Some(kind) = classify_entry_path(&relative) {
+    if let Some(kind) = classify_entry_path(&config.root, &relative) {
         return ModuleClassification {
             kind,
             matched_kinds: Vec::new(),

@@ -4,8 +4,9 @@ import { schema } from "aruna/schema";
 export const purchaseItem = defineAction({
   id: "shop.purchaseItem",
   rateLimit: {
-    limit: 5,
+    key: "player",
     windowMs: 1000,
+    max: 5,
   },
   input: schema.object({ itemId: schema.string() }),
   output: schema.object({ ok: schema.boolean() }),

@@ -2,59 +2,125 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct SourceConfig {
-    #[serde(default)]
-    pub include: Vec<String>,
-    #[serde(default)]
-    pub exclude: Vec<String>,
+pub struct CompilerConfig {
+    #[serde(default = "default_preserve_generated_comments")]
+    pub preserve_generated_comments: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct DiagnosticsConfig {
-    #[serde(default)]
-    pub warnings_as_errors: bool,
-    #[serde(default)]
-    pub ignore: Vec<String>,
+fn default_preserve_generated_comments() -> bool {
+    true
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum SecurityMode {
-    Recommended,
-    Strict,
-    Audit,
-    Off,
-}
-
-impl Default for SecurityMode {
+impl Default for CompilerConfig {
     fn default() -> Self {
-        Self::Recommended
+        Self {
+            preserve_generated_comments: default_preserve_generated_comments(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ActionTransport {
+    RemoteEvent,
+    RemoteFunction,
+    Memory,
+}
+
+impl Default for ActionTransport {
+    fn default() -> Self {
+        Self::RemoteEvent
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct SecurityConfig {
-    #[serde(default)]
-    pub mode: SecurityMode,
+pub struct ActionRateLimitConfig {
+    #[serde(default = "default_action_rate_limit_key")]
+    pub key: String,
+    #[serde(default = "default_action_rate_limit_window_ms")]
+    pub window_ms: u32,
+    #[serde(default = "default_action_rate_limit_max")]
+    pub max: u32,
+}
+
+fn default_action_rate_limit_key() -> String {
+    "player".to_string()
+}
+
+fn default_action_rate_limit_window_ms() -> u32 {
+    1000
+}
+
+fn default_action_rate_limit_max() -> u32 {
+    20
+}
+
+impl Default for ActionRateLimitConfig {
+    fn default() -> Self {
+        Self {
+            key: default_action_rate_limit_key(),
+            window_ms: default_action_rate_limit_window_ms(),
+            max: default_action_rate_limit_max(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct ManifestConfig {
-    #[serde(default = "default_manifest_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_manifest_output")]
-    pub output: String,
+pub struct ActionsConfig {
+    #[serde(default)]
+    pub transport: ActionTransport,
+    #[serde(default)]
+    pub default_rate_limit: ActionRateLimitConfig,
 }
 
-fn default_manifest_enabled() -> bool {
+impl Default for ActionsConfig {
+    fn default() -> Self {
+        Self {
+            transport: ActionTransport::default(),
+            default_rate_limit: ActionRateLimitConfig::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StrictSeverity {
+    Off,
+    Warning,
+    Error,
+}
+
+impl Default for StrictSeverity {
+    fn default() -> Self {
+        Self::Warning
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StrictConfig {
+    #[serde(default = "default_shared_safety")]
+    pub shared_safety: bool,
+    #[serde(default)]
+    pub raw_remote_usage: StrictSeverity,
+    #[serde(default)]
+    pub unresolved_imports: StrictSeverity,
+}
+
+fn default_shared_safety() -> bool {
     true
 }
 
-fn default_manifest_output() -> String {
-    ".aruna/manifest.json".to_string()
+impl Default for StrictConfig {
+    fn default() -> Self {
+        Self {
+            shared_safety: default_shared_safety(),
+            raw_remote_usage: StrictSeverity::default(),
+            unresolved_imports: StrictSeverity::default(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -71,83 +137,44 @@ pub struct ConventionConfig {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaConfig {
-    #[serde(default)]
-    pub root: Option<String>,
-    #[serde(default = "default_tsconfig")]
-    pub tsconfig: String,
+    #[serde(default = "default_root")]
+    pub root: String,
     #[serde(default = "default_generated_dir")]
     pub generated_dir: String,
+    #[serde(default = "default_manifest_output")]
+    pub manifest_output: String,
     #[serde(default)]
-    pub source: SourceConfig,
+    pub compiler: CompilerConfig,
+    #[serde(default)]
+    pub actions: ActionsConfig,
     #[serde(default)]
     pub conventions: ConventionConfig,
     #[serde(default)]
-    pub diagnostics: DiagnosticsConfig,
-    #[serde(default)]
-    pub security: SecurityConfig,
-    #[serde(default)]
-    pub manifest: ManifestConfig,
+    pub strict: StrictConfig,
 }
 
-fn default_tsconfig() -> String {
-    "tsconfig.json".to_string()
+fn default_root() -> String {
+    "src".to_string()
 }
 
 fn default_generated_dir() -> String {
     "src/.aruna".to_string()
 }
 
-impl Default for SourceConfig {
-    fn default() -> Self {
-        Self {
-            include: vec!["src/**/*.ts".to_string(), "src/**/*.tsx".to_string()],
-            exclude: vec![
-                "node_modules/**".to_string(),
-                "out/**".to_string(),
-                ".aruna/**".to_string(),
-                "**/.aruna/**".to_string(),
-            ],
-        }
-    }
-}
-
-impl Default for DiagnosticsConfig {
-    fn default() -> Self {
-        Self {
-            warnings_as_errors: false,
-            ignore: Vec::new(),
-        }
-    }
-}
-
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            mode: SecurityMode::Recommended,
-        }
-    }
-}
-
-impl Default for ManifestConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            output: default_manifest_output(),
-        }
-    }
+fn default_manifest_output() -> String {
+    "src/.aruna/manifest.json".to_string()
 }
 
 impl Default for ArunaConfig {
     fn default() -> Self {
         Self {
-            root: None,
-            tsconfig: default_tsconfig(),
+            root: default_root(),
             generated_dir: default_generated_dir(),
-            source: SourceConfig::default(),
+            manifest_output: default_manifest_output(),
+            compiler: CompilerConfig::default(),
+            actions: ActionsConfig::default(),
             conventions: ConventionConfig::default(),
-            diagnostics: DiagnosticsConfig::default(),
-            security: SecurityConfig::default(),
-            manifest: ManifestConfig::default(),
+            strict: StrictConfig::default(),
         }
     }
 }

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "project": {
+    "root": "fixtures/action-rate-limit/input",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": {
+        "key": "player",
+        "max": 5,
+        "windowMs": 1000
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "generatedAt": null
+}

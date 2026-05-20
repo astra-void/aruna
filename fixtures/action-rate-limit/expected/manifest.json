@@ -24,7 +24,8 @@
         }
       },
       "rateLimit": {
-        "limit": 5,
+        "key": "player",
+        "max": 5,
         "windowMs": 1000
       },
       "serialization": {

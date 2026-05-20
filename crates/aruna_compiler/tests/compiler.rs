@@ -23,6 +23,7 @@ fn compiler_input(root: &Path) -> CompilerInput {
         tsconfig_options: TsconfigResolverOptions::default(),
         write_manifest: true,
         write_generated: false,
+        warnings_as_errors: false,
     }
 }
 
@@ -364,8 +365,9 @@ import { defineAction } from "aruna/server";
 export const demo = defineAction({
   id: "demo.rateLimit",
   rateLimit: {
-    limit: 5,
+    key: "player",
     windowMs: 1000,
+    max: 5,
   },
   run() {
     return null;
@@ -387,8 +389,9 @@ export const demo = defineAction({
     assert_eq!(
         action.rate_limit.as_ref(),
         Some(&aruna_compiler::ArunaActionRateLimitMetadata {
-            limit: 5,
+            key: "player".to_string(),
             window_ms: 1000,
+            max: 5,
         })
     );
 }
@@ -407,6 +410,7 @@ import { defineAction } from "aruna/server";
 export const demo = defineAction({
   id: "demo.rateLimit",
   rateLimit: {
+    limit: 5,
     windowMs: 1000,
   },
   run() {

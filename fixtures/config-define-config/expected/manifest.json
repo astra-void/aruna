@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/client.ts",
+      "kind": "clientEntry",
+      "path": "src/client.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/shared/schema.ts",
+      "kind": "shared",
+      "path": "src/shared/schema.ts",
+      "reason": "path"
+    }
+  ],
+  "imports": [],
+  "actions": [],
+  "diagnostics": []
+}
