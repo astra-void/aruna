@@ -3,21 +3,64 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import * as ts from "typescript";
-import type { ArunaConfig, ArunaDiagnostic } from "@arunajs/core";
-import { DEFAULT_ARUNA_CONFIG } from "@arunajs/core";
+import type {
+  ArunaActionsConfig,
+  ArunaCompilerConfig,
+  ArunaConfig,
+  ArunaConventionConfig,
+  ArunaDiagnostic,
+  ArunaStrictConfig,
+  NormalizedArunaConfig,
+} from "@arunajs/core";
 
 export type LoadedArunaConfig = {
   projectRoot: string;
   configPath?: string | undefined;
-  config: ArunaConfig;
+  config: NormalizedArunaConfig;
   tsconfigPath: string;
   tsconfigOptions: ts.CompilerOptions;
   diagnostics: ArunaDiagnostic[];
 };
 
 type RawConfigObject = Record<string, unknown>;
+type MutableCompilerManifestConfig = {
+  output?: string;
+};
 
-const requireForConfig = createRequire(import.meta.url);
+type MutableCompilerConfig = {
+  generatedDir?: string;
+  manifest?: string | MutableCompilerManifestConfig;
+  preserveGeneratedComments?: boolean;
+};
+
+type MutableActionsConfig = {
+  transport?: ArunaActionsConfig["transport"];
+  defaultRateLimit?: {
+    key?: string;
+    windowMs?: number;
+    max?: number;
+  };
+};
+
+type MutableConventionConfig = {
+  client?: string[];
+  server?: string[];
+  shared?: string[];
+};
+
+type MutableStrictConfig = {
+  sharedSafety?: boolean;
+  rawRemoteUsage?: ArunaStrictConfig["rawRemoteUsage"];
+  unresolvedImports?: ArunaStrictConfig["unresolvedImports"];
+};
+
+type MutableArunaConfig = {
+  root?: string;
+  compiler?: MutableCompilerConfig;
+  actions?: MutableActionsConfig;
+  conventions?: MutableConventionConfig;
+  strict?: MutableStrictConfig;
+};
 
 const DIAGNOSTIC_META: Record<
   "aruna::100" | "aruna::102" | "aruna::103",
@@ -26,6 +69,21 @@ const DIAGNOSTIC_META: Record<
   "aruna::100": { name: "invalid-config", severity: "error" },
   "aruna::102": { name: "missing-tsconfig", severity: "warning" },
   "aruna::103": { name: "invalid-tsconfig", severity: "error" },
+};
+
+const DEFAULT_CONVENTIONS: Required<Pick<NormalizedArunaConfig["conventions"], "client" | "server" | "shared">> = {
+  client: ["**/client/**"],
+  server: ["**/server/**"],
+  shared: ["**/shared/**"],
+};
+
+const DEFAULT_ROOT = "src";
+const DEFAULT_GENERATED_DIR = `${DEFAULT_ROOT}/.aruna`;
+const DEFAULT_MANIFEST_OUTPUT = `${DEFAULT_GENERATED_DIR}/manifest.json`;
+const DEFAULT_RATE_LIMIT: NonNullable<ArunaActionsConfig["defaultRateLimit"]> = {
+  key: "player",
+  windowMs: 1000,
+  max: 20,
 };
 
 function createDiagnostic(
@@ -53,14 +111,61 @@ function isRecord(value: unknown): value is RawConfigObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isStringArray(value: unknown): value is string[] {
+function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
-function mergeArray<T>(
-  base: readonly T[] | undefined,
-  override: readonly T[] | undefined,
-): T[] | undefined {
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function isTransport(value: unknown): value is NonNullable<ArunaActionsConfig["transport"]> {
+  return value === "remote-event" || value === "remote-function" || value === "memory";
+}
+
+function isStrictSeverity(
+  value: unknown,
+): value is NonNullable<ArunaStrictConfig["rawRemoteUsage"]> {
+  return value === "off" || value === "warning" || value === "error";
+}
+
+function flatConfigSuggestion(): string {
+  return [
+    'import { defineConfig } from "aruna";',
+    "",
+    "export default defineConfig({",
+    '  root: "src",',
+    "  compiler: {",
+    '    generatedDir: "src/.aruna",',
+    '    manifest: "src/.aruna/manifest.json",',
+    '    preserveGeneratedComments: true,',
+    "  },",
+    "  actions: {",
+    '    transport: "remote-event",',
+    "    defaultRateLimit: {",
+    '      key: "player",',
+    "      windowMs: 1000,",
+    "      max: 20,",
+    "    },",
+    "  },",
+    "  conventions: {",
+    '    client: ["src/client.tsx", "src/domains/**/ui.tsx"],',
+    '    server: ["src/server.ts", "src/domains/**/actions.ts"],',
+    '    shared: ["src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],',
+    "  },",
+    "  strict: {",
+    "    sharedSafety: true,",
+    '    rawRemoteUsage: "warning",',
+    '    unresolvedImports: "warning",',
+    "  },",
+    "});",
+  ].join("\n");
+}
+
+function mergeStringArray(
+  base: readonly string[] | undefined,
+  override: readonly string[] | undefined,
+): string[] | undefined {
   if (override !== undefined) {
     return [...override];
   }
@@ -72,42 +177,97 @@ function mergeArray<T>(
   return undefined;
 }
 
-function mergeConfig(base: ArunaConfig, override: ArunaConfig): ArunaConfig {
+function mergeCompilerConfig(
+  base: ArunaCompilerConfig | undefined,
+  override: ArunaCompilerConfig | undefined,
+): ArunaCompilerConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
   return {
     ...base,
     ...override,
-    source: {
-      ...base.source,
-      ...override.source,
-      include: mergeArray(base.source?.include, override.source?.include),
-      exclude: mergeArray(base.source?.exclude, override.source?.exclude),
-    },
-    conventions: {
-      ...base.conventions,
-      ...override.conventions,
-      client: mergeArray(base.conventions?.client, override.conventions?.client),
-      server: mergeArray(base.conventions?.server, override.conventions?.server),
-      shared: mergeArray(base.conventions?.shared, override.conventions?.shared),
-    },
-    diagnostics: {
-      ...base.diagnostics,
-      ...override.diagnostics,
-      ignore: mergeArray(base.diagnostics?.ignore, override.diagnostics?.ignore),
-    },
-    security: {
-      ...base.security,
-      ...override.security,
-    },
-    manifest: {
-      ...base.manifest,
-      ...override.manifest,
-    },
   };
+}
+
+function mergeActionsConfig(
+  base: ArunaActionsConfig | undefined,
+  override: ArunaActionsConfig | undefined,
+): ArunaActionsConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+    defaultRateLimit: override?.defaultRateLimit ?? base?.defaultRateLimit,
+  };
+}
+
+function mergeConventionConfig(
+  base: ArunaConventionConfig | undefined,
+  override: ArunaConventionConfig | undefined,
+): ArunaConventionConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+    client: mergeStringArray(base?.client, override?.client),
+    server: mergeStringArray(base?.server, override?.server),
+    shared: mergeStringArray(base?.shared, override?.shared),
+  };
+}
+
+function mergeStrictConfig(
+  base: ArunaStrictConfig | undefined,
+  override: ArunaStrictConfig | undefined,
+): ArunaStrictConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+  };
+}
+
+function mergePublicConfig(base: ArunaConfig, override: ArunaConfig): ArunaConfig {
+  return {
+    root: override.root ?? base.root,
+    compiler: mergeCompilerConfig(base.compiler, override.compiler),
+    actions: mergeActionsConfig(base.actions, override.actions),
+    conventions: mergeConventionConfig(base.conventions, override.conventions),
+    strict: mergeStrictConfig(base.strict, override.strict),
+  };
+}
+
+function validateUnsupportedKeys(
+  object: RawConfigObject,
+  allowedKeys: readonly string[],
+  diagnostics: string[],
+  prefix: string,
+): void {
+  for (const key of Object.keys(object)) {
+    if (!allowedKeys.includes(key)) {
+      diagnostics.push(
+        prefix === "top-level config"
+          ? `Unsupported top-level config field: ${key}`
+          : `Unsupported ${prefix}.${key} field.`,
+      );
+    }
+  }
 }
 
 function normalizeConfigObject(value: unknown): {
   config?: ArunaConfig;
   error?: string;
+  flatShape?: boolean;
 } {
   if (!isRecord(value)) {
     return { error: "configuration module did not export an object" };
@@ -119,8 +279,25 @@ function normalizeConfigObject(value: unknown): {
   }
 
   const candidateRecord = candidate as RawConfigObject;
+  if (
+    candidateRecord["generatedDir"] !== undefined ||
+    candidateRecord["manifest"] !== undefined ||
+    candidateRecord["source"] !== undefined ||
+    candidateRecord["diagnostics"] !== undefined ||
+    candidateRecord["security"] !== undefined ||
+    candidateRecord["tsconfig"] !== undefined
+  ) {
+    return {
+      flatShape: true,
+      error:
+        "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+    };
+  }
+
   const diagnostics: string[] = [];
-  const config: ArunaConfig = {};
+  const config: MutableArunaConfig = {};
+  const allowedTopLevel = ["root", "compiler", "actions", "conventions", "strict"] as const;
+  validateUnsupportedKeys(candidateRecord, allowedTopLevel, diagnostics, "top-level config");
 
   if (candidateRecord["root"] !== undefined) {
     if (typeof candidateRecord["root"] !== "string") {
@@ -130,43 +307,118 @@ function normalizeConfigObject(value: unknown): {
     }
   }
 
-  if (candidateRecord["tsconfig"] !== undefined) {
-    if (typeof candidateRecord["tsconfig"] !== "string") {
-      diagnostics.push("tsconfig must be a string");
+  if (candidateRecord["compiler"] !== undefined) {
+    const compilerValue = candidateRecord["compiler"];
+    if (!isRecord(compilerValue)) {
+      diagnostics.push("compiler must be an object");
     } else {
-      config.tsconfig = candidateRecord["tsconfig"];
+      validateUnsupportedKeys(compilerValue, ["generatedDir", "manifest", "preserveGeneratedComments"], diagnostics, "compiler");
+      const compiler: MutableCompilerConfig = {};
+
+      if (compilerValue["generatedDir"] !== undefined) {
+        if (typeof compilerValue["generatedDir"] !== "string") {
+          diagnostics.push("compiler.generatedDir must be a string");
+        } else {
+          compiler.generatedDir = compilerValue["generatedDir"];
+        }
+      }
+
+      if (compilerValue["manifest"] !== undefined) {
+        const manifestValue = compilerValue["manifest"];
+        if (typeof manifestValue === "string") {
+          compiler.manifest = manifestValue;
+        } else if (isRecord(manifestValue)) {
+          validateUnsupportedKeys(manifestValue, ["output"], diagnostics, "compiler.manifest");
+          const manifest: MutableCompilerManifestConfig = {};
+          if (manifestValue["output"] !== undefined) {
+            if (typeof manifestValue["output"] !== "string") {
+              diagnostics.push("compiler.manifest.output must be a string");
+            } else {
+              manifest.output = manifestValue["output"];
+            }
+          }
+          compiler.manifest = manifest;
+        } else {
+          diagnostics.push("compiler.manifest must be a string or an object");
+        }
+      }
+
+      if (compilerValue["preserveGeneratedComments"] !== undefined) {
+        if (typeof compilerValue["preserveGeneratedComments"] !== "boolean") {
+          diagnostics.push("compiler.preserveGeneratedComments must be a boolean");
+        } else {
+          compiler.preserveGeneratedComments = compilerValue["preserveGeneratedComments"];
+        }
+      }
+
+      config.compiler = compiler;
     }
   }
 
-  if (candidateRecord["generatedDir"] !== undefined) {
-    if (typeof candidateRecord["generatedDir"] !== "string") {
-      diagnostics.push("generatedDir must be a string");
+  if (candidateRecord["actions"] !== undefined) {
+    const actionsValue = candidateRecord["actions"];
+    if (!isRecord(actionsValue)) {
+      diagnostics.push("actions must be an object");
     } else {
-      config.generatedDir = candidateRecord["generatedDir"];
-    }
-  }
+      validateUnsupportedKeys(actionsValue, ["transport", "defaultRateLimit"], diagnostics, "actions");
+      const actions: MutableActionsConfig = {};
 
-  if (candidateRecord["source"] !== undefined) {
-    const sourceValue = candidateRecord["source"];
-    if (!isRecord(sourceValue)) {
-      diagnostics.push("source must be an object");
-    } else {
-      const source: NonNullable<ArunaConfig["source"]> = {};
-      if (sourceValue["include"] !== undefined) {
-        if (!isStringArray(sourceValue["include"])) {
-          diagnostics.push("source.include must be a string array");
+      if (actionsValue["transport"] !== undefined) {
+        if (!isTransport(actionsValue["transport"])) {
+          diagnostics.push(
+            'actions.transport must be one of "remote-event", "remote-function", or "memory"',
+          );
         } else {
-          source.include = sourceValue["include"];
+          actions.transport = actionsValue["transport"];
         }
       }
-      if (sourceValue["exclude"] !== undefined) {
-        if (!isStringArray(sourceValue["exclude"])) {
-          diagnostics.push("source.exclude must be a string array");
+
+      if (actionsValue["defaultRateLimit"] !== undefined) {
+        const defaultRateLimitValue = actionsValue["defaultRateLimit"];
+        if (!isRecord(defaultRateLimitValue)) {
+          diagnostics.push("actions.defaultRateLimit must be an object");
         } else {
-          source.exclude = sourceValue["exclude"];
+          validateUnsupportedKeys(
+            defaultRateLimitValue,
+            ["key", "windowMs", "max"],
+            diagnostics,
+            "actions.defaultRateLimit",
+          );
+          const defaultRateLimit = {
+            key: "player",
+            windowMs: 1000,
+            max: 20,
+          };
+
+          if (defaultRateLimitValue["key"] !== undefined) {
+            if (defaultRateLimitValue["key"] !== "player") {
+              diagnostics.push('actions.defaultRateLimit.key must be "player"');
+            } else {
+              defaultRateLimit.key = "player";
+            }
+          }
+
+          if (defaultRateLimitValue["windowMs"] !== undefined) {
+            if (!isPositiveInteger(defaultRateLimitValue["windowMs"])) {
+              diagnostics.push("actions.defaultRateLimit.windowMs must be a positive integer");
+            } else {
+              defaultRateLimit.windowMs = defaultRateLimitValue["windowMs"];
+            }
+          }
+
+          if (defaultRateLimitValue["max"] !== undefined) {
+            if (!isPositiveInteger(defaultRateLimitValue["max"])) {
+              diagnostics.push("actions.defaultRateLimit.max must be a positive integer");
+            } else {
+              defaultRateLimit.max = defaultRateLimitValue["max"];
+            }
+          }
+
+          actions.defaultRateLimit = defaultRateLimit;
         }
       }
-      config.source = source;
+
+      config.actions = actions;
     }
   }
 
@@ -175,14 +427,15 @@ function normalizeConfigObject(value: unknown): {
     if (!isRecord(conventionsValue)) {
       diagnostics.push("conventions must be an object");
     } else {
-      const conventions: NonNullable<ArunaConfig["conventions"]> = {};
+      validateUnsupportedKeys(conventionsValue, ["client", "server", "shared"], diagnostics, "conventions");
+      const conventions: MutableConventionConfig = {};
       for (const key of ["client", "server", "shared"] as const) {
         const conventionValue = conventionsValue[key];
         if (conventionValue !== undefined) {
           if (!isStringArray(conventionValue)) {
-            diagnostics.push(`conventions.${key} must be a string array`);
+            diagnostics.push(`conventions.${key} must be an array of strings`);
           } else {
-            conventions[key] = conventionValue;
+            conventions[key] = [...conventionValue];
           }
         }
       }
@@ -190,69 +443,46 @@ function normalizeConfigObject(value: unknown): {
     }
   }
 
-  if (candidateRecord["diagnostics"] !== undefined) {
-    const diagnosticsValue = candidateRecord["diagnostics"];
-    if (!isRecord(diagnosticsValue)) {
-      diagnostics.push("diagnostics must be an object");
+  if (candidateRecord["strict"] !== undefined) {
+    const strictValue = candidateRecord["strict"];
+    if (!isRecord(strictValue)) {
+      diagnostics.push("strict must be an object");
     } else {
-      const diagnosticsConfig: NonNullable<ArunaConfig["diagnostics"]> = {};
-      if (diagnosticsValue["warningsAsErrors"] !== undefined) {
-        if (typeof diagnosticsValue["warningsAsErrors"] !== "boolean") {
-          diagnostics.push("diagnostics.warningsAsErrors must be a boolean");
-        } else {
-          diagnosticsConfig.warningsAsErrors = diagnosticsValue["warningsAsErrors"];
-        }
-      }
-      if (diagnosticsValue["ignore"] !== undefined) {
-        if (!isStringArray(diagnosticsValue["ignore"])) {
-          diagnostics.push("diagnostics.ignore must be a string array");
-        } else {
-          diagnosticsConfig.ignore = diagnosticsValue["ignore"];
-        }
-      }
-      config.diagnostics = diagnosticsConfig;
-    }
-  }
+      validateUnsupportedKeys(
+        strictValue,
+        ["sharedSafety", "rawRemoteUsage", "unresolvedImports"],
+        diagnostics,
+        "strict",
+      );
+      const strict: MutableStrictConfig = {};
 
-  if (candidateRecord["security"] !== undefined) {
-    const securityValue = candidateRecord["security"];
-    if (!isRecord(securityValue)) {
-      diagnostics.push("security must be an object");
-    } else {
-      const security: NonNullable<ArunaConfig["security"]> = {};
-      if (securityValue["mode"] !== undefined) {
-        const allowed = new Set(["recommended", "strict", "audit", "off"]);
-        if (typeof securityValue["mode"] !== "string" || !allowed.has(securityValue["mode"])) {
-          diagnostics.push("security.mode must be one of recommended, strict, audit, off");
+      if (strictValue["sharedSafety"] !== undefined) {
+        if (typeof strictValue["sharedSafety"] !== "boolean") {
+          diagnostics.push("strict.sharedSafety must be a boolean");
         } else {
-          security.mode = securityValue["mode"] as NonNullable<ArunaConfig["security"]>["mode"];
+          strict.sharedSafety = strictValue["sharedSafety"];
         }
       }
-      config.security = security;
-    }
-  }
 
-  if (candidateRecord["manifest"] !== undefined) {
-    const manifestValue = candidateRecord["manifest"];
-    if (!isRecord(manifestValue)) {
-      diagnostics.push("manifest must be an object");
-    } else {
-      const manifest: NonNullable<ArunaConfig["manifest"]> = {};
-      if (manifestValue["enabled"] !== undefined) {
-        if (typeof manifestValue["enabled"] !== "boolean") {
-          diagnostics.push("manifest.enabled must be a boolean");
+      if (strictValue["rawRemoteUsage"] !== undefined) {
+        if (!isStrictSeverity(strictValue["rawRemoteUsage"])) {
+          diagnostics.push('strict.rawRemoteUsage must be one of "off", "warning", or "error"');
         } else {
-          manifest.enabled = manifestValue["enabled"];
+          strict.rawRemoteUsage = strictValue["rawRemoteUsage"];
         }
       }
-      if (manifestValue["output"] !== undefined) {
-        if (typeof manifestValue["output"] !== "string") {
-          diagnostics.push("manifest.output must be a string");
+
+      if (strictValue["unresolvedImports"] !== undefined) {
+        if (!isStrictSeverity(strictValue["unresolvedImports"])) {
+          diagnostics.push(
+            'strict.unresolvedImports must be one of "off", "warning", or "error"',
+          );
         } else {
-          manifest.output = manifestValue["output"];
+          strict.unresolvedImports = strictValue["unresolvedImports"];
         }
       }
-      config.manifest = manifest;
+
+      config.strict = strict;
     }
   }
 
@@ -260,10 +490,49 @@ function normalizeConfigObject(value: unknown): {
     return { error: diagnostics.join("; ") };
   }
 
-  return { config };
+  return { config: config as ArunaConfig };
+}
+
+function normalizeResolvedConfig(config: ArunaConfig): NormalizedArunaConfig {
+  const root = config.root ?? DEFAULT_ROOT;
+  const generatedDir = config.compiler?.generatedDir ?? `${root}/.aruna`;
+  const manifestOutput =
+    typeof config.compiler?.manifest === "string"
+      ? config.compiler.manifest
+      : config.compiler?.manifest?.output ?? `${generatedDir}/manifest.json`;
+  const defaultRateLimit = config.actions?.defaultRateLimit ?? DEFAULT_RATE_LIMIT;
+
+  return {
+    root,
+    generatedDir,
+    manifestOutput,
+    compiler: {
+      preserveGeneratedComments: config.compiler?.preserveGeneratedComments ?? true,
+    },
+    actions: {
+      transport: config.actions?.transport ?? "remote-event",
+      defaultRateLimit: {
+        key: defaultRateLimit.key,
+        windowMs: defaultRateLimit.windowMs,
+        max: defaultRateLimit.max,
+      },
+    },
+    conventions: {
+      client: mergeStringArray(DEFAULT_CONVENTIONS.client, config.conventions?.client) ?? [...DEFAULT_CONVENTIONS.client],
+      server: mergeStringArray(DEFAULT_CONVENTIONS.server, config.conventions?.server) ?? [...DEFAULT_CONVENTIONS.server],
+      shared: mergeStringArray(DEFAULT_CONVENTIONS.shared, config.conventions?.shared) ?? [...DEFAULT_CONVENTIONS.shared],
+    },
+    strict: {
+      sharedSafety: config.strict?.sharedSafety ?? true,
+      rawRemoteUsage: config.strict?.rawRemoteUsage ?? "warning",
+      unresolvedImports: config.strict?.unresolvedImports ?? "warning",
+    },
+  };
 }
 
 function evaluateCommonJs(sourceText: string, filename: string): unknown {
+  const requireForConfig = createRequire(filename);
+  const defineConfig = (config: unknown): unknown => config;
   const transformed = ts.transpileModule(sourceText, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -277,7 +546,19 @@ function evaluateCommonJs(sourceText: string, filename: string): unknown {
   const sandbox = {
     exports: module.exports,
     module,
-    require: requireForConfig,
+    require(specifier: string) {
+      if (specifier === "aruna" || specifier === "aruna/config") {
+        return {
+          __esModule: true,
+          defineConfig,
+          default: {
+            defineConfig,
+          },
+        };
+      }
+
+      return requireForConfig(specifier);
+    },
     __filename: filename,
     __dirname: path.dirname(filename),
   };
@@ -299,19 +580,18 @@ function loadUserConfigFile(
     const evaluated = evaluateCommonJs(sourceText, configFile);
     const normalized = normalizeConfigObject(evaluated);
     if (normalized.error) {
+      const message = normalized.flatShape
+        ? normalized.error
+        : `Invalid Aruna configuration in ${path.basename(configFile)}.`;
       return {
-        diagnostic: createDiagnostic(
-          "aruna::100",
-          `Invalid Aruna configuration in ${path.basename(configFile)}.`,
-          {
-            file: formatProjectRelativePath(projectRoot, configFile),
-            details: normalized.error,
-            suggestion:
-              "Export a plain object from aruna.config.ts or wrap it with defineConfig().",
-          },
-        ),
+        diagnostic: createDiagnostic("aruna::100", message, {
+          file: formatProjectRelativePath(projectRoot, configFile),
+          details: normalized.flatShape ? undefined : normalized.error,
+          suggestion: normalized.flatShape ? flatConfigSuggestion() : undefined,
+        }),
       };
     }
+
     return { config: normalized.config as ArunaConfig };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -419,13 +699,11 @@ export function loadProjectConfig(
     break;
   }
 
-  const merged = mergeConfig(DEFAULT_ARUNA_CONFIG, loadedConfig ?? {});
-
-  const finalConfig = overrideConfig ? mergeConfig(merged, overrideConfig) : merged;
-  const resolvedTsconfig = path.resolve(
-    projectRoot,
-    finalConfig.tsconfig ?? DEFAULT_ARUNA_CONFIG.tsconfig ?? "tsconfig.json",
-  );
+  const mergedConfig: ArunaConfig = overrideConfig
+    ? mergePublicConfig(loadedConfig ?? ({} as ArunaConfig), overrideConfig)
+    : (loadedConfig ?? ({} as ArunaConfig));
+  const finalConfig = normalizeResolvedConfig(mergedConfig);
+  const resolvedTsconfig = path.resolve(projectRoot, "tsconfig.json");
   const tsconfig = loadTsConfig(projectRoot, resolvedTsconfig);
   if (tsconfig.diagnostic) {
     diagnostics.push(tsconfig.diagnostic);

@@ -8,6 +8,7 @@ export const fixtureCases = [
   { name: "unknown-module-kind", mode: "inspect" },
   { name: "unresolved-import", mode: "inspect" },
   { name: "missing-tsconfig", mode: "inspect" },
+  { name: "config-define-config", mode: "inspect" },
   { name: "invalid-config", mode: "inspect" },
   { name: "invalid-tsconfig", mode: "inspect" },
   { name: "tsconfig-path-alias", mode: "inspect" },

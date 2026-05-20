@@ -3,8 +3,8 @@ import type { CompilerOptions } from "typescript";
 import type {
   ArunaCompilerInput,
   ArunaCompilerOutput,
-  ArunaConfig,
   ArunaDiagnostic,
+  NormalizedArunaConfig,
 } from "@arunajs/core";
 import { loadProjectConfig } from "./config.js";
 import { loadNativeCompiler } from "./native.js";
@@ -16,11 +16,12 @@ type NativeTsconfigOptions = {
 
 type NativeCompilerInput = {
   projectRoot: string;
-  config: ArunaConfig;
+  config: NormalizedArunaConfig;
   configDiagnostics: ArunaDiagnostic[];
   tsconfigOptions: NativeTsconfigOptions;
   writeManifest: boolean;
   writeGenerated: boolean;
+  warningsAsErrors: boolean;
 };
 
 type NativeCompiler = {
@@ -29,7 +30,7 @@ type NativeCompiler = {
 };
 
 function resolveProjectRoot(input: ArunaCompilerInput): string {
-  return path.resolve(input.root ?? input.config?.root ?? process.cwd());
+  return path.resolve(input.root ?? process.cwd());
 }
 
 function normalizeTsconfigOptions(options: CompilerOptions): NativeTsconfigOptions {
@@ -43,20 +44,6 @@ function normalizeTsconfigOptions(options: CompilerOptions): NativeTsconfigOptio
   };
 }
 
-function normalizeConfig(config: ArunaConfig, warningsAsErrors?: boolean): ArunaConfig {
-  if (!warningsAsErrors) {
-    return config;
-  }
-
-  return {
-    ...config,
-    diagnostics: {
-      ...config.diagnostics,
-      warningsAsErrors: true,
-    },
-  };
-}
-
 function buildNativeInput(
   input: ArunaCompilerInput,
   writeManifest: boolean,
@@ -66,11 +53,12 @@ function buildNativeInput(
   const loadedConfig = loadProjectConfig(projectRoot, input.configPath, input.config);
   return {
     projectRoot,
-    config: normalizeConfig(loadedConfig.config, input.warningsAsErrors),
+    config: loadedConfig.config,
     configDiagnostics: loadedConfig.diagnostics,
     tsconfigOptions: normalizeTsconfigOptions(loadedConfig.tsconfigOptions),
     writeManifest,
     writeGenerated,
+    warningsAsErrors: input.warningsAsErrors ?? false,
   };
 }
 
