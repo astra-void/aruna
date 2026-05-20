@@ -56,13 +56,120 @@ src/
 
 Policy notes:
 
-- `src/client.ts` and `src/client.tsx` are default client entries.
-- `src/server.ts` and `src/server.tsx` are default server entries.
+- `src/client.tsx` and `src/server.ts` are the harness runtime entry files.
+- The harness source stays spec-shaped; emitted output is partitioned separately for `rbxtsc`.
 - `domains/` is a recommended organization pattern, not a boundary kind.
 - `shared/` is reserved for cross-domain shared-safe code.
 - `.aruna/` is generated output and can be deleted and regenerated safely.
 - Do not require every client-only or server-only module to use `.client.ts` or `.server.ts`.
 - Reserve `.client` and `.server` suffixes for explicit runtime entry hints, not broad folder conventions.
+
+## Configuration
+
+Aruna is still pre-public, so the config surface is being shaped around the intended public API now.
+Use `defineConfig()` and the nested config shape directly.
+
+```ts
+import { defineConfig } from "aruna";
+
+export default defineConfig({
+  root: "src",
+  compiler: {
+    generatedDir: "src/.aruna",
+    manifest: "src/.aruna/manifest.json",
+    preserveGeneratedComments: true,
+  },
+  actions: {
+    transport: "remote-event",
+    defaultRateLimit: {
+      key: "player",
+      windowMs: 1000,
+      max: 20,
+    },
+  },
+  conventions: {
+    client: ["src/client.tsx", "src/domains/**/ui.tsx"],
+    server: ["src/server.ts", "src/domains/**/actions.ts", "src/domains/**/runtime.ts"],
+    shared: ["src/app/**", "src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],
+  },
+  strict: {
+    sharedSafety: true,
+    rawRemoteUsage: "warning",
+    unresolvedImports: "warning",
+  },
+});
+```
+
+- `compiler.generatedDir` controls where generated files are written.
+- `compiler.manifest` accepts a manifest path string or `{ output }`.
+- `actions.transport` currently supports `remote-event`, `remote-function`, and `memory`.
+- `actions.defaultRateLimit` uses `key`, `windowMs`, and `max`.
+- `conventions.client`, `conventions.server`, and `conventions.shared` are arrays of glob strings.
+- `strict` is accepted and normalized; the current implementation does not fully enforce every strict behavior yet.
+- The legacy flat `generatedDir` / `manifest.output` config shape is no longer supported.
+- `domains/` remains recommended, not required.
+
+## Quickstart flow
+
+1. Config:
+
+   ```ts
+   import { defineConfig } from "aruna";
+
+   export default defineConfig({
+     compiler: {
+       generatedDir: "src/.aruna",
+       manifest: "src/.aruna/manifest.json",
+     },
+     actions: {
+       transport: "remote-event",
+       defaultRateLimit: {
+         key: "player",
+         windowMs: 1000,
+         max: 20,
+       },
+     },
+     conventions: {
+       client: ["src/client.tsx", "src/domains/**/ui.tsx"],
+       server: ["src/server.ts", "src/domains/**/actions.ts"],
+       shared: ["src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],
+     },
+   });
+   ```
+
+2. Action:
+
+   ```ts
+   import { defineAction } from "aruna/server";
+   import { schema } from "aruna/schema";
+
+   export const purchaseItem = defineAction({
+     id: "shop.purchaseItem",
+     rateLimit: { key: "player", windowMs: 1000, max: 5 },
+     input: schema.object({ itemId: schema.string() }),
+     output: schema.object({ ok: schema.boolean() }),
+     run(ctx, input) {
+       return { ok: true };
+     },
+   });
+   ```
+
+3. Generated imports:
+
+   ```ts
+   import { purchaseItem } from "$aruna/actions/client";
+   import { actions } from "$aruna/actions/server";
+   ```
+
+4. Commands:
+
+   ```bash
+   aruna doctor --fix
+   aruna check
+   aruna build
+   aruna inspect actions
+   aruna inspect contract --json
+   ```
 
 ## Phase 1 scope
 
@@ -78,7 +185,6 @@ Policy notes:
 - fixture-based tests without Roblox Studio
 - `packages/compiler` loads the Rust native compiler
 - no TypeScript analyzer fallback
-- current config shape is still flat (`generatedDir`, `manifest.output`); nested `compiler.generatedDir` / `compiler.manifest` from the RFC are pending
 
 ## Native compiler preflight
 
@@ -140,6 +246,9 @@ Common CLI checks:
 ```bash
 pnpm aruna check --project fixtures/valid-client-imports-shared/input
 pnpm aruna check --project fixtures/invalid-client-imports-server/input
+pnpm aruna inspect actions --project fixtures/action-rate-limit/input
+pnpm aruna inspect actions --project fixtures/action-rate-limit/input --json
+pnpm aruna inspect contract --project fixtures/action-rate-limit/input --json
 pnpm aruna inspect modules --project fixtures/feature-local-layout/input
 pnpm aruna inspect graph --project fixtures/invalid-client-imports-server/input
 pnpm aruna check --json --project fixtures/invalid-client-imports-server/input
@@ -157,9 +266,11 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 
 - server action discovery exists in Rust
 - action manifest records now include basic schema metadata when `input` or `output` is declared
+- `aruna inspect actions` lists client-callable actions, input/output schema summaries, serialization policy metadata, rate-limit metadata, and basic authority notes
+- `aruna inspect contract` now emits a deterministic JSON snapshot of the action contract surface, including ids, source paths, generated export names, schema metadata and summaries, serialization policy, rate limits, authority notes, and warnings
 - generated action files are snapshot-tested in the fixture suite
 - application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
-- `aruna build` writes deterministic `src/shared/.aruna/actions.client.generated.ts` and `src/shared/.aruna/actions.server.generated.ts`
+- `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
 - an in-memory action invoker exists for non-Roblox tests
@@ -177,6 +288,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - basic fixed-window action rate limiting now runs per action and player/key before `run()`
 - invalid input and serialization failures do not consume quota
 - manifest action records now include serialization policy metadata and optional `rateLimit` metadata
+- the contract snapshot foundation is implemented through `aruna inspect contract`; diffing remains deferred
 - the MVP schema helpers support string, number, boolean, and undefined literal values, plus array, object, optional, and enum validation
 - the schema DSL now has TypeScript inference for primitives, literals, arrays, objects, optionals, and enums
 - the generated files are safe to delete and regenerate
@@ -196,8 +308,7 @@ The next MVP work should stay on contract and authority metadata, not more trans
    - runtime enforces per-action/per-player or key buckets before `run()`
    - invalid payloads and serialization failures do not consume quota
    - the limiter is not a full anti-abuse or security system yet
-4. Add inspect actions that list client-callable actions, summarize input/output schemas, expose transport and rate-limit info, and surface serialization warnings.
-5. Add a contract snapshot foundation with a stable JSON snapshot of actions, schemas, and rate limits. Diffing can wait.
+4. Contract snapshot foundation is implemented with a stable JSON snapshot of actions, schemas, and rate limits. Diffing can wait.
 
 Do not move to `defineResource` until that cutline is done.
 
@@ -210,8 +321,8 @@ import { purchaseItem } from "$aruna/actions/client";
 import { actions } from "$aruna/actions/server";
 ```
 
-Do not import the physical `../shared/.aruna/*.generated` files directly in app code.
-Aruna owns the physical files under `src/shared/.aruna/`.
+Do not import the physical `../.aruna/*.generated` files directly in app code.
+Aruna owns the physical files under `src/.aruna/`.
 `aruna check` resolves these virtual modules without writing files.
 `aruna build` writes the physical generated files used by TypeScript and roblox-ts tooling.
 For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install the required tsconfig path aliases.
@@ -220,14 +331,19 @@ For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install t
 
 `apps/rbxts-harness` is a private roblox-ts-style app harness.
 It intentionally mirrors Recommended Layout v0 closely enough to act as the realistic app/starter reference while still remaining a harness rather than create-app output.
-It runs `aruna build` against a real app layout, then validates the harness with both TypeScript and `rbxtsc`.
+It runs `aruna build` against the real source tree, then uses a temporary, compiler-manifest-driven layout shim to validate the emitted build with both TypeScript and `rbxtsc`.
 Use `pnpm --filter @arunajs/rbxts-harness typecheck` for the TypeScript check and `pnpm --filter @arunajs/rbxts-harness rbxtsc` for the roblox-ts compile.
 The harness covers generated action files, app bootstrap, schema inference, domain-local UI files, and public Aruna runtime imports.
 `default.project.json` now follows a conventional roblox-ts/Rojo-style tree with `ServerScriptService`, `ReplicatedStorage`, `StarterPlayer`, `Workspace`, `HttpService`, and `SoundService`.
-`rbxts_include` is used for roblox-ts package folders, and `out/server`, `out/shared`, and `out/client` are the intended Rojo mount points.
+The build output is intentionally partitioned so `rbxtsc` emits a Rojo-friendly tree under `out/client`, `out/server`, and `out/shared`.
+That partitioning is build artifact layout, not source taxonomy.
+`rbxts_include` is used for normal roblox-ts package folders only; it is not an Aruna staging area.
+The harness still keeps a direct workspace `aruna` package mount there for `rbxtsc` resolution, and that mount is harness-only glue rather than create-app behavior.
 Generated `.aruna` files remain compiler and TypeScript inputs, not a special replicated Rojo node.
-This is still manual harness metadata, not generated Rojo integration.
-The runtime entries `src/client.tsx` and `src/server.ts` perform the client/server wiring directly.
+The harness keeps those generated files under `src/.aruna` and writes `src/.aruna/rbxts-layout.json` as compiler-derived metadata for the temporary split tree used by `rbxtsc`.
+The server action stub is the only generated file that is duplicated into server output for rbxtsc resolution; the source of truth still stays under `src/.aruna`.
+This is still a temporary harness build-layout shim, not generated Rojo integration.
+The runtime entries live under `src/client.tsx` and `src/server.ts`; the build step is what aligns them with the Rojo mounts.
 `src/app/bootstrap.ts` and `src/app/providers.ts` stay shared-safe and model app composition helpers rather than hidden runtime entry files.
 It is not create-app, Rojo generation, generated Roblox Instance creation, or full Studio validation yet.
 
