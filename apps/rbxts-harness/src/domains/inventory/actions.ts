@@ -19,15 +19,11 @@ export const restockItem = defineAction({
   }),
   run(_ctx, input): RestockItemOutput {
     const typedInput: RestockItemInput = input;
-    const warnings =
-      typedInput.auditTag === undefined ? [] : [`audit:${typedInput.auditTag}`];
+    const warnings = typedInput.auditTag === undefined ? [] : [`audit:${typedInput.auditTag}`];
     const hasItems = typedInput.itemIds[0] !== undefined;
 
     return {
-      result: createActionResult(
-        hasItems,
-        hasItems ? undefined : "no items to restock",
-      ),
+      result: createActionResult(hasItems, hasItems ? undefined : "no items to restock"),
       itemIds: typedInput.itemIds,
       warnings,
     };

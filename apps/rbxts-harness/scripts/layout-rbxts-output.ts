@@ -143,11 +143,12 @@ function buildLayoutMetadata(manifest: LayoutManifest): LayoutMetadata {
     entry: isEntryModule(module.kind),
   }));
 
-  targets.sort((left, right) =>
-    left.source.localeCompare(right.source) ||
-    left.kind.localeCompare(right.kind) ||
-    left.target.localeCompare(right.target) ||
-    Number(left.entry) - Number(right.entry),
+  targets.sort(
+    (left, right) =>
+      left.source.localeCompare(right.source) ||
+      left.kind.localeCompare(right.kind) ||
+      left.target.localeCompare(right.target) ||
+      Number(left.entry) - Number(right.entry),
   );
 
   return {
@@ -290,10 +291,7 @@ async function writeLayoutMetadata(manifest: LayoutManifest): Promise<LayoutMeta
   return layout;
 }
 
-async function stageSourceTree(
-  tempRoot: string,
-  layout: LayoutMetadata,
-): Promise<void> {
+async function stageSourceTree(tempRoot: string, layout: LayoutMetadata): Promise<void> {
   const stageRoot = path.join(tempRoot, "src");
   const sourceFiles = await walkSourceFiles(sourceRoot);
   const sourceToStage = new Map<string, string>();
@@ -372,8 +370,12 @@ async function main(): Promise<void> {
         paths: {
           aruna: ["../../packages/aruna/dist/index.d.ts"],
           "aruna/*": ["../../packages/aruna/dist/*.d.ts"],
-          "$aruna/actions/client": [`src/shared/${generatedRootRelative}/actions.client.generated.ts`],
-          "$aruna/actions/server": [`src/server/${generatedRootRelative}/actions.server.generated.ts`],
+          "$aruna/actions/client": [
+            `src/shared/${generatedRootRelative}/actions.client.generated.ts`,
+          ],
+          "$aruna/actions/server": [
+            `src/server/${generatedRootRelative}/actions.server.generated.ts`,
+          ],
         },
         noLib: true,
         outDir: "out",
@@ -418,7 +420,7 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
   process.exitCode = 1;
 });
