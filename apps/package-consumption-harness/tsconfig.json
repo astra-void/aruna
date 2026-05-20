@@ -20,5 +20,5 @@
     "types": ["@rbxts/types", "@rbxts/compiler-types"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["aruna.config.ts", "dist", "node_modules", "out"]
 }

@@ -4,6 +4,7 @@
     "baseUrl": ".",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "rootDir": ".",
     "paths": {
       "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
       "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"]
