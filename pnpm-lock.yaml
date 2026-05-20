@@ -42,6 +42,25 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6(@types/node@24.12.2)(vite@8.0.13(@types/node@24.12.2)(esbuild@0.27.7)(tsx@4.21.0))
 
+  apps/package-consumption-harness:
+    dependencies:
+      aruna:
+        specifier: workspace:*
+        version: link:../../packages/aruna
+    devDependencies:
+      '@rbxts/compiler-types':
+        specifier: 3.0.0-types.0
+        version: 3.0.0-types.0
+      '@rbxts/types':
+        specifier: ^1.0.920
+        version: 1.0.920
+      roblox-ts:
+        specifier: 3.0.0
+        version: 3.0.0
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   apps/rbxts-harness:
     dependencies:
       aruna:
