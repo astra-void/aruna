@@ -1,0 +1,26 @@
+{
+  "name": "@arunajs/package-consumption-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "aruna:doctor": "pnpm --filter aruna build && pnpm --filter aruna aruna doctor --project .",
+    "aruna:doctor:fix": "pnpm --filter aruna build && pnpm --filter aruna aruna doctor --fix --project .",
+    "aruna:check": "pnpm --filter aruna build && pnpm --filter aruna aruna check --project .",
+    "aruna:build": "pnpm --filter aruna build && pnpm --filter aruna aruna build --project .",
+    "inspect:actions": "pnpm --filter aruna build && pnpm --filter aruna aruna inspect actions --project .",
+    "inspect:contract": "pnpm --filter aruna build && pnpm --filter aruna aruna inspect contract --project . --json",
+    "contract:diff": "pnpm --filter aruna build && pnpm --filter aruna aruna contract diff --project . --baseline src/.aruna/contract.snapshot.json",
+    "typecheck": "pnpm aruna:build && tsc -p tsconfig.typecheck.json --noEmit",
+    "rbxtsc": "pnpm aruna:build && rbxtsc --project .",
+    "build": "pnpm typecheck && pnpm rbxtsc"
+  },
+  "dependencies": {
+    "aruna": "workspace:*"
+  },
+  "devDependencies": {
+    "@rbxts/compiler-types": "3.0.0-types.0",
+    "@rbxts/types": "^1.0.920",
+    "roblox-ts": "3.0.0",
+    "typescript": "^5.8.3"
+  }
+}
