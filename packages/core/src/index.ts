@@ -71,8 +71,9 @@ export type ArunaActionRecord = {
   };
   rateLimit?:
     | {
-        limit: number;
+        key: "player";
         windowMs: number;
+        max: number;
       }
     | undefined;
   inputSchema?: ArunaSchemaMetadata | undefined;
@@ -127,40 +128,63 @@ export type ArunaManifest = {
   diagnostics: ArunaDiagnostic[];
 };
 
+export type ArunaCompilerConfig = {
+  readonly generatedDir?: string | undefined;
+  readonly manifest?:
+    | string
+    | {
+        readonly output?: string | undefined;
+      }
+    | undefined;
+  readonly preserveGeneratedComments?: boolean | undefined;
+};
+
+export type ArunaActionsConfig = {
+  readonly transport?: "remote-event" | "remote-function" | "memory" | undefined;
+  readonly defaultRateLimit?: NonNullable<ArunaActionRecord["rateLimit"]> | undefined;
+};
+
+export type ArunaConventionConfig = {
+  readonly client?: readonly string[] | undefined;
+  readonly server?: readonly string[] | undefined;
+  readonly shared?: readonly string[] | undefined;
+};
+
+export type ArunaStrictConfig = {
+  readonly sharedSafety?: boolean | undefined;
+  readonly rawRemoteUsage?: "off" | "warning" | "error" | undefined;
+  readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
+};
+
 export type ArunaConfig = {
-  root?: string | undefined;
-  tsconfig?: string | undefined;
-  generatedDir?: string | undefined;
-  source?:
-    | {
-        include?: string[] | undefined;
-        exclude?: string[] | undefined;
-      }
-    | undefined;
-  conventions?:
-    | {
-        client?: string[] | undefined;
-        server?: string[] | undefined;
-        shared?: string[] | undefined;
-      }
-    | undefined;
-  diagnostics?:
-    | {
-        warningsAsErrors?: boolean | undefined;
-        ignore?: string[] | undefined;
-      }
-    | undefined;
-  security?:
-    | {
-        mode?: "recommended" | "strict" | "audit" | "off" | undefined;
-      }
-    | undefined;
-  manifest?:
-    | {
-        enabled?: boolean | undefined;
-        output?: string | undefined;
-      }
-    | undefined;
+  readonly root?: string | undefined;
+  readonly compiler?: ArunaCompilerConfig | undefined;
+  readonly actions?: ArunaActionsConfig | undefined;
+  readonly conventions?: ArunaConventionConfig | undefined;
+  readonly strict?: ArunaStrictConfig | undefined;
+};
+
+export type NormalizedArunaConfig = {
+  readonly root: string;
+  readonly generatedDir: string;
+  readonly manifestOutput: string;
+  readonly compiler: {
+    readonly preserveGeneratedComments: boolean;
+  };
+  readonly actions: {
+    readonly transport: "remote-event" | "remote-function" | "memory";
+    readonly defaultRateLimit: NonNullable<ArunaActionsConfig["defaultRateLimit"]>;
+  };
+  readonly conventions: {
+    readonly client: readonly string[];
+    readonly server: readonly string[];
+    readonly shared: readonly string[];
+  };
+  readonly strict: {
+    readonly sharedSafety: boolean;
+    readonly rawRemoteUsage: "off" | "warning" | "error";
+    readonly unresolvedImports: "off" | "warning" | "error";
+  };
 };
 
 export type ArunaCompilerInput = {
@@ -187,7 +211,7 @@ export type ArunaCompilerSummary = {
 export type ArunaCompilerOutput = {
   ok: boolean;
   projectRoot: string;
-  config: ArunaConfig;
+  config: NormalizedArunaConfig;
   diagnostics: ArunaDiagnostic[];
   manifest: ArunaManifest;
   generatedFiles?: ArunaGeneratedFile[] | undefined;
@@ -195,35 +219,33 @@ export type ArunaCompilerOutput = {
   manifestPath?: string | undefined;
 };
 
-export const DEFAULT_ARUNA_CONFIG: Required<
-  Pick<
-    ArunaConfig,
-    "tsconfig" | "generatedDir" | "source" | "conventions" | "diagnostics" | "security" | "manifest"
-  >
-> = {
-  tsconfig: "tsconfig.json",
+export const DEFAULT_ARUNA_CONFIG: NormalizedArunaConfig = {
+  root: "src",
   generatedDir: "src/.aruna",
-  source: {
-    include: ["src/**/*.ts", "src/**/*.tsx"],
-    exclude: ["node_modules/**", "out/**", ".aruna/**", "**/.aruna/**"],
+  manifestOutput: "src/.aruna/manifest.json",
+  compiler: {
+    preserveGeneratedComments: true,
+  },
+  actions: {
+    transport: "remote-event",
+    defaultRateLimit: {
+      key: "player",
+      windowMs: 1000,
+      max: 20,
+    },
   },
   conventions: {
     client: ["**/client/**"],
     server: ["**/server/**"],
     shared: ["**/shared/**"],
   },
-  diagnostics: {
-    warningsAsErrors: false,
-  },
-  security: {
-    mode: "recommended",
-  },
-  manifest: {
-    enabled: true,
-    output: ".aruna/manifest.json",
+  strict: {
+    sharedSafety: true,
+    rawRemoteUsage: "warning",
+    unresolvedImports: "warning",
   },
 };
 
-export function defineConfig<T extends ArunaConfig>(config: T): T {
+export function defineConfig(config: ArunaConfig): ArunaConfig {
   return config;
 }
