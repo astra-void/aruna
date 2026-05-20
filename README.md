@@ -169,6 +169,7 @@ export default defineConfig({
    aruna build
    aruna inspect actions
    aruna inspect contract --json
+   aruna contract diff --project apps/rbxts-harness --baseline contract.snapshot.json
    ```
 
 ## Phase 1 scope
@@ -249,6 +250,7 @@ pnpm aruna check --project fixtures/invalid-client-imports-server/input
 pnpm aruna inspect actions --project fixtures/action-rate-limit/input
 pnpm aruna inspect actions --project fixtures/action-rate-limit/input --json
 pnpm aruna inspect contract --project fixtures/action-rate-limit/input --json
+pnpm aruna contract diff --project fixtures/action-rate-limit/input --baseline fixtures/action-rate-limit/expected/contract.snapshot.json
 pnpm aruna inspect modules --project fixtures/feature-local-layout/input
 pnpm aruna inspect graph --project fixtures/invalid-client-imports-server/input
 pnpm aruna check --json --project fixtures/invalid-client-imports-server/input
@@ -267,7 +269,8 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - server action discovery exists in Rust
 - action manifest records now include basic schema metadata when `input` or `output` is declared
 - `aruna inspect actions` lists client-callable actions, input/output schema summaries, serialization policy metadata, rate-limit metadata, and basic authority notes
-- `aruna inspect contract` now emits a deterministic JSON snapshot of the action contract surface, including ids, source paths, generated export names, schema metadata and summaries, serialization policy, rate limits, authority notes, and warnings
+- `aruna inspect contract` emits a deterministic JSON snapshot of the action contract surface, including ids, source paths, generated export names, schema metadata and summaries, serialization policy, rate limits, authority notes, and warnings
+- `aruna contract diff` compares two action contract snapshots or a snapshot file against the current project and reports breaking, non-breaking, and info-level changes
 - generated action files are snapshot-tested in the fixture suite
 - application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
 - `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
@@ -288,7 +291,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - basic fixed-window action rate limiting now runs per action and player/key before `run()`
 - invalid input and serialization failures do not consume quota
 - manifest action records now include serialization policy metadata and optional `rateLimit` metadata
-- the contract snapshot foundation is implemented through `aruna inspect contract`; diffing remains deferred
+- the contract snapshot foundation is implemented through `aruna inspect contract`, and `aruna contract diff` now serves as the compatibility gate for action contract snapshots
 - the MVP schema helpers support string, number, boolean, and undefined literal values, plus array, object, optional, and enum validation
 - the schema DSL now has TypeScript inference for primitives, literals, arrays, objects, optionals, and enums
 - the generated files are safe to delete and regenerate
@@ -308,7 +311,18 @@ The next MVP work should stay on contract and authority metadata, not more trans
    - runtime enforces per-action/per-player or key buckets before `run()`
    - invalid payloads and serialization failures do not consume quota
    - the limiter is not a full anti-abuse or security system yet
-4. Contract snapshot foundation is implemented with a stable JSON snapshot of actions, schemas, and rate limits. Diffing can wait.
+4. Package consumption validation is implemented with the first-party package-consumption harness.
+5. Contract snapshot foundation is implemented with a stable JSON snapshot of actions, schemas, and rate limits.
+6. Action contract diffing is implemented as a deterministic compatibility gate.
+
+## Package consumption validation
+
+`apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
+It imports `defineConfig`, `defineAction`, `schema`, `aruna/client`, `aruna/server`, `aruna/server-app`, and `aruna/roblox-runtime` through package names rather than source paths.
+It validates `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
+It does not implement `create-app`.
+It does not guarantee published tarball consumption yet.
+`rbxtsc` still fails on the current workspace-only setup because roblox-ts rejects direct node_modules package modules without a different package installation or mount strategy.
 
 Do not move to `defineResource` until that cutline is done.
 
