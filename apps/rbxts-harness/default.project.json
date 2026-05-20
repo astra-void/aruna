@@ -6,7 +6,7 @@
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "TS": {
-        "$path": "out/server.luau"
+        "$path": "out/server"
       }
     },
     "ReplicatedStorage": {
@@ -15,25 +15,13 @@
         "$path": "include",
         "node_modules": {
           "$className": "Folder",
-          "aruna": {
-            "$path": "../../packages/aruna/dist"
-          },
           "@rbxts": {
             "$path": "node_modules/@rbxts"
           },
-          "@rbxts-js": {
-            "$path": "node_modules/@rbxts-js"
-          },
-          "@flamework": {
-            "$path": "node_modules/@flamework"
+          "aruna": {
+            "$path": "../../packages/aruna/dist"
           }
         }
-      },
-      "App": {
-        "$path": "out/app"
-      },
-      "Domains": {
-        "$path": "out/domains"
       },
       "TS": {
         "$path": "out/shared"
@@ -44,7 +32,7 @@
       "StarterPlayerScripts": {
         "$className": "StarterPlayerScripts",
         "TS": {
-          "$path": "out/client.luau"
+          "$path": "out/client"
         }
       }
     },

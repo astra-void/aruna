@@ -1,13 +1,13 @@
-import { defineAction } from "aruna";
-import { schema } from "aruna";
+import { defineAction, schema } from "aruna";
 import { type PurchaseItemInput, type PurchaseItemOutput } from "./schema";
 import { createActionResult } from "../../shared/result";
 
 export const purchaseItem = defineAction({
   id: "shop.purchaseItem",
   rateLimit: {
-    limit: 5,
+    key: "player",
     windowMs: 1000,
+    max: 5,
   },
   input: schema.object({
     itemId: schema.string(),

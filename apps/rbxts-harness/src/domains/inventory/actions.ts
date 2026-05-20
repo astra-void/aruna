@@ -1,5 +1,4 @@
-import { defineAction } from "aruna";
-import { schema } from "aruna";
+import { defineAction, schema } from "aruna";
 import { type RestockItemInput, type RestockItemOutput } from "./schema";
 import { createActionResult } from "../../shared/result";
 
