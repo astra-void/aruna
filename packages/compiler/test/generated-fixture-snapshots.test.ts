@@ -46,11 +46,13 @@ describe.each(buildFixtureCases)("$name generated snapshots", ({ name }) => {
     const generated = await readGeneratedSnapshot(generatedRoot);
     const generatedPaths = generated.map((entry) => entry.path);
 
-    expect(generatedPaths, `Build fixture "${name}" is missing the client generated snapshot.`).toContain(
-      "src/.aruna/actions.client.generated.ts",
-    );
-    expect(generatedPaths, `Build fixture "${name}" is missing the server generated snapshot.`).toContain(
-      "src/.aruna/actions.server.generated.ts",
-    );
+    expect(
+      generatedPaths,
+      `Build fixture "${name}" is missing the client generated snapshot.`,
+    ).toContain("src/.aruna/actions.client.generated.ts");
+    expect(
+      generatedPaths,
+      `Build fixture "${name}" is missing the server generated snapshot.`,
+    ).toContain("src/.aruna/actions.server.generated.ts");
   });
 });

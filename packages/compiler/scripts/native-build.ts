@@ -158,9 +158,9 @@ function targetArtifactCandidates(
       : [path.join(targetDir, profile)];
 
   return targetDirs.flatMap((directory) => [
-      path.join(directory, nativeBuildOutputName(targetInfo.target)),
-      path.join(directory, "aruna_napi.node"),
-    ]);
+    path.join(directory, nativeBuildOutputName(targetInfo.target)),
+    path.join(directory, "aruna_napi.node"),
+  ]);
 }
 
 async function resolveArtifactPath(

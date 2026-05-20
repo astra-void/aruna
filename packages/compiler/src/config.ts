@@ -71,7 +71,9 @@ const DIAGNOSTIC_META: Record<
   "aruna::103": { name: "invalid-tsconfig", severity: "error" },
 };
 
-const DEFAULT_CONVENTIONS: Required<Pick<NormalizedArunaConfig["conventions"], "client" | "server" | "shared">> = {
+const DEFAULT_CONVENTIONS: Required<
+  Pick<NormalizedArunaConfig["conventions"], "client" | "server" | "shared">
+> = {
   client: ["**/client/**"],
   server: ["**/server/**"],
   shared: ["**/shared/**"],
@@ -138,7 +140,7 @@ function flatConfigSuggestion(): string {
     "  compiler: {",
     '    generatedDir: "src/.aruna",',
     '    manifest: "src/.aruna/manifest.json",',
-    '    preserveGeneratedComments: true,',
+    "    preserveGeneratedComments: true,",
     "  },",
     "  actions: {",
     '    transport: "remote-event",',
@@ -312,7 +314,12 @@ function normalizeConfigObject(value: unknown): {
     if (!isRecord(compilerValue)) {
       diagnostics.push("compiler must be an object");
     } else {
-      validateUnsupportedKeys(compilerValue, ["generatedDir", "manifest", "preserveGeneratedComments"], diagnostics, "compiler");
+      validateUnsupportedKeys(
+        compilerValue,
+        ["generatedDir", "manifest", "preserveGeneratedComments"],
+        diagnostics,
+        "compiler",
+      );
       const compiler: MutableCompilerConfig = {};
 
       if (compilerValue["generatedDir"] !== undefined) {
@@ -360,7 +367,12 @@ function normalizeConfigObject(value: unknown): {
     if (!isRecord(actionsValue)) {
       diagnostics.push("actions must be an object");
     } else {
-      validateUnsupportedKeys(actionsValue, ["transport", "defaultRateLimit"], diagnostics, "actions");
+      validateUnsupportedKeys(
+        actionsValue,
+        ["transport", "defaultRateLimit"],
+        diagnostics,
+        "actions",
+      );
       const actions: MutableActionsConfig = {};
 
       if (actionsValue["transport"] !== undefined) {
@@ -427,7 +439,12 @@ function normalizeConfigObject(value: unknown): {
     if (!isRecord(conventionsValue)) {
       diagnostics.push("conventions must be an object");
     } else {
-      validateUnsupportedKeys(conventionsValue, ["client", "server", "shared"], diagnostics, "conventions");
+      validateUnsupportedKeys(
+        conventionsValue,
+        ["client", "server", "shared"],
+        diagnostics,
+        "conventions",
+      );
       const conventions: MutableConventionConfig = {};
       for (const key of ["client", "server", "shared"] as const) {
         const conventionValue = conventionsValue[key];
@@ -474,9 +491,7 @@ function normalizeConfigObject(value: unknown): {
 
       if (strictValue["unresolvedImports"] !== undefined) {
         if (!isStrictSeverity(strictValue["unresolvedImports"])) {
-          diagnostics.push(
-            'strict.unresolvedImports must be one of "off", "warning", or "error"',
-          );
+          diagnostics.push('strict.unresolvedImports must be one of "off", "warning", or "error"');
         } else {
           strict.unresolvedImports = strictValue["unresolvedImports"];
         }
@@ -499,7 +514,7 @@ function normalizeResolvedConfig(config: ArunaConfig): NormalizedArunaConfig {
   const manifestOutput =
     typeof config.compiler?.manifest === "string"
       ? config.compiler.manifest
-      : config.compiler?.manifest?.output ?? `${generatedDir}/manifest.json`;
+      : (config.compiler?.manifest?.output ?? `${generatedDir}/manifest.json`);
   const defaultRateLimit = config.actions?.defaultRateLimit ?? DEFAULT_RATE_LIMIT;
 
   return {
@@ -518,9 +533,15 @@ function normalizeResolvedConfig(config: ArunaConfig): NormalizedArunaConfig {
       },
     },
     conventions: {
-      client: mergeStringArray(DEFAULT_CONVENTIONS.client, config.conventions?.client) ?? [...DEFAULT_CONVENTIONS.client],
-      server: mergeStringArray(DEFAULT_CONVENTIONS.server, config.conventions?.server) ?? [...DEFAULT_CONVENTIONS.server],
-      shared: mergeStringArray(DEFAULT_CONVENTIONS.shared, config.conventions?.shared) ?? [...DEFAULT_CONVENTIONS.shared],
+      client: mergeStringArray(DEFAULT_CONVENTIONS.client, config.conventions?.client) ?? [
+        ...DEFAULT_CONVENTIONS.client,
+      ],
+      server: mergeStringArray(DEFAULT_CONVENTIONS.server, config.conventions?.server) ?? [
+        ...DEFAULT_CONVENTIONS.server,
+      ],
+      shared: mergeStringArray(DEFAULT_CONVENTIONS.shared, config.conventions?.shared) ?? [
+        ...DEFAULT_CONVENTIONS.shared,
+      ],
     },
     strict: {
       sharedSafety: config.strict?.sharedSafety ?? true,
