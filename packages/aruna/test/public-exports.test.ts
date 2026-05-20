@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   ActionSerializationError,
   ActionRateLimitError,
+  defineConfig,
   defineAction as defineActionRoot,
   schema as schemaRoot,
   createActionRateLimiter,
@@ -68,6 +69,16 @@ afterEach(() => {
 });
 
 describe("public exports", () => {
+  it("returns defineConfig objects unchanged", () => {
+    const config = {
+      compiler: {
+        generatedDir: "src/.aruna",
+      },
+    } as const;
+
+    expect(defineConfig(config)).toBe(config);
+  });
+
   it("keeps the stable entrypoints wired together", async () => {
     const registry: ActionRegistry = {
       "shop.purchaseItem": defineActionServer({

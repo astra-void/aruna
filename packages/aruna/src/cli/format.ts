@@ -84,6 +84,30 @@ export function formatSummary(
   return lines.join("\n");
 }
 
+export function formatBuildSummary(
+  output: ArunaCompilerOutput,
+  colors: CliColorMode,
+): string {
+  const generatedFiles = output.generatedFiles?.map((file) => file.path) ?? [];
+  if (generatedFiles.length === 0) {
+    return formatSummary(output, "build", { colors, includeDuration: false });
+  }
+
+  const lines: string[] = [commandTitle("build", colors), "", "  generated:"];
+  for (const filePath of generatedFiles) {
+    lines.push(`    ${filePath}`);
+  }
+
+  lines.push("");
+  lines.push(`  ${output.manifest.actions.length} ${output.manifest.actions.length === 1 ? "action" : "actions"} discovered`);
+  lines.push(`  ${output.summary.errors} ${output.summary.errors === 1 ? "error" : "errors"} found`);
+  if (output.summary.warnings > 0) {
+    lines.push(`  ${output.summary.warnings} ${output.summary.warnings === 1 ? "warning" : "warnings"} found`);
+  }
+
+  return lines.join("\n");
+}
+
 function renderDiagnosticBlock(diagnostic: ArunaDiagnostic, colors: CliColorMode): string[] {
   const lines: string[] = [
     `${statusLabel(diagnostic.severity, colors)} ${diagnostic.code} ${diagnostic.name}`,

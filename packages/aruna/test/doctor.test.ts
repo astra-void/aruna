@@ -8,6 +8,7 @@ import { doctorExitCode, formatDoctorReport, fixDoctorProject, inspectDoctorProj
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const builtCliPath = path.resolve(packageRoot, "dist/cli.js");
+const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
 
 function makeTempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aruna-doctor-"));
@@ -22,7 +23,7 @@ function writeProject(root: string, files: Record<string, string>): void {
 }
 
 function minimalConfig(generatedDir = "src/.aruna"): string {
-  return `export default {\n  generatedDir: "${generatedDir}",\n  conventions: {\n    client: ["src/client.ts"],\n    server: ["src/server.ts"],\n    shared: ["src/shared/**"]\n  },\n};\n`;
+  return `import { defineConfig } from "aruna";\n\nexport default defineConfig({\n  compiler: {\n    generatedDir: "${generatedDir}",\n    manifest: "${generatedDir}/manifest.json",\n  },\n  conventions: {\n    client: ["src/client.ts"],\n    server: ["src/server.ts"],\n    shared: ["src/shared/**"]\n  },\n});\n`;
 }
 
 function tsconfigWithPaths(extra: string = ""): string {
@@ -30,6 +31,31 @@ function tsconfigWithPaths(extra: string = ""): string {
 }
 
 describe("doctor", () => {
+  it("mentions generatedDir and generated action aliases in the built CLI", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "doctor",
+        "--no-color",
+        "--project",
+        path.join(fixturesRoot, "config-define-config", "input"),
+      ],
+      {
+        encoding: "utf8",
+        env: { ...process.env, CI: "1" },
+      },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("generated dir: src/.aruna");
+    expect(result.stdout).toContain("$aruna/actions/client");
+    expect(result.stdout).toContain("tsconfig aliases");
+    expect(result.stderr).toBe("");
+  });
+
   it("reports missing Aruna path aliases", () => {
     const root = makeTempRoot();
     writeProject(root, {
@@ -41,7 +67,10 @@ describe("doctor", () => {
 
     expect(report.status.client).toBe("missing");
     expect(report.status.server).toBe("missing");
-    expect(formatDoctorReport(report)).toContain("missing or incorrect $aruna/actions/client");
+    expect(formatDoctorReport(report)).toContain("generated dir: src/.aruna");
+    expect(formatDoctorReport(report)).toContain(
+      "$aruna/actions/client -> src/.aruna/actions.client.generated.ts  missing",
+    );
     expect(doctorExitCode(report)).toBe(1);
   });
 
@@ -56,6 +85,7 @@ describe("doctor", () => {
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
     expect(report.fixApplied).toBe(true);
+    expect(report.fixChanges).toContain("added compilerOptions.baseUrl = \".\"");
     expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/.aruna/actions.client.generated.ts",
     ]);
@@ -147,6 +177,7 @@ describe("doctor", () => {
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
     expect(report.generatedDir).toBe("src/generated");
+    expect(report.manifestOutput).toBe("src/generated/manifest.json");
     expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/generated/actions.client.generated.ts",
     ]);
@@ -187,7 +218,7 @@ describe("doctor", () => {
     );
 
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("tsconfig aliases updated");
+    expect(result.stdout).toContain("fixed tsconfig.json");
     expect(result.stderr).toBe("");
   });
 });

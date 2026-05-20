@@ -1,8 +1,9 @@
 import type { ActionRunContext } from "./server.js";
 
 export type ActionRateLimitConfig = {
-  readonly limit: number;
+  readonly key: "player";
   readonly windowMs: number;
+  readonly max: number;
 };
 
 export type ActionRateLimitOptions = ActionRateLimitConfig;
@@ -84,7 +85,7 @@ function createBucketKey(actionId: string, key: string): string {
 export class ActionRateLimitError extends Error {
   override readonly name = "ActionRateLimitError";
   readonly actionId: string;
-  readonly limit: number;
+  readonly max: number;
   readonly windowMs: number;
   readonly retryAfterMs: number;
   readonly resetAtMs: number;
@@ -93,7 +94,7 @@ export class ActionRateLimitError extends Error {
     message: string,
     options: {
       readonly actionId: string;
-      readonly limit: number;
+      readonly max: number;
       readonly windowMs: number;
       readonly retryAfterMs: number;
       readonly resetAtMs: number;
@@ -101,7 +102,7 @@ export class ActionRateLimitError extends Error {
   ) {
     super(message);
     this.actionId = options.actionId;
-    this.limit = options.limit;
+    this.max = options.max;
     this.windowMs = options.windowMs;
     this.retryAfterMs = options.retryAfterMs;
     this.resetAtMs = options.resetAtMs;
@@ -123,12 +124,12 @@ export function createActionRateLimiter(): ActionRateLimiter {
       if (
         bucket === undefined ||
         bucket.windowStartMs !== windowStartMs ||
-        bucket.limit !== config.limit ||
+        bucket.limit !== config.max ||
         bucket.windowMs !== config.windowMs
       ) {
         buckets[bucketKey] = {
           windowStartMs,
-          limit: config.limit,
+          limit: config.max,
           windowMs: config.windowMs,
           count: 0,
         };
@@ -138,12 +139,12 @@ export function createActionRateLimiter(): ActionRateLimiter {
       if (currentBucket === undefined) {
         return {
           ok: true,
-          remaining: config.limit - 1,
+          remaining: config.max - 1,
           resetAtMs: windowStartMs + config.windowMs,
         };
       }
 
-      if (currentBucket.count >= config.limit) {
+      if (currentBucket.count >= config.max) {
         const resetAtMs = currentBucket.windowStartMs + currentBucket.windowMs;
         return {
           ok: false,
@@ -155,7 +156,7 @@ export function createActionRateLimiter(): ActionRateLimiter {
       currentBucket.count += 1;
       return {
         ok: true,
-        remaining: config.limit - currentBucket.count,
+        remaining: config.max - currentBucket.count,
         resetAtMs: currentBucket.windowStartMs + currentBucket.windowMs,
       };
     },

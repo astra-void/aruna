@@ -1,4 +1,5 @@
 import { createClientApp } from "../src/client.js";
+import { defineConfig } from "aruna";
 import {
   bindDefaultRobloxActionRemoteEvent,
   createRemoteEventActionInvoker,
@@ -24,6 +25,7 @@ import {
   type SerializationPolicyViolation,
   validateSerializableActionValue,
 } from "../src/server-runtime.js";
+import type { ArunaConfig } from "aruna";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
   ? true
@@ -44,6 +46,29 @@ const objectSchema = schema.object({
   quantity: schema.number(),
   note: schema.optional(schema.string()),
 });
+
+const nestedConfig = defineConfig({
+  compiler: {
+    generatedDir: "src/.aruna",
+    manifest: "src/.aruna/manifest.json",
+  },
+  actions: {
+    transport: "remote-event",
+    defaultRateLimit: {
+      key: "player",
+      windowMs: 1000,
+      max: 20,
+    },
+  },
+  conventions: {
+    client: ["src/client.ts"],
+    server: ["src/server.ts"],
+    shared: ["src/shared/**"],
+  },
+});
+
+const nestedConfigShape: ArunaConfig = nestedConfig;
+void nestedConfigShape;
 
 const serializableValue: SerializableActionValue = {
   itemId: "sword",
@@ -82,8 +107,9 @@ type _ObjectSchema = Expect<
 const purchaseItem = defineAction({
   id: "shop.purchaseItem",
   rateLimit: {
-    limit: 5,
+    key: "player",
     windowMs: 1000,
+    max: 5,
   },
   input: schema.object({
     itemId: schema.string(),

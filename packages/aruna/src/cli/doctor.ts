@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadProjectConfig } from "@arunajs/compiler";
-import type { ArunaConfig, ArunaDiagnostic } from "@arunajs/core";
-import { DEFAULT_ARUNA_CONFIG } from "@arunajs/core";
+import type { ArunaDiagnostic } from "@arunajs/core";
 import {
   ARUNA_ACTION_PATHS,
   inspectArunaActionPaths,
@@ -22,6 +21,8 @@ export type DoctorReport = {
   tsconfigPath: string;
   generatedDir: string;
   generatedDirResolved: string;
+  manifestOutput: string;
+  manifestOutputResolved: string;
   configDiagnostics: ArunaDiagnostic[];
   tsconfigDiagnostics: ArunaDiagnostic[];
   expectedPaths: {
@@ -38,10 +39,10 @@ export type DoctorReport = {
     baseUrlPresent: boolean;
     baseUrlRequired: boolean;
     baseUrlRecommended: boolean;
-    generatedDirSupported: boolean;
-    manifestOutputSupported: boolean;
   };
+  fixable: boolean;
   fixApplied: boolean;
+  fixChanges: string[];
 };
 
 type TsconfigJsonObject = Record<string, unknown>;
@@ -92,81 +93,99 @@ function createTsconfigDiagnostic(
   };
 }
 
-function configSupportsGeneratedDir(config: ArunaConfig): boolean {
-  return typeof config.generatedDir === "string" || config.generatedDir === undefined;
+function displayPath(projectRoot: string, absolutePath: string): string {
+  const relativePath = path.relative(projectRoot, absolutePath);
+  return relativePath.length > 0 ? relativePath.split(path.sep).join("/") : ".";
 }
 
-function configSupportsManifestOutput(config: ArunaConfig): boolean {
-  return config.manifest === undefined || typeof config.manifest.output === "string" || config.manifest.output === undefined;
+function formatPathList(values: readonly string[]): string {
+  return values.join(", ");
+}
+
+function renderStatusLabel(status: "missing" | "correct" | "incorrect"): string {
+  switch (status) {
+    case "correct":
+      return "ok";
+    case "incorrect":
+      return "incorrect";
+    case "missing":
+      return "missing";
+  }
+}
+
+function renderDiagnosticSummary(diagnostic: ArunaDiagnostic): string {
+  const parts = [`${diagnostic.code} ${diagnostic.message}`];
+  if (diagnostic.details) {
+    parts.push(diagnostic.details);
+  }
+  return parts.join(" ");
 }
 
 export function formatDoctorReport(report: DoctorReport): string {
   const lines: string[] = ["aruna doctor", ""];
-  lines.push(`project: ${report.projectRoot}`);
+  const needsFix =
+    report.status.client !== "correct" ||
+    report.status.server !== "correct" ||
+    !report.status.baseUrlPresent;
+  lines.push(`project: ${displayPath(process.cwd(), report.projectRoot)}`);
   if (report.configPath) {
-    lines.push(`config: ${report.configPath}`);
+    lines.push(`config: ${displayPath(report.projectRoot, report.configPath)}`);
   }
-  lines.push(`tsconfig: ${report.tsconfigPath}`);
-  lines.push(`generatedDir: ${report.generatedDir}`);
-  lines.push(`resolved generatedDir: ${report.generatedDirResolved}`);
-  lines.push(`client alias: ${report.status.client}`);
-  lines.push(`server alias: ${report.status.server}`);
-  lines.push(
-    `baseUrl: ${report.status.baseUrlPresent ? "present" : "absent"} (${report.status.baseUrlRequired ? "required" : "not required"})`,
-  );
-  lines.push(
-    `generatedDir supported: ${report.status.generatedDirSupported ? "yes" : "no"}`,
-  );
-  lines.push(
-    `manifest.output supported: ${report.status.manifestOutputSupported ? "yes" : "no"}`,
-  );
+  lines.push(`tsconfig: ${displayPath(report.projectRoot, report.tsconfigPath)}`);
+  lines.push(`generated dir: ${report.generatedDir}`);
+  lines.push(`manifest: ${report.manifestOutput}`);
+  lines.push(`generated dir resolved: ${report.generatedDirResolved}`);
+  lines.push(`manifest resolved: ${report.manifestOutputResolved}`);
+  lines.push(`fix available: ${report.fixable ? "yes" : "no"}`);
 
-  const problems: string[] = [];
-  if (report.configDiagnostics.length > 0) {
-    problems.push(
-      ...report.configDiagnostics.map((diagnostic) =>
-        diagnostic.details
-          ? `${diagnostic.code} ${diagnostic.message} (${diagnostic.details})`
-          : `${diagnostic.code} ${diagnostic.message}`,
-      ),
-    );
-  }
-  if (report.tsconfigDiagnostics.length > 0) {
-    problems.push(
-      ...report.tsconfigDiagnostics.map((diagnostic) =>
-        diagnostic.details
-          ? `${diagnostic.code} ${diagnostic.message} (${diagnostic.details})`
-          : `${diagnostic.code} ${diagnostic.message}`,
-      ),
-    );
-  }
-  if (report.status.client !== "correct") {
-    problems.push(
-      `missing or incorrect ${ARUNA_ACTION_PATHS.client} -> ${report.expectedPaths.client.join(", ")}`,
-    );
-  }
-  if (report.status.server !== "correct") {
-    problems.push(
-      `missing or incorrect ${ARUNA_ACTION_PATHS.server} -> ${report.expectedPaths.server.join(", ")}`,
-    );
+  if (report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0) {
+    lines.push("");
+    lines.push("problems");
+    for (const diagnostic of [...report.configDiagnostics, ...report.tsconfigDiagnostics]) {
+      lines.push(`  - ${renderDiagnosticSummary(diagnostic)}`);
+    }
   }
 
-  if (problems.length > 0) {
+  lines.push("");
+  lines.push("tsconfig aliases");
+  lines.push(
+    `  baseUrl: ${report.status.baseUrlPresent ? "present" : "missing"}${report.status.baseUrlRequired ? " (required)" : ""}`,
+  );
+  lines.push(
+    `  ${ARUNA_ACTION_PATHS.client} -> ${formatPathList(report.expectedPaths.client)}  ${renderStatusLabel(report.status.client)}`,
+  );
+  if (report.status.client === "incorrect" && report.actualPaths.client) {
+    lines.push(`    current: ${formatPathList(report.actualPaths.client)}`);
+  }
+  lines.push(
+    `  ${ARUNA_ACTION_PATHS.server} -> ${formatPathList(report.expectedPaths.server)}  ${renderStatusLabel(report.status.server)}`,
+  );
+  if (report.status.server === "incorrect" && report.actualPaths.server) {
+    lines.push(`    current: ${formatPathList(report.actualPaths.server)}`);
+  }
+
+  if (report.fixApplied) {
     lines.push("");
-    lines.push("problems:");
-    for (const problem of problems) {
-      lines.push(`  - ${problem}`);
+    if (report.fixChanges.length > 0) {
+      lines.push("fixed tsconfig.json");
+      for (const change of report.fixChanges) {
+        lines.push(`  - ${change}`);
+      }
+    } else {
+      lines.push("tsconfig.json already matched the Aruna aliases");
     }
-    if (!report.fixApplied) {
-      lines.push("");
-      lines.push("run `aruna doctor --fix` to write the required tsconfig aliases");
-    }
-  } else if (report.fixApplied) {
+  } else if (report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0 || needsFix) {
     lines.push("");
-    lines.push("tsconfig aliases updated");
+    if (report.fixable) {
+      lines.push(
+        `run \`aruna doctor --fix --project ${displayPath(process.cwd(), report.projectRoot)}\` to update tsconfig.json`,
+      );
+    } else {
+      lines.push("unable to fix automatically until the project config and tsconfig are valid");
+    }
   } else {
     lines.push("");
-    lines.push("tsconfig aliases are configured correctly");
+    lines.push("done");
   }
 
   return lines.join("\n");
@@ -174,10 +193,10 @@ export function formatDoctorReport(report: DoctorReport): string {
 
 export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
   const loaded = loadProjectConfig(options.projectRoot, options.configPath);
-  const generatedDir = (loaded.config.generatedDir ??
-    DEFAULT_ARUNA_CONFIG.generatedDir ??
-    "src/.aruna") as string;
+  const generatedDir = loaded.config.generatedDir;
   const generatedDirResolved = path.resolve(options.projectRoot, generatedDir);
+  const manifestOutput = loaded.config.manifestOutput;
+  const manifestOutputResolved = path.resolve(options.projectRoot, manifestOutput);
   const tsconfigPath = loaded.tsconfigPath;
   const expectedPaths = resolveArunaActionPaths(tsconfigPath, generatedDir);
   const tsconfigResult = readTsconfig(tsconfigPath);
@@ -199,6 +218,8 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       tsconfigPath,
       generatedDir,
       generatedDirResolved,
+      manifestOutput,
+      manifestOutputResolved,
       configDiagnostics,
       tsconfigDiagnostics: effectiveTsconfigDiagnostics,
       expectedPaths,
@@ -209,10 +230,10 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
         baseUrlPresent: false,
         baseUrlRequired: true,
         baseUrlRecommended: false,
-        generatedDirSupported: configSupportsGeneratedDir(loaded.config),
-        manifestOutputSupported: configSupportsManifestOutput(loaded.config),
       },
+      fixable: false,
       fixApplied: false,
+      fixChanges: [],
     };
   }
 
@@ -223,6 +244,8 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
     tsconfigPath,
     generatedDir,
     generatedDirResolved,
+    manifestOutput,
+    manifestOutputResolved,
     configDiagnostics,
     tsconfigDiagnostics: effectiveTsconfigDiagnostics,
     expectedPaths,
@@ -233,16 +256,16 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       baseUrlPresent: inspection.hasBaseUrl,
       baseUrlRequired: true,
       baseUrlRecommended: false,
-      generatedDirSupported: configSupportsGeneratedDir(loaded.config),
-      manifestOutputSupported: configSupportsManifestOutput(loaded.config),
     },
+    fixable: configDiagnostics.length === 0 && effectiveTsconfigDiagnostics.length === 0,
     fixApplied: false,
+    fixChanges: [],
   };
 }
 
 export function fixDoctorProject(options: DoctorOptions): DoctorReport {
   const report = inspectDoctorProject(options);
-  if (report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0) {
+  if (!report.fixable || report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0) {
     return report;
   }
 
@@ -258,17 +281,34 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
     return {
       ...report,
       fixApplied: true,
+      fixChanges: [],
     };
   }
 
   fs.writeFileSync(report.tsconfigPath, updated.contents, "utf8");
+  const fixChanges: string[] = [];
+  if (!report.status.baseUrlPresent && report.status.baseUrlRequired) {
+    fixChanges.push("added compilerOptions.baseUrl = \".\"");
+  }
+  if (report.status.client !== "correct") {
+    fixChanges.push(
+      `${ARUNA_ACTION_PATHS.client} -> ${formatPathList(report.expectedPaths.client)}`,
+    );
+  }
+  if (report.status.server !== "correct") {
+    fixChanges.push(
+      `${ARUNA_ACTION_PATHS.server} -> ${formatPathList(report.expectedPaths.server)}`,
+    );
+  }
   return {
     ...report,
     fixApplied: true,
+    fixChanges,
     status: {
       ...report.status,
       client: "correct",
       server: "correct",
+      baseUrlPresent: true,
     },
     actualPaths: report.expectedPaths,
   };

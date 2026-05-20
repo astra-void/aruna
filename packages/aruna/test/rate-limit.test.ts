@@ -102,8 +102,9 @@ function makeActionRegistry(run = vi.fn(() => ({ ok: true }))) {
     "shop.purchaseItem": defineAction({
       id: "shop.purchaseItem",
       rateLimit: {
-        limit: 2,
+        key: "player",
         windowMs: 1000,
+        max: 2,
       },
       input: schema.object({
         itemId: schema.string(),
@@ -113,8 +114,9 @@ function makeActionRegistry(run = vi.fn(() => ({ ok: true }))) {
     "inventory.restockItem": defineAction({
       id: "inventory.restockItem",
       rateLimit: {
-        limit: 2,
+        key: "player",
         windowMs: 1000,
+        max: 2,
       },
       run,
     }),
@@ -165,7 +167,7 @@ describe("action rate limits", () => {
     ).rejects.toMatchObject({
       name: "ActionRateLimitError",
       actionId: "shop.purchaseItem",
-      limit: 2,
+      max: 2,
       windowMs: 1000,
       retryAfterMs: 1000,
       resetAtMs: 2000,
@@ -185,8 +187,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         input: schema.object({
           itemId: schema.string(),
@@ -213,8 +216,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),
@@ -255,8 +259,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),
@@ -282,16 +287,18 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),
       "inventory.restockItem": defineAction({
         id: "inventory.restockItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),
@@ -318,8 +325,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),
@@ -353,8 +361,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),
@@ -374,7 +383,7 @@ describe("action rate limits", () => {
       expect(error).toMatchObject({
         name: "ActionRateLimitError",
         actionId: "shop.purchaseItem",
-        limit: 1,
+        max: 1,
         windowMs: 1000,
         retryAfterMs: 1000,
         resetAtMs: 2000,
@@ -403,8 +412,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run() {
           return { ok: true };
@@ -450,8 +460,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run(_ctx, input) {
           return { ok: true, input };
@@ -482,8 +493,9 @@ describe("action rate limits", () => {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
         rateLimit: {
-          limit: 1,
+          key: "player",
           windowMs: 1000,
+          max: 1,
         },
         run,
       }),

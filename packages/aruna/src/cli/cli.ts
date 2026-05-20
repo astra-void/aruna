@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { ArunaCompilerOutput } from "@arunajs/core";
 import { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
 import {
   formatDiagnostics,
   formatDurationLine,
+  formatBuildSummary,
   formatGraphInspection,
   formatModuleInspection,
   formatSummary,
   type CliColorMode,
 } from "./format.js";
 import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
+import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
+import { buildActionContractSnapshot } from "./action-contracts.js";
+import { formatActionContractInspection } from "./inspect-contract.js";
 import { formatError, formatMuted } from "./theme.js";
 
 type CliOptions = {
@@ -90,9 +93,13 @@ function renderCompilerOutput(
   }
 
   const hasDiagnostics = output.diagnostics.length > 0;
-  writeText(
-    formatSummary(output, command, { colors, durationMs, includeDuration: !hasDiagnostics }),
-  );
+  if (command === "build" && output.ok && output.generatedFiles && output.generatedFiles.length > 0) {
+    writeText(formatBuildSummary(output, colors));
+  } else {
+    writeText(
+      formatSummary(output, command, { colors, durationMs, includeDuration: !hasDiagnostics }),
+    );
+  }
   if (!options.quiet && hasDiagnostics) {
     const diagnostics = formatDiagnostics(output, colors);
     if (diagnostics.length > 0) {
@@ -177,6 +184,54 @@ export async function main(): Promise<number> {
   });
 
   inspect
+    .command("actions")
+    .description("show discovered actions and contract metadata")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const output = await runInspect(options);
+      if (options.json) {
+        const report = buildActionInspectionReport(output);
+        writeJson(report);
+        process.exitCode = output.ok ? 0 : 1;
+        return;
+      }
+
+      const colors = resolveColorMode(options);
+      writeText(formatActionInspection(output, colors));
+      if (!options.quiet && output.diagnostics.length > 0) {
+        const diagnostics = formatDiagnostics(output, colors);
+        if (diagnostics.length > 0) {
+          writeText(diagnostics);
+        }
+      }
+      process.exitCode = output.ok ? 0 : 1;
+    });
+
+  inspect
+    .command("contract")
+    .alias("contracts")
+    .description("print a deterministic action contract snapshot")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const output = await runInspect(options);
+      if (options.json) {
+        writeJson(buildActionContractSnapshot(output));
+        process.exitCode = output.ok ? 0 : 1;
+        return;
+      }
+
+      const colors = resolveColorMode(options);
+      writeText(formatActionContractInspection(output, colors));
+      if (!options.quiet && output.diagnostics.length > 0) {
+        const diagnostics = formatDiagnostics(output, colors);
+        if (diagnostics.length > 0) {
+          writeText(diagnostics);
+        }
+      }
+      process.exitCode = output.ok ? 0 : 1;
+    });
+
+  inspect
     .command("modules")
     .description("print module classification")
     .action(async () => {
@@ -229,7 +284,7 @@ export async function main(): Promise<number> {
 
   program
     .command("build")
-    .description("build the project and write generated output")
+    .description("build generated action files and the manifest")
     .action(async () => {
       const options = program.optsWithGlobals<CliOptions>();
       const startedAt = Date.now();
@@ -240,7 +295,7 @@ export async function main(): Promise<number> {
 
   const doctor = program
     .command("doctor")
-    .description("inspect and optionally fix Aruna tsconfig path aliases")
+    .description("inspect and optionally fix generated action aliases in tsconfig.json")
     .option("--fix", "write the required tsconfig path aliases");
 
   doctor.action(async () => {

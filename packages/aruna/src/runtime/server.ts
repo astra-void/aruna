@@ -105,7 +105,7 @@ export async function dispatchAction<TPlayer = unknown>(
         `Aruna action ${actionId} is rate limited. Retry after ${result.retryAfterMs}ms.`,
         {
           actionId,
-          limit: action.rateLimit.limit,
+          max: action.rateLimit.max,
           windowMs: action.rateLimit.windowMs,
           retryAfterMs: result.retryAfterMs,
           resetAtMs: result.resetAtMs,
