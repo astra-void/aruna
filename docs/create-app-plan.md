@@ -3,6 +3,8 @@
 This note is the next-step planning target after package-consumption validation.
 It does not describe an implemented `create-app` command.
 
+Current blocker: the packed package-consumption smoke now installs the local tarballs, runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript. The remaining failure is `rbxtsc`, which now reports a package-layout boundary: roblox-ts rejects direct `node_modules` package modules and the temp Rojo tree does not cover `out/domains/shop/model.luau`. Do not start create-app implementation until that `rbxtsc` issue is resolved.
+
 ## Intended starter output
 
 - `src/client.tsx`
@@ -46,3 +48,7 @@ It does not describe an implemented `create-app` command.
 - policies and capabilities
 - sessions
 - resource invalidation
+
+## If split is required
+
+If the rbxts layout problem cannot be solved without a direct `node_modules` package import, the next step is a runtime-only package split for Roblox-facing APIs, with the CLI/config package kept separate and the smoke updated to consume the runtime package instead of the full root package.

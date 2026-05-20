@@ -318,11 +318,15 @@ The next MVP work should stay on contract and authority metadata, not more trans
 ## Package consumption validation
 
 `apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
-It imports `defineConfig`, `defineAction`, `schema`, `aruna/client`, `aruna/server`, `aruna/server-app`, and `aruna/roblox-runtime` through package names rather than source paths.
+It imports `defineConfig` from the root package for config only, and uses runtime-safe public subpaths such as `aruna/server`, `aruna/schema`, `aruna/client`, `aruna/server-app`, `aruna/client-runtime`, and `aruna/roblox-runtime` for Roblox-facing code.
 It validates `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
 It does not implement `create-app`.
-It does not guarantee published tarball consumption yet.
-`rbxtsc` still fails on the current workspace-only setup because roblox-ts rejects direct node_modules package modules without a different package installation or mount strategy.
+It still fails on `rbxtsc` in the packed smoke because roblox-ts rejects direct `node_modules` package modules and the temp Rojo tree does not cover the emitted `out/domains/shop/model.luau` path.
+
+`pnpm verify:package-consumption` now builds local tarballs and installs the packed Aruna dependency graph without contacting the npm registry for `aruna`, `@arunajs/core`, or `@arunajs/compiler`.
+The smoke now runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript. The remaining blocker is `rbxtsc`: the packed consumer now fails for package-layout reasons rather than config leakage or missing package subpaths.
+
+See [docs/package-consumption.md](docs/package-consumption.md) for the exact failure details and current conclusion.
 
 Do not move to `defineResource` until that cutline is done.
 

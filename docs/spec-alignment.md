@@ -24,7 +24,7 @@ Aruna is aligned with the compiler-first direction of the RFC, but the implement
 | Serialization boundary policy    | Keep   | Runtime now enforces the default `plain-data-v1` action boundary and rejects non-wire-safe input/output values.                                                                                                                                                                                                                                     |
 | Basic action rate limit          | Keep   | Manifest-visible fixed-window rate limits are parsed and enforced per action and player/key.                                                                                                                                                                                                                                                        |
 | Virtual generated imports        | Keep   | `$aruna/actions/client` and `$aruna/actions/server` are supported.                                                                                                                                                                                                                                                                                  |
-| Package consumption validation   | Keep   | `apps/package-consumption-harness` validates package-style consumption through workspace package resolution, package exports, doctor/check/build/inspect/contract diff, and the current TypeScript path setup. `rbxtsc` still needs a different package-install or mount strategy before it can stop rejecting direct node_modules package modules. |
+| Package consumption validation   | Keep   | `apps/package-consumption-harness` validates package-style consumption through workspace package resolution, package exports, doctor/check/build/inspect/contract diff, and the current TypeScript path setup. The packed tarball smoke now resolves the local Aruna tarballs without registry access, runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript; the remaining blocker is `rbxtsc` package-layout, where roblox-ts rejects direct `node_modules` package modules and the temp Rojo tree does not cover `out/domains/shop/model.luau`. |
 | `rbxts` harness                  | Keep   | The harness validates generated output, typecheck, and `rbxtsc`.                                                                                                                                                                                                                                                                                    |
 | Recommended layout harness shape | Keep   | `apps/rbxts-harness` mirrors the recommended app/domain/shared layout and conventional Roblox service tree closely enough for starter/reference use, while the temporary layout shim is driven from compiler manifest metadata and partitions emitted output into `out/client`, `out/server`, and `out/shared`.                                     |
 
@@ -47,7 +47,7 @@ Aruna is aligned with the compiler-first direction of the RFC, but the implement
 | README framing                     | Keep        | The README now distinguishes the general source layout from the temporary harness build-layout shim for `src/.aruna`.                                                                                                                                                                                                                                                                                                     |
 | Harness generatedDir               | Keep        | The private rbxts harness keeps generated files under `src/.aruna`; the temporary layout shim now derives its staging paths from the normalized compiler config, stages compiler-derived copies into `shared/.aruna` and `server/.aruna` as needed for `rbxtsc`, and keeps the committed source of truth under `src/.aruna`. The workspace `aruna` package mount remains in `rbxts_include` as private harness-only glue. |
 | Recommended layout starter harness | In progress | The rbxts harness now mirrors the recommended layout, but create-app and generated Rojo remain deferred.                                                                                                                                                                                                                                                                                                                  |
-| Package consumption foundation     | Keep        | The first-party package-consumption harness is in place, but `rbxtsc` still fails on the current workspace-only setup because roblox-ts rejects direct node_modules package modules without a different package installation or mount strategy.                                                                                                                                                                           |
+| Package consumption foundation     | Keep        | The first-party package-consumption harness is in place, and the packed smoke now installs the local tarballs without registry fetches, installs the generated aliases, validates public package subpaths, and passes TypeScript. The remaining blocker is `rbxtsc` package-layout, so the publish-like package story is closer but still not closed.                                                                                                          |
 
 ## Correct MVP cutline
 
@@ -79,7 +79,8 @@ Aruna is aligned with the compiler-first direction of the RFC, but the implement
 
 ## Next implementation order
 
-1. Create-app planning document or thin create-app RFC.
-2. Thin inspect authority.
-3. Then defineResource / resource invalidation design.
-4. Resource implementation later.
+1. Finish diagnosing the packed-smoke `rbxtsc` package-layout / runtime-package blocker.
+2. Then create-app planning document or thin create-app RFC.
+3. Thin inspect authority.
+4. Then defineResource / resource invalidation design.
+5. Resource implementation later.
