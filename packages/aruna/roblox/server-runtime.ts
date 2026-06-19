@@ -2,6 +2,8 @@
 
 import type { ActionContext, ActionDefinition } from "./server";
 import type { Schema } from "./schema";
+import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
+import { isWireSafe } from "./serialization";
 
 export interface ActionDispatchResult {
 	readonly ok: boolean;
@@ -29,6 +31,8 @@ export function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>): Acti
 		actionsById.set(actionId as string, definition);
 	}
 
+	const rateLimiter = createActionRateLimiter();
+
 	return {
 		dispatch: (player, actionId, input) => {
 			return new Promise<ActionDispatchResult>((resolve) => {
@@ -38,15 +42,36 @@ export function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>): Acti
 					return;
 				}
 
+				// Reject non-wire-safe input before validation or user code runs.
+				if (!isWireSafe(input)) {
+					resolve({ ok: false, error: "non-serializable action input" });
+					return;
+				}
+
 				const inputSchema = definition.input;
 				if (inputSchema !== undefined && !inputSchema.validate(input)) {
 					resolve({ ok: false, error: "invalid action input" });
 					return;
 				}
 
+				const rateLimit = definition.rateLimit;
+				if (rateLimit !== undefined) {
+					const limitKey = resolveRateLimitKey(rateLimit, player);
+					if (!rateLimiter.check(actionId, limitKey, rateLimit)) {
+						resolve({ ok: false, error: "rate limit exceeded" });
+						return;
+					}
+				}
+
 				const context: ActionContext<TPlayer> = { player };
 				Promise.resolve(definition.run(context, input as never)).then(
-					(output) => resolve({ ok: true, output }),
+					(output) => {
+						if (!isWireSafe(output)) {
+							resolve({ ok: false, error: "non-serializable action output" });
+							return;
+						}
+						resolve({ ok: true, output });
+					},
 					(reason) => resolve({ ok: false, error: tostring(reason) }),
 				);
 			});
