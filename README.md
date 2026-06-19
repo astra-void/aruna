@@ -179,6 +179,7 @@ export default defineConfig({
 - Rust-owned compiler core in `crates/aruna_compiler` and N-API binding in `crates/aruna_napi`
 - TypeScript CLI and package wrappers
 - source discovery, entry classification, module classification, import graph construction, action discovery, boundary validation, diagnostics, and manifest generation in Rust
+- OXC-based TS/TSX import parsing in the Rust core (replaces the earlier SWC parser path)
 - deterministic compiler output
 - `aruna check`
 - `aruna inspect`
@@ -321,10 +322,10 @@ The next MVP work should stay on contract and authority metadata, not more trans
 It imports `defineConfig` from the root package for config only, and uses runtime-safe public subpaths such as `aruna/server`, `aruna/schema`, `aruna/client`, `aruna/server-app`, `aruna/client-runtime`, and `aruna/roblox-runtime` for Roblox-facing code.
 It validates `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
 It does not implement `create-app`.
-It still fails on `rbxtsc` in the packed smoke because roblox-ts rejects direct `node_modules` package modules and the temp Rojo tree does not cover the emitted `out/domains/shop/model.luau` path.
+Its workspace `rbxtsc` build now passes: `aruna build --emit-runtime` vendors the roblox-ts-native runtime (`packages/aruna/roblox/`) into `src/.aruna/runtime/`, the harness aliases the Roblox `aruna/*` subpaths to that vendored runtime, and `default.project.json` maps the full `out` tree, so roblox-ts compiles the consumer — including the runtime — to Luau without the "modules directly under node_modules" rejection.
 
 `pnpm verify:package-consumption` now builds local tarballs and installs the packed Aruna dependency graph without contacting the npm registry for `aruna`, `@arunajs/core`, or `@arunajs/compiler`.
-The smoke now runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript. The remaining blocker is `rbxtsc`: the packed consumer now fails for package-layout reasons rather than config leakage or missing package subpaths.
+The smoke runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript. Re-running the packed-tarball smoke against the new vendored-runtime path is the remaining follow-up.
 
 See [docs/package-consumption.md](docs/package-consumption.md) for the exact failure details and current conclusion.
 
