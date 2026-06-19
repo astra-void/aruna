@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { ArunaCompilerOutput } from "@arunajs/core";
 import { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
@@ -129,8 +131,63 @@ async function runInspect(options: CliOptions): Promise<ArunaCompilerOutput> {
   return inspectProject(compilerInput(options));
 }
 
-async function runBuild(options: CliOptions): Promise<ArunaCompilerOutput> {
-  return buildProject(compilerInput(options));
+type BuildCliOptions = CliOptions & {
+  emitRuntime?: boolean;
+};
+
+// Resolves the roblox-ts-native runtime source shipped in the aruna package
+// ("roblox/" at the package root, shipped via package "files"). The compiled
+// CLI may live at dist/cli/cli.js or dist/cli.js, so candidate depths are tried.
+async function findRobloxRuntimeSourceDir(): Promise<string | undefined> {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, "../../roblox"),
+    path.resolve(here, "../roblox"),
+    path.resolve(here, "roblox"),
+  ];
+  for (const candidate of candidates) {
+    const entries = await fs.readdir(candidate).catch(() => undefined);
+    if (entries && entries.some((name) => name.endsWith(".ts"))) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function generatedDirFromOutput(output: ArunaCompilerOutput): string {
+  const first = output.generatedFiles?.[0]?.path;
+  return first ? path.posix.dirname(first) : "src/.aruna";
+}
+
+// Vendors the Roblox-targeted runtime into the project's generated dir so a
+// consumer compiles it as project source (avoids roblox-ts's "modules directly
+// under node_modules" rule). Distinct from the Node reference runtime.
+async function emitRobloxRuntime(root: string, generatedDir: string): Promise<void> {
+  const sourceDir = await findRobloxRuntimeSourceDir();
+  if (sourceDir === undefined) {
+    return;
+  }
+  const entries = await fs.readdir(sourceDir);
+  const runtimeFiles = entries.filter((name) => name.endsWith(".ts"));
+  if (runtimeFiles.length === 0) {
+    return;
+  }
+
+  const targetDir = path.join(root, generatedDir, "runtime");
+  await fs.rm(targetDir, { recursive: true, force: true });
+  await fs.mkdir(targetDir, { recursive: true });
+  for (const name of runtimeFiles) {
+    await fs.copyFile(path.join(sourceDir, name), path.join(targetDir, name));
+  }
+}
+
+async function runBuild(options: BuildCliOptions): Promise<ArunaCompilerOutput> {
+  const input = compilerInput(options);
+  const output = await buildProject(input);
+  if (options.emitRuntime && output.ok) {
+    await emitRobloxRuntime(input.root, generatedDirFromOutput(output));
+  }
+  return output;
 }
 
 async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
@@ -288,16 +345,21 @@ export async function main(): Promise<number> {
       process.exitCode = output.ok ? 0 : 1;
     });
 
-  program
+  const build = program
     .command("build")
     .description("build generated action files and the manifest")
-    .action(async () => {
-      const options = program.optsWithGlobals<CliOptions>();
-      const startedAt = Date.now();
-      const output = await runBuild(options);
-      renderCompilerOutput(output, options, Date.now() - startedAt, "build");
-      process.exitCode = output.ok ? 0 : 1;
-    });
+    .option(
+      "--emit-runtime",
+      "vendor the Roblox-targeted runtime into the generated dir as project source",
+    );
+
+  build.action(async () => {
+    const options = build.optsWithGlobals<BuildCliOptions>();
+    const startedAt = Date.now();
+    const output = await runBuild(options);
+    renderCompilerOutput(output, options, Date.now() - startedAt, "build");
+    process.exitCode = output.ok ? 0 : 1;
+  });
 
   const doctor = program
     .command("doctor")
