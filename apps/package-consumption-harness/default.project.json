@@ -3,12 +3,6 @@
   "globIgnorePaths": ["**/package.json", "**/tsconfig.json"],
   "tree": {
     "$className": "DataModel",
-    "ServerScriptService": {
-      "$className": "ServerScriptService",
-      "TS": {
-        "$path": "out/server"
-      }
-    },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "rbxts_include": {
@@ -17,23 +11,11 @@
           "$className": "Folder",
           "@rbxts": {
             "$path": "node_modules/@rbxts"
-          },
-          "aruna": {
-            "$path": "node_modules/aruna"
           }
         }
       },
       "TS": {
-        "$path": "out/shared"
-      }
-    },
-    "StarterPlayer": {
-      "$className": "StarterPlayer",
-      "StarterPlayerScripts": {
-        "$className": "StarterPlayerScripts",
-        "TS": {
-          "$path": "out/client"
-        }
+        "$path": "out"
       }
     },
     "Workspace": {
