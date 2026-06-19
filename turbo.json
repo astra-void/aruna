@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**", "src/.aruna/**"]
+      "outputs": ["dist/**", "src/.aruna/**", "*.js", "*.d.ts"]
     },
     "check": {
       "dependsOn": ["^build"]
