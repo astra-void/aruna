@@ -3,22 +3,17 @@
 
 import { invokeAction } from "aruna/client-runtime";
 
-export type RestockItemInput = {
-  itemId: string;
-  note?: string | undefined;
-  quantity: number;
-  tags: string[];
-};
+export type RestockItemInput = { itemId: string; note?: string | undefined; quantity: number; tags: string[]; };
 
-export type RestockItemOutput = { ok: boolean; warnings: string[] };
+export type RestockItemOutput = { ok: boolean; warnings: string[]; };
 
 export const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {
   return invokeAction("inventory.restockItem", input) as Promise<RestockItemOutput>;
 };
 
-export type PurchaseItemInput = { itemId: string };
+export type PurchaseItemInput = { itemId: string; };
 
-export type PurchaseItemOutput = { ok: boolean };
+export type PurchaseItemOutput = { ok: boolean; };
 
 export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
   return invokeAction("shop.purchaseItem", input) as Promise<PurchaseItemOutput>;
