@@ -90,11 +90,14 @@ The roblox-ts package-layout blocker is now resolved for `apps/package-consumpti
    2. **Done**: authored a thin roblox-ts-native runtime at `packages/aruna/roblox/` (chosen option **(b)**, kept separate from the Node reference runtime so vitest stays green). It is shipped via package `files` and vendored into the consumer with `aruna build --emit-runtime`. The discovery that the Node runtime is not roblox-ts-compatible (Node idioms, ~71 `rbxtsc` errors, masked previously by the `rbxts-harness` dist-as-ambient mount) is what forced the separate native runtime.
    3. **Done**: `apps/package-consumption-harness` compiles to Luau end-to-end. Its tsconfig aliases the Roblox `aruna/*` subpaths to the vendored runtime, and `default.project.json` maps the full `out` tree. `pnpm test` and `pnpm typecheck` are fully green; `rbxts-harness` is unaffected (still uses the dist-mount model).
 
-   Remaining follow-ups for this workstream:
-   - Automate the `aruna/*` → vendored-runtime tsconfig aliases in `aruna doctor --fix` (the harness currently commits them by hand).
-   - Bring the native runtime to parity with the Node runtime: rate-limit enforcement, serialization boundary policy, fuller schema surface.
-   - Add a dedicated roblox-ts typecheck/CI gate for `packages/aruna/roblox/` so native-runtime regressions are caught without going through a harness build.
-   - Re-run `pnpm verify:package-consumption` (packed-tarball smoke) and confirm the vendored-runtime path also closes the packed case.
+   Follow-ups for this workstream:
+   - **Done**: `aruna doctor --fix --emit-runtime` now writes the `aruna/*` → vendored-runtime tsconfig aliases (`ARUNA_RUNTIME_MODULES` in `tsconfig-paths.ts`), pairing with `build --emit-runtime`.
+   - **Done**: the packed-tarball smoke passes. `scripts/verify-package-consumption.ts` ships `roblox/` in the staged tarball, runs `doctor`/`build` with `--emit-runtime`, and maps the full `out` Rojo tree, so a published-style install compiles to Luau.
+   - **Done**: the native runtime enforces the `plain-data-v1` serialization boundary (`isWireSafe` on action input and output) and per-action fixed-window rate limits in dispatch (`roblox/serialization.ts`, `roblox/rate-limit.ts`).
+   - **Done**: `packages/aruna/tsconfig.roblox.json` type-checks `roblox/**` under `@rbxts` types as part of `pnpm typecheck`, catching native-runtime type regressions without a harness build. (roblox-ts-specific restrictions — reserved identifiers, method-vs-property, node_modules imports — remain covered by the harness/packed `rbxtsc` build.)
+   - **Done**: the schema surface now reaches Phase 1 parity across native, Node, and the Rust compiler — `literal` and `enum` are exposed in the native runtime, and `union` (limited union) was added everywhere (Rust parse + manifest `members` metadata + codegen `A | B` render + Node validate/infer + native validate). Verified end-to-end: a union action renders `{ id: string | number }` in the generated stub.
+   - **Done (turnkey setup)**: `aruna init` scaffolds `aruna.config.ts`, a roblox-ts `tsconfig.json` (with the action + runtime aliases and `@rbxts` typeRoots), and `default.project.json` (full `out` Rojo mapping). A scaffolded project + an action compiles to Luau via `aruna build --emit-runtime` then `rbxtsc` with no hand-editing. Existing files are kept, not overwritten.
+   - Still open: native-runtime *runtime* tests (the dispatch/serialization/rate-limit logic mirrors the vitest-covered Node runtime but is only compiled, not executed, in CI — needs a lune/luau harness).
 2. Then create-app planning document or thin create-app RFC.
 3. Thin inspect authority.
 4. Then defineResource / resource invalidation design.
