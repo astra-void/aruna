@@ -55,7 +55,7 @@ pub enum ArunaSchemaLiteralMetadata {
     Undefined,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaSchemaMetadata {
     pub kind: String,
@@ -69,6 +69,8 @@ pub struct ArunaSchemaMetadata {
     pub values: Option<Vec<ArunaSchemaLiteralMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inner: Option<Box<ArunaSchemaMetadata>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub members: Option<Vec<ArunaSchemaMetadata>>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -314,6 +316,57 @@ fn parse_schema_expression(
     }
 }
 
+fn parse_schema_union_members(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    role: SchemaRole,
+    array: &ArrayExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<Vec<ArunaSchemaMetadata>> {
+    if array.elements.is_empty() {
+        diagnostics.push(schema_invalid_diagnostic(
+            file,
+            action_id,
+            export_name,
+            role,
+            DiagnosticSpan {
+                start: array.span.start as usize,
+                end: array.span.end as usize,
+            },
+            "union schemas require at least one member schema.".to_string(),
+        ));
+        return None;
+    }
+
+    let mut members = Vec::new();
+    for element in &array.elements {
+        let Some(expression) = element.as_expression() else {
+            diagnostics.push(schema_invalid_diagnostic(
+                file,
+                action_id,
+                export_name,
+                role,
+                DiagnosticSpan {
+                    start: element.span().start as usize,
+                    end: element.span().end as usize,
+                },
+                "union members must be schema expressions such as schema.string().".to_string(),
+            ));
+            return None;
+        };
+
+        let Some(member) =
+            parse_schema_expression(file, action_id, export_name, role, expression, diagnostics)
+        else {
+            return None;
+        };
+        members.push(member);
+    }
+
+    Some(members)
+}
+
 fn parse_schema_argument(
     file: &str,
     action_id: &str,
@@ -475,10 +528,7 @@ fn parse_schema_object(
     Some(ArunaSchemaMetadata {
         kind: "object".to_string(),
         properties: Some(properties),
-        items: None,
-        literal: None,
-        values: None,
-        inner: None,
+        ..Default::default()
     })
 }
 
@@ -555,11 +605,7 @@ fn parse_schema_call(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
-                properties: None,
-                items: None,
-                literal: None,
-                values: None,
-                inner: None,
+                ..Default::default()
             })
         }
         "literal" => {
@@ -611,11 +657,8 @@ fn parse_schema_call(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
-                properties: None,
-                items: None,
                 literal: Some(value),
-                values: None,
-                inner: None,
+                ..Default::default()
             })
         }
         "array" => {
@@ -662,11 +705,8 @@ fn parse_schema_call(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
-                properties: None,
                 items: Some(Box::new(items)),
-                literal: None,
-                values: None,
-                inner: None,
+                ..Default::default()
             })
         }
         "object" => {
@@ -761,11 +801,8 @@ fn parse_schema_call(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
-                properties: None,
-                items: None,
-                literal: None,
-                values: None,
                 inner: Some(Box::new(inner)),
+                ..Default::default()
             })
         }
         "enum" => {
@@ -828,11 +865,66 @@ fn parse_schema_call(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
-                properties: None,
-                items: None,
-                literal: None,
                 values: Some(values),
-                inner: None,
+                ..Default::default()
+            })
+        }
+        "union" => {
+            let Some(argument) = call.arguments.first() else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "union schemas require exactly one array literal argument.".to_string(),
+                ));
+                return None;
+            };
+
+            if call.arguments.len() != 1 {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "union schemas require exactly one array literal argument.".to_string(),
+                ));
+                return None;
+            }
+
+            let Argument::ArrayExpression(array) = argument else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: argument.span().start as usize,
+                        end: argument.span().end as usize,
+                    },
+                    "union schemas require an array literal of schema members.".to_string(),
+                ));
+                return None;
+            };
+
+            let Some(members) =
+                parse_schema_union_members(file, action_id, export_name, role, array, diagnostics)
+            else {
+                return None;
+            };
+
+            Some(ArunaSchemaMetadata {
+                kind: kind.to_string(),
+                members: Some(members),
+                ..Default::default()
             })
         }
         _ => {
@@ -1366,11 +1458,7 @@ mod tests {
     fn schema(kind: &str) -> ArunaSchemaMetadata {
         ArunaSchemaMetadata {
             kind: kind.to_string(),
-            properties: None,
-            items: None,
-            literal: None,
-            values: None,
-            inner: None,
+            ..Default::default()
         }
     }
 
@@ -1383,10 +1471,7 @@ mod tests {
                     .map(|(key, value)| (key.to_string(), value.clone()))
                     .collect::<BTreeMap<_, _>>(),
             ),
-            items: None,
-            literal: None,
-            values: None,
-            inner: None,
+            ..Default::default()
         }
     }
 
@@ -1517,11 +1602,37 @@ export const purchaseItem = defineAction({
             action.input_schema,
             Some(ArunaSchemaMetadata {
                 kind: "array".to_string(),
-                properties: None,
                 items: Some(Box::new(schema("string"))),
-                literal: None,
-                values: None,
-                inner: None,
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn extracts_union_schema_metadata() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: schema.union([schema.string(), schema.number()]),
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        assert!(diagnostics.is_empty());
+        assert!(action.has_input_schema);
+        assert_eq!(
+            action.input_schema,
+            Some(ArunaSchemaMetadata {
+                kind: "union".to_string(),
+                members: Some(vec![schema("string"), schema("number")]),
+                ..Default::default()
             })
         );
     }

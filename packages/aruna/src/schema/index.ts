@@ -41,6 +41,11 @@ export type EnumSchema<TValues extends readonly SchemaLiteral[] = readonly Schem
   readonly values: TValues;
 };
 
+export type UnionSchema = {
+  readonly kind: "union";
+  readonly members: readonly Schema[];
+};
+
 export type Schema =
   | StringSchema
   | NumberSchema
@@ -49,7 +54,8 @@ export type Schema =
   | ArraySchema
   | ObjectSchema
   | OptionalSchema
-  | EnumSchema;
+  | EnumSchema
+  | UnionSchema;
 
 type OptionalKeys<TShape extends SchemaShape> = {
   [TKey in keyof TShape]-?: TShape[TKey] extends OptionalSchema ? TKey : never;
@@ -93,7 +99,11 @@ export type InferSchema<TSchema extends Schema> = TSchema extends StringSchema
                 : unknown
               : TSchema extends EnumSchema<infer TValues>
                 ? TValues[number]
-                : never;
+                : TSchema extends UnionSchema
+                  ? TSchema["members"][number] extends Schema
+                    ? InferSchema<TSchema["members"][number]>
+                    : never
+                  : never;
 
 export type SchemaValidationIssue = {
   readonly path: readonly string[];
@@ -259,6 +269,15 @@ function validateSchemaAtPath(
             ),
           ];
     }
+    case "union": {
+      for (const member of schema.members) {
+        if (validateSchemaAtPath(member, value, path).length === 0) {
+          return [];
+        }
+      }
+
+      return [createIssue(path, "expected a value matching one of the union members")];
+    }
     default:
       throw new Error("Unsupported schema kind.");
   }
@@ -360,5 +379,11 @@ export const schema = {
 
   enum<const TValues extends readonly SchemaLiteral[]>(values: TValues): EnumSchema<TValues> {
     return { kind: "enum", values };
+  },
+
+  union<const TMembers extends readonly Schema[]>(
+    members: TMembers,
+  ): UnionSchema & { readonly members: TMembers } {
+    return { kind: "union", members };
   },
 };

@@ -42,6 +42,16 @@ describe("schema runtime", () => {
     });
   });
 
+  it("accepts any matching union member", () => {
+    const idOrName = schema.union([schema.number(), schema.string()]);
+    expect(validateSchema(idOrName, 7)).toEqual({ ok: true });
+    expect(validateSchema(idOrName, "player-7")).toEqual({ ok: true });
+    expect(validateSchema(idOrName, true)).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected a value matching one of the union members" }],
+    });
+  });
+
   it("validates arrays item-by-item", () => {
     expect(validateSchema(schema.array(schema.string()), ["one", "two"])).toEqual({ ok: true });
     expect(validateSchema(schema.array(schema.string()), ["one", 2])).toEqual({

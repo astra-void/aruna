@@ -2,13 +2,24 @@
 //
 // Hand-authored to compile under roblox-ts. This is the Roblox-targeted runtime
 // (vendored into a project's src/.aruna/runtime/), distinct from the Node
-// reference runtime under packages/aruna/src that is validated by vitest.
+// reference runtime that vitest validates.
 //
 // Builder functions are named `*Schema` rather than `string`/`number`/... because
 // roblox-ts reserves identifiers that collide with Lua globals (e.g. `string`).
 // The public API stays `schema.string()` etc. via the exported `schema` object.
 
-export type SchemaTypeName = "string" | "number" | "boolean" | "object" | "array" | "optional";
+export type SchemaTypeName =
+	| "string"
+	| "number"
+	| "boolean"
+	| "object"
+	| "array"
+	| "optional"
+	| "literal"
+	| "enum"
+	| "union";
+
+export type SchemaLiteral = string | number | boolean;
 
 export interface Schema<T = unknown> {
 	readonly typeName: SchemaTypeName;
@@ -90,6 +101,45 @@ function objectSchema<F extends FieldRecord>(fields: F): Schema<InferFields<F>> 
 	};
 }
 
+function literalSchema<const TValue extends SchemaLiteral>(value: TValue): Schema<TValue> {
+	return {
+		typeName: "literal",
+		validate: (candidate) => candidate === value,
+	};
+}
+
+function enumSchema<const TValues extends readonly SchemaLiteral[]>(
+	values: TValues,
+): Schema<TValues[number]> {
+	return {
+		typeName: "enum",
+		validate: (candidate) => {
+			for (const value of values) {
+				if (candidate === value) {
+					return true;
+				}
+			}
+			return false;
+		},
+	};
+}
+
+function unionSchema<const TMembers extends readonly Schema[]>(
+	members: TMembers,
+): Schema<Infer<TMembers[number]>> {
+	return {
+		typeName: "union",
+		validate: (candidate) => {
+			for (const member of members) {
+				if (member.validate(candidate)) {
+					return true;
+				}
+			}
+			return false;
+		},
+	};
+}
+
 export const schema = {
 	string: stringSchema,
 	number: numberSchema,
@@ -97,4 +147,7 @@ export const schema = {
 	array: arraySchema,
 	optional: optionalSchema,
 	object: objectSchema,
+	literal: literalSchema,
+	enum: enumSchema,
+	union: unionSchema,
 };

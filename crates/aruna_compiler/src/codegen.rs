@@ -138,8 +138,25 @@ fn render_schema_metadata(schema: &ArunaSchemaMetadata) -> String {
             .map(|inner| format!("{} | undefined", render_schema_metadata(inner)))
             .unwrap_or_else(|| "unknown".to_string()),
         "enum" => render_enum_schema(schema.values.as_ref()),
+        "union" => render_union_schema(schema.members.as_ref()),
         _ => "unknown".to_string(),
     }
+}
+
+fn render_union_schema(members: Option<&Vec<ArunaSchemaMetadata>>) -> String {
+    let Some(members) = members else {
+        return "unknown".to_string();
+    };
+
+    if members.is_empty() {
+        return "never".to_string();
+    }
+
+    members
+        .iter()
+        .map(render_schema_metadata)
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 
 fn render_enum_schema(values: Option<&Vec<ArunaSchemaLiteralMetadata>>) -> String {
@@ -594,23 +611,15 @@ mod tests {
                         "itemId".to_string(),
                         ArunaSchemaMetadata {
                             kind: "string".to_string(),
-                            properties: None,
-                            items: None,
-                            literal: None,
-                            values: None,
-                            inner: None,
+                            ..Default::default()
                         },
                     ),
                     (
                         "labels".to_string(),
                         ArunaSchemaMetadata {
                             kind: "array".to_string(),
-                            properties: None,
                             items: Some(Box::new(ArunaSchemaMetadata {
                                 kind: "enum".to_string(),
-                                properties: None,
-                                items: None,
-                                literal: None,
                                 values: Some(vec![
                                     ArunaSchemaLiteralMetadata::String {
                                         value: "rare".to_string(),
@@ -619,38 +628,27 @@ mod tests {
                                         value: "legendary".to_string(),
                                     },
                                 ]),
-                                inner: None,
+                                ..Default::default()
                             })),
-                            literal: None,
-                            values: None,
-                            inner: None,
+                            ..Default::default()
                         },
                     ),
                     (
                         "note".to_string(),
                         ArunaSchemaMetadata {
                             kind: "optional".to_string(),
-                            properties: None,
-                            items: None,
-                            literal: None,
-                            values: None,
                             inner: Some(Box::new(ArunaSchemaMetadata {
                                 kind: "literal".to_string(),
-                                properties: None,
-                                items: None,
                                 literal: Some(ArunaSchemaLiteralMetadata::String {
                                     value: "gift".to_string(),
                                 }),
-                                values: None,
-                                inner: None,
+                                ..Default::default()
                             })),
+                            ..Default::default()
                         },
                     ),
                 ])),
-                items: None,
-                literal: None,
-                values: None,
-                inner: None,
+                ..Default::default()
             }),
             output_schema: Some(ArunaSchemaMetadata {
                 kind: "object".to_string(),
@@ -658,17 +656,10 @@ mod tests {
                     "ok".to_string(),
                     ArunaSchemaMetadata {
                         kind: "boolean".to_string(),
-                        properties: None,
-                        items: None,
-                        literal: None,
-                        values: None,
-                        inner: None,
+                        ..Default::default()
                     },
                 )])),
-                items: None,
-                literal: None,
-                values: None,
-                inner: None,
+                ..Default::default()
             }),
         };
 

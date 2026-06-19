@@ -104,6 +104,7 @@ export type ArunaSchemaMetadata = {
   literal?: ArunaSchemaLiteralMetadata | undefined;
   values?: ArunaSchemaLiteralMetadata[] | undefined;
   inner?: ArunaSchemaMetadata | undefined;
+  members?: ArunaSchemaMetadata[] | undefined;
 };
 
 export type ArunaGeneratedFile = {
