@@ -15,6 +15,7 @@ import {
   type CliColorMode,
 } from "./format.js";
 import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
+import { formatInitReport, runInit } from "./init.js";
 import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
@@ -34,6 +35,7 @@ type CliOptions = {
 
 type DoctorCliOptions = CliOptions & {
   fix?: boolean;
+  emitRuntime?: boolean;
 };
 
 function isCI(env: NodeJS.ProcessEnv): boolean {
@@ -197,6 +199,7 @@ async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
       projectRoot: compilerOptions.root,
       configPath: compilerOptions.configPath,
       fix: options.fix,
+      emitRuntime: options.emitRuntime,
     });
 
     if (options.json) {
@@ -361,10 +364,27 @@ export async function main(): Promise<number> {
     process.exitCode = output.ok ? 0 : 1;
   });
 
+  program
+    .command("init")
+    .description("scaffold aruna.config.ts, tsconfig.json, and default.project.json")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const result = runInit({ projectRoot: compilerInput(options).root });
+      if (options.json) {
+        writeJson(result);
+      } else {
+        writeText(formatInitReport(result));
+      }
+    });
+
   const doctor = program
     .command("doctor")
     .description("inspect and optionally fix generated action aliases in tsconfig.json")
-    .option("--fix", "write the required tsconfig path aliases");
+    .option("--fix", "write the required tsconfig path aliases")
+    .option(
+      "--emit-runtime",
+      "also alias the Roblox aruna/* subpaths to the vendored runtime (pairs with build --emit-runtime)",
+    );
 
   doctor.action(async () => {
     const options = doctor.optsWithGlobals<DoctorCliOptions>();

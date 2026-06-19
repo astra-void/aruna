@@ -6,13 +6,16 @@ import {
   ARUNA_ACTION_PATHS,
   inspectArunaActionPaths,
   resolveArunaActionPaths,
+  resolveArunaRuntimePaths,
   updateArunaActionPaths,
+  updateArunaRuntimePaths,
 } from "./tsconfig-paths.js";
 
 export type DoctorOptions = {
   projectRoot: string;
   configPath?: string | undefined;
   fix?: boolean | undefined;
+  emitRuntime?: boolean | undefined;
 };
 
 export type DoctorReport = {
@@ -279,10 +282,27 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
     return report;
   }
 
-  const updated = updateArunaActionPaths(tsconfigResult.value, report.expectedPaths, {
+  const tsconfig = tsconfigResult.value;
+  const actionUpdate = updateArunaActionPaths(tsconfig, report.expectedPaths, {
     requireBaseUrl: true,
   });
-  if (!updated.changed) {
+  let finalContents = actionUpdate.contents;
+  let changed = actionUpdate.changed;
+
+  const runtimeChanges: string[] = [];
+  if (options.emitRuntime) {
+    const runtimePaths = resolveArunaRuntimePaths(report.tsconfigPath, report.generatedDir);
+    const runtimeUpdate = updateArunaRuntimePaths(tsconfig, runtimePaths);
+    finalContents = runtimeUpdate.contents;
+    if (runtimeUpdate.changed) {
+      changed = true;
+      for (const [alias, targets] of Object.entries(runtimePaths)) {
+        runtimeChanges.push(`${alias} -> ${formatPathList(targets)}`);
+      }
+    }
+  }
+
+  if (!changed) {
     return {
       ...report,
       fixApplied: true,
@@ -290,7 +310,7 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
     };
   }
 
-  fs.writeFileSync(report.tsconfigPath, updated.contents, "utf8");
+  fs.writeFileSync(report.tsconfigPath, finalContents, "utf8");
   const fixChanges: string[] = [];
   if (!report.status.baseUrlPresent && report.status.baseUrlRequired) {
     fixChanges.push('added compilerOptions.baseUrl = "."');
@@ -305,6 +325,7 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
       `${ARUNA_ACTION_PATHS.server} -> ${formatPathList(report.expectedPaths.server)}`,
     );
   }
+  fixChanges.push(...runtimeChanges);
   return {
     ...report,
     fixApplied: true,

@@ -114,6 +114,79 @@ export function inspectArunaActionPaths(
   };
 }
 
+// Roblox-facing runtime modules vendored into `<generatedDir>/runtime/` by
+// `aruna build --emit-runtime`. The bare `aruna/<name>` subpaths are aliased to
+// those project-source files so roblox-ts compiles them instead of rejecting a
+// `node_modules` package import.
+export const ARUNA_RUNTIME_MODULES = [
+  "client",
+  "client-runtime",
+  "server",
+  "server-runtime",
+  "server-app",
+  "roblox-runtime",
+  "runtime",
+  "schema",
+] as const;
+
+export function resolveArunaRuntimePaths(
+  tsconfigPath: string,
+  generatedDir: string,
+): Record<string, string[]> {
+  const tsconfigDir = path.dirname(tsconfigPath);
+  const result: Record<string, string[]> = {};
+  for (const moduleName of ARUNA_RUNTIME_MODULES) {
+    const target = path
+      .relative(tsconfigDir, path.resolve(tsconfigDir, generatedDir, "runtime", `${moduleName}.ts`))
+      .split(path.sep)
+      .join("/");
+    result[`aruna/${moduleName}`] = [target];
+  }
+  return result;
+}
+
+// Merges an arbitrary alias -> target-paths map into compilerOptions.paths,
+// mutating `tsconfig` in place. Used for the runtime aliases alongside the
+// action aliases so both land in a single tsconfig write.
+export function updateArunaRuntimePaths(
+  tsconfig: unknown,
+  aliasPaths: Record<string, string[]>,
+): TsconfigEditResult {
+  if (!isRecord(tsconfig)) {
+    throw new Error("tsconfig must contain a top-level JSON object.");
+  }
+  if (tsconfig["compilerOptions"] !== undefined && !isRecord(tsconfig["compilerOptions"])) {
+    throw new Error("compilerOptions must be a JSON object.");
+  }
+  const compilerOptions = isRecord(tsconfig["compilerOptions"])
+    ? tsconfig["compilerOptions"]
+    : (tsconfig["compilerOptions"] = {});
+  if (compilerOptions["paths"] !== undefined && !isRecord(compilerOptions["paths"])) {
+    throw new Error("compilerOptions.paths must be a JSON object.");
+  }
+  const paths = isRecord(compilerOptions["paths"])
+    ? compilerOptions["paths"]
+    : (compilerOptions["paths"] = {});
+
+  let changed = false;
+  for (const [alias, desired] of Object.entries(aliasPaths)) {
+    const current = normalizePathList(paths[alias]);
+    const matches =
+      current !== undefined &&
+      current.length === desired.length &&
+      current.every((entry, index) => entry === desired[index]);
+    if (!matches) {
+      paths[alias] = [...desired];
+      changed = true;
+    }
+  }
+
+  return {
+    changed,
+    contents: `${JSON.stringify(tsconfig, null, 2)}\n`,
+  };
+}
+
 export function updateArunaActionPaths(
   tsconfig: unknown,
   expected: ArunaActionPathMap,
