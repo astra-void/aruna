@@ -56,7 +56,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.shims.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit && tsc -p tsconfig.roblox.json --noEmit",
     "test": "pnpm exec vitest run",
     "lint": "pnpm exec oxlint src test",
     "lint:fix": "pnpm exec oxlint src test --fix",
