@@ -137,9 +137,9 @@ export function buildConsumerPackageJson(
     private: true,
     type: "module",
     scripts: {
-      doctor: "aruna doctor --fix --project .",
+      doctor: "aruna doctor --fix --emit-runtime --project .",
       check: "aruna check --project .",
-      build: "aruna build --project .",
+      build: "aruna build --emit-runtime --project .",
       inspect: "aruna inspect actions --project .",
       contract: "aruna inspect contract --project . --json",
       typecheck: "tsc -p tsconfig.typecheck.json --noEmit",
@@ -454,6 +454,14 @@ async function stagePackage(options: {
       await fs.cp(sourcePath, path.join(options.stagedPackageDirectory, fileName));
     }
   }
+  // The roblox-ts-native runtime source is shipped (via package "files") and
+  // vendored into consumers by `aruna build --emit-runtime`. Only aruna has it.
+  const robloxSource = path.join(options.sourcePackageDirectory, "roblox");
+  if (await exists(robloxSource)) {
+    await fs.cp(robloxSource, path.join(options.stagedPackageDirectory, "roblox"), {
+      recursive: true,
+    });
+  }
 
   const stagedPackageJson: PackageJson = {
     name: sourcePackageJson.name,
@@ -655,12 +663,6 @@ async function createConsumerFiles(
       '  "globIgnorePaths": ["**/package.json", "**/tsconfig.json"],',
       '  "tree": {',
       '    "$className": "DataModel",',
-      '    "ServerScriptService": {',
-      '      "$className": "ServerScriptService",',
-      '      "TS": {',
-      '        "$path": "out/server"',
-      "      }",
-      "    },",
       '    "ReplicatedStorage": {',
       '      "$className": "ReplicatedStorage",',
       '      "rbxts_include": {',
@@ -669,23 +671,11 @@ async function createConsumerFiles(
       '          "$className": "Folder",',
       '          "@rbxts": {',
       '            "$path": "node_modules/@rbxts"',
-      "          },",
-      '          "aruna": {',
-      '            "$path": "node_modules/aruna"',
       "          }",
       "        }",
       "      },",
       '      "TS": {',
-      '        "$path": "out/shared"',
-      "      }",
-      "    },",
-      '    "StarterPlayer": {',
-      '      "$className": "StarterPlayer",',
-      '      "StarterPlayerScripts": {',
-      '        "$className": "StarterPlayerScripts",',
-      '        "TS": {',
-      '          "$path": "out/client"',
-      "        }",
+      '        "$path": "out"',
       "      }",
       "    },",
       '    "Workspace": {',
@@ -986,7 +976,7 @@ async function runChecks(): Promise<void> {
   await runCommand(
     "aruna doctor --fix",
     "pnpm",
-    ["exec", "aruna", "doctor", "--fix", "--project", "."],
+    ["exec", "aruna", "doctor", "--fix", "--emit-runtime", "--project", "."],
     tempRoot,
     "06-doctor-fix.log",
   );
@@ -1000,7 +990,7 @@ async function runChecks(): Promise<void> {
   await runCommand(
     "aruna build",
     "pnpm",
-    ["exec", "aruna", "build", "--project", "."],
+    ["exec", "aruna", "build", "--emit-runtime", "--project", "."],
     tempRoot,
     "08-build.log",
   );
