@@ -56,6 +56,7 @@ describe("native staging helpers", () => {
     const packageJson = JSON.parse(await fs.readFile(staged.packageJsonPath, "utf8")) as {
       name: string;
       version: string;
+      repository: { type: string; url: string };
       main: string;
       files: string[];
       os: string[];
@@ -66,6 +67,10 @@ describe("native staging helpers", () => {
     expect(packageJson).toEqual({
       name: "@arunajs/compiler-darwin-arm64",
       version: "0.1.0",
+      repository: {
+        type: "git",
+        url: "git+https://github.com/astra-void/aruna.git",
+      },
       main: "./compiler.darwin-arm64.node",
       files: ["compiler.darwin-arm64.node"],
       os: ["darwin"],

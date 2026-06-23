@@ -2,6 +2,10 @@
   "name": "@arunajs/compiler",
   "version": "0.1.1",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astra-void/aruna.git"
+  },
   "files": [
     "dist"
   ],

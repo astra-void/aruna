@@ -22,6 +22,7 @@ type SourcePackageJson = {
   name?: string;
   version?: string;
   type?: string;
+  repository?: unknown;
   main?: string;
   module?: string;
   types?: string;
@@ -86,6 +87,7 @@ export async function stageCompilerPackage(
     name: sourcePackageJson.name ?? "@arunajs/compiler",
     version: options.version,
     type: sourcePackageJson.type,
+    repository: sourcePackageJson.repository,
     main: sourcePackageJson.main,
     module: sourcePackageJson.module,
     types: sourcePackageJson.types,
