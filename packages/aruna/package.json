@@ -1,6 +1,6 @@
 {
   "name": "@arunajs/aruna",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "repository": {
     "type": "git",
@@ -32,25 +32,9 @@
       "types": "./client.d.ts",
       "import": "./client.js"
     },
-    "./client-runtime": {
-      "types": "./client-runtime.d.ts",
-      "import": "./client-runtime.js"
-    },
-    "./server-runtime": {
-      "types": "./server-runtime.d.ts",
-      "import": "./server-runtime.js"
-    },
-    "./server-app": {
-      "types": "./server-app.d.ts",
-      "import": "./server-app.js"
-    },
-    "./roblox-runtime": {
-      "types": "./roblox-runtime.d.ts",
-      "import": "./roblox-runtime.js"
-    },
-    "./runtime": {
-      "types": "./runtime.d.ts",
-      "import": "./runtime.js"
+    "./roblox": {
+      "types": "./roblox.d.ts",
+      "import": "./roblox.js"
     },
     "./schema": {
       "types": "./schema.d.ts",

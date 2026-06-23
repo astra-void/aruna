@@ -178,7 +178,7 @@ describe("release orchestrator", () => {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName(hostTarget)]: "0.1.1",
+      [nativePackageName(hostTarget)]: "0.1.2",
     });
 
     const stagedPackageJsons = await Promise.all(
@@ -293,8 +293,8 @@ describe("release orchestrator", () => {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName("linux-x64-gnu")]: "0.1.1",
-      [nativePackageName("linux-arm64-gnu")]: "0.1.1",
+      [nativePackageName("linux-x64-gnu")]: "0.1.2",
+      [nativePackageName("linux-arm64-gnu")]: "0.1.2",
     });
   });
 
@@ -457,7 +457,7 @@ describe("release orchestrator", () => {
       await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
     ) as { optionalDependencies: Record<string, string> };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName(hostTarget)]: "0.1.1",
+      [nativePackageName(hostTarget)]: "0.1.2",
     });
 
     const publishCalls = spawnCalls.filter((entry) => entry.args.includes("publish"));
