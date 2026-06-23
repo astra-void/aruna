@@ -80,6 +80,21 @@ importers:
         specifier: 5.5.3
         version: 5.5.3
 
+  apps/roblox-runtime-test:
+    devDependencies:
+      '@rbxts/compiler-types':
+        specifier: 3.0.0-types.0
+        version: 3.0.0-types.0
+      '@rbxts/types':
+        specifier: ^1.0.924
+        version: 1.0.924
+      roblox-ts:
+        specifier: 3.0.0
+        version: 3.0.0
+      typescript:
+        specifier: 5.5.3
+        version: 5.5.3
+
   packages/aruna:
     dependencies:
       '@arunajs/compiler':

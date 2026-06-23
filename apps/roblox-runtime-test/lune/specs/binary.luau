@@ -1,0 +1,143 @@
+--!nocheck
+-- Execution coverage for the schema-driven binary codec (roblox/binary.ts).
+local roblox = require("@lune/roblox")
+local Vector3, Color3, CFrame = roblox.Vector3, roblox.Color3, roblox.CFrame
+
+return function(ctx)
+	local t = ctx.t
+	local schema = ctx.load("schema").schema
+	local binary = ctx.load("binary")
+	local encodeBinary, decodeBinary = binary.encodeBinary, binary.decodeBinary
+
+	local function roundTrip(s, value)
+		return decodeBinary(s, encodeBinary(s, value))
+	end
+
+	t.describe("binary codec", function()
+		t.it("round trips primitives", function()
+			t.eq(roundTrip(schema.string(), "hello"), "hello")
+			t.eq(roundTrip(schema.number(), 3.5), 3.5)
+			t.eq(roundTrip(schema.number(), -42), -42)
+			t.isTrue(roundTrip(schema.boolean(), true))
+			t.isFalse(roundTrip(schema.boolean(), false))
+		end)
+
+		t.it("round trips utf-8 strings", function()
+			t.eq(roundTrip(schema.string(), "안녕 🌙"), "안녕 🌙")
+			t.eq(roundTrip(schema.string(), ""), "")
+		end)
+
+		t.it("spends no bytes on literals", function()
+			local s = schema.literal("ready")
+			local bytes = encodeBinary(s, "ready")
+			t.eq(buffer.len(bytes), 0)
+			t.eq(decodeBinary(s, bytes), "ready")
+		end)
+
+		t.it("round trips arrays", function()
+			local s = schema.array(schema.number())
+			local decoded = roundTrip(s, { 1, 2, 3 })
+			t.eq(#decoded, 3)
+			t.eq(decoded[1], 1)
+			t.eq(decoded[3], 3)
+			t.eq(#roundTrip(s, {}), 0)
+		end)
+
+		t.it("round trips objects", function()
+			local s = schema.object({ amount = schema.number(), source = schema.string() })
+			local decoded = roundTrip(s, { amount = 12, source = "trap" })
+			t.eq(decoded.amount, 12)
+			t.eq(decoded.source, "trap")
+		end)
+
+		t.it("round trips present and absent optionals", function()
+			local s = schema.object({ name = schema.string(), nick = schema.optional(schema.string()) })
+			local present = roundTrip(s, { name = "Ada", nick = "Bug" })
+			t.eq(present.nick, "Bug")
+			local absent = roundTrip(s, { name = "Ada" })
+			t.eq(absent.nick, nil)
+		end)
+
+		t.it("round trips enums and unions", function()
+			local e = schema.enum({ "idle", "running", "done" })
+			t.eq(roundTrip(e, "running"), "running")
+			local u = schema.union({ schema.string(), schema.number() })
+			t.eq(roundTrip(u, "text"), "text")
+			t.eq(roundTrip(u, 99), 99)
+		end)
+
+		t.it("round trips each numeric width", function()
+			t.eq(roundTrip(schema.u8(), 200), 200)
+			t.eq(roundTrip(schema.u16(), 60000), 60000)
+			t.eq(roundTrip(schema.u32(), 4000000000), 4000000000)
+			t.eq(roundTrip(schema.i8(), -100), -100)
+			t.eq(roundTrip(schema.i16(), -30000), -30000)
+			t.eq(roundTrip(schema.i32(), -2000000000), -2000000000)
+			t.eq(roundTrip(schema.f32(), 0.5), 0.5)
+		end)
+
+		t.it("packs each width to its declared byte count", function()
+			t.eq(buffer.len(encodeBinary(schema.u8(), 1)), 1)
+			t.eq(buffer.len(encodeBinary(schema.i8(), 1)), 1)
+			t.eq(buffer.len(encodeBinary(schema.u16(), 1)), 2)
+			t.eq(buffer.len(encodeBinary(schema.i16(), 1)), 2)
+			t.eq(buffer.len(encodeBinary(schema.u32(), 1)), 4)
+			t.eq(buffer.len(encodeBinary(schema.f32(), 1)), 4)
+			t.eq(buffer.len(encodeBinary(schema.number(), 1)), 8)
+		end)
+
+		t.it("validates integer width ranges", function()
+			t.isTrue(schema.u8().validate(255))
+			t.isFalse(schema.u8().validate(256))
+			t.isFalse(schema.u8().validate(-1))
+			t.isFalse(schema.u8().validate(1.5))
+			t.isTrue(schema.i16().validate(-32768))
+			t.isFalse(schema.i16().validate(-32769))
+		end)
+
+		t.it("round trips a nested structure", function()
+			local s = schema.object({
+				id = schema.string(),
+				tags = schema.array(schema.string()),
+				stats = schema.object({ hp = schema.number(), alive = schema.boolean() }),
+			})
+			local decoded = roundTrip(s, {
+				id = "p1",
+				tags = { "a", "b" },
+				stats = { hp = 100, alive = true },
+			})
+			t.eq(decoded.id, "p1")
+			t.eq(#decoded.tags, 2)
+			t.eq(decoded.tags[2], "b")
+			t.eq(decoded.stats.hp, 100)
+			t.isTrue(decoded.stats.alive)
+		end)
+
+		t.it("round trips Roblox userdata as native value types", function()
+			-- f32-exact values so the round trip is bit-for-bit.
+			local v = roundTrip(schema.vector3(), Vector3.new(1.5, -2.25, 0.5))
+			t.eq(typeof(v), "Vector3")
+			t.eq(v.X, 1.5)
+			t.eq(v.Y, -2.25)
+			t.eq(v.Z, 0.5)
+
+			local c = roundTrip(schema.color3(), Color3.new(0.25, 0.5, 1))
+			t.eq(typeof(c), "Color3")
+			t.eq(c.R, 0.25)
+			t.eq(c.B, 1)
+
+			local cf = roundTrip(schema.cframe(), CFrame.new(1.5, 2, -0.5))
+			t.eq(typeof(cf), "CFrame")
+			local x, y, z = cf:GetComponents()
+			t.eq(x, 1.5)
+			t.eq(y, 2)
+			t.eq(z, -0.5)
+		end)
+
+		t.it("packs each userdata kind to its declared byte count", function()
+			t.eq(buffer.len(encodeBinary(schema.vector3(), Vector3.new(0, 0, 0))), 12)
+			t.eq(buffer.len(encodeBinary(schema.color3(), Color3.new(0, 0, 0))), 12)
+			t.eq(buffer.len(encodeBinary(schema.cframe(), CFrame.new(0, 0, 0))), 48)
+		end)
+	end)
+end

@@ -1,0 +1,16 @@
+{
+  "name": "@arunajs/roblox-runtime-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "tsx scripts/run-runtime-tests.ts",
+    "test:keep": "tsx scripts/run-runtime-tests.ts --keep",
+    "rbxtsc": "rbxtsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@rbxts/compiler-types": "3.0.0-types.0",
+    "@rbxts/types": "^1.0.924",
+    "roblox-ts": "3.0.0",
+    "typescript": "5.5.3"
+  }
+}
