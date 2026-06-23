@@ -12,12 +12,13 @@ import { NativeTargetInfo } from "../src/native-platform.js";
 
 export type NativeBuildProfile = "debug" | "release";
 export type ZigPolicy = "auto" | "always" | "never";
-export type BuildTool = "cargo" | "cargo-zigbuild";
+export type BuildTool = "cargo" | "cargo-zigbuild" | "cargo-xwin";
 
 export type ToolAvailability = {
   cargo: boolean;
   cargoZigbuild: boolean;
   zig: boolean;
+  cargoXwin?: boolean;
 };
 
 export type BuildNativeArtifactOptions = {
@@ -142,6 +143,7 @@ export function detectToolAvailability(spawn: typeof spawnSync = spawnSync): Too
     cargo: versionCheck(spawn, "cargo", ["--version"]),
     cargoZigbuild: versionCheck(spawn, "cargo-zigbuild", ["--version"]),
     zig: versionCheck(spawn, "zig", ["version"]),
+    cargoXwin: versionCheck(spawn, "cargo-xwin", ["--version"]),
   };
 }
 
@@ -152,10 +154,12 @@ function targetArtifactCandidates(
   buildTool: BuildTool = "cargo",
 ): string[] {
   const targetDir = path.join(workspaceRoot, "target");
+  // Any cross build passes `--target <triple>`, so cargo nests output under
+  // target/<triple>/<profile>. Only a plain host `cargo build` uses target/<profile>.
   const targetDirs =
-    buildTool === "cargo-zigbuild"
-      ? [path.join(targetDir, targetInfo.rustTarget, profile)]
-      : [path.join(targetDir, profile)];
+    buildTool === "cargo"
+      ? [path.join(targetDir, profile)]
+      : [path.join(targetDir, targetInfo.rustTarget, profile)];
 
   return targetDirs.flatMap((directory) => [
     path.join(directory, nativeBuildOutputName(targetInfo.target)),
@@ -241,14 +245,30 @@ export function selectNativeBuildTool(args: {
     return "cargo";
   }
 
-  if (targetInfo.os !== "linux") {
-    const reason = `Cross-compiling ${args.target} from ${args.hostTarget} is not supported. Only Linux targets can use cargo-zigbuild in this release.`;
+  // Windows MSVC targets cross-compile with cargo-xwin; Zig cannot link the MSVC ABI.
+  if (targetInfo.os === "win32") {
+    if (!args.tools.cargoXwin) {
+      const reason = `Cannot cross-compile ${args.target} because cargo-xwin is unavailable.`;
+      if (args.allowMissingTools) {
+        return { skip: true, reason };
+      }
+      throw new Error(
+        `${reason} Re-run with --allow-missing-tools to skip this target or install cargo-xwin with \`cargo install cargo-xwin\`.`,
+      );
+    }
+    return "cargo-xwin";
+  }
+
+  // macOS targets can only be linked where the Apple SDK is present, i.e. a macOS host.
+  if (targetInfo.os === "darwin" && nativeTargetInfo(args.hostTarget).os !== "darwin") {
+    const reason = `Cross-compiling ${args.target} requires a macOS host; the Apple SDK is unavailable on ${args.hostTarget}.`;
     if (args.allowMissingTools) {
       return { skip: true, reason };
     }
     throw new Error(reason);
   }
 
+  // Linux (from any host) and macOS cross-arch (from a macOS host) use cargo-zigbuild.
   if (args.policy === "never") {
     const reason = `--zig never forbids cargo-zigbuild for ${args.target}. This target cannot be built with plain cargo on the current host.`;
     if (args.allowMissingTools) {
@@ -316,7 +336,8 @@ export async function buildNativeArtifact(
       throw new Error(selection.reason);
     })();
 
-  if (buildTool === "cargo-zigbuild") {
+  // Every cross build passes an explicit --target triple that must be installed first.
+  if (buildTool !== "cargo") {
     await ensureRustTargetInstalled(spawn, targetInfo.rustTarget, options.workspaceRoot, toolchain);
   }
 
@@ -339,13 +360,34 @@ export async function buildNativeArtifact(
     await fs.mkdir(extraEnv.ZIG_LOCAL_CACHE_DIR, { recursive: true });
   }
 
+  if (buildTool === "cargo-xwin") {
+    // cargo-xwin downloads the MSVC CRT/SDK on demand; cache it and accept the license non-interactively.
+    extraEnv.XWIN_ACCEPT_LICENSE = "1";
+    extraEnv.XWIN_CACHE_DIR = path.join(os.tmpdir(), "aruna-xwin-cache");
+    await fs.mkdir(extraEnv.XWIN_CACHE_DIR, { recursive: true });
+  }
+
+  if (targetInfo.libc === "musl") {
+    // musl targets default to a static CRT, which forbids the cdylib crate type
+    // the napi addon needs. Disable crt-static so a shared object can be linked.
+    const existingFlags = process.env.RUSTFLAGS ? `${process.env.RUSTFLAGS} ` : "";
+    extraEnv.RUSTFLAGS = `${existingFlags}-C target-feature=-crt-static`;
+  }
+
+  const subcommand =
+    buildTool === "cargo-zigbuild"
+      ? ["zigbuild"]
+      : buildTool === "cargo-xwin"
+        ? ["xwin", "build"]
+        : ["build"];
+
   const args = [
-    buildTool === "cargo-zigbuild" ? "zigbuild" : "build",
+    ...subcommand,
     "--manifest-path",
     options.manifestPath ?? path.join(options.workspaceRoot, "crates", "aruna_napi", "Cargo.toml"),
     "--package",
     "aruna_napi",
-    ...(buildTool === "cargo-zigbuild" ? ["--target", targetInfo.rustTarget] : []),
+    ...(buildTool === "cargo" ? [] : ["--target", targetInfo.rustTarget]),
     ...profileArg(profile),
   ];
 
@@ -359,7 +401,9 @@ export async function buildNativeArtifact(
     const installHint =
       buildTool === "cargo-zigbuild"
         ? "Install cargo-zigbuild with `cargo install cargo-zigbuild` and make sure Zig is on PATH."
-        : "Retry the native build after confirming cargo is installed and the target toolchain is available.";
+        : buildTool === "cargo-xwin"
+          ? "Install cargo-xwin with `cargo install cargo-xwin`."
+          : "Retry the native build after confirming cargo is installed and the target toolchain is available.";
     throw new Error(`Failed to run ${buildTool}: ${result.error.message}. ${installHint}`);
   }
 
@@ -367,7 +411,9 @@ export async function buildNativeArtifact(
     throw new Error(
       buildTool === "cargo-zigbuild"
         ? `cargo-zigbuild failed to build the requested native target. Install cargo-zigbuild with \`cargo install cargo-zigbuild\`, make sure Zig is on PATH, and ensure the Rust target is installed with \`rustup target add ${targetInfo.rustTarget}\`.`
-        : "cargo build failed to build the requested native target.",
+        : buildTool === "cargo-xwin"
+          ? `cargo-xwin failed to build the requested native target. Install cargo-xwin with \`cargo install cargo-xwin\` and ensure the Rust target is installed with \`rustup target add ${targetInfo.rustTarget}\`.`
+          : "cargo build failed to build the requested native target.",
     );
   }
 
