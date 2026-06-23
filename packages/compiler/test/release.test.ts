@@ -177,7 +177,7 @@ describe("release orchestrator", () => {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName(hostTarget)]: "0.1.0",
+      [nativePackageName(hostTarget)]: "0.1.1",
     });
 
     const stagedPackageJsons = await Promise.all(
@@ -292,8 +292,8 @@ describe("release orchestrator", () => {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName("linux-x64-gnu")]: "0.1.0",
-      [nativePackageName("linux-arm64-gnu")]: "0.1.0",
+      [nativePackageName("linux-x64-gnu")]: "0.1.1",
+      [nativePackageName("linux-arm64-gnu")]: "0.1.1",
     });
   });
 
