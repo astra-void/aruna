@@ -279,7 +279,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
 - an in-memory action invoker exists for non-Roblox tests
-- thin client/server app bootstrap helpers at `aruna/client` and `aruna/server-app` wire the runtime invoker and server action registry
+- thin client/server app bootstrap helpers at `aruna/client` and `aruna/server` wire the runtime invoker and server action registry
 - the bootstrap helpers are functional, disposable, and intentionally do not scan modules or register services
 - a structural Roblox `RemoteFunction` action transport adapter exists for tests and future Studio integration
 - a structural Roblox `RemoteEvent` request/response transport adapter exists for tests and future Studio integration
@@ -344,7 +344,7 @@ connection.disconnect();
 ```
 
 - Payloads are validated against the `plain-data-v1` serialization boundary and the declared schema on publish (the server throws on a violation) and dropped on schema mismatch on delivery (the client never invokes a handler with a malformed payload).
-- The roblox-ts native runtime ships default-transport helpers `createDefaultRobloxSignalPublisher` / `createDefaultRobloxSignalSubscriber` over a dedicated `ArunaSignalRemoteEvent`, distinct from the action `ArunaActionRemoteEvent`.
+- The roblox-ts native runtime ships default-transport helpers `createSignalPublisher` / `createSignalSubscriber` over a dedicated `ArunaSignalRemoteEvent`, distinct from the action `ArunaActionRemoteEvent`.
 - Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. (Contract `diff` currently gates action changes; extending the diff to signals is a follow-up.)
 
 ## Binary serialization
@@ -386,7 +386,7 @@ Serialization boundary, fixed-window rate limits, the contract snapshot, contrac
 ## Package consumption validation
 
 `apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
-It imports `defineConfig` from the root package for config only, and uses runtime-safe public subpaths such as `aruna/server`, `aruna/schema`, `aruna/client`, `aruna/server-app`, `aruna/client-runtime`, and `aruna/roblox-runtime` for Roblox-facing code.
+It imports `defineConfig` from the root package for config only, and uses the runtime-safe public subpaths `aruna/server`, `aruna/client`, `aruna/roblox`, and `aruna/schema` for Roblox-facing code.
 It validates `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build --emit-runtime`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
 It does not implement `create-app`.
 

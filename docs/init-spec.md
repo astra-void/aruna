@@ -304,7 +304,7 @@ The manifest is used by:
 Initial shape:
 
 ```tsx
-type ArunaManifest = {
+type Manifest = {
   version: 1;
   projectRoot: string;
 
@@ -3793,7 +3793,7 @@ Each diagnostic should be emitted with enough structure for CLI output, editor i
 Example shape:
 
 ```tsx
-type ArunaDiagnostic = {
+type Diagnostic = {
   code: `aruna::${number}`;
   name: string;
   severity: "error" | "warning" | "info";
@@ -4421,7 +4421,7 @@ Possible modes:
 Example config direction:
 
 ```tsx
-export default defineArunaConfig({
+export default defineConfig({
   security: {
     mode: "recommended",
   },
@@ -4647,7 +4647,7 @@ The Phase 1 compiler should accept:
 Conceptual API:
 
 ```tsx
-type ArunaCompilerInput = {
+type CompilerInput = {
   projectRoot: string;
   configPath?: string;
   tsconfigPath?: string;
@@ -4669,11 +4669,11 @@ The Phase 1 compiler should produce:
 Conceptual API:
 
 ```tsx
-type ArunaCompilerOutput = {
-  diagnostics: ArunaDiagnostic[];
-  modules: ArunaModuleRecord[];
-  imports: ArunaImportEdge[];
-  manifest: ArunaManifest;
+type CompilerOutput = {
+  diagnostics: Diagnostic[];
+  modules: ModuleRecord[];
+  imports: ImportEdge[];
+  manifest: Manifest;
   hasErrors: boolean;
 };
 ```
@@ -4753,16 +4753,16 @@ Phase 1 should emit a small manifest that can later support inspect output, LSP 
 Initial shape:
 
 ```tsx
-type ArunaManifest = {
+type Manifest = {
   version: 1;
   projectRoot: string;
   generatedAt?: string;
-  modules: ArunaModuleRecord[];
-  imports: ArunaImportEdge[];
-  diagnostics: ArunaDiagnostic[];
+  modules: ModuleRecord[];
+  imports: ImportEdge[];
+  diagnostics: Diagnostic[];
 };
 
-type ArunaModuleRecord = {
+type ModuleRecord = {
   id: string;
   path: string;
   kind: "client" | "server" | "shared" | "unknown";
@@ -4770,7 +4770,7 @@ type ArunaModuleRecord = {
   reasonDetail?: string;
 };
 
-type ArunaImportEdge = {
+type ImportEdge = {
   from: string;
   to?: string;
   specifier: string;
@@ -4977,7 +4977,7 @@ export default defineConfig({
 Initial shape:
 
 ```tsx
-type ArunaConfig = {
+type Config = {
   root?: string;
   tsconfig?: string;
 
@@ -5243,11 +5243,11 @@ Responsibilities:
 Possible exports:
 
 ```tsx
-export type ArunaConfig = { /* ... */ };
-export type ArunaDiagnostic = { /* ... */ };
-export type ArunaDiagnosticCode = `aruna::${number}`;
-export type ArunaManifest = { /* ... */ };
-export type ArunaModuleKind = "client" | "server" | "shared" | "unknown";
+export type Config = { /* ... */ };
+export type Diagnostic = { /* ... */ };
+export type DiagnosticCode = `aruna::${number}`;
+export type Manifest = { /* ... */ };
+export type ModuleKind = "client" | "server" | "shared" | "unknown";
 ```
 
 `@arunajs/core` should avoid depending on compiler internals or runtime-heavy packages.
@@ -5272,11 +5272,11 @@ Responsibilities:
 Conceptual API:
 
 ```tsx
-import type { ArunaCompilerInput, ArunaCompilerOutput } from "@arunajs/core";
+import type { CompilerInput, CompilerOutput } from "@arunajs/core";
 
-export async function checkProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput>;
+export async function checkProject(input: CompilerInput): Promise<CompilerOutput>;
 
-export async function inspectProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput>;
+export async function inspectProject(input: CompilerInput): Promise<CompilerOutput>;
 ```
 
 The compiler package should not own CLI formatting, terminal colors, or command parsing. Those belong in the `aruna` package.
@@ -5423,10 +5423,10 @@ Aruna should explicitly separate public stable-ish APIs from internal unstable A
 Public stable-ish APIs:
 
 - `defineConfig()`
-- `ArunaConfig`
-- `ArunaDiagnostic`
-- `ArunaManifest`
-- `ArunaModuleKind`
+- `Config`
+- `Diagnostic`
+- `Manifest`
+- `ModuleKind`
 - CLI commands documented for users
 
 Internal unstable APIs:
@@ -5466,10 +5466,10 @@ Preferred boundary shape:
 
 ```tsx
 type CompilerBridgeResult = {
-  diagnostics: ArunaDiagnostic[];
-  modules: ArunaModuleRecord[];
-  imports: ArunaImportEdge[];
-  manifest: ArunaManifest;
+  diagnostics: Diagnostic[];
+  modules: ModuleRecord[];
+  imports: ImportEdge[];
+  manifest: Manifest;
 };
 ```
 
@@ -5779,7 +5779,7 @@ Recommended behavior:
 Initial config extension:
 
 ```tsx
-type ArunaConfig = {
+type Config = {
   codegen?: {
     output?: string;
     clean?: boolean;
@@ -6709,7 +6709,7 @@ Actions should appear in the Aruna manifest.
 Conceptual shape:
 
 ```tsx
-type ArunaActionRecord = {
+type ActionRecord = {
   id: string;
   source: string;
   exportName: string;
@@ -7639,8 +7639,8 @@ type ArunaCliJsonOutput = {
     errors: number;
     warnings: number;
   };
-  diagnostics: ArunaDiagnostic[];
-  manifest?: ArunaManifest;
+  diagnostics: Diagnostic[];
+  manifest?: Manifest;
 };
 ```
 

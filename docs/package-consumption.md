@@ -17,7 +17,7 @@ Roblox-facing code is consumed through a **vendored runtime**, not through direc
 - `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig `paths` aliases that pair with `build --emit-runtime`.
 - `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer project — including the vendored runtime — to Luau.
 
-Consumers import `defineConfig` from the root package for config only, and use the runtime-safe public subpaths (`aruna/server`, `aruna/schema`, `aruna/client`, `aruna/server-app`, `aruna/client-runtime`, `aruna/roblox-runtime`) for Roblox-facing code; those subpaths resolve to the vendored runtime through the aliases.
+Consumers import `defineConfig` from the root package for config only, and use the runtime-safe public subpaths (`aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema`) for Roblox-facing code; those subpaths resolve to the vendored runtime through the aliases.
 
 `aruna init` scaffolds a turnkey project for this model (`aruna.config.ts`, a roblox-ts `tsconfig.json` with the action + runtime aliases and `@rbxts` typeRoots, and a full-`out` `default.project.json`). A scaffolded project plus an action compiles to Luau via `aruna build --emit-runtime` then `rbxtsc` with no hand-editing.
 
