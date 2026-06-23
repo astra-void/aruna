@@ -47,7 +47,11 @@ jobs:
       # (rustup target add).
 
       - name: Install Zig
-        uses: mlugg/setup-zig@v1
+        uses: mlugg/setup-zig@v2
+        with:
+          # Pin an explicit released version; "latest" can resolve to a build
+          # that community mirrors haven't propagated yet (404s).
+          version: 0.15.2
 
       - name: Install cross-compile tools
         uses: taiki-e/install-action@v2
