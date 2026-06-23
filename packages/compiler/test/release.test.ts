@@ -110,15 +110,15 @@ describe("release orchestrator", () => {
       "Cross mode requires --targets.",
     );
 
-    const unsupportedTarget =
-      hostTarget === "darwin-arm64" || hostTarget === "darwin-x64"
-        ? "win32-x64-msvc"
-        : "darwin-arm64";
-    expect(canBuildTargetOnHost(hostTarget, "linux-x64-gnu")).toBe(true);
-    expect(canBuildTargetOnHost(hostTarget, "linux-x64-musl")).toBe(false);
-    expect(canBuildTargetOnHost(hostTarget, unsupportedTarget as NativeTarget)).toBe(false);
+    // Linux (gnu + musl) and Windows MSVC cross-compile from any host.
+    expect(canBuildTargetOnHost("linux-x64-gnu", "linux-arm64-musl")).toBe(true);
+    expect(canBuildTargetOnHost("linux-x64-gnu", "win32-x64-msvc")).toBe(true);
+    expect(canBuildTargetOnHost("darwin-arm64", "linux-x64-gnu")).toBe(true);
+    // macOS targets need a macOS host (the Apple SDK).
+    expect(canBuildTargetOnHost("darwin-arm64", "darwin-x64")).toBe(true);
+    expect(canBuildTargetOnHost("linux-x64-gnu", "darwin-arm64")).toBe(false);
     expect(() =>
-      resolveTargetsForMode("cross", hostTarget, [unsupportedTarget as NativeTarget]),
+      resolveTargetsForMode("cross", "linux-x64-gnu", ["darwin-arm64"]),
     ).toThrow(/Unsupported cross target\(s\)/);
   });
 
@@ -241,7 +241,7 @@ describe("release orchestrator", () => {
     const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter(
       (entry) => !entry.startsWith("."),
     );
-    expect(rootEntries).toEqual(["compiler"]);
+    expect([...rootEntries].sort()).toEqual(["aruna", "compiler", "core"]);
   });
 
   it("stages cross mode targets with target-qualified artifacts", async () => {
@@ -362,8 +362,13 @@ describe("release orchestrator", () => {
     );
 
     const packCalls = spawnCalls.filter((entry) => entry.args.includes("pack"));
-    expect(packCalls[0]?.cwd).toBe(path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`));
-    expect(packCalls[packCalls.length - 1]?.cwd).toBe(path.join(workspaceRoot, ".npm", "compiler"));
+    const packCwds = packCalls.map((entry) => entry.cwd);
+    // Dependency order: native binaries first, then core → compiler → aruna.
+    expect(packCwds[0]).toBe(path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`));
+    expect(packCwds.indexOf(path.join(workspaceRoot, ".npm", "core"))).toBeLessThan(
+      packCwds.indexOf(path.join(workspaceRoot, ".npm", "compiler")),
+    );
+    expect(packCwds[packCwds.length - 1]).toBe(path.join(workspaceRoot, ".npm", "aruna"));
     expect(await fsp.readdir(packDestination)).toContain("compiler.tgz");
   });
 

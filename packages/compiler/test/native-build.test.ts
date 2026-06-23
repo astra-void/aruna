@@ -108,9 +108,55 @@ describe("native build tool selection", () => {
     ).toThrow("--zig never");
   });
 
-  it("detects cargo, cargo-zigbuild, and zig via version commands", () => {
+  it("selects cargo-xwin for Windows MSVC cross targets when available", () => {
+    expect(
+      select("win32-x64-msvc" as NativeTarget, "auto", {
+        cargo: true,
+        cargoZigbuild: false,
+        zig: false,
+        cargoXwin: true,
+      }),
+    ).toBe("cargo-xwin");
+  });
+
+  it("fails a Windows cross target when cargo-xwin is unavailable", () => {
+    expect(() =>
+      select("win32-x64-msvc" as NativeTarget, "auto", {
+        cargo: true,
+        cargoZigbuild: true,
+        zig: true,
+        cargoXwin: false,
+      }),
+    ).toThrow("cargo-xwin");
+  });
+
+  it("selects cargo-zigbuild for macOS cross-arch targets from a macOS host", () => {
+    expect(
+      select("darwin-x64" as NativeTarget, "auto", {
+        cargo: true,
+        cargoZigbuild: true,
+        zig: true,
+      }),
+    ).toBe("cargo-zigbuild");
+  });
+
+  it("rejects macOS targets when the host is not macOS", () => {
+    expect(() =>
+      selectNativeBuildTool({
+        target: "darwin-arm64" as NativeTarget,
+        hostTarget: "linux-x64-gnu" as NativeTarget,
+        policy: "auto",
+        tools: { cargo: true, cargoZigbuild: true, zig: true, cargoXwin: true },
+      }),
+    ).toThrow(/requires a macOS host/);
+  });
+
+  it("detects cargo, cargo-zigbuild, zig, and cargo-xwin via version commands", () => {
     const spawnSync = vi.fn((command: string, args: string[]) => {
-      if (command === "cargo-zigbuild" && args[0] === "--version") {
+      if (
+        (command === "cargo-zigbuild" && args[0] === "--version") ||
+        (command === "cargo-xwin" && args[0] === "--version")
+      ) {
         return { status: 0, error: undefined };
       }
 
@@ -128,6 +174,7 @@ describe("native build tool selection", () => {
       cargo: true,
       cargoZigbuild: true,
       zig: true,
+      cargoXwin: true,
     });
     expect(spawnSync).toHaveBeenNthCalledWith(1, "cargo", ["--version"], expect.any(Object));
     expect(spawnSync).toHaveBeenNthCalledWith(
@@ -137,6 +184,7 @@ describe("native build tool selection", () => {
       expect.any(Object),
     );
     expect(spawnSync).toHaveBeenNthCalledWith(3, "zig", ["version"], expect.any(Object));
+    expect(spawnSync).toHaveBeenNthCalledWith(4, "cargo-xwin", ["--version"], expect.any(Object));
   });
 
   it("installs the Rust target before running cargo-zigbuild", async () => {
