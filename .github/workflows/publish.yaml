@@ -38,9 +38,8 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      # Trusted publishing requires npm >= 11.5.1.
-      - name: Upgrade npm
-        run: npm install --global npm@latest
+      # Publishing goes through `pnpm publish`; pnpm 11.5.1 (pinned via the
+      # packageManager field) supports OIDC trusted publishing and provenance.
 
       - uses: dtolnay/rust-toolchain@stable
       # Per-target Rust std is installed on demand by the release script

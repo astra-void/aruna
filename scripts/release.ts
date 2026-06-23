@@ -141,35 +141,11 @@ function npmCacheDirectory(): string {
   return path.join(process.env.TMPDIR ?? "/tmp", "aruna-npm-cache");
 }
 
-async function resolveNpmInvocation(): Promise<{ command: string; args: string[] }> {
-  const candidatePaths = [
-    "/usr/local/lib/node_modules/npm/bin/npm-cli.js",
-    "/opt/homebrew/lib/node_modules/npm/bin/npm-cli.js",
-    path.resolve(
-      path.dirname(process.execPath),
-      "..",
-      "lib",
-      "node_modules",
-      "npm",
-      "bin",
-      "npm-cli.js",
-    ),
-  ];
-
-  for (const candidatePath of candidatePaths) {
-    try {
-      await fs.access(candidatePath);
-      return {
-        command: process.execPath,
-        args: [candidatePath],
-      };
-    } catch {
-      // Try the next installed npm CLI location.
-    }
-  }
-
+async function resolvePnpmInvocation(): Promise<{ command: string; args: string[] }> {
+  // pnpm is the workspace package manager and always on PATH; it proxies
+  // `pack`, `publish`, `whoami`, and `view` to the npm registry tooling.
   return {
-    command: "npm",
+    command: "pnpm",
     args: [],
   };
 }
@@ -431,10 +407,22 @@ async function stageReleasePackages(
   const allowMissingTools = options.allowMissingTools ?? false;
 
   await cleanDirectory(npmDirectory);
+  // Build only the publishable packages. A full-workspace `turbo run build`
+  // also builds the apps/* harnesses, which require the `aruna` binary on PATH
+  // and per-app node_modules — neither is present in the publish job, so they
+  // fail. The `^build` dependency pulls in their workspace deps anyway.
   runCommand(
     spawn,
     "pnpm",
-    ["exec", "turbo", "run", "build"],
+    [
+      "exec",
+      "turbo",
+      "run",
+      "build",
+      "--filter=@arunajs/core",
+      "--filter=@arunajs/compiler",
+      "--filter=@arunajs/aruna",
+    ],
     workspaceRoot,
     "Failed to build TypeScript packages",
   );
@@ -514,11 +502,11 @@ async function packPackage(
   spawn: typeof spawnSync,
 ): Promise<string> {
   const before = new Set(await fs.readdir(packDestination));
-  const npmInvocation = await resolveNpmInvocation();
+  const pnpmInvocation = await resolvePnpmInvocation();
   runCommand(
     spawn,
-    npmInvocation.command,
-    [...npmInvocation.args, "pack", "--pack-destination", packDestination],
+    pnpmInvocation.command,
+    [...pnpmInvocation.args, "pack", "--pack-destination", packDestination],
     packageDirectory,
     `Failed to pack ${workspaceRelative(packageDirectory)}`,
     { npm_config_cache: npmCacheDirectory() },
@@ -527,7 +515,7 @@ async function packPackage(
   const newTarballs = after.filter((entry) => !before.has(entry) && entry.endsWith(".tgz"));
   if (newTarballs.length === 0) {
     throw new Error(
-      `npm pack did not produce a tarball for ${workspaceRelative(packageDirectory)}`,
+      `pnpm pack did not produce a tarball for ${workspaceRelative(packageDirectory)}`,
     );
   }
 
@@ -550,13 +538,13 @@ async function packRelease(prepared: PreparedRelease, deps: ReleaseDeps): Promis
 }
 
 async function ensurePublishCredentials(spawn: typeof spawnSync): Promise<void> {
-  const npmInvocation = await resolveNpmInvocation();
+  const pnpmInvocation = await resolvePnpmInvocation();
   runCommand(
     spawn,
-    npmInvocation.command,
-    [...npmInvocation.args, "whoami"],
+    pnpmInvocation.command,
+    [...pnpmInvocation.args, "whoami"],
     workspaceRoot,
-    "npm credentials are required to publish. Run `npm login` first.",
+    "npm credentials are required to publish. Run `pnpm login` first.",
     { npm_config_cache: npmCacheDirectory() },
   );
 }
@@ -573,13 +561,13 @@ async function readStagedPackageName(packageDirectory: string): Promise<string> 
 
 function isAlreadyPublished(
   spawn: typeof spawnSync,
-  npmInvocation: { command: string; args: string[] },
+  pnpmInvocation: { command: string; args: string[] },
   name: string,
   version: string,
 ): boolean {
   const result = spawn(
-    npmInvocation.command,
-    [...npmInvocation.args, "view", `${name}@${version}`, "version"],
+    pnpmInvocation.command,
+    [...pnpmInvocation.args, "view", `${name}@${version}`, "version"],
     {
       cwd: workspaceRoot,
       encoding: "utf8",
@@ -595,21 +583,29 @@ function isAlreadyPublished(
 
 async function publishPackage(
   spawn: typeof spawnSync,
-  npmInvocation: { command: string; args: string[] },
+  pnpmInvocation: { command: string; args: string[] },
   packageDirectory: string,
   options: ReleaseOptions,
   version: string,
 ): Promise<void> {
   const name = await readStagedPackageName(packageDirectory);
   // Idempotent: a re-run after a partial failure skips what already landed.
-  if (!options.dryRun && isAlreadyPublished(spawn, npmInvocation, name, version)) {
+  if (!options.dryRun && isAlreadyPublished(spawn, pnpmInvocation, name, version)) {
     console.log(`Skipping ${name}@${version} (already published).`);
     return;
   }
 
   // Scoped @arunajs/* packages default to restricted (private) access on npm;
-  // publish them publicly.
-  const args = [...npmInvocation.args, "publish", packageDirectory, "--access", "public"];
+  // publish them publicly. `--no-git-checks` keeps pnpm from refusing to publish
+  // off a detached tag checkout in CI.
+  const args = [
+    ...pnpmInvocation.args,
+    "publish",
+    packageDirectory,
+    "--access",
+    "public",
+    "--no-git-checks",
+  ];
   if (options.dryRun) {
     args.push("--dry-run");
   }
@@ -621,7 +617,7 @@ async function publishPackage(
   }
   runCommand(
     spawn,
-    npmInvocation.command,
+    pnpmInvocation.command,
     args,
     workspaceRoot,
     `Failed to publish ${workspaceRelative(packageDirectory)}`,
@@ -635,12 +631,12 @@ async function publishRelease(
   deps: ReleaseDeps,
 ): Promise<void> {
   const spawn = deps.spawnSync ?? spawnSync;
-  // OIDC trusted publishing has no logged-in identity, so `npm whoami` would fail;
+  // OIDC trusted publishing has no logged-in identity, so `pnpm whoami` would fail;
   // CI skips the check with --no-verify-credentials.
   if (!options.dryRun && options.verifyCredentials !== false) {
     await ensurePublishCredentials(spawn);
   }
-  const npmInvocation = await resolveNpmInvocation();
+  const pnpmInvocation = await resolvePnpmInvocation();
 
   // Dependency order: native binaries → core → compiler → aruna.
   const orderedDirectories = [
@@ -651,7 +647,7 @@ async function publishRelease(
   ];
 
   for (const packageDirectory of orderedDirectories) {
-    await publishPackage(spawn, npmInvocation, packageDirectory, options, prepared.version);
+    await publishPackage(spawn, pnpmInvocation, packageDirectory, options, prepared.version);
   }
 }
 
@@ -759,10 +755,10 @@ async function main(): Promise<void> {
   addModeOptions(
     program
       .command("publish")
-      .option("--dry-run", "run npm publish in dry-run mode")
+      .option("--dry-run", "run pnpm publish in dry-run mode")
       .option("--tag <tag>", "publish tag", "latest")
       .option("--provenance", "publish with npm provenance attestation (CI/OIDC)")
-      .option("--no-verify-credentials", "skip the npm whoami check (use with OIDC trusted publishing)")
+      .option("--no-verify-credentials", "skip the pnpm whoami check (use with OIDC trusted publishing)")
       .action(async function (this: Command) {
         const opts = this.opts<{
           mode: ReleaseMode;
