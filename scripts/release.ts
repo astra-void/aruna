@@ -21,6 +21,7 @@ import {
 } from "../packages/compiler/scripts/native-targets.ts";
 import { stageCompilerPackage } from "../packages/compiler/scripts/stage-compiler-package.ts";
 import { stageNativePackage } from "../packages/compiler/scripts/stage-native-package.ts";
+import { stageWorkspacePackage } from "../packages/compiler/scripts/stage-package.ts";
 
 export type ReleaseMode = "local" | "cross" | "full";
 
@@ -33,6 +34,7 @@ export type ReleaseOptions = {
   tag?: string;
   zig?: ZigPolicy;
   allowMissingTools?: boolean;
+  provenance?: boolean;
 };
 
 export type ReleaseDeps = {
@@ -52,12 +54,18 @@ export type PreparedRelease = {
   skippedTargets: Array<{ target: NativeTarget; reason: string }>;
   nativePackageDirectories: string[];
   compilerPackageDirectory: string;
+  corePackageDirectory: string;
+  arunaPackageDirectory: string;
 };
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(scriptRoot, "..");
 const compilerPackageRoot = path.join(workspaceRoot, "packages", "compiler");
 const compilerPackageJsonPath = path.join(compilerPackageRoot, "package.json");
+const corePackageRoot = path.join(workspaceRoot, "packages", "core");
+const arunaPackageRoot = path.join(workspaceRoot, "packages", "aruna");
+const stagedCoreDirectory = path.join(workspaceRoot, ".npm", "core");
+const stagedArunaDirectory = path.join(workspaceRoot, ".npm", "aruna");
 const releaseProfile: NativeBuildProfile = "release";
 
 export function parseTargetList(value: string | undefined): NativeTarget[] {
@@ -83,7 +91,16 @@ export function canBuildTargetOnHost(hostTarget: NativeTarget, target: NativeTar
   }
 
   const targetInfo = nativeTargetInfo(target);
-  return targetInfo.os === "linux" && targetInfo.libc === "gnu";
+  // Linux (gnu + musl) cross-compiles from any host via cargo-zigbuild; Windows
+  // MSVC cross-compiles from any host via cargo-xwin. macOS targets need the
+  // Apple SDK, which is only available on a macOS host.
+  if (targetInfo.os === "linux" || targetInfo.os === "win32") {
+    return true;
+  }
+  if (targetInfo.os === "darwin") {
+    return nativeTargetInfo(hostTarget).os === "darwin";
+  }
+  return false;
 }
 
 export function resolveTargetsForMode(
@@ -372,6 +389,8 @@ async function validateStagedRelease(
   const expectedRootEntries = [
     ...stagedNativePackages.map((entry) => path.basename(entry.packageDirectory)),
     "compiler",
+    "core",
+    "aruna",
   ];
 
   if (
@@ -387,6 +406,8 @@ async function validateStagedRelease(
     await validateNativePackage(entry.packageDirectory, entry.target);
   }
   await validateCompilerPackage(compilerPackageDirectory, expectedTargets);
+  await ensureNoWorkspaceProtocols(path.join(stagedCoreDirectory, "package.json"));
+  await ensureNoWorkspaceProtocols(path.join(stagedArunaDirectory, "package.json"));
 }
 
 async function stageReleasePackages(
@@ -455,6 +476,17 @@ async function stageReleasePackages(
     nativeTargets,
   });
 
+  await stageWorkspacePackage({
+    sourcePackageDirectory: corePackageRoot,
+    stagedPackageDirectory: stagedCoreDirectory,
+    version,
+  });
+  await stageWorkspacePackage({
+    sourcePackageDirectory: arunaPackageRoot,
+    stagedPackageDirectory: stagedArunaDirectory,
+    version,
+  });
+
   await validateStagedRelease(
     stagedNativePackages,
     compilerPackage.packageDirectory,
@@ -470,6 +502,8 @@ async function stageReleasePackages(
     skippedTargets,
     nativePackageDirectories: stagedNativePackages.map((entry) => entry.packageDirectory),
     compilerPackageDirectory: compilerPackage.packageDirectory,
+    corePackageDirectory: stagedCoreDirectory,
+    arunaPackageDirectory: stagedArunaDirectory,
   };
 }
 
@@ -508,7 +542,9 @@ async function packRelease(prepared: PreparedRelease, deps: ReleaseDeps): Promis
   for (const packageDirectory of prepared.nativePackageDirectories) {
     tarballs.push(await packPackage(packageDirectory, packDestination, spawn));
   }
+  tarballs.push(await packPackage(prepared.corePackageDirectory, packDestination, spawn));
   tarballs.push(await packPackage(prepared.compilerPackageDirectory, packDestination, spawn));
+  tarballs.push(await packPackage(prepared.arunaPackageDirectory, packDestination, spawn));
   return tarballs;
 }
 
@@ -524,6 +560,72 @@ async function ensurePublishCredentials(spawn: typeof spawnSync): Promise<void> 
   );
 }
 
+async function readStagedPackageName(packageDirectory: string): Promise<string> {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(packageDirectory, "package.json"), "utf8"),
+  ) as { name?: string };
+  if (!packageJson.name) {
+    throw new Error(`Staged package ${workspaceRelative(packageDirectory)} is missing a name.`);
+  }
+  return packageJson.name;
+}
+
+function isAlreadyPublished(
+  spawn: typeof spawnSync,
+  npmInvocation: { command: string; args: string[] },
+  name: string,
+  version: string,
+): boolean {
+  const result = spawn(
+    npmInvocation.command,
+    [...npmInvocation.args, "view", `${name}@${version}`, "version"],
+    {
+      cwd: workspaceRoot,
+      encoding: "utf8",
+      env: { ...process.env, npm_config_cache: npmCacheDirectory() },
+    },
+  );
+  return (
+    result.status === 0 &&
+    typeof result.stdout === "string" &&
+    result.stdout.trim() === version
+  );
+}
+
+async function publishPackage(
+  spawn: typeof spawnSync,
+  npmInvocation: { command: string; args: string[] },
+  packageDirectory: string,
+  options: ReleaseOptions,
+  version: string,
+): Promise<void> {
+  const name = await readStagedPackageName(packageDirectory);
+  // Idempotent: a re-run after a partial failure skips what already landed.
+  if (!options.dryRun && isAlreadyPublished(spawn, npmInvocation, name, version)) {
+    console.log(`Skipping ${name}@${version} (already published).`);
+    return;
+  }
+
+  const args = [...npmInvocation.args, "publish", packageDirectory];
+  if (options.dryRun) {
+    args.push("--dry-run");
+  }
+  if (options.tag) {
+    args.push("--tag", options.tag);
+  }
+  if (options.provenance) {
+    args.push("--provenance");
+  }
+  runCommand(
+    spawn,
+    npmInvocation.command,
+    args,
+    workspaceRoot,
+    `Failed to publish ${workspaceRelative(packageDirectory)}`,
+    { npm_config_cache: npmCacheDirectory() },
+  );
+}
+
 async function publishRelease(
   prepared: PreparedRelease,
   options: ReleaseOptions,
@@ -535,39 +637,17 @@ async function publishRelease(
   }
   const npmInvocation = await resolveNpmInvocation();
 
-  for (const packageDirectory of prepared.nativePackageDirectories) {
-    const args = [...npmInvocation.args, "publish", packageDirectory];
-    if (options.dryRun) {
-      args.push("--dry-run");
-    }
-    if (options.tag) {
-      args.push("--tag", options.tag);
-    }
-    runCommand(
-      spawn,
-      npmInvocation.command,
-      args,
-      workspaceRoot,
-      `Failed to publish ${workspaceRelative(packageDirectory)}`,
-      { npm_config_cache: npmCacheDirectory() },
-    );
-  }
+  // Dependency order: native binaries → core → compiler → aruna.
+  const orderedDirectories = [
+    ...prepared.nativePackageDirectories,
+    prepared.corePackageDirectory,
+    prepared.compilerPackageDirectory,
+    prepared.arunaPackageDirectory,
+  ];
 
-  const compilerArgs = [...npmInvocation.args, "publish", prepared.compilerPackageDirectory];
-  if (options.dryRun) {
-    compilerArgs.push("--dry-run");
+  for (const packageDirectory of orderedDirectories) {
+    await publishPackage(spawn, npmInvocation, packageDirectory, options, prepared.version);
   }
-  if (options.tag) {
-    compilerArgs.push("--tag", options.tag);
-  }
-  runCommand(
-    spawn,
-    npmInvocation.command,
-    compilerArgs,
-    workspaceRoot,
-    `Failed to publish ${workspaceRelative(prepared.compilerPackageDirectory)}`,
-    { npm_config_cache: npmCacheDirectory() },
-  );
 }
 
 export async function prepareRelease(
@@ -676,6 +756,7 @@ async function main(): Promise<void> {
       .command("publish")
       .option("--dry-run", "run npm publish in dry-run mode")
       .option("--tag <tag>", "publish tag", "latest")
+      .option("--provenance", "publish with npm provenance attestation (CI/OIDC)")
       .action(async function (this: Command) {
         const opts = this.opts<{
           mode: ReleaseMode;
@@ -684,6 +765,7 @@ async function main(): Promise<void> {
           tag?: string;
           zig?: ZigPolicy;
           allowMissingTools?: boolean;
+          provenance?: boolean;
         }>();
         await runCli("publish", {
           mode: opts.mode,
@@ -692,6 +774,7 @@ async function main(): Promise<void> {
           tag: opts.tag,
           zig: opts.zig,
           allowMissingTools: opts.allowMissingTools,
+          provenance: opts.provenance,
         });
       }),
   );

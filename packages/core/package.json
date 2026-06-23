@@ -1,7 +1,7 @@
 {
   "name": "@arunajs/core",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "files": [
     "dist"
   ],

@@ -1,6 +1,6 @@
 {
-  "name": "aruna",
-  "version": "0.0.1",
+  "name": "@arunajs/aruna",
+  "version": "0.1.0",
   "private": false,
   "bin": {
     "aruna": "./dist/cli.js"
