@@ -10,6 +10,7 @@
     "lint:fix": "turbo run lint:fix",
     "typecheck": "pnpm build:native && turbo run typecheck",
     "release:prepare": "tsx scripts/release.ts prepare",
+    "release:build-native": "tsx scripts/release.ts build-native",
     "release:pack": "tsx scripts/release.ts pack",
     "release:publish": "tsx scripts/release.ts publish",
     "release:dry-run": "tsx scripts/release.ts publish --dry-run",

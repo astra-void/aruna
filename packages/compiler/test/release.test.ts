@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
+  buildNativeRelease,
   canBuildTargetOnHost,
   parseTargetList,
   prepareRelease,
@@ -370,6 +371,116 @@ describe("release orchestrator", () => {
     );
     expect(packCwds[packCwds.length - 1]).toBe(path.join(workspaceRoot, ".npm", "aruna"));
     expect(await fsp.readdir(packDestination)).toContain("compiler.tgz");
+  });
+
+  it("build-native stages only the native package without the TS graph", async () => {
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo",
+          args: [],
+        };
+      },
+    );
+    const spawnSync = vi.fn(() => ({ status: 0, error: undefined }));
+
+    const result = await buildNativeRelease(
+      { mode: "cross", targets: hostTarget },
+      { spawnSync, buildNativeArtifact },
+    );
+
+    expect(result.nativeTargets).toEqual([hostTarget]);
+    expect(buildNativeArtifact).toHaveBeenCalledTimes(1);
+
+    // The native package is staged...
+    const artifactPath = path.join(
+      workspaceRoot,
+      ".npm",
+      `compiler-${hostTarget}`,
+      `compiler.${hostTarget}.node`,
+    );
+    expect(await fsp.readFile(artifactPath, "utf8")).toBe(`artifact:${hostTarget}`);
+
+    // ...but the TS graph (compiler/core/aruna) is not — that is the publish
+    // job's responsibility during --assemble.
+    const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter(
+      (entry) => !entry.startsWith("."),
+    );
+    expect(rootEntries).toEqual([`compiler-${hostTarget}`]);
+  });
+
+  it("assembles and publishes from a pre-staged native package", async () => {
+    const buildNativeArtifact = vi.fn(
+      async (options: { target: NativeTarget; [key: string]: unknown }) => {
+        const sourceArtifactPath = await createNativeArtifact(options.target);
+        return {
+          targetInfo: nativeTargetInfo(options.target),
+          profile: "release",
+          sourceArtifactPath,
+          command: "cargo",
+          args: [],
+        };
+      },
+    );
+
+    // Stand in for a per-target build job: stage the native package, then leave
+    // it in `.npm/` for the assemble step to pick up (as artifact download would).
+    await buildNativeRelease(
+      { mode: "cross", targets: hostTarget },
+      { spawnSync: vi.fn(() => ({ status: 0, error: undefined })), buildNativeArtifact },
+    );
+
+    const spawnCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
+    const spawnSync = vi.fn((command: string, args: string[], options: { cwd: string }) => {
+      spawnCalls.push({ command, args, cwd: options.cwd });
+      return { status: 0, error: undefined };
+    });
+
+    await publishPreparedRelease(
+      { mode: "full", assemble: true, dryRun: true },
+      {
+        spawnSync,
+        // Native build must NOT run during assemble.
+        buildNativeArtifact: vi.fn(() => {
+          throw new Error("native build must not run during assemble");
+        }),
+        stageCompilerPackage: stageCompilerPackageStub,
+      },
+    );
+
+    // The discovered native target flows into the compiler optionalDependencies.
+    const compilerPackageJson = JSON.parse(
+      await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
+    ) as { optionalDependencies: Record<string, string> };
+    expect(compilerPackageJson.optionalDependencies).toEqual({
+      [nativePackageName(hostTarget)]: "0.1.1",
+    });
+
+    const publishCalls = spawnCalls.filter((entry) => entry.args.includes("publish"));
+    expect(publishCalls.length).toBeGreaterThan(0);
+    // Native package publishes first (dependency order), aruna last.
+    expect(publishCalls[0].args).toContain(
+      path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`),
+    );
+    expect(publishCalls[publishCalls.length - 1].args).toContain(
+      path.join(workspaceRoot, ".npm", "aruna"),
+    );
+  });
+
+  it("assemble fails when no native packages are staged", async () => {
+    await expect(
+      publishPreparedRelease(
+        { mode: "full", assemble: true, dryRun: true },
+        {
+          spawnSync: vi.fn(() => ({ status: 0, error: undefined })),
+          stageCompilerPackage: stageCompilerPackageStub,
+        },
+      ),
+    ).rejects.toThrow(/No staged native packages/);
   });
 
   it("publishes from staged packages only during dry-run", async () => {

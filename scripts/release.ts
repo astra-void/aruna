@@ -16,6 +16,7 @@ import {
   nativePackageName,
   nativeTargetInfo,
   resolveNativeTarget,
+  stagedNativePackageDirectory,
   SUPPORTED_NATIVE_TARGETS,
   type NativeTarget,
 } from "../packages/compiler/scripts/native-targets.ts";
@@ -25,7 +26,7 @@ import { stageWorkspacePackage } from "../packages/compiler/scripts/stage-packag
 
 export type ReleaseMode = "local" | "cross" | "full";
 
-export type ReleaseCommand = "prepare" | "pack" | "publish";
+export type ReleaseCommand = "prepare" | "pack" | "publish" | "build-native";
 
 export type ReleaseOptions = {
   mode: ReleaseMode;
@@ -36,6 +37,12 @@ export type ReleaseOptions = {
   allowMissingTools?: boolean;
   provenance?: boolean;
   verifyCredentials?: boolean;
+  /**
+   * Skip native compilation and assemble the release from native packages that
+   * are already staged under `.npm/` (e.g. downloaded from per-target build-job
+   * artifacts in CI). The native target list is discovered from disk.
+   */
+  assemble?: boolean;
 };
 
 export type ReleaseDeps = {
@@ -387,26 +394,9 @@ async function validateStagedRelease(
   await ensureNoWorkspaceProtocols(path.join(stagedArunaDirectory, "package.json"));
 }
 
-async function stageReleasePackages(
-  options: ReleaseOptions,
-  mode: ReleaseMode,
-  targets: NativeTarget[],
-  deps: ReleaseDeps,
-): Promise<PreparedRelease> {
-  const spawn = deps.spawnSync ?? spawnSync;
-  const buildNativeArtifactFn = deps.buildNativeArtifact ?? buildNativeArtifact;
-  const stageNativePackageFn = deps.stageNativePackage ?? stageNativePackage;
-  const stageCompilerPackageFn = deps.stageCompilerPackage ?? stageCompilerPackage;
-  const toolAvailability = deps.toolAvailability ?? detectToolAvailability(spawn);
-  const hostTarget = resolveNativeTarget();
-  const version = await readCompilerVersion();
-  const npmDirectory = path.join(workspaceRoot, ".npm");
-  const nativeTargets = [] as NativeTarget[];
-  const skippedTargets: Array<{ target: NativeTarget; reason: string }> = [];
-  const zigPolicy = options.zig ?? "auto";
-  const allowMissingTools = options.allowMissingTools ?? false;
+type StagedNativePackage = { packageDirectory: string; target: NativeTarget };
 
-  await cleanDirectory(npmDirectory);
+function buildPublishableTypeScriptPackages(spawn: typeof spawnSync): void {
   // Build only the publishable packages. A full-workspace `turbo run build`
   // also builds the apps/* harnesses, which require the `aruna` binary on PATH
   // and per-app node_modules — neither is present in the publish job, so they
@@ -426,8 +416,30 @@ async function stageReleasePackages(
     workspaceRoot,
     "Failed to build TypeScript packages",
   );
+}
 
-  const stagedNativePackages: Array<{ packageDirectory: string; target: NativeTarget }> = [];
+async function buildAndStageNativeTargets(
+  options: ReleaseOptions,
+  targets: NativeTarget[],
+  deps: ReleaseDeps,
+): Promise<{
+  stagedNativePackages: StagedNativePackage[];
+  nativeTargets: NativeTarget[];
+  skippedTargets: Array<{ target: NativeTarget; reason: string }>;
+}> {
+  const spawn = deps.spawnSync ?? spawnSync;
+  const buildNativeArtifactFn = deps.buildNativeArtifact ?? buildNativeArtifact;
+  const stageNativePackageFn = deps.stageNativePackage ?? stageNativePackage;
+  const toolAvailability = deps.toolAvailability ?? detectToolAvailability(spawn);
+  const hostTarget = resolveNativeTarget();
+  const version = await readCompilerVersion();
+  const zigPolicy = options.zig ?? "auto";
+  const allowMissingTools = options.allowMissingTools ?? false;
+
+  const stagedNativePackages: StagedNativePackage[] = [];
+  const nativeTargets: NativeTarget[] = [];
+  const skippedTargets: Array<{ target: NativeTarget; reason: string }> = [];
+
   for (const target of targets) {
     const selection = selectNativeBuildTool({
       target,
@@ -459,6 +471,16 @@ async function stageReleasePackages(
     nativeTargets.push(target);
   }
 
+  return { stagedNativePackages, nativeTargets, skippedTargets };
+}
+
+async function stagePublishablePackages(
+  nativeTargets: NativeTarget[],
+  deps: ReleaseDeps,
+): Promise<{ compilerPackageDirectory: string }> {
+  const stageCompilerPackageFn = deps.stageCompilerPackage ?? stageCompilerPackage;
+  const version = await readCompilerVersion();
+
   const compilerPackage = await stageCompilerPackageFn({
     workspaceRoot,
     version,
@@ -476,24 +498,115 @@ async function stageReleasePackages(
     version,
   });
 
-  await validateStagedRelease(
-    stagedNativePackages,
-    compilerPackage.packageDirectory,
-    nativeTargets,
-  );
+  return { compilerPackageDirectory: compilerPackage.packageDirectory };
+}
 
+function toPreparedRelease(args: {
+  version: string;
+  mode: ReleaseMode;
+  hostTarget: NativeTarget;
+  nativeTargets: NativeTarget[];
+  skippedTargets: Array<{ target: NativeTarget; reason: string }>;
+  stagedNativePackages: StagedNativePackage[];
+  compilerPackageDirectory: string;
+}): PreparedRelease {
   return {
     workspaceRoot,
+    version: args.version,
+    mode: args.mode,
+    hostTarget: args.hostTarget,
+    nativeTargets: args.nativeTargets,
+    skippedTargets: args.skippedTargets,
+    nativePackageDirectories: args.stagedNativePackages.map((entry) => entry.packageDirectory),
+    compilerPackageDirectory: args.compilerPackageDirectory,
+    corePackageDirectory: stagedCoreDirectory,
+    arunaPackageDirectory: stagedArunaDirectory,
+  };
+}
+
+async function stageReleasePackages(
+  options: ReleaseOptions,
+  mode: ReleaseMode,
+  targets: NativeTarget[],
+  deps: ReleaseDeps,
+): Promise<PreparedRelease> {
+  const spawn = deps.spawnSync ?? spawnSync;
+  const hostTarget = resolveNativeTarget();
+  const version = await readCompilerVersion();
+  const npmDirectory = path.join(workspaceRoot, ".npm");
+
+  await cleanDirectory(npmDirectory);
+  buildPublishableTypeScriptPackages(spawn);
+
+  const { stagedNativePackages, nativeTargets, skippedTargets } =
+    await buildAndStageNativeTargets(options, targets, deps);
+
+  const { compilerPackageDirectory } = await stagePublishablePackages(nativeTargets, deps);
+
+  await validateStagedRelease(stagedNativePackages, compilerPackageDirectory, nativeTargets);
+
+  return toPreparedRelease({
     version,
     mode,
     hostTarget,
     nativeTargets,
     skippedTargets,
-    nativePackageDirectories: stagedNativePackages.map((entry) => entry.packageDirectory),
-    compilerPackageDirectory: compilerPackage.packageDirectory,
-    corePackageDirectory: stagedCoreDirectory,
-    arunaPackageDirectory: stagedArunaDirectory,
-  };
+    stagedNativePackages,
+    compilerPackageDirectory,
+  });
+}
+
+async function discoverStagedNativeTargets(): Promise<NativeTarget[]> {
+  const discovered: NativeTarget[] = [];
+  for (const target of SUPPORTED_NATIVE_TARGETS) {
+    try {
+      await fs.access(stagedNativePackageDirectory(workspaceRoot, target));
+      discovered.push(target);
+    } catch {
+      // Target was not built/downloaded for this release; skip it.
+    }
+  }
+
+  if (discovered.length === 0) {
+    throw new Error(
+      "No staged native packages found under .npm/. Run `release build-native` on each " +
+        "target (or download the per-target build artifacts) before assembling the release.",
+    );
+  }
+
+  return discovered;
+}
+
+// Assemble a release from native packages already staged under `.npm/` (built on
+// other machines and downloaded as artifacts). Skips native compilation entirely;
+// only the TypeScript packages are built and the compiler/core/aruna manifests are
+// staged around the pre-built native packages.
+async function assembleReleasePackages(deps: ReleaseDeps): Promise<PreparedRelease> {
+  const spawn = deps.spawnSync ?? spawnSync;
+  const hostTarget = resolveNativeTarget();
+  const version = await readCompilerVersion();
+
+  const nativeTargets = await discoverStagedNativeTargets();
+  const stagedNativePackages: StagedNativePackage[] = nativeTargets.map((target) => ({
+    packageDirectory: stagedNativePackageDirectory(workspaceRoot, target),
+    target,
+  }));
+
+  buildPublishableTypeScriptPackages(spawn);
+
+  const { compilerPackageDirectory } = await stagePublishablePackages(nativeTargets, deps);
+
+  await validateStagedRelease(stagedNativePackages, compilerPackageDirectory, nativeTargets);
+
+  return toPreparedRelease({
+    version,
+    mode: "full",
+    hostTarget,
+    nativeTargets,
+    skippedTargets: [],
+    stagedNativePackages,
+    compilerPackageDirectory,
+  });
 }
 
 async function packPackage(
@@ -651,10 +764,53 @@ async function publishRelease(
   }
 }
 
+export type NativeBuildResult = {
+  workspaceRoot: string;
+  version: string;
+  nativeTargets: NativeTarget[];
+  skippedTargets: Array<{ target: NativeTarget; reason: string }>;
+  nativePackageDirectories: string[];
+};
+
+// Build and stage ONLY the requested native packages, without touching the
+// TypeScript/compiler/core/aruna packages. Used by the per-target CI build jobs,
+// which upload `.npm/compiler-<target>` as an artifact for the publish job to
+// assemble. Each job runs in a fresh checkout, so `.npm/` is cleaned first.
+export async function buildNativeRelease(
+  options: ReleaseOptions,
+  deps: ReleaseDeps = {},
+): Promise<NativeBuildResult> {
+  const hostTarget = resolveNativeTarget();
+  const targetList = parseTargetList(options.targets);
+  const targets = resolveTargetsForMode(options.mode, hostTarget, targetList);
+  const version = await readCompilerVersion();
+  const npmDirectory = path.join(workspaceRoot, ".npm");
+
+  await cleanDirectory(npmDirectory);
+
+  const { stagedNativePackages, nativeTargets, skippedTargets } =
+    await buildAndStageNativeTargets(options, targets, deps);
+
+  for (const entry of stagedNativePackages) {
+    await validateNativePackage(entry.packageDirectory, entry.target);
+  }
+
+  return {
+    workspaceRoot,
+    version,
+    nativeTargets,
+    skippedTargets,
+    nativePackageDirectories: stagedNativePackages.map((entry) => entry.packageDirectory),
+  };
+}
+
 export async function prepareRelease(
   options: ReleaseOptions,
   deps: ReleaseDeps = {},
 ): Promise<PreparedRelease> {
+  if (options.assemble) {
+    return assembleReleasePackages(deps);
+  }
   const hostTarget = resolveNativeTarget();
   const targetList = parseTargetList(options.targets);
   const targets = resolveTargetsForMode(options.mode, hostTarget, targetList);
@@ -678,6 +834,19 @@ export async function publishPreparedRelease(
 }
 
 async function runCli(command: ReleaseCommand, options: ReleaseOptions): Promise<void> {
+  if (command === "build-native") {
+    const result = await buildNativeRelease(options);
+    console.log(
+      [
+        `Built ${result.nativeTargets.length} native package(s).`,
+        `Built: ${result.nativeTargets.length > 0 ? result.nativeTargets.join(", ") : "none"}`,
+        `Skipped: ${result.skippedTargets.length > 0 ? result.skippedTargets.map((entry) => `${entry.target} (${entry.reason})`).join(", ") : "none"}`,
+        ...result.nativePackageDirectories.map((directory) => `- ${workspaceRelative(directory)}`),
+      ].join("\n"),
+    );
+    return;
+  }
+
   if (command === "prepare") {
     const prepared = await prepareRelease(options);
     console.log(
@@ -736,14 +905,14 @@ async function main(): Promise<void> {
   );
 
   addModeOptions(
-    program.command("pack").action(async function (this: Command) {
+    program.command("build-native").action(async function (this: Command) {
       const opts = this.opts<{
         mode: ReleaseMode;
         targets?: string;
         zig?: ZigPolicy;
         allowMissingTools?: boolean;
       }>();
-      await runCli("pack", {
+      await runCli("build-native", {
         mode: opts.mode,
         targets: opts.targets,
         zig: opts.zig,
@@ -754,11 +923,34 @@ async function main(): Promise<void> {
 
   addModeOptions(
     program
+      .command("pack")
+      .option("--assemble", "assemble from native packages already staged under .npm/")
+      .action(async function (this: Command) {
+        const opts = this.opts<{
+          mode: ReleaseMode;
+          targets?: string;
+          zig?: ZigPolicy;
+          allowMissingTools?: boolean;
+          assemble?: boolean;
+        }>();
+        await runCli("pack", {
+          mode: opts.mode,
+          targets: opts.targets,
+          zig: opts.zig,
+          allowMissingTools: opts.allowMissingTools,
+          assemble: opts.assemble,
+        });
+      }),
+  );
+
+  addModeOptions(
+    program
       .command("publish")
       .option("--dry-run", "run pnpm publish in dry-run mode")
       .option("--tag <tag>", "publish tag", "latest")
       .option("--provenance", "publish with npm provenance attestation (CI/OIDC)")
       .option("--no-verify-credentials", "skip the pnpm whoami check (use with OIDC trusted publishing)")
+      .option("--assemble", "assemble from native packages already staged under .npm/ (CI publish job)")
       .action(async function (this: Command) {
         const opts = this.opts<{
           mode: ReleaseMode;
@@ -769,6 +961,7 @@ async function main(): Promise<void> {
           allowMissingTools?: boolean;
           provenance?: boolean;
           verifyCredentials?: boolean;
+          assemble?: boolean;
         }>();
         await runCli("publish", {
           mode: opts.mode,
@@ -779,6 +972,7 @@ async function main(): Promise<void> {
           allowMissingTools: opts.allowMissingTools,
           provenance: opts.provenance,
           verifyCredentials: opts.verifyCredentials,
+          assemble: opts.assemble,
         });
       }),
   );
