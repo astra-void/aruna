@@ -1,0 +1,61 @@
+name: publish
+
+# Publishes the full Aruna package graph (8 native targets + @arunajs/core +
+# @arunajs/compiler + @arunajs/aruna) to npm when a v* tag is pushed.
+#
+# A single macOS runner can build every native target: cargo-zigbuild covers
+# Linux (gnu + musl) and macOS, cargo-xwin covers Windows MSVC.
+#
+# Auth uses npm trusted publishing (OIDC) — no NPM_TOKEN secret. Configure a
+# trusted publisher for each package on npmjs.com pointing at this repo and
+# workflow file. Provenance attestations are attached automatically.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance + OIDC trusted publishing
+
+jobs:
+  publish:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      # Trusted publishing requires npm >= 11.5.1.
+      - name: Upgrade npm
+        run: npm install --global npm@latest
+
+      - uses: dtolnay/rust-toolchain@stable
+      # Per-target Rust std is installed on demand by the release script
+      # (rustup target add).
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v1
+
+      - name: Install cross-compile tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild,cargo-xwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish
+        run: pnpm release:publish --mode full --provenance --no-verify-credentials

@@ -35,6 +35,7 @@ export type ReleaseOptions = {
   zig?: ZigPolicy;
   allowMissingTools?: boolean;
   provenance?: boolean;
+  verifyCredentials?: boolean;
 };
 
 export type ReleaseDeps = {
@@ -634,7 +635,9 @@ async function publishRelease(
   deps: ReleaseDeps,
 ): Promise<void> {
   const spawn = deps.spawnSync ?? spawnSync;
-  if (!options.dryRun) {
+  // OIDC trusted publishing has no logged-in identity, so `npm whoami` would fail;
+  // CI skips the check with --no-verify-credentials.
+  if (!options.dryRun && options.verifyCredentials !== false) {
     await ensurePublishCredentials(spawn);
   }
   const npmInvocation = await resolveNpmInvocation();
@@ -759,6 +762,7 @@ async function main(): Promise<void> {
       .option("--dry-run", "run npm publish in dry-run mode")
       .option("--tag <tag>", "publish tag", "latest")
       .option("--provenance", "publish with npm provenance attestation (CI/OIDC)")
+      .option("--no-verify-credentials", "skip the npm whoami check (use with OIDC trusted publishing)")
       .action(async function (this: Command) {
         const opts = this.opts<{
           mode: ReleaseMode;
@@ -768,6 +772,7 @@ async function main(): Promise<void> {
           zig?: ZigPolicy;
           allowMissingTools?: boolean;
           provenance?: boolean;
+          verifyCredentials?: boolean;
         }>();
         await runCli("publish", {
           mode: opts.mode,
@@ -777,6 +782,7 @@ async function main(): Promise<void> {
           zig: opts.zig,
           allowMissingTools: opts.allowMissingTools,
           provenance: opts.provenance,
+          verifyCredentials: opts.verifyCredentials,
         });
       }),
   );
