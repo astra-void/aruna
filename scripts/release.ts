@@ -606,7 +606,9 @@ async function publishPackage(
     return;
   }
 
-  const args = [...npmInvocation.args, "publish", packageDirectory];
+  // Scoped @arunajs/* packages default to restricted (private) access on npm;
+  // publish them publicly.
+  const args = [...npmInvocation.args, "publish", packageDirectory, "--access", "public"];
   if (options.dryRun) {
     args.push("--dry-run");
   }

@@ -406,6 +406,7 @@ describe("release orchestrator", () => {
     for (const entry of publishCalls) {
       expect(entry.args.join(" ")).toContain(".npm/");
       expect(entry.args.join(" ")).not.toContain("packages/");
+      expect(entry.args.join(" ")).toContain("--access public");
       expect(entry.args).toContain("--dry-run");
       expect(entry.args).toContain("--tag");
       expect(entry.args).toContain("next");
