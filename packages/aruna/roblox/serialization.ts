@@ -1,8 +1,9 @@
 // Aruna roblox-ts native runtime — plain-data-v1 serialization boundary.
 //
-// Action input/output must be wire-safe plain data. Roblox userdata (Instance,
-// Vector3, CFrame, ...), functions, threads, and cyclic tables are rejected by
-// default; only strings, numbers, booleans, nil, and plain tables are allowed.
+// Action input/output must be wire-safe plain data. Functions, threads, cyclic
+// tables, and most userdata (Instance, ...) are rejected; strings, numbers,
+// booleans, nil, plain tables, and the Roblox value types that RemoteEvents
+// serialize natively (Vector3, Color3, CFrame) are allowed.
 
 const MAX_DEPTH = 32;
 
@@ -16,8 +17,14 @@ function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolea
 	if (typeIs(value, "string") || typeIs(value, "number") || typeIs(value, "boolean")) {
 		return true;
 	}
+	// Roblox value types carried natively by RemoteEvents. These back the
+	// schema.vector3()/color3()/cframe() kinds, which the wire codec rejected
+	// before they were first-class schema types.
+	if (typeIs(value, "Vector3") || typeIs(value, "Color3") || typeIs(value, "CFrame")) {
+		return true;
+	}
 	if (!typeIs(value, "table")) {
-		// Instance, function, thread, Vector3, and other userdata are forbidden.
+		// Other userdata (Instance, function, thread, ...) remain forbidden.
 		return false;
 	}
 

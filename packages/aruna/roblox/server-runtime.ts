@@ -1,6 +1,6 @@
 // Aruna roblox-ts native runtime — server action registry and dispatch.
 
-import type { ActionContext, ActionDefinition } from "./server";
+import type { ActionContext, ActionDefinition, ActionRateLimitOptions } from "./server";
 import type { Schema } from "./schema";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
@@ -23,7 +23,16 @@ type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema 
 
 export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinition<TPlayer> };
 
-export function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>): ActionRegistry<TPlayer> {
+export interface ActionRegistryOptions {
+	// Applied to any action that does not declare its own `rateLimit`. A
+	// per-action `rateLimit` always takes precedence over this fallback.
+	readonly defaultRateLimit?: ActionRateLimitOptions;
+}
+
+export function createActionRegistry<TPlayer>(
+	actions: ActionMap<TPlayer>,
+	options?: ActionRegistryOptions,
+): ActionRegistry<TPlayer> {
 	const actionsById = new Map<string, AnyActionDefinition<TPlayer>>();
 	for (const [actionId, definition] of pairs(
 		actions as { [key: string]: AnyActionDefinition<TPlayer> },
@@ -31,6 +40,7 @@ export function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>): Acti
 		actionsById.set(actionId as string, definition);
 	}
 
+	const defaultRateLimit = options?.defaultRateLimit;
 	const rateLimiter = createActionRateLimiter();
 
 	return {
@@ -54,7 +64,10 @@ export function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>): Acti
 					return;
 				}
 
-				const rateLimit = definition.rateLimit;
+				// A per-action `rateLimit` always wins; otherwise fall back to the
+				// registry-wide default. Only when neither is present is the action
+				// left unthrottled.
+				const rateLimit = definition.rateLimit ?? defaultRateLimit;
 				if (rateLimit !== undefined) {
 					const limitKey = resolveRateLimitKey(rateLimit, player);
 					if (!rateLimiter.check(actionId, limitKey, rateLimit)) {
@@ -64,7 +77,18 @@ export function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>): Acti
 				}
 
 				const context: ActionContext<TPlayer> = { player };
-				Promise.resolve(definition.run(context, input as never)).then(
+
+				// Invoke the handler inside a pcall so a *synchronous* throw becomes
+				// a result payload rather than rejecting the dispatch promise. A
+				// rejection would leave the transport's `.then` success handler
+				// unfired and the client waiting forever for a response.
+				const [invoked, runResult] = pcall(() => definition.run(context, input as never));
+				if (!invoked) {
+					resolve({ ok: false, error: tostring(runResult) });
+					return;
+				}
+
+				Promise.resolve(runResult).then(
 					(output) => {
 						if (!isWireSafe(output)) {
 							resolve({ ok: false, error: "non-serializable action output" });

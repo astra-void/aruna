@@ -1,11 +1,16 @@
 use crate::config::ArunaConfig;
-use crate::actions::{collect_action_definitions, ArunaActionRecord};
+use crate::actions::{
+    collect_action_definitions, collect_signal_definitions, ArunaActionRecord, ArunaSignalRecord,
+};
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
 use crate::files::{normalize_path, project_absolute, project_relative};
 use crate::manifest::ArunaModuleRecord;
 use crate::module_kind::{classify_module, ModuleKind, ModuleReason};
 use crate::parser::collect_static_imports;
-use crate::resolver::{resolve_import_specifier, TsconfigResolverOptions, VirtualGeneratedActionModule};
+use crate::resolver::{
+    resolve_import_specifier, TsconfigResolverOptions, VirtualGeneratedActionModule,
+    VirtualGeneratedSignalModule,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -52,6 +57,8 @@ pub struct BuildGraphResult {
     pub modules: Vec<ArunaModuleRecord>,
     pub imports: Vec<GraphImportRecord>,
     pub actions: Vec<ArunaActionRecord>,
+    #[serde(default)]
+    pub signals: Vec<ArunaSignalRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub module_map: BTreeMap<String, ArunaModuleRecord>,
     pub diagnostics: Vec<ArunaDiagnostic>,
@@ -95,6 +102,24 @@ fn virtual_generated_action_module_record(
         },
         reason: ModuleReason::Directive,
         reason_detail: Some("virtual $aruna/actions module".to_string()),
+    }
+}
+
+fn virtual_generated_signal_module_record(
+    project_root: &Path,
+    generated_dir: &str,
+    module: VirtualGeneratedSignalModule,
+) -> ArunaModuleRecord {
+    let absolute_path = project_absolute(project_root, generated_dir).join(module.filename());
+    let relative_path = project_relative(project_root, &absolute_path);
+    ArunaModuleRecord {
+        id: relative_path.clone(),
+        path: relative_path,
+        // Signals are shared contracts, importable from both the client
+        // subscriber and the server publisher.
+        kind: ModuleKind::Shared,
+        reason: ModuleReason::Directive,
+        reason_detail: Some("virtual $aruna/signals module".to_string()),
     }
 }
 
@@ -151,6 +176,7 @@ pub fn build_project_graph(
 
     let mut action_records = Vec::new();
     let mut action_files = BTreeSet::new();
+    let mut signal_records = Vec::new();
 
     for absolute_path in files {
         let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
@@ -169,6 +195,13 @@ pub fn build_project_graph(
                     error,
                 );
             }
+        }
+
+        // Signal discovery shares the per-file parse pattern. A parse failure was
+        // already reported by the action pass above, so only the Ok case adds work.
+        if let Ok(result) = collect_signal_definitions(project_root, absolute_path, &source_text) {
+            signal_records.extend(result.signals);
+            diagnostics.extend(result.diagnostics);
         }
     }
 
@@ -224,6 +257,16 @@ pub fn build_project_graph(
             module_map.insert(record.path.clone(), record.clone());
             module_records.push(record);
         }
+    }
+
+    if !signal_records.is_empty() {
+        let record = virtual_generated_signal_module_record(
+            project_root,
+            &config.generated_dir,
+            VirtualGeneratedSignalModule,
+        );
+        module_map.insert(record.path.clone(), record.clone());
+        module_records.push(record);
     }
 
     let mut imports = Vec::new();
@@ -334,10 +377,35 @@ pub fn build_project_graph(
             })
     });
 
+    signal_records.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+
+    let mut seen_signal_ids = BTreeMap::new();
+    for signal in &signal_records {
+        if let Some(previous_file) = seen_signal_ids.insert(signal.id.clone(), signal.file.clone()) {
+            diagnostics.push(create_diagnostic(
+                "aruna::563",
+                format!("Signal id {} is defined more than once.", signal.id),
+                Some(signal.file.clone()),
+                None,
+                Some(format!(
+                    "First defined in {}, then again in {}.",
+                    previous_file, signal.file
+                )),
+                Some("Use globally unique signal ids such as domain.signalName.".to_string()),
+            ));
+        }
+    }
+
     Ok(BuildGraphResult {
         modules: module_records,
         imports,
         actions: action_records,
+        signals: signal_records,
         module_map,
         diagnostics,
     })

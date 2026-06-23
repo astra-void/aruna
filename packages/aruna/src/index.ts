@@ -22,6 +22,28 @@ export {
 
 export { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
 export { defineAction } from "./server.js";
+export { defineSignal } from "./signals/define-signal.js";
+export {
+  assertPublishableSignalPayload,
+  isDeliverableSignalPayload,
+  type InferSignalPayload,
+  type SignalDefinition,
+  type SignalPayload,
+  type SignalRegistry,
+} from "./runtime/signal.js";
+export {
+  createRemoteSignalPublisher,
+  createRemoteSignalSubscriber,
+  type CreateRemoteSignalSubscriberOptions,
+  type RemoteSignalClientLike,
+  type RemoteSignalConnection,
+  type RemoteSignalMessage,
+  type RemoteSignalPublisher,
+  type RemoteSignalServerLike,
+  type RemoteSignalSubscriber,
+  type SignalHandler,
+  type StaticSignalHandlers,
+} from "./runtime/remote-signal.js";
 export { createClientApp, type ClientApp, type CreateClientAppOptions } from "./client.js";
 export {
   createServerApp,
@@ -81,4 +103,5 @@ export {
   type SerializationPolicyViolation,
   validateSerializableActionValue,
 } from "./server-runtime.js";
-export { schema, type InferSchema } from "./schema.js";
+export { schema, type InferSchema, type NumberFormat } from "./schema.js";
+export { decodeBinary, encodeBinary } from "./runtime/binary.js";

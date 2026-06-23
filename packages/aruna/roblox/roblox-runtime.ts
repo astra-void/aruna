@@ -3,8 +3,16 @@
 import type { ActionInvoker } from "./client-runtime";
 import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding } from "./server-app";
+import {
+	createSignalPublisher,
+	createSignalSubscriber,
+	type SignalMap,
+	type SignalPublisher,
+	type SignalSubscriber,
+} from "./signal-runtime";
 
 const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
+const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
 
 interface ActionResponsePayload {
 	readonly ok: boolean;
@@ -42,6 +50,15 @@ function defaultRequestId(): string {
 
 export interface CreateDefaultRobloxActionInvokerOptions {
 	readonly createRequestId?: () => string;
+	// Milliseconds to wait for a server response before rejecting with a timeout
+	// error. 0 or undefined (the default) disables the timeout. Mirrors the Node
+	// reference runtime's RemoteEventActionInvokerOptions.requestTimeoutMs.
+	readonly requestTimeoutMs?: number;
+}
+
+interface PendingActionRequest {
+	readonly resolve: (payload: ActionResponsePayload) => void;
+	timeoutThread?: thread;
 }
 
 export function createDefaultRobloxActionInvoker(
@@ -52,27 +69,47 @@ export function createDefaultRobloxActionInvoker(
 		options !== undefined && options.createRequestId !== undefined
 			? options.createRequestId
 			: defaultRequestId;
-	const pending = new Map<string, (payload: ActionResponsePayload) => void>();
+	const requestTimeoutMs =
+		options !== undefined && options.requestTimeoutMs !== undefined ? options.requestTimeoutMs : 0;
+	const pending = new Map<string, PendingActionRequest>();
 
 	remote.OnClientEvent.Connect((requestId: string, payload: ActionResponsePayload) => {
-		const resolver = pending.get(requestId);
-		if (resolver !== undefined) {
+		const entry = pending.get(requestId);
+		if (entry !== undefined) {
 			pending.delete(requestId);
-			resolver(payload);
+			if (entry.timeoutThread !== undefined) {
+				task.cancel(entry.timeoutThread);
+			}
+			entry.resolve(payload);
 		}
 	});
 
 	return (actionId, input) => {
 		return new Promise<unknown>((resolve, reject) => {
 			const requestId = createRequestId();
-			pending.set(requestId, (payload) => {
-				if (payload.ok) {
-					resolve(payload.output);
-				} else {
-					reject(payload.error !== undefined ? payload.error : "action failed");
-				}
-			});
+			const entry: PendingActionRequest = {
+				resolve: (payload) => {
+					if (payload.ok) {
+						resolve(payload.output);
+					} else {
+						reject(payload.error !== undefined ? payload.error : "action failed");
+					}
+				},
+			};
+			pending.set(requestId, entry);
 			remote.FireServer(requestId, actionId, input);
+
+			// Arm a timeout only when enabled and still pending (the response may
+			// have arrived synchronously above). task.delay uses seconds.
+			if (requestTimeoutMs > 0 && pending.get(requestId) === entry) {
+				entry.timeoutThread = task.delay(requestTimeoutMs / 1000, () => {
+					if (pending.get(requestId) !== entry) {
+						return;
+					}
+					pending.delete(requestId);
+					reject(`Aruna action ${actionId} timed out after ${requestTimeoutMs}ms.`);
+				});
+			}
 		});
 	};
 }
@@ -82,9 +119,15 @@ export function bindDefaultRobloxActionRemoteEvent<TPlayer>(
 ): ServerAppBinding {
 	const remote = ensureServerActionRemote();
 	const connection = remote.OnServerEvent.Connect((player: Player, ...args: Array<unknown>) => {
-		const requestId = args[0] as string;
-		const actionId = args[1] as string;
+		const requestId = args[0];
+		const actionId = args[1];
 		const input = args[2];
+
+		// Drop malformed envelopes from untrusted clients before dispatch.
+		if (!typeIs(requestId, "string") || !typeIs(actionId, "string")) {
+			return;
+		}
+
 		void registry.dispatch(player as unknown as TPlayer, actionId, input).then((result) => {
 			remote.FireClient(player, requestId, result);
 		});
@@ -95,4 +138,55 @@ export function bindDefaultRobloxActionRemoteEvent<TPlayer>(
 			connection.Disconnect();
 		},
 	};
+}
+
+function ensureServerSignalRemote(): RemoteEvent {
+	const storage = getReplicatedStorage();
+	const existing = storage.FindFirstChild(SIGNAL_REMOTE_NAME);
+	if (existing !== undefined && existing.IsA("RemoteEvent")) {
+		return existing;
+	}
+
+	const remote = new Instance("RemoteEvent");
+	remote.Name = SIGNAL_REMOTE_NAME;
+	remote.Parent = storage;
+	return remote;
+}
+
+function waitForClientSignalRemote(): RemoteEvent {
+	const storage = getReplicatedStorage();
+	return storage.WaitForChild(SIGNAL_REMOTE_NAME) as RemoteEvent;
+}
+
+// Server-side signal emitter over the default Aruna signal RemoteEvent.
+export function createDefaultRobloxSignalPublisher<TSignals extends SignalMap>(
+	signals: TSignals,
+): SignalPublisher<TSignals, Player> {
+	const remote = ensureServerSignalRemote();
+	return createSignalPublisher<TSignals, Player>(
+		{
+			FireClient: (player, message) => {
+				remote.FireClient(player, message);
+			},
+			FireAllClients: (message) => {
+				remote.FireAllClients(message);
+			},
+		},
+		signals,
+	);
+}
+
+// Client-side signal subscriber over the default Aruna signal RemoteEvent.
+export function createDefaultRobloxSignalSubscriber<TSignals extends SignalMap>(
+	signals: TSignals,
+): SignalSubscriber<TSignals> {
+	const remote = waitForClientSignalRemote();
+	return createSignalSubscriber<TSignals>(
+		{
+			OnClientEvent: {
+				Connect: (callback) => remote.OnClientEvent.Connect(callback as (...args: Array<unknown>) => void),
+			},
+		},
+		signals,
+	);
 }

@@ -9,7 +9,7 @@ use oxc_ast::ast::{
 use oxc_parser::Parser;
 use oxc_span::{GetSpan, SourceType};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -60,6 +60,8 @@ pub enum ArunaSchemaLiteralMetadata {
 pub struct ArunaSchemaMetadata {
     pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub numeric_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub properties: Option<BTreeMap<String, ArunaSchemaMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub items: Option<Box<ArunaSchemaMetadata>>,
@@ -77,6 +79,7 @@ pub struct ArunaSchemaMetadata {
 enum SchemaRole {
     Input,
     Output,
+    Payload,
 }
 
 impl SchemaRole {
@@ -84,6 +87,7 @@ impl SchemaRole {
         match self {
             SchemaRole::Input => "aruna::553",
             SchemaRole::Output => "aruna::554",
+            SchemaRole::Payload => "aruna::564",
         }
     }
 
@@ -91,6 +95,7 @@ impl SchemaRole {
         match self {
             SchemaRole::Input => "input",
             SchemaRole::Output => "output",
+            SchemaRole::Payload => "payload",
         }
     }
 }
@@ -117,6 +122,28 @@ pub struct ArunaActionRecord {
 pub struct ActionDiscoveryResult {
     pub actions: Vec<ArunaActionRecord>,
     pub action_files: BTreeSet<String>,
+    pub diagnostics: Vec<ArunaDiagnostic>,
+}
+
+// A server -> client signal discovered from `export const X = defineSignal({...})`.
+// Signals are the push counterpart to actions: an id plus an optional payload
+// schema, no run handler and no response.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArunaSignalRecord {
+    pub id: String,
+    pub file: String,
+    pub export_name: String,
+    pub has_payload_schema: bool,
+    pub serialization: ArunaActionSerializationMetadata,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload_schema: Option<ArunaSchemaMetadata>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SignalDiscoveryResult {
+    pub signals: Vec<ArunaSignalRecord>,
+    pub signal_files: BTreeSet<String>,
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
@@ -215,6 +242,46 @@ fn schema_span_from_expression(expression: &Expression<'_>) -> DiagnosticSpan {
     }
 }
 
+/// Module-level `const NAME = <schema expr>` bindings within a single file.
+/// Lets a schema extracted to a variable resolve to the same metadata as if it
+/// were written inline, instead of being rejected as a non-call expression.
+type SchemaEnv<'a> = HashMap<&'a str, &'a Expression<'a>>;
+
+fn collect_schema_bindings<'a>(program: &'a oxc_ast::ast::Program<'a>) -> SchemaEnv<'a> {
+    let mut env: SchemaEnv<'a> = HashMap::new();
+
+    for statement in &program.body {
+        let variable_decl = match statement {
+            Statement::VariableDeclaration(decl) => decl,
+            Statement::ExportNamedDeclaration(export_decl) => {
+                match &export_decl.declaration {
+                    Some(Declaration::VariableDeclaration(decl)) => decl,
+                    _ => continue,
+                }
+            }
+            _ => continue,
+        };
+
+        if variable_decl.kind != VariableDeclarationKind::Const {
+            continue;
+        }
+
+        for declarator in &variable_decl.declarations {
+            let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                continue;
+            };
+            let Some(init) = declarator.init.as_ref() else {
+                continue;
+            };
+            // A later binding with the same name shadows an earlier one, matching
+            // how the value would resolve at runtime.
+            env.insert(binding.name.as_str(), init);
+        }
+    }
+
+    env
+}
+
 fn unwrap_schema_expression<'a>(expression: &'a Expression<'a>) -> &'a Expression<'a> {
     match expression {
         Expression::ParenthesizedExpression(parenthesized) => {
@@ -284,44 +351,80 @@ fn literal_metadata_from_array_element(
     }
 }
 
-fn parse_schema_expression(
+fn parse_schema_expression<'a>(
     file: &str,
     action_id: &str,
     export_name: &str,
     role: SchemaRole,
-    expression: &Expression<'_>,
+    expression: &'a Expression<'a>,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
-    match unwrap_schema_expression(expression) {
-        Expression::CallExpression(call) => parse_schema_call(
-            file,
-            action_id,
-            export_name,
-            role,
-            call,
-            diagnostics,
-        ),
-        _ => {
-            diagnostics.push(schema_invalid_diagnostic(
-                file,
-                action_id,
-                export_name,
-                role,
-                schema_span_from_expression(expression),
-                "The schema expression must be a call such as schema.string() or schema.object({...})."
-                    .to_string(),
-            ));
-            None
+    let mut current = unwrap_schema_expression(expression);
+    // Follow `const a = b; const b = schema.string()` chains, guarding against a
+    // binding that refers (directly or transitively) back to itself.
+    let mut seen: Vec<&'a str> = Vec::new();
+
+    loop {
+        match current {
+            Expression::CallExpression(call) => {
+                return parse_schema_call(file, action_id, export_name, role, call, env, diagnostics);
+            }
+            Expression::Identifier(identifier) => {
+                let name = identifier.name.as_str();
+
+                let Some(resolved) = env.get(name).copied() else {
+                    diagnostics.push(schema_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        role,
+                        schema_span_from_expression(current),
+                        format!(
+                            "The schema variable `{name}` could not be resolved. Declare it as a module-level `const` schema in the same file."
+                        ),
+                    ));
+                    return None;
+                };
+
+                if seen.contains(&name) {
+                    diagnostics.push(schema_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        role,
+                        schema_span_from_expression(current),
+                        format!("The schema variable `{name}` refers to itself."),
+                    ));
+                    return None;
+                }
+
+                seen.push(name);
+                current = unwrap_schema_expression(resolved);
+            }
+            _ => {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    schema_span_from_expression(current),
+                    "The schema expression must be a call such as schema.string() or schema.object({...})."
+                        .to_string(),
+                ));
+                return None;
+            }
         }
     }
 }
 
-fn parse_schema_union_members(
+fn parse_schema_union_members<'a>(
     file: &str,
     action_id: &str,
     export_name: &str,
     role: SchemaRole,
-    array: &ArrayExpression<'_>,
+    array: &'a ArrayExpression<'a>,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<Vec<ArunaSchemaMetadata>> {
     if array.elements.is_empty() {
@@ -356,9 +459,15 @@ fn parse_schema_union_members(
             return None;
         };
 
-        let Some(member) =
-            parse_schema_expression(file, action_id, export_name, role, expression, diagnostics)
-        else {
+        let Some(member) = parse_schema_expression(
+            file,
+            action_id,
+            export_name,
+            role,
+            expression,
+            env,
+            diagnostics,
+        ) else {
             return None;
         };
         members.push(member);
@@ -367,52 +476,46 @@ fn parse_schema_union_members(
     Some(members)
 }
 
-fn parse_schema_argument(
+fn parse_schema_argument<'a>(
     file: &str,
     action_id: &str,
     export_name: &str,
     role: SchemaRole,
-    argument: &Argument<'_>,
+    argument: &'a Argument<'a>,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
-    match argument {
-        Argument::CallExpression(call) => parse_schema_call(
+    if let Argument::SpreadElement(_) = argument {
+        diagnostics.push(schema_invalid_diagnostic(
             file,
             action_id,
             export_name,
             role,
-            call,
-            diagnostics,
-        ),
-        Argument::SpreadElement(_) => {
-            diagnostics.push(schema_invalid_diagnostic(
-                file,
-                action_id,
-                export_name,
-                role,
-                DiagnosticSpan {
-                    start: argument.span().start as usize,
-                    end: argument.span().end as usize,
-                },
-                "Spread arguments are not valid schema expressions.".to_string(),
-            ));
-            None
-        }
-        _ => {
-            diagnostics.push(schema_invalid_diagnostic(
-                file,
-                action_id,
-                export_name,
-                role,
-                DiagnosticSpan {
-                    start: argument.span().start as usize,
-                    end: argument.span().end as usize,
-                },
-                "The schema argument must be a schema call such as schema.string().".to_string(),
-            ));
-            None
-        }
+            DiagnosticSpan {
+                start: argument.span().start as usize,
+                end: argument.span().end as usize,
+            },
+            "Spread arguments are not valid schema expressions.".to_string(),
+        ));
+        return None;
     }
+
+    let Some(expression) = argument.as_expression() else {
+        diagnostics.push(schema_invalid_diagnostic(
+            file,
+            action_id,
+            export_name,
+            role,
+            DiagnosticSpan {
+                start: argument.span().start as usize,
+                end: argument.span().end as usize,
+            },
+            "The schema argument must be a schema call such as schema.string().".to_string(),
+        ));
+        return None;
+    };
+
+    parse_schema_expression(file, action_id, export_name, role, expression, env, diagnostics)
 }
 
 fn parse_schema_array_values(
@@ -466,12 +569,13 @@ fn parse_schema_array_values(
     Some(values)
 }
 
-fn parse_schema_object(
+fn parse_schema_object<'a>(
     file: &str,
     action_id: &str,
     export_name: &str,
     role: SchemaRole,
-    object: &ObjectExpression<'_>,
+    object: &'a ObjectExpression<'a>,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
     let mut properties = BTreeMap::new();
@@ -517,6 +621,7 @@ fn parse_schema_object(
             export_name,
             role,
             &object_property.value,
+            env,
             diagnostics,
         ) else {
             return None;
@@ -532,12 +637,13 @@ fn parse_schema_object(
     })
 }
 
-fn parse_schema_call(
+fn parse_schema_call<'a>(
     file: &str,
     action_id: &str,
     export_name: &str,
     role: SchemaRole,
-    call: &CallExpression<'_>,
+    call: &'a CallExpression<'a>,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
     let Expression::StaticMemberExpression(member) = unwrap_schema_expression(&call.callee) else {
@@ -587,7 +693,10 @@ fn parse_schema_call(
 
     let kind = member.property.name.as_str();
     match kind {
-        "string" | "number" | "boolean" => {
+        // Argument-less leaf schemas. The Roblox userdata kinds (vector3/color3/
+        // cframe) map to native Vector3/Color3/CFrame and travel over the wire
+        // natively or as packed f32 components via the binary codec.
+        "string" | "number" | "boolean" | "vector3" | "color3" | "cframe" => {
             if !call.arguments.is_empty() {
                 diagnostics.push(schema_invalid_diagnostic(
                     file,
@@ -605,6 +714,31 @@ fn parse_schema_call(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
+                ..Default::default()
+            })
+        }
+        "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32" => {
+            if !call.arguments.is_empty() {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    format!("{kind} schemas do not accept arguments."),
+                ));
+                return None;
+            }
+
+            // Numeric width hints render as plain `number` in TypeScript; the
+            // width is preserved as metadata for the binary codec, inspect, and
+            // contract diffs. Plain `schema.number()` stays format-less (f64).
+            Some(ArunaSchemaMetadata {
+                kind: "number".to_string(),
+                numeric_format: Some(kind.to_string()),
                 ..Default::default()
             })
         }
@@ -698,6 +832,7 @@ fn parse_schema_call(
                 export_name,
                 role,
                 argument,
+                env,
                 diagnostics,
             ) else {
                 return None;
@@ -755,7 +890,7 @@ fn parse_schema_call(
                 return None;
             };
 
-            parse_schema_object(file, action_id, export_name, role, object, diagnostics)
+            parse_schema_object(file, action_id, export_name, role, object, env, diagnostics)
         }
         "optional" => {
             let Some(argument) = call.arguments.first() else {
@@ -794,6 +929,7 @@ fn parse_schema_call(
                 export_name,
                 role,
                 argument,
+                env,
                 diagnostics,
             ) else {
                 return None;
@@ -915,9 +1051,15 @@ fn parse_schema_call(
                 return None;
             };
 
-            let Some(members) =
-                parse_schema_union_members(file, action_id, export_name, role, array, diagnostics)
-            else {
+            let Some(members) = parse_schema_union_members(
+                file,
+                action_id,
+                export_name,
+                role,
+                array,
+                env,
+                diagnostics,
+            ) else {
                 return None;
             };
 
@@ -944,13 +1086,14 @@ fn parse_schema_call(
     }
 }
 
-fn extract_action_schema(
+fn extract_action_schema<'a>(
     file: &str,
     action_id: &str,
     export_name: &str,
     role: SchemaRole,
-    object: &ObjectExpression<'_>,
+    object: &'a ObjectExpression<'a>,
     property_name: &str,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> (bool, Option<ArunaSchemaMetadata>) {
     let Some(property) = find_object_property(object, property_name) else {
@@ -965,6 +1108,7 @@ fn extract_action_schema(
             export_name,
             role,
             &property.value,
+            env,
             diagnostics,
         ),
     )
@@ -1195,10 +1339,11 @@ fn extract_action_rate_limit(
     parse_rate_limit_object(file, action_id, export_name, rate_limit_object, diagnostics)
 }
 
-fn analyze_define_action_call(
+fn analyze_define_action_call<'a>(
     file: &str,
     export_name: &str,
-    call: &CallExpression<'_>,
+    call: &'a CallExpression<'a>,
+    env: &SchemaEnv<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaActionRecord> {
     let Some(first_argument) = call.arguments.first() else {
@@ -1262,6 +1407,7 @@ fn analyze_define_action_call(
         SchemaRole::Input,
         object,
         "input",
+        env,
         diagnostics,
     );
     let (has_output_schema, output_schema) = extract_action_schema(
@@ -1271,6 +1417,7 @@ fn analyze_define_action_call(
         SchemaRole::Output,
         object,
         "output",
+        env,
         diagnostics,
     );
     let rate_limit = extract_action_rate_limit(file, &id, export_name, object, diagnostics);
@@ -1334,6 +1481,7 @@ fn collect_action_candidates(
 ) -> (Vec<ArunaActionRecord>, bool) {
     let mut actions = Vec::new();
     let mut saw_define_action = false;
+    let env = collect_schema_bindings(program);
 
     for statement in &program.body {
         let Statement::ExportNamedDeclaration(export_decl) = statement else {
@@ -1371,6 +1519,7 @@ fn collect_action_candidates(
                 file,
                 binding.name.as_str(),
                 call,
+                &env,
                 diagnostics,
             ) else {
                 continue;
@@ -1380,6 +1529,175 @@ fn collect_action_candidates(
     }
 
     (actions, saw_define_action)
+}
+
+fn analyze_define_signal_call<'a>(
+    file: &str,
+    export_name: &str,
+    call: &'a CallExpression<'a>,
+    env: &SchemaEnv<'a>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<ArunaSignalRecord> {
+    let Some(Argument::ObjectExpression(object)) = call.arguments.first() else {
+        diagnostics.push(create_diagnostic(
+            "aruna::560",
+            format!("Signal {export_name} in {file} has an invalid defineSignal definition."),
+            Some(file.to_string()),
+            Some(call_span(call)),
+            Some("defineSignal expects a single object literal with at least an id.".to_string()),
+            Some("Use defineSignal({ id: \"domain.signal\", payload: schema.object({ ... }) }).".to_string()),
+        ));
+        return None;
+    };
+
+    let Some(id_property) = find_object_property(object, "id") else {
+        diagnostics.push(create_diagnostic(
+            "aruna::560",
+            format!("Signal {export_name} in {file} is missing an id."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some("Signal ids must be declared as a static string literal.".to_string()),
+            Some("Add id: \"domain.signalName\" to the defineSignal object.".to_string()),
+        ));
+        return None;
+    };
+
+    let Some(id) = (match &id_property.value {
+        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        _ => None,
+    }) else {
+        diagnostics.push(create_diagnostic(
+            "aruna::560",
+            format!("Signal {export_name} in {file} has an invalid id."),
+            Some(file.to_string()),
+            Some(DiagnosticSpan {
+                start: id_property.span.start as usize,
+                end: id_property.span.end as usize,
+            }),
+            Some("Signal ids must be static string literals.".to_string()),
+            Some("Use id: \"domain.signalName\" with a literal string value.".to_string()),
+        ));
+        return None;
+    };
+
+    let (has_payload_schema, payload_schema) = extract_action_schema(
+        file,
+        &id,
+        export_name,
+        SchemaRole::Payload,
+        object,
+        "payload",
+        env,
+        diagnostics,
+    );
+
+    Some(ArunaSignalRecord {
+        id,
+        file: file.to_string(),
+        export_name: export_name.to_string(),
+        has_payload_schema,
+        serialization: ArunaActionSerializationMetadata::default(),
+        payload_schema,
+    })
+}
+
+fn collect_signal_candidates(
+    file: &str,
+    program: &oxc_ast::ast::Program<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> (Vec<ArunaSignalRecord>, bool) {
+    let mut signals = Vec::new();
+    let mut saw_define_signal = false;
+    let env = collect_schema_bindings(program);
+
+    for statement in &program.body {
+        let Statement::ExportNamedDeclaration(export_decl) = statement else {
+            continue;
+        };
+
+        let Some(Declaration::VariableDeclaration(variable_decl)) = &export_decl.declaration else {
+            continue;
+        };
+
+        if variable_decl.kind != VariableDeclarationKind::Const {
+            continue;
+        }
+
+        for declarator in &variable_decl.declarations {
+            let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                continue;
+            };
+
+            let Some(Expression::CallExpression(call)) = declarator.init.as_ref() else {
+                continue;
+            };
+
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+
+            if callee.name.as_str() != "defineSignal" {
+                continue;
+            }
+
+            saw_define_signal = true;
+
+            let Some(candidate) =
+                analyze_define_signal_call(file, binding.name.as_str(), call, &env, diagnostics)
+            else {
+                continue;
+            };
+            signals.push(candidate);
+        }
+    }
+
+    (signals, saw_define_signal)
+}
+
+pub fn collect_signal_definitions(
+    project_root: &Path,
+    path: &Path,
+    source_text: &str,
+) -> Result<SignalDiscoveryResult, String> {
+    let file = project_relative(project_root, path);
+    let allocator = Allocator::default();
+    let source_type = source_type_for_path(path)?;
+    let parser_return = Parser::new(&allocator, source_text, source_type).parse();
+
+    if parser_return.panicked || !parser_return.errors.is_empty() {
+        let errors = parser_return
+            .errors
+            .into_iter()
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        return Err(if errors.is_empty() {
+            "Oxc parser panicked without reporting a recoverable error.".to_string()
+        } else {
+            errors.join("\n")
+        });
+    }
+
+    let mut diagnostics = Vec::new();
+    let (mut signals, saw_define_signal) =
+        collect_signal_candidates(&file, &parser_return.program, &mut diagnostics);
+    let mut signal_files = BTreeSet::new();
+
+    if saw_define_signal {
+        signal_files.insert(file.clone());
+    }
+
+    signals.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+
+    Ok(SignalDiscoveryResult {
+        signals,
+        signal_files,
+        diagnostics,
+    })
 }
 
 pub fn collect_action_definitions(
@@ -1453,6 +1771,57 @@ mod tests {
 
         assert_eq!(result.actions.len(), 1);
         (result.actions[0].clone(), result.diagnostics)
+    }
+
+    fn collect_signals(source: &str) -> SignalDiscoveryResult {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let path = write_file(root, "src/signals.ts", source);
+        collect_signal_definitions(root, &path, &std::fs::read_to_string(&path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn collects_define_signal_with_payload_schema() {
+        let result = collect_signals(
+            r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const damaged = defineSignal({
+  id: "combat.damaged",
+  payload: schema.object({ amount: schema.u16(), source: schema.string() }),
+});
+
+export const tick = defineSignal({ id: "world.tick" });
+"#,
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.signals.len(), 2);
+
+        let damaged = &result.signals[0];
+        assert_eq!(damaged.id, "combat.damaged");
+        assert_eq!(damaged.export_name, "damaged");
+        assert!(damaged.has_payload_schema);
+
+        let tick = &result.signals[1];
+        assert_eq!(tick.id, "world.tick");
+        assert!(!tick.has_payload_schema);
+        assert_eq!(tick.payload_schema, None);
+    }
+
+    #[test]
+    fn reports_signal_missing_id() {
+        let result = collect_signals(
+            r#"
+import { defineSignal } from "aruna/server";
+
+export const broken = defineSignal({});
+"#,
+        );
+
+        assert!(result.signals.is_empty());
+        assert!(result.diagnostics.iter().any(|d| d.code == "aruna::560"));
     }
 
     fn schema(kind: &str) -> ArunaSchemaMetadata {
@@ -1557,6 +1926,58 @@ export const purchaseItem = defineAction({
     }
 
     #[test]
+    fn extracts_roblox_userdata_schema_metadata() {
+        let result = collect_signals(
+            r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const moved = defineSignal({
+  id: "world.moved",
+  payload: schema.object({
+    position: schema.vector3(),
+    tint: schema.color3(),
+    pivot: schema.cframe(),
+  }),
+});
+"#,
+        );
+
+        assert!(result.diagnostics.is_empty());
+        let moved = &result.signals[0];
+        assert_eq!(
+            moved.payload_schema,
+            Some(object_schema(&[
+                ("pivot", schema("cframe")),
+                ("position", schema("vector3")),
+                ("tint", schema("color3")),
+            ]))
+        );
+    }
+
+    #[test]
+    fn rejects_arguments_to_userdata_schemas() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: schema.vector3(schema.number()),
+  run(ctx, input) {
+    return true;
+  },
+});
+"#,
+        );
+
+        assert!(action.input_schema.is_none());
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "aruna::553");
+    }
+
+    #[test]
     fn extracts_number_and_boolean_schema_metadata() {
         let (action, diagnostics) = collect_single_action(
             r#"
@@ -1577,6 +1998,39 @@ export const purchaseItem = defineAction({
         assert!(diagnostics.is_empty());
         assert_eq!(action.input_schema, Some(schema("number")));
         assert_eq!(action.output_schema, Some(schema("boolean")));
+    }
+
+    #[test]
+    fn extracts_numeric_width_hint_metadata() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const move = defineAction({
+  id: "player.move",
+  input: schema.object({ x: schema.i16(), team: schema.u8() }),
+  output: schema.f32(),
+  run(ctx, input) {
+    return 1.0;
+  },
+});
+"#,
+        );
+
+        assert!(diagnostics.is_empty());
+
+        let numeric = |format: &str| ArunaSchemaMetadata {
+            kind: "number".to_string(),
+            numeric_format: Some(format.to_string()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            action.input_schema,
+            Some(object_schema(&[("team", numeric("u8")), ("x", numeric("i16"))]))
+        );
+        assert_eq!(action.output_schema, Some(numeric("f32")));
     }
 
     #[test]
@@ -1690,5 +2144,166 @@ export const purchaseItem = defineAction({
         assert_eq!(diagnostics[0].name, "action-input-schema-invalid");
         assert_eq!(diagnostics[0].severity, crate::diagnostics::DiagnosticSeverity::Warning);
         assert!(diagnostics[0].message.contains("invalid input schema"));
+    }
+
+    #[test]
+    fn resolves_action_schema_extracted_to_a_const() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const purchaseInput = schema.object({ itemId: schema.string() });
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: purchaseInput,
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        assert!(diagnostics.is_empty());
+        assert!(action.has_input_schema);
+        assert_eq!(
+            action.input_schema,
+            Some(object_schema(&[("itemId", schema("string"))]))
+        );
+    }
+
+    #[test]
+    fn resolves_signal_payload_schema_extracted_to_a_const() {
+        let result = collect_signals(
+            r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const damagePayload = schema.object({ amount: schema.u16() });
+
+export const damaged = defineSignal({
+  id: "combat.damaged",
+  payload: damagePayload,
+});
+"#,
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.signals.len(), 1);
+
+        let damaged = &result.signals[0];
+        assert!(damaged.has_payload_schema);
+
+        let amount = ArunaSchemaMetadata {
+            kind: "number".to_string(),
+            numeric_format: Some("u16".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            damaged.payload_schema,
+            Some(object_schema(&[("amount", amount)]))
+        );
+    }
+
+    #[test]
+    fn resolves_schema_variable_nested_inside_a_schema() {
+        let (action, _diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const tag = schema.string();
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: schema.object({ tags: schema.array(tag) }),
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        let tags = ArunaSchemaMetadata {
+            kind: "array".to_string(),
+            items: Some(Box::new(schema("string"))),
+            ..Default::default()
+        };
+        assert_eq!(action.input_schema, Some(object_schema(&[("tags", tags)])));
+    }
+
+    #[test]
+    fn follows_a_chain_of_schema_variables() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const base = schema.string();
+const alias = base;
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: alias,
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        assert!(diagnostics.is_empty());
+        assert_eq!(action.input_schema, Some(schema("string")));
+    }
+
+    #[test]
+    fn reports_unresolved_schema_variable() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: missingSchema,
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        assert!(action.input_schema.is_none());
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "aruna::553");
+        assert!(diagnostics[0]
+            .details
+            .as_ref()
+            .is_some_and(|details| details.contains("could not be resolved")));
+    }
+
+    #[test]
+    fn reports_self_referential_schema_variable() {
+        let result = collect_signals(
+            r#"
+import { defineSignal } from "aruna/server";
+
+const loopSchema = loopSchema;
+
+export const ticked = defineSignal({
+  id: "world.ticked",
+  payload: loopSchema,
+});
+"#,
+        );
+
+        let signal = &result.signals[0];
+        assert!(signal.payload_schema.is_none());
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "aruna::564");
+        assert!(result.diagnostics[0]
+            .details
+            .as_ref()
+            .is_some_and(|details| details.contains("refers to itself")));
     }
 }

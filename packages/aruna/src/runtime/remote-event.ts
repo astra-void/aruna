@@ -52,8 +52,43 @@ export type RemoteEventServerLike<TPlayer = unknown> = {
 
 export type RemoteEventRequestIdFactory = () => string;
 
+// Cancels a pending scheduled timeout. Returned by ActionTimeoutScheduler.
+export type ActionTimeoutCanceler = () => void;
+
+// Schedules `callback` to run after `delayMs` milliseconds and returns a
+// canceler. Injectable so the same invoker works under Node (setTimeout) and
+// the roblox-ts native runtime (task.delay), which share no timer global, and
+// so tests can drive timers deterministically.
+export type ActionTimeoutScheduler = (
+  callback: () => void,
+  delayMs: number,
+) => ActionTimeoutCanceler;
+
+// Recommended request timeout. Timeouts are opt-in: invoke() arms a timer only
+// when requestTimeoutMs is a positive number; 0 or undefined keeps the
+// historical "wait for the response forever" behavior.
+export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
+
+export class ArunaTimeoutError extends Error {
+  override readonly name = "ActionTimeoutError";
+  readonly actionId: string;
+  readonly timeoutMs: number;
+
+  constructor(actionId: string, timeoutMs: number) {
+    super(`Aruna action ${actionId} timed out after ${timeoutMs}ms.`);
+    this.actionId = actionId;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export type RemoteEventActionInvokerOptions = {
   readonly createRequestId?: RemoteEventRequestIdFactory;
+  // Milliseconds to wait for a server response before rejecting with
+  // ArunaTimeoutError. 0 or undefined (the default) disables the timeout.
+  readonly requestTimeoutMs?: number;
+  // Overrides how request timeouts are scheduled. Defaults to a setTimeout
+  // based scheduler; inject this under Luau or to drive timers in tests.
+  readonly scheduleTimeout?: ActionTimeoutScheduler;
 };
 
 export type DisposableActionInvoker = ActionInvoker & {
@@ -78,8 +113,26 @@ function createDefaultRequestId(): string {
   return `aruna:${nextRequestId}`;
 }
 
+function createDefaultTimeoutScheduler(): ActionTimeoutScheduler {
+  return (callback, delayMs) => {
+    const handle = setTimeout(callback, delayMs);
+    return () => {
+      clearTimeout(handle);
+    };
+  };
+}
+
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function isValidRequestEnvelope(value: unknown): value is RemoteEventActionRequest {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as { readonly requestId?: unknown; readonly actionId?: unknown };
+  return isString(candidate.requestId) && isString(candidate.actionId);
 }
 
 function toRemoteEventErrorPayload(error: unknown): RemoteEventActionErrorPayload {
@@ -106,13 +159,14 @@ export function createRemoteEventActionInvoker(
   options?: RemoteEventActionInvokerOptions,
 ): DisposableActionInvoker {
   const createRequestId = options?.createRequestId ?? createDefaultRequestId;
-  const pendingRequests = new Map<
-    string,
-    {
-      readonly resolve: (value: unknown) => void;
-      readonly reject: (reason: unknown) => void;
-    }
-  >();
+  const requestTimeoutMs = options?.requestTimeoutMs ?? 0;
+  const scheduleTimeout = options?.scheduleTimeout ?? createDefaultTimeoutScheduler();
+  type PendingRequest = {
+    readonly resolve: (value: unknown) => void;
+    readonly reject: (reason: unknown) => void;
+    cancelTimeout?: ActionTimeoutCanceler;
+  };
+  const pendingRequests = new Map<string, PendingRequest>();
   let disposed = false;
 
   const connection = remote.OnClientEvent.Connect((response) => {
@@ -123,6 +177,7 @@ export function createRemoteEventActionInvoker(
     }
 
     pendingRequests.delete(response.requestId);
+    pending.cancelTimeout?.();
 
     if (response.ok) {
       pending.resolve(response.output);
@@ -149,7 +204,8 @@ export function createRemoteEventActionInvoker(
     const requestId = createRequestId();
 
     return new Promise<unknown>((resolve, reject) => {
-      pendingRequests.set(requestId, { resolve, reject });
+      const pending: PendingRequest = { resolve, reject };
+      pendingRequests.set(requestId, pending);
 
       try {
         remote.FireServer({
@@ -160,6 +216,21 @@ export function createRemoteEventActionInvoker(
       } catch (error) {
         pendingRequests.delete(requestId);
         reject(error);
+        return;
+      }
+
+      // The response may have already settled synchronously during FireServer
+      // (some in-process transports emit immediately). Only arm a timer if the
+      // request is still pending.
+      if (requestTimeoutMs > 0 && pendingRequests.get(requestId) === pending) {
+        pending.cancelTimeout = scheduleTimeout(() => {
+          if (pendingRequests.get(requestId) !== pending) {
+            return;
+          }
+
+          pendingRequests.delete(requestId);
+          reject(new ArunaTimeoutError(actionId, requestTimeoutMs));
+        }, requestTimeoutMs);
       }
     });
   };
@@ -175,6 +246,7 @@ export function createRemoteEventActionInvoker(
 
       for (const [requestId, pending] of pendingRequests) {
         pendingRequests.delete(requestId);
+        pending.cancelTimeout?.();
         pending.reject(new Error("RemoteEvent action invoker is disposed."));
       }
     },
@@ -187,6 +259,26 @@ export function bindRemoteEventActions<TPlayer = unknown>(
   options?: BindRemoteEventActionsOptions<TPlayer>,
 ): ServerBinding {
   const connection = remote.OnServerEvent.Connect(async (player, request) => {
+    // Clients can fire arbitrary payloads. Reject malformed envelopes before
+    // touching the registry: respond with an error when there is a usable
+    // requestId to address, otherwise drop the packet entirely.
+    if (!isValidRequestEnvelope(request)) {
+      const requestId = (request as { readonly requestId?: unknown } | null | undefined)?.requestId;
+
+      if (isString(requestId)) {
+        remote.FireClient(player, {
+          requestId,
+          ok: false,
+          error: {
+            message: "Invalid Aruna action request envelope.",
+            name: "ActionRequestError",
+          },
+        });
+      }
+
+      return;
+    }
+
     const context = options?.createContext?.(player) ?? ({ player } as ActionRunContext<TPlayer>);
 
     try {

@@ -36,6 +36,15 @@ function writeProject(root: string, files: Record<string, string>): void {
   }
 }
 
+// Copies a fixture's input into a throwaway temp dir so `aruna build` can write
+// generated output (stubs, vendored runtime) without polluting the committed
+// fixture — which the compiler fixture snapshots read from.
+function copyFixtureInput(name: string): string {
+  const dest = makeTempRoot();
+  fs.cpSync(path.join(fixturesRoot, name, "input"), dest, { recursive: true });
+  return dest;
+}
+
 async function loadFixtureOutput(name: string) {
   return inspectProject({ root: path.join(fixturesRoot, name, "input") });
 }
@@ -334,7 +343,7 @@ describe("cli integration", () => {
         "build",
         "--no-color",
         "--project",
-        path.join(fixturesRoot, "action-generated-output", "input"),
+        copyFixtureInput("action-generated-output"),
       ],
       {
         encoding: "utf8",
@@ -352,6 +361,154 @@ describe("cli integration", () => {
     expect(result.stdout).toContain("0 errors found");
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
     expect(result.stderr).toBe("");
+  });
+
+  it("reports a graceful rbxtsc skip when roblox-ts is not installed", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "build",
+        "--no-color",
+        "--project",
+        copyFixtureInput("action-generated-output"),
+      ],
+      { encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("rbxtsc skipped");
+    expect(result.stdout).toContain("--no-emit-luau");
+    expect(result.stderr).toBe("");
+  });
+
+  it("does not attempt the rbxtsc step under --no-emit-luau", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+
+    const result = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "build",
+        "--no-color",
+        "--no-emit-luau",
+        "--project",
+        copyFixtureInput("action-generated-output"),
+      ],
+      { encoding: "utf8", env },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("generated:");
+    expect(result.stdout).not.toContain("rbxtsc");
+    expect(result.stderr).toBe("");
+  });
+
+  it("records the rbxtsc step in --json build output", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+
+    const withLuau = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "build",
+        "--json",
+        "--project",
+        copyFixtureInput("action-generated-output"),
+      ],
+      { encoding: "utf8", env },
+    );
+
+    expect(withLuau.status).toBe(0);
+    const parsed = JSON.parse(withLuau.stdout) as { rbxtsc?: { kind: string } };
+    expect(parsed.rbxtsc?.kind).toBe("skipped");
+
+    const withoutLuau = spawnSync(
+      process.execPath,
+      [
+        builtCliPath,
+        "build",
+        "--json",
+        "--no-emit-luau",
+        "--project",
+        copyFixtureInput("action-generated-output"),
+      ],
+      { encoding: "utf8", env },
+    );
+
+    expect(withoutLuau.status).toBe(0);
+    expect(JSON.parse(withoutLuau.stdout)).not.toHaveProperty("rbxtsc");
+  });
+
+  it("defaults the project root to the process cwd when --project is omitted", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const projectRoot = copyFixtureInput("action-generated-output");
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+    // INIT_CWD points elsewhere; a bare `aruna build` (e.g. a package script
+    // whose cwd is the package dir) must still target cwd, not INIT_CWD.
+    env.INIT_CWD = path.dirname(projectRoot);
+
+    const result = spawnSync(
+      process.execPath,
+      [builtCliPath, "build", "--no-emit-luau", "--no-emit-runtime", "--no-color"],
+      { encoding: "utf8", env, cwd: projectRoot },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("2 actions discovered");
+    expect(result.stderr).toBe("");
+  });
+
+  it("vendors the Roblox runtime by default and skips it under --no-emit-runtime", () => {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+
+    const projectRoot = copyFixtureInput("action-generated-output");
+    const runtimeMarker = path.join(projectRoot, "src", ".aruna", "runtime", "schema.ts");
+    const runBuild = (extraArgs: string[]): ReturnType<typeof spawnSync> =>
+      spawnSync(
+        process.execPath,
+        [builtCliPath, "build", "--no-color", ...extraArgs, "--project", projectRoot],
+        { encoding: "utf8", env },
+      );
+
+    // Default build vendors the native runtime as project source.
+    fs.rmSync(path.dirname(runtimeMarker), { recursive: true, force: true });
+    const vendored = runBuild([]);
+    expect(vendored.status).toBe(0);
+    expect(fs.existsSync(runtimeMarker)).toBe(true);
+
+    // --no-emit-runtime opts out of vendoring.
+    fs.rmSync(path.dirname(runtimeMarker), { recursive: true, force: true });
+    const skipped = runBuild(["--no-emit-runtime"]);
+    expect(skipped.status).toBe(0);
+    expect(fs.existsSync(runtimeMarker)).toBe(false);
+
+    // The legacy --emit-runtime flag is still accepted (redundant explicit-on).
+    fs.rmSync(path.dirname(runtimeMarker), { recursive: true, force: true });
+    const explicit = runBuild(["--emit-runtime"]);
+    expect(explicit.status).toBe(0);
+    expect(fs.existsSync(runtimeMarker)).toBe(true);
   });
 
   it("explains defineConfig when the legacy flat config is used", () => {

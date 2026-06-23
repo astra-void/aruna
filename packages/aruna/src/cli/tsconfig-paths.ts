@@ -5,6 +5,25 @@ export const ARUNA_ACTION_PATHS = {
   server: "$aruna/actions/server",
 } as const;
 
+// The generated signal registry virtual module. Installed alongside the action
+// aliases so `import { signals } from "$aruna/signals"` resolves under tsc and
+// rbxtsc; the compiler resolves the same specifier virtually. Points at the
+// generated file, which only exists once a project declares signals — an unused
+// mapping to a missing file is harmless (tsc path mappings resolve lazily).
+export const ARUNA_SIGNALS_ALIAS = "$aruna/signals";
+
+export function resolveArunaSignalPaths(
+  tsconfigPath: string,
+  generatedDir: string,
+): Record<string, string[]> {
+  const tsconfigDir = path.dirname(tsconfigPath);
+  const target = path
+    .relative(tsconfigDir, path.resolve(tsconfigDir, generatedDir, "signals.generated.ts"))
+    .split(path.sep)
+    .join("/");
+  return { [ARUNA_SIGNALS_ALIAS]: [target] };
+}
+
 export type ArunaActionPathKey = keyof typeof ARUNA_ACTION_PATHS;
 
 export type ArunaActionPathMap = Record<ArunaActionPathKey, string[]>;

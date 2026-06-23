@@ -7,6 +7,7 @@ import {
   inspectArunaActionPaths,
   resolveArunaActionPaths,
   resolveArunaRuntimePaths,
+  resolveArunaSignalPaths,
   updateArunaActionPaths,
   updateArunaRuntimePaths,
 } from "./tsconfig-paths.js";
@@ -289,6 +290,19 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
   let finalContents = actionUpdate.contents;
   let changed = actionUpdate.changed;
 
+  // The $aruna/signals virtual-module alias is installed alongside the action
+  // aliases (always, like actions — independent of runtime vendoring).
+  const signalChanges: string[] = [];
+  const signalPaths = resolveArunaSignalPaths(report.tsconfigPath, report.generatedDir);
+  const signalUpdate = updateArunaRuntimePaths(tsconfig, signalPaths);
+  finalContents = signalUpdate.contents;
+  if (signalUpdate.changed) {
+    changed = true;
+    for (const [alias, targets] of Object.entries(signalPaths)) {
+      signalChanges.push(`${alias} -> ${formatPathList(targets)}`);
+    }
+  }
+
   const runtimeChanges: string[] = [];
   if (options.emitRuntime) {
     const runtimePaths = resolveArunaRuntimePaths(report.tsconfigPath, report.generatedDir);
@@ -325,6 +339,7 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
       `${ARUNA_ACTION_PATHS.server} -> ${formatPathList(report.expectedPaths.server)}`,
     );
   }
+  fixChanges.push(...signalChanges);
   fixChanges.push(...runtimeChanges);
   return {
     ...report,

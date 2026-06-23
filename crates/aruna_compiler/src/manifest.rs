@@ -1,5 +1,5 @@
 use crate::diagnostics::{stable_sort_diagnostics, ArunaDiagnostic};
-use crate::actions::ArunaActionRecord;
+use crate::actions::{ArunaActionRecord, ArunaSignalRecord};
 use crate::files::normalize_path;
 use crate::graph::ArunaImportEdge;
 use crate::module_kind::{ModuleKind, ModuleReason};
@@ -24,6 +24,10 @@ pub struct ArunaManifest {
     pub modules: Vec<ArunaModuleRecord>,
     pub imports: Vec<ArunaImportEdge>,
     pub actions: Vec<ArunaActionRecord>,
+    // Omitted from JSON when empty so manifests without signals stay byte-stable
+    // with pre-signal snapshots.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub signals: Vec<ArunaSignalRecord>,
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
@@ -64,11 +68,23 @@ fn sort_actions(actions: &[ArunaActionRecord]) -> Vec<ArunaActionRecord> {
     sorted
 }
 
+fn sort_signals(signals: &[ArunaSignalRecord]) -> Vec<ArunaSignalRecord> {
+    let mut sorted = signals.to_vec();
+    sorted.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+    sorted
+}
+
 pub fn create_manifest(
     project_root: &str,
     modules: &[ArunaModuleRecord],
     imports: &[ArunaImportEdge],
     actions: &[ArunaActionRecord],
+    signals: &[ArunaSignalRecord],
     diagnostics: &[ArunaDiagnostic],
 ) -> ArunaManifest {
     ArunaManifest {
@@ -77,6 +93,7 @@ pub fn create_manifest(
         modules: sort_modules(modules),
         imports: sort_imports(imports),
         actions: sort_actions(actions),
+        signals: sort_signals(signals),
         diagnostics: stable_sort_diagnostics(diagnostics),
     }
 }

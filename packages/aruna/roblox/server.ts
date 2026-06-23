@@ -2,6 +2,12 @@
 
 import type { Infer, Schema } from "./schema";
 
+// defineSignal lives alongside defineAction on the `aruna/server` surface so
+// signal definitions import from the same entry as actions (mirrors the Node
+// reference runtime's src/server.ts barrel).
+export { defineSignal } from "./signal";
+export type { InferSignalPayload, SignalDefinition } from "./signal";
+
 export interface ActionContext<TPlayer = unknown> {
 	readonly player: TPlayer;
 }

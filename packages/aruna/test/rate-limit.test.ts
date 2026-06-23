@@ -163,6 +163,73 @@ describe("action rate limits", () => {
     expect(run).toHaveBeenCalledTimes(3);
   });
 
+  it("applies defaultRateLimit to actions that do not declare their own", async () => {
+    const run = vi.fn(() => ({ ok: true }));
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({ id: "shop.purchaseItem", run }),
+    };
+    const rateLimiter = createActionRateLimiter();
+    const defaultRateLimit = { key: "player", windowMs: 1000, max: 2 } as const;
+
+    await expect(
+      dispatchAction(registry, "shop.purchaseItem", {}, {}, { rateLimiter, defaultRateLimit }),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      dispatchAction(registry, "shop.purchaseItem", {}, {}, { rateLimiter, defaultRateLimit }),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      dispatchAction(registry, "shop.purchaseItem", {}, {}, { rateLimiter, defaultRateLimit }),
+    ).rejects.toMatchObject({
+      name: "ActionRateLimitError",
+      actionId: "shop.purchaseItem",
+      max: 2,
+      windowMs: 1000,
+    });
+
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets a per-action rateLimit override the defaultRateLimit", async () => {
+    const run = vi.fn(() => ({ ok: true }));
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        rateLimit: { key: "player", windowMs: 1000, max: 3 },
+        run,
+      }),
+    };
+    const rateLimiter = createActionRateLimiter();
+    // A stricter default must NOT clamp an action that declares a looser limit.
+    const defaultRateLimit = { key: "player", windowMs: 1000, max: 1 } as const;
+
+    for (let call = 0; call < 3; call += 1) {
+      await expect(
+        dispatchAction(registry, "shop.purchaseItem", {}, {}, { rateLimiter, defaultRateLimit }),
+      ).resolves.toEqual({ ok: true });
+    }
+    await expect(
+      dispatchAction(registry, "shop.purchaseItem", {}, {}, { rateLimiter, defaultRateLimit }),
+    ).rejects.toMatchObject({ name: "ActionRateLimitError", max: 3 });
+
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("createServerApp forwards defaultRateLimit to dispatch", async () => {
+    const run = vi.fn(() => ({ ok: true }));
+    const app = createServerApp({
+      actions: { "shop.purchaseItem": defineAction({ id: "shop.purchaseItem", run }) },
+      defaultRateLimit: { key: "player", windowMs: 1000, max: 1 },
+    });
+
+    await expect(app.dispatch("shop.purchaseItem", {}, {})).resolves.toEqual({ ok: true });
+    await expect(app.dispatch("shop.purchaseItem", {}, {})).rejects.toMatchObject({
+      name: "ActionRateLimitError",
+      max: 1,
+    });
+
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("enforces a fixed window and resets after the window expires", async () => {
     const { registry, run } = makeActionRegistry();
     const rateLimiter = createActionRateLimiter();
@@ -580,6 +647,40 @@ describe("action rate limits", () => {
     ).rejects.toMatchObject({
       name: "ActionRateLimitError",
       message: "Aruna action shop.purchaseItem is rate limited. Retry after 1000ms.",
+    });
+  });
+
+  it("purges only fully-elapsed buckets and reports the count", () => {
+    const config = { key: "player", windowMs: 1000, max: 2 } as const;
+    const limiter = createActionRateLimiter();
+
+    // Two keys in the same window [1000, 2000); the second check is within the
+    // window so it does not trigger the lazy sweep.
+    limiter.check("shop.purchaseItem", "alpha", config, 1000);
+    limiter.check("shop.purchaseItem", "beta", config, 1500);
+
+    expect(limiter.purge?.(1999)).toBe(0);
+    expect(limiter.purge?.(2000)).toBe(2);
+    expect(limiter.purge?.(2000)).toBe(0);
+  });
+
+  it("lazily purges abandoned keys on check while keeping the active window", () => {
+    const config = { key: "player", windowMs: 1000, max: 2 } as const;
+    const limiter = createActionRateLimiter();
+
+    limiter.check("shop.purchaseItem", "abandoned", config, 1000);
+    // A later check (new window) triggers the lazy sweep of "abandoned"; without
+    // it this purge would report 1.
+    limiter.check("shop.purchaseItem", "active", config, 2500);
+    expect(limiter.purge?.(2999)).toBe(0);
+
+    // The active bucket survived: its earlier count still applies.
+    expect(limiter.check("shop.purchaseItem", "active", config, 2600)).toMatchObject({
+      ok: true,
+      remaining: 0,
+    });
+    expect(limiter.check("shop.purchaseItem", "active", config, 2700)).toMatchObject({
+      ok: false,
     });
   });
 

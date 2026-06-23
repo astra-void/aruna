@@ -5,6 +5,7 @@ import type {
   ArunaDiagnostic,
   ArunaModuleRecord,
   ArunaSchemaMetadata,
+  ArunaSignalRecord,
 } from "@arunajs/core";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
 
@@ -44,10 +45,25 @@ export type ActionContractRecord = {
   readonly warnings: readonly string[];
 };
 
+export type SignalContractRecord = {
+  readonly id: string;
+  readonly source: string;
+  readonly moduleKind: ArunaModuleRecord["kind"];
+  readonly direction: "server-to-client";
+  readonly payload: ActionContractSchema;
+  readonly serialization: {
+    readonly policy: "plain-data-v1";
+  };
+  readonly warnings: readonly string[];
+};
+
 export type ActionContractSnapshot = {
   readonly version: 1;
   readonly project: ActionContractProjectMetadata;
   readonly actions: readonly ActionContractRecord[];
+  // Omitted when the project declares no signals, keeping action-only snapshots
+  // byte-stable with pre-signal baselines.
+  readonly signals?: readonly SignalContractRecord[];
   readonly diagnostics: readonly ArunaDiagnostic[];
   readonly generatedAt: null;
 };
@@ -127,6 +143,28 @@ function summarizeAction(
   };
 }
 
+function summarizeSignal(
+  output: ArunaCompilerOutput,
+  signal: ArunaSignalRecord,
+): SignalContractRecord {
+  const payload = formatActionSchemaSummary(signal.payloadSchema);
+
+  return {
+    id: signal.id,
+    source: normalizePath(signal.file),
+    moduleKind: lookupModuleKind(output, signal.file),
+    direction: "server-to-client",
+    payload: {
+      summary: payload.summary,
+      schema: signal.payloadSchema ?? null,
+    },
+    serialization: {
+      policy: signal.serialization.policy,
+    },
+    warnings: sortWarnings(payload.warnings),
+  };
+}
+
 export function buildActionContractSnapshot(output: ArunaCompilerOutput): ActionContractSnapshot {
   const generatedDir = normalizePath(output.config.generatedDir);
   const actions = [...output.manifest.actions]
@@ -138,6 +176,15 @@ export function buildActionContractSnapshot(output: ArunaCompilerOutput): Action
     )
     .map((action) => summarizeAction(output, action));
 
+  const signals = [...(output.manifest.signals ?? [])]
+    .sort(
+      (left, right) =>
+        compareStrings(left.id, right.id) ||
+        compareStrings(left.file, right.file) ||
+        compareStrings(left.exportName, right.exportName),
+    )
+    .map((signal) => summarizeSignal(output, signal));
+
   return {
     version: 1,
     project: {
@@ -146,6 +193,7 @@ export function buildActionContractSnapshot(output: ArunaCompilerOutput): Action
       manifest: normalizePath(output.config.manifestOutput),
     },
     actions,
+    ...(signals.length > 0 ? { signals } : {}),
     diagnostics: sortDiagnostics(output.diagnostics),
     generatedAt: null,
   };

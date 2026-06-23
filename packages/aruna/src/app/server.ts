@@ -3,6 +3,7 @@ import {
   type ActionRegistry,
   type ActionRateLimitKeyResolver,
   type ActionRateLimiter,
+  type ActionRateLimitOptions,
   type ActionRunContext,
   type DispatchActionOptions,
 } from "../runtime/server.js";
@@ -36,6 +37,8 @@ export type CreateServerAppOptions<
   readonly actions: TActions;
   readonly rateLimiter?: ActionRateLimiter;
   readonly rateLimitKey?: ActionRateLimitKeyResolver<TPlayer>;
+  // Fallback rate limit for actions that do not declare their own `rateLimit`.
+  readonly defaultRateLimit?: ActionRateLimitOptions;
   readonly nowMs?: () => number;
 };
 
@@ -50,6 +53,9 @@ export function createServerApp<
       const dispatchOptions = {
         rateLimiter,
         ...(options.rateLimitKey !== undefined ? { rateLimitKey: options.rateLimitKey } : {}),
+        ...(options.defaultRateLimit !== undefined
+          ? { defaultRateLimit: options.defaultRateLimit }
+          : {}),
         ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
       } satisfies DispatchActionOptions<TPlayer>;
       return dispatchAction(options.actions, actionId, ctx, input, dispatchOptions);

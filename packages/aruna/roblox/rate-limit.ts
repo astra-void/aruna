@@ -4,11 +4,16 @@ import type { ActionRateLimitOptions } from "./server";
 
 interface RateLimitBucket {
 	windowStart: number;
+	windowSeconds: number;
 	count: number;
 }
 
 export interface ActionRateLimiter {
 	readonly check: (actionId: string, key: string, options: ActionRateLimitOptions) => boolean;
+	// Removes buckets whose window has fully elapsed at `now` (seconds, defaults
+	// to os.clock()) and returns how many were removed. Mirrors the Node
+	// reference runtime's leftover-key cleanup path.
+	readonly purge: (now?: number) => number;
 }
 
 function bucketId(actionId: string, key: string): string {
@@ -17,17 +22,39 @@ function bucketId(actionId: string, key: string): string {
 
 export function createActionRateLimiter(): ActionRateLimiter {
 	const buckets = new Map<string, RateLimitBucket>();
+	let lastPurge = -math.huge;
+
+	function purgeExpired(now: number): number {
+		const expired = new Array<string>();
+		for (const [id, bucket] of buckets) {
+			if (bucket.windowStart + bucket.windowSeconds <= now) {
+				expired.push(id);
+			}
+		}
+		for (const id of expired) {
+			buckets.delete(id);
+		}
+		return expired.size();
+	}
 
 	return {
 		check: (actionId, key, options) => {
 			const windowSeconds = options.windowMs / 1000;
 			const now = os.clock();
+
+			// Opportunistic cleanup, at most once per window, so abandoned keys
+			// (e.g. players who left) do not accumulate.
+			if (now - lastPurge >= windowSeconds) {
+				purgeExpired(now);
+				lastPurge = now;
+			}
+
 			const windowStart = math.floor(now / windowSeconds) * windowSeconds;
 			const id = bucketId(actionId, key);
 			const bucket = buckets.get(id);
 
 			if (bucket === undefined || bucket.windowStart !== windowStart) {
-				buckets.set(id, { windowStart, count: 1 });
+				buckets.set(id, { windowStart, windowSeconds, count: 1 });
 				return true;
 			}
 
@@ -37,6 +64,9 @@ export function createActionRateLimiter(): ActionRateLimiter {
 
 			bucket.count += 1;
 			return true;
+		},
+		purge: (now) => {
+			return purgeExpired(now !== undefined ? now : os.clock());
 		},
 	};
 }

@@ -42,6 +42,11 @@ export type ActionRateLimiter = {
     nowMs?: number,
   ) => ActionRateLimitResult;
   readonly reset: () => void;
+  // Removes buckets whose window has fully elapsed at nowMs (defaults to
+  // Date.now()) and returns how many were removed. Prevents unbounded growth
+  // from keys (players/actions) that never call check() again. Optional so
+  // custom ActionRateLimiter implementations stay compatible.
+  readonly purge?: (nowMs?: number) => number;
 };
 
 function isRobloxPlayerLike(value: unknown): value is { readonly UserId: number } {
@@ -113,10 +118,35 @@ export class ActionRateLimitError extends Error {
 
 export function createActionRateLimiter(): ActionRateLimiter {
   let buckets: ActionRateLimitStore = Object.create(null) as ActionRateLimitStore;
+  let lastPurgeMs = Number.NEGATIVE_INFINITY;
+
+  function purgeExpired(nowMs: number): number {
+    let removed = 0;
+
+    for (const bucketKey in buckets) {
+      const bucket = buckets[bucketKey];
+
+      if (bucket !== undefined && bucket.windowStartMs + bucket.windowMs <= nowMs) {
+        delete buckets[bucketKey];
+        removed += 1;
+      }
+    }
+
+    return removed;
+  }
 
   return {
     check(actionId, key, config, nowMs = Date.now()) {
       const currentNow = Math.floor(nowMs);
+
+      // Opportunistic cleanup: sweep fully-elapsed buckets at most once per
+      // window so abandoned keys don't accumulate. The active window's bucket
+      // is never expired here, so this does not affect the result below.
+      if (currentNow - lastPurgeMs >= config.windowMs) {
+        purgeExpired(currentNow);
+        lastPurgeMs = currentNow;
+      }
+
       const windowStartMs = toBucketStart(currentNow, config.windowMs);
       const bucketKey = createBucketKey(actionId, key);
       const bucket = buckets[bucketKey];
@@ -162,6 +192,10 @@ export function createActionRateLimiter(): ActionRateLimiter {
     },
     reset() {
       buckets = Object.create(null) as ActionRateLimitStore;
+      lastPurgeMs = Number.NEGATIVE_INFINITY;
+    },
+    purge(nowMs = Date.now()) {
+      return purgeExpired(Math.floor(nowMs));
     },
   };
 }

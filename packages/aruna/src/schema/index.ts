@@ -4,8 +4,25 @@ export type StringSchema = {
   readonly kind: "string";
 };
 
+// Numeric width hints. The codec uses these to pick a packed wire encoding;
+// `f64` (the default for schema.number()) is the lossless full-width form.
+// Integer formats additionally constrain validation to whole numbers in range.
+export type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
+
 export type NumberSchema = {
   readonly kind: "number";
+  readonly format: NumberFormat;
+};
+
+// Inclusive [min, max] ranges for the integer formats. Float formats (f32/f64)
+// are not range-checked beyond requiring a finite number.
+export const NUMBER_FORMAT_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+  u8: [0, 255],
+  u16: [0, 65_535],
+  u32: [0, 4_294_967_295],
+  i8: [-128, 127],
+  i16: [-32_768, 32_767],
+  i32: [-2_147_483_648, 2_147_483_647],
 };
 
 export type BooleanSchema = {
@@ -46,6 +63,40 @@ export type UnionSchema = {
   readonly members: readonly Schema[];
 };
 
+// Roblox userdata schema kinds. The roblox-ts runtime maps these to the native
+// Vector3/Color3/CFrame and relies on RemoteEvent serialization to carry them;
+// the Node reference runtime (and the binary wire contract) models them as plain
+// numeric records so the same schema validates and round-trips off-Roblox.
+export type Vector3Schema = {
+  readonly kind: "vector3";
+};
+
+export type Color3Schema = {
+  readonly kind: "color3";
+};
+
+export type CFrameSchema = {
+  readonly kind: "cframe";
+};
+
+export type Vector3Value = {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+};
+
+export type Color3Value = {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+};
+
+// 12 numbers in CFrame:GetComponents() order: x, y, z, then the 3x3 rotation
+// matrix (R00, R01, R02, R10, R11, R12, R20, R21, R22).
+export type CFrameValue = {
+  readonly components: readonly number[];
+};
+
 export type Schema =
   | StringSchema
   | NumberSchema
@@ -55,7 +106,10 @@ export type Schema =
   | ObjectSchema
   | OptionalSchema
   | EnumSchema
-  | UnionSchema;
+  | UnionSchema
+  | Vector3Schema
+  | Color3Schema
+  | CFrameSchema;
 
 type OptionalKeys<TShape extends SchemaShape> = {
   [TKey in keyof TShape]-?: TShape[TKey] extends OptionalSchema ? TKey : never;
@@ -103,7 +157,13 @@ export type InferSchema<TSchema extends Schema> = TSchema extends StringSchema
                   ? TSchema["members"][number] extends Schema
                     ? InferSchema<TSchema["members"][number]>
                     : never
-                  : never;
+                  : TSchema extends Vector3Schema
+                    ? Vector3Value
+                    : TSchema extends Color3Schema
+                      ? Color3Value
+                      : TSchema extends CFrameSchema
+                        ? CFrameValue
+                        : never;
 
 export type SchemaValidationIssue = {
   readonly path: readonly string[];
@@ -199,6 +259,37 @@ function isRecordLike(value: unknown): value is Readonly<Record<string, unknown>
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isVector3Value(value: unknown): value is Vector3Value {
+  return (
+    isRecordLike(value) &&
+    isFiniteNumber(value["x"]) &&
+    isFiniteNumber(value["y"]) &&
+    isFiniteNumber(value["z"])
+  );
+}
+
+function isColor3Value(value: unknown): value is Color3Value {
+  return (
+    isRecordLike(value) &&
+    isFiniteNumber(value["r"]) &&
+    isFiniteNumber(value["g"]) &&
+    isFiniteNumber(value["b"])
+  );
+}
+
+function isCFrameValue(value: unknown): value is CFrameValue {
+  if (!isRecordLike(value)) {
+    return false;
+  }
+
+  const components = value["components"];
+  return Array.isArray(components) && components.length === 12 && components.every(isFiniteNumber);
+}
+
 function validateSchemaAtPath(
   schema: Schema,
   value: unknown,
@@ -207,10 +298,25 @@ function validateSchemaAtPath(
   switch (schema.kind) {
     case "string":
       return typeof value === "string" ? [] : [createIssue(path, "expected string")];
-    case "number":
-      return typeof value === "number" && Number.isFinite(value)
-        ? []
-        : [createIssue(path, "expected finite number")];
+    case "number": {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return [createIssue(path, "expected finite number")];
+      }
+
+      const range = NUMBER_FORMAT_RANGES[schema.format];
+      if (range !== undefined) {
+        if (!Number.isInteger(value)) {
+          return [createIssue(path, `expected integer for ${schema.format}`)];
+        }
+        if (value < range[0] || value > range[1]) {
+          return [
+            createIssue(path, `expected ${schema.format} in range ${range[0]}..${range[1]}`),
+          ];
+        }
+      }
+
+      return [];
+    }
     case "boolean":
       return typeof value === "boolean" ? [] : [createIssue(path, "expected boolean")];
     case "literal":
@@ -278,6 +384,14 @@ function validateSchemaAtPath(
 
       return [createIssue(path, "expected a value matching one of the union members")];
     }
+    case "vector3":
+      return isVector3Value(value) ? [] : [createIssue(path, "expected Vector3 { x, y, z }")];
+    case "color3":
+      return isColor3Value(value) ? [] : [createIssue(path, "expected Color3 { r, g, b }")];
+    case "cframe":
+      return isCFrameValue(value)
+        ? []
+        : [createIssue(path, "expected CFrame { components: number[12] }")];
     default:
       throw new Error("Unsupported schema kind.");
   }
@@ -350,7 +464,35 @@ export const schema = {
   },
 
   number(): NumberSchema {
-    return { kind: "number" };
+    return { kind: "number", format: "f64" };
+  },
+
+  f32(): NumberSchema {
+    return { kind: "number", format: "f32" };
+  },
+
+  u8(): NumberSchema {
+    return { kind: "number", format: "u8" };
+  },
+
+  u16(): NumberSchema {
+    return { kind: "number", format: "u16" };
+  },
+
+  u32(): NumberSchema {
+    return { kind: "number", format: "u32" };
+  },
+
+  i8(): NumberSchema {
+    return { kind: "number", format: "i8" };
+  },
+
+  i16(): NumberSchema {
+    return { kind: "number", format: "i16" };
+  },
+
+  i32(): NumberSchema {
+    return { kind: "number", format: "i32" };
   },
 
   boolean(): BooleanSchema {
@@ -385,5 +527,17 @@ export const schema = {
     members: TMembers,
   ): UnionSchema & { readonly members: TMembers } {
     return { kind: "union", members };
+  },
+
+  vector3(): Vector3Schema {
+    return { kind: "vector3" };
+  },
+
+  color3(): Color3Schema {
+    return { kind: "color3" };
+  },
+
+  cframe(): CFrameSchema {
+    return { kind: "cframe" };
   },
 };

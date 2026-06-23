@@ -23,7 +23,7 @@
       "end": 87,
       "start": 70
     },
-    "suggestion": "Use $aruna/actions/client or $aruna/actions/server, or import a real source file."
+    "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
   },
   {
     "code": "aruna::301",

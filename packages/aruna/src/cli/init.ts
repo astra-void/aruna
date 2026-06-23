@@ -4,7 +4,9 @@ import {
   ARUNA_ACTION_PATHS,
   resolveArunaActionPaths,
   resolveArunaRuntimePaths,
+  resolveArunaSignalPaths,
 } from "./tsconfig-paths.js";
+import { partitionedRojoProject } from "./rojo-layout.js";
 
 export type InitOptions = {
   projectRoot: string;
@@ -35,6 +37,7 @@ function tsconfigTemplate(projectRoot: string): string {
   const paths: Record<string, string[]> = {
     [ARUNA_ACTION_PATHS.client]: actionPaths.client,
     [ARUNA_ACTION_PATHS.server]: actionPaths.server,
+    ...resolveArunaSignalPaths(tsconfigPath, GENERATED_DIR),
     ...resolveArunaRuntimePaths(tsconfigPath, GENERATED_DIR),
   };
 
@@ -70,36 +73,11 @@ function tsconfigTemplate(projectRoot: string): string {
 }
 
 function defaultProjectTemplate(): string {
-  const project = {
-    name: "aruna-game",
-    globIgnorePaths: ["**/package.json", "**/tsconfig.json"],
-    tree: {
-      $className: "DataModel",
-      ReplicatedStorage: {
-        $className: "ReplicatedStorage",
-        rbxts_include: {
-          $path: "include",
-          node_modules: {
-            $className: "Folder",
-            "@rbxts": {
-              $path: "node_modules/@rbxts",
-            },
-          },
-        },
-        TS: {
-          $path: "out",
-        },
-      },
-      Workspace: {
-        $className: "Workspace",
-        $properties: {
-          FilteringEnabled: true,
-        },
-      },
-    },
-  };
-
-  return `${JSON.stringify(project, null, 2)}\n`;
+  // The service-separated DataModel contract `aruna build` partitions `out/`
+  // onto: server code → ServerScriptService (not replicated), client →
+  // StarterPlayerScripts, shared (+ vendored runtime + client stubs) →
+  // ReplicatedStorage.
+  return `${JSON.stringify(partitionedRojoProject(), null, 2)}\n`;
 }
 
 export function runInit(options: InitOptions): InitResult {
@@ -148,8 +126,12 @@ export function formatInitReport(result: InitResult): string {
   lines.push("");
   lines.push("next steps");
   lines.push("  1. add your actions under src/ (e.g. src/domains/<feature>/actions.ts)");
-  lines.push("  2. aruna build --emit-runtime   # generate stubs + vendor the Roblox runtime");
-  lines.push("  3. rbxtsc                        # compile to Luau");
+  lines.push(
+    "  2. aruna build   # generate stubs, vendor the Roblox runtime, and compile to Luau via rbxtsc",
+  );
+  lines.push(
+    "     (--no-emit-luau stops after vendoring; --no-emit-runtime skips vendoring too)",
+  );
 
   return lines.join("\n");
 }

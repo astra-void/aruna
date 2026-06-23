@@ -24,11 +24,22 @@ describe("aruna init", () => {
       expect(paths["$aruna/actions/server"]).toEqual([
         "src/.aruna/actions.server.generated.ts",
       ]);
+      expect(paths["$aruna/signals"]).toEqual(["src/.aruna/signals.generated.ts"]);
 
       const project = JSON.parse(
         await fs.readFile(path.join(root, "default.project.json"), "utf8"),
-      ) as { tree: { ReplicatedStorage: { TS: { $path: string } } } };
-      expect(project.tree.ReplicatedStorage.TS.$path).toBe("out");
+      ) as {
+        tree: {
+          ServerScriptService: { TS: { $path: string } };
+          ReplicatedStorage: { TS: { $path: string } };
+          StarterPlayer: { StarterPlayerScripts: { TS: { $path: string } } };
+        };
+      };
+      // The scaffolded project maps the partitioned out/ onto the DataModel:
+      // server code is NOT replicated to clients.
+      expect(project.tree.ServerScriptService.TS.$path).toBe("out/server");
+      expect(project.tree.ReplicatedStorage.TS.$path).toBe("out/shared");
+      expect(project.tree.StarterPlayer.StarterPlayerScripts.TS.$path).toBe("out/client");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

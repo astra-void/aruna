@@ -5,8 +5,10 @@ import { createServerApp } from "../src/server-app.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
 import {
+  ArunaTimeoutError,
   bindRemoteEventActions,
   createRemoteEventActionInvoker,
+  type ActionTimeoutScheduler,
   type RemoteEventActionRequest,
   type RemoteEventActionResponse,
   type RemoteEventClientLike,
@@ -94,6 +96,39 @@ function createFakeRemoteEvent<TPlayer = unknown>(player: TPlayer): FakeRemoteEv
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+// A scheduler whose timers fire only when the test asks. Tracks how many timers
+// are armed and how many were canceled so tests can assert timer lifecycle.
+function createControllableScheduler() {
+  const timers = new Map<number, () => void>();
+  let nextId = 0;
+  let cancelCount = 0;
+
+  const scheduler: ActionTimeoutScheduler = (callback) => {
+    const id = nextId;
+    nextId += 1;
+    timers.set(id, callback);
+
+    return () => {
+      if (timers.delete(id)) {
+        cancelCount += 1;
+      }
+    };
+  };
+
+  return {
+    scheduler,
+    activeCount: () => timers.size,
+    cancelCount: () => cancelCount,
+    fireAll() {
+      const callbacks = [...timers.values()];
+      timers.clear();
+      for (const callback of callbacks) {
+        callback();
+      }
+    },
+  };
 }
 
 beforeEach(() => {
@@ -267,6 +302,94 @@ describe("createRemoteEventActionInvoker", () => {
     invoker.dispose();
 
     expect(remote.clientSignal.listenerCount()).toBe(0);
+  });
+});
+
+describe("createRemoteEventActionInvoker request timeout", () => {
+  it("does not arm a timer when requestTimeoutMs is omitted", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" });
+    expect(scheduler.activeCount()).toBe(0);
+
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+
+    invoker.dispose();
+  });
+
+  it("clears the timer and resolves when a response arrives", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 1000,
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" });
+    expect(scheduler.activeCount()).toBe(1);
+
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(scheduler.cancelCount()).toBe(1);
+
+    invoker.dispose();
+  });
+
+  it("rejects with ArunaTimeoutError and clears the pending entry on timeout", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 1000,
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" });
+    expect(scheduler.activeCount()).toBe(1);
+
+    scheduler.fireAll();
+
+    await expect(promise).rejects.toBeInstanceOf(ArunaTimeoutError);
+    await expect(promise).rejects.toMatchObject({
+      name: "ActionTimeoutError",
+      actionId: "shop.purchaseItem",
+      timeoutMs: 1000,
+    });
+
+    // The pending entry was removed: a late response finds nothing to settle and
+    // therefore never reaches the (already fired) timer canceler.
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { late: true } });
+    await flushMicrotasks();
+    expect(scheduler.cancelCount()).toBe(0);
+
+    invoker.dispose();
+  });
+
+  it("clears pending timers when disposed", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 1000,
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" });
+    expect(scheduler.activeCount()).toBe(1);
+
+    invoker.dispose();
+
+    await expect(promise).rejects.toThrowError("disposed");
+    expect(scheduler.cancelCount()).toBe(1);
+    expect(scheduler.activeCount()).toBe(0);
   });
 });
 
@@ -514,6 +637,62 @@ describe("bindRemoteEventActions", () => {
         input: { itemId: "sword" },
       },
     });
+  });
+
+  it("rejects a malformed request envelope with an error response", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const run = vi.fn(() => ({ ok: true }));
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({ id: "shop.purchaseItem", run }),
+    };
+
+    bindRemoteEventActions(remote, registry);
+
+    // actionId is not a string, but the requestId is usable for a reply.
+    remote.serverSignal.emit({ name: "Ada" }, {
+      requestId: "request-1",
+      actionId: 123,
+      input: {},
+    } as unknown as RemoteEventActionRequest);
+
+    await flushMicrotasks();
+
+    expect(run).not.toHaveBeenCalled();
+    expect(remote.responses).toEqual([
+      {
+        player: { name: "Ada" },
+        response: {
+          requestId: "request-1",
+          ok: false,
+          error: {
+            message: "Invalid Aruna action request envelope.",
+            name: "ActionRequestError",
+          },
+        },
+      },
+    ]);
+  });
+
+  it("drops a request that has no usable requestId", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const run = vi.fn(() => ({ ok: true }));
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({ id: "shop.purchaseItem", run }),
+    };
+
+    bindRemoteEventActions(remote, registry);
+
+    remote.serverSignal.emit({ name: "Ada" }, {
+      requestId: undefined,
+      actionId: "shop.purchaseItem",
+      input: {},
+    } as unknown as RemoteEventActionRequest);
+    remote.serverSignal.emit({ name: "Ada" }, null as unknown as RemoteEventActionRequest);
+
+    await flushMicrotasks();
+
+    expect(run).not.toHaveBeenCalled();
+    expect(remote.responses).toEqual([]);
   });
 
   it("dispose disconnects from the server request signal", () => {

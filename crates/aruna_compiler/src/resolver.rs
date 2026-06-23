@@ -50,6 +50,32 @@ pub fn resolve_virtual_generated_action_module(
     }
 }
 
+// Signals are server -> client contracts: the same typed registry feeds the
+// server publisher and the client subscriber, so a single virtual module serves
+// both sides (unlike actions, whose client/server stubs differ).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VirtualGeneratedSignalModule;
+
+impl VirtualGeneratedSignalModule {
+    pub fn specifier(self) -> &'static str {
+        "$aruna/signals"
+    }
+
+    pub fn filename(self) -> &'static str {
+        "signals.generated.ts"
+    }
+}
+
+pub fn resolve_virtual_generated_signal_module(
+    specifier: &str,
+) -> Option<VirtualGeneratedSignalModule> {
+    if specifier == "$aruna/signals" {
+        Some(VirtualGeneratedSignalModule)
+    } else {
+        None
+    }
+}
+
 fn is_ts_source_file(file_path: &Path) -> bool {
     let text = normalize_path(&file_path.to_string_lossy());
     (text.ends_with(".ts") || text.ends_with(".tsx")) && !text.ends_with(".d.ts")
@@ -221,6 +247,15 @@ pub fn resolve_import_specifier(
 ) -> ResolvedImport {
     if let Some(virtual_module) = resolve_virtual_generated_action_module(specifier) {
         let generated_path = project_absolute(project_root, generated_dir).join(virtual_module.filename());
+        return ResolvedImport {
+            resolved: true,
+            absolute_path: Some(normalize_path_buf(&generated_path)),
+        };
+    }
+
+    if let Some(virtual_module) = resolve_virtual_generated_signal_module(specifier) {
+        let generated_path =
+            project_absolute(project_root, generated_dir).join(virtual_module.filename());
         return ResolvedImport {
             resolved: true,
             absolute_path: Some(normalize_path_buf(&generated_path)),

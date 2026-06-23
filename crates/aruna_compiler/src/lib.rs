@@ -14,10 +14,14 @@ pub mod rules;
 pub use compiler::{
     check_project, inspect_project, CompilerInput, CompilerOutput, CompilerSummary,
 };
-pub use codegen::{generate_action_files, GeneratedActionOutput, GeneratedFile};
+pub use codegen::{
+    generate_action_files, generate_signal_files, GeneratedActionOutput, GeneratedFile,
+    GeneratedSignalOutput,
+};
 pub use actions::{
-    collect_action_definitions, ActionDiscoveryResult, ArunaActionRateLimitMetadata,
-    ArunaActionRecord, ArunaSchemaLiteralMetadata, ArunaSchemaMetadata,
+    collect_action_definitions, collect_signal_definitions, ActionDiscoveryResult,
+    ArunaActionRateLimitMetadata, ArunaActionRecord, ArunaSchemaLiteralMetadata,
+    ArunaSchemaMetadata, ArunaSignalRecord, SignalDiscoveryResult,
 };
 pub use config::{
     ActionRateLimitConfig, ActionTransport, ArunaConfig, CompilerConfig, ConventionConfig,

@@ -8,3 +8,5 @@ export const actions = {
   "inventory.purchaseItem": src_domains_inventory_actions_purchaseItem,
   "shop.purchaseItem": src_domains_shop_actions_purchaseItem,
 } as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;

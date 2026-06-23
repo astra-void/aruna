@@ -69,7 +69,9 @@ function summarizeSchema(schema: ArunaSchemaMetadata | undefined): ActionSchemaS
     case "string":
       return { summary: "string", warnings: [] };
     case "number":
-      return { summary: "number", warnings: [] };
+      // Surface the numeric width hint so `inspect actions` and `contract diff`
+      // distinguish a u8 from a u16. Plain schema.number() carries no format.
+      return { summary: schema.numericFormat ?? "number", warnings: [] };
     case "boolean":
       return { summary: "boolean", warnings: [] };
     case "literal":

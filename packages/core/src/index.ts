@@ -80,6 +80,19 @@ export type ArunaActionRecord = {
   outputSchema?: ArunaSchemaMetadata | undefined;
 };
 
+// A server -> client signal discovered by the compiler. The push counterpart to
+// ArunaActionRecord: an id and an optional payload schema, no run/response.
+export type ArunaSignalRecord = {
+  id: string;
+  file: string;
+  exportName: string;
+  hasPayloadSchema: boolean;
+  serialization: {
+    policy: "plain-data-v1";
+  };
+  payloadSchema?: ArunaSchemaMetadata | undefined;
+};
+
 export type ArunaSchemaLiteralMetadata =
   | {
       kind: "string";
@@ -99,6 +112,7 @@ export type ArunaSchemaLiteralMetadata =
 
 export type ArunaSchemaMetadata = {
   kind: string;
+  numericFormat?: string | undefined;
   properties?: Record<string, ArunaSchemaMetadata> | undefined;
   items?: ArunaSchemaMetadata | undefined;
   literal?: ArunaSchemaLiteralMetadata | undefined;
@@ -126,6 +140,8 @@ export type ArunaManifest = {
   modules: ArunaModuleRecord[];
   imports: ArunaImportEdge[];
   actions: ArunaActionRecord[];
+  // Omitted from manifest JSON when empty; treat as [] when absent.
+  signals?: ArunaSignalRecord[] | undefined;
   diagnostics: ArunaDiagnostic[];
 };
 

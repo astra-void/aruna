@@ -1,0 +1,224 @@
+import type { RemoteEventSignalConnectionLike, RemoteEventSignalLike } from "./remote-event.js";
+import type { Schema } from "../schema/index.js";
+import {
+  assertPublishableSignalPayload,
+  isDeliverableSignalPayload,
+  type InferSignalPayload,
+  type SignalDefinition,
+  type SignalRegistry,
+} from "./signal.js";
+
+// Wire envelope for a server -> client push. A single RemoteEvent multiplexes
+// every signal by id, mirroring how the action transport multiplexes by
+// requestId/actionId.
+export type RemoteSignalMessage = {
+  readonly signalId: string;
+  readonly payload: unknown;
+};
+
+export type RemoteSignalServerLike<TPlayer = unknown> = {
+  readonly FireClient: (player: TPlayer, message: RemoteSignalMessage) => void;
+  readonly FireAllClients: (message: RemoteSignalMessage) => void;
+};
+
+export type RemoteSignalClientLike = {
+  readonly OnClientEvent: RemoteEventSignalLike<[RemoteSignalMessage]>;
+};
+
+type SignalId<TSignals extends SignalRegistry> = keyof TSignals & string;
+
+// Server-side emitter bound to a signal registry. Every emit validates the
+// payload against the serialization boundary and the signal schema before it
+// touches the wire, so an invalid payload fails loudly on the server rather
+// than silently reaching clients.
+export type RemoteSignalPublisher<TSignals extends SignalRegistry, TPlayer = unknown> = {
+  readonly to: <TId extends SignalId<TSignals>>(
+    player: TPlayer,
+    signalId: TId,
+    payload: InferSignalPayload<TSignals[TId]>,
+  ) => void;
+  readonly toMany: <TId extends SignalId<TSignals>>(
+    players: readonly TPlayer[],
+    signalId: TId,
+    payload: InferSignalPayload<TSignals[TId]>,
+  ) => void;
+  readonly toAll: <TId extends SignalId<TSignals>>(
+    signalId: TId,
+    payload: InferSignalPayload<TSignals[TId]>,
+  ) => void;
+};
+
+function resolveSignal(
+  signals: SignalRegistry,
+  signalId: string,
+): SignalDefinition<Schema | undefined> {
+  const signal = signals[signalId];
+
+  if (signal === undefined) {
+    throw new Error(`Aruna signal not found: ${signalId}`);
+  }
+
+  return signal;
+}
+
+export function createRemoteSignalPublisher<
+  TSignals extends SignalRegistry,
+  TPlayer = unknown,
+>(
+  remote: RemoteSignalServerLike<TPlayer>,
+  signals: TSignals,
+): RemoteSignalPublisher<TSignals, TPlayer> {
+  // Implemented against loose signatures and re-typed on the way out. The public
+  // RemoteSignalPublisher surface is a heavy mapped/generic type; inferring it
+  // directly inside the implementation triggers TS2589 (excessive depth).
+  const publisher = {
+    to(player: TPlayer, signalId: string, payload: unknown): void {
+      const signal = resolveSignal(signals, signalId);
+      assertPublishableSignalPayload(signal, payload);
+      remote.FireClient(player, { signalId, payload });
+    },
+    toMany(players: readonly TPlayer[], signalId: string, payload: unknown): void {
+      const signal = resolveSignal(signals, signalId);
+      assertPublishableSignalPayload(signal, payload);
+      const message: RemoteSignalMessage = { signalId, payload };
+
+      for (const player of players) {
+        remote.FireClient(player, message);
+      }
+    },
+    toAll(signalId: string, payload: unknown): void {
+      const signal = resolveSignal(signals, signalId);
+      assertPublishableSignalPayload(signal, payload);
+      remote.FireAllClients({ signalId, payload });
+    },
+  };
+
+  return publisher as RemoteSignalPublisher<TSignals, TPlayer>;
+}
+
+export type SignalHandler<TPayload> = (payload: TPayload) => void;
+
+export type RemoteSignalConnection = {
+  readonly disconnect: () => void;
+};
+
+export type StaticSignalHandlers<TSignals extends SignalRegistry> = {
+  readonly [TId in SignalId<TSignals>]?: SignalHandler<InferSignalPayload<TSignals[TId]>>;
+};
+
+export type CreateRemoteSignalSubscriberOptions<TSignals extends SignalRegistry> = {
+  // Statically bound handlers, connected immediately. Equivalent to calling
+  // `.on(id, handler)` for each entry; useful for app-level wiring.
+  readonly handlers?: StaticSignalHandlers<TSignals>;
+};
+
+// Client-side subscriber bound to a signal registry. A single OnClientEvent
+// connection fans messages out to per-signal handler sets. Supports both static
+// handlers (app-style wiring) and dynamic `.on()` subscriptions that return a
+// disconnectable handle.
+export type RemoteSignalSubscriber<TSignals extends SignalRegistry> = {
+  readonly on: <TId extends SignalId<TSignals>>(
+    signalId: TId,
+    handler: SignalHandler<InferSignalPayload<TSignals[TId]>>,
+  ) => RemoteSignalConnection;
+  readonly dispose: () => void;
+};
+
+function isValidSignalMessage(value: unknown): value is RemoteSignalMessage {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  return typeof (value as { readonly signalId?: unknown }).signalId === "string";
+}
+
+export function createRemoteSignalSubscriber<TSignals extends SignalRegistry>(
+  remote: RemoteSignalClientLike,
+  signals: TSignals,
+  options?: CreateRemoteSignalSubscriberOptions<TSignals>,
+): RemoteSignalSubscriber<TSignals> {
+  const handlersBySignal = new Map<string, Set<SignalHandler<unknown>>>();
+  let disposed = false;
+
+  function addHandler(signalId: string, handler: SignalHandler<unknown>): RemoteSignalConnection {
+    let handlers = handlersBySignal.get(signalId);
+
+    if (handlers === undefined) {
+      handlers = new Set<SignalHandler<unknown>>();
+      handlersBySignal.set(signalId, handlers);
+    }
+
+    handlers.add(handler);
+    let connected = true;
+
+    return {
+      disconnect() {
+        if (!connected) {
+          return;
+        }
+
+        connected = false;
+        handlers.delete(handler);
+      },
+    };
+  }
+
+  if (options?.handlers !== undefined) {
+    for (const [signalId, handler] of Object.entries(options.handlers)) {
+      if (handler !== undefined) {
+        addHandler(signalId, handler as SignalHandler<unknown>);
+      }
+    }
+  }
+
+  const connection: RemoteEventSignalConnectionLike = remote.OnClientEvent.Connect((message) => {
+    if (!isValidSignalMessage(message)) {
+      return;
+    }
+
+    const handlers = handlersBySignal.get(message.signalId);
+
+    if (handlers === undefined || handlers.size === 0) {
+      return;
+    }
+
+    const signal = signals[message.signalId];
+
+    // Drop payloads that violate the declared schema before invoking handlers.
+    if (signal !== undefined && !isDeliverableSignalPayload(signal, message.payload)) {
+      return;
+    }
+
+    // Snapshot so handlers that subscribe/unsubscribe during delivery do not
+    // mutate the set mid-iteration. Built with an explicit loop to mirror the
+    // roblox-ts native runtime and to avoid Array.from, which is shadowed by the
+    // globally loaded @rbxts/types and would lose the handler element type.
+    const snapshot: SignalHandler<unknown>[] = [];
+    for (const handler of handlers) {
+      snapshot.push(handler);
+    }
+
+    for (const handler of snapshot) {
+      handler(message.payload);
+    }
+  });
+
+  return {
+    on(signalId, handler) {
+      if (disposed) {
+        throw new Error("RemoteSignal subscriber is disposed.");
+      }
+
+      return addHandler(signalId, handler as SignalHandler<unknown>);
+    },
+    dispose() {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      connection.Disconnect();
+      handlersBySignal.clear();
+    },
+  };
+}

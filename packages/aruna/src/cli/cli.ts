@@ -17,10 +17,13 @@ import {
 import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { formatInitReport, runInit } from "./init.js";
 import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
+import { buildSignalInspectionReport, formatSignalInspection } from "./inspect-signals.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
-import { formatError, formatMuted } from "./theme.js";
+import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
+import { runPartitionedRbxtsc } from "./rojo-layout.js";
+import { formatError, formatMuted, formatSuccess } from "./theme.js";
 
 type CliOptions = {
   project?: string;
@@ -57,14 +60,22 @@ export function resolveColorMode(
   return { enabled: !disabled };
 }
 
-function workspaceCwd(): string {
+// Where a relative `--project`/`--config` is anchored. Prefer INIT_CWD (the dir
+// the user actually ran pnpm/npm from) so `pnpm --filter aruna aruna <cmd>
+// --project .` resolves against the consumer rather than the aruna package whose
+// script cwd the nested invocation adopts.
+function invocationCwd(): string {
   return process.env["INIT_CWD"] ?? process.cwd();
 }
 
 function compilerInput(options: CliOptions) {
-  const baseCwd = workspaceCwd();
+  const baseCwd = invocationCwd();
   return {
-    root: options.project ? path.resolve(baseCwd, options.project) : path.resolve(baseCwd),
+    // With no explicit --project the bin runs inside the target project (a
+    // package script's cwd is the package dir), so use cwd() directly — not
+    // INIT_CWD, which points at wherever pnpm was launched. This makes a bare
+    // `aruna build` (e.g. a harness `"build": "aruna build"`) target itself.
+    root: options.project ? path.resolve(baseCwd, options.project) : process.cwd(),
     configPath: options.config ? path.resolve(baseCwd, options.config) : undefined,
     warningsAsErrors: options.warningsAsErrors,
     json: options.json,
@@ -134,7 +145,13 @@ async function runInspect(options: CliOptions): Promise<ArunaCompilerOutput> {
 }
 
 type BuildCliOptions = CliOptions & {
+  // Runtime vendoring and the rbxtsc compile are both on by default so a bare
+  // `aruna build` is turnkey (stubs + vendored Roblox runtime + Luau). The flags
+  // are opt-outs (`--no-emit-runtime` / `--no-emit-luau`); the legacy
+  // `--emit-runtime` is still accepted as a redundant explicit-on. Commander
+  // leaves these undefined by default, so callers gate on `!== false`.
   emitRuntime?: boolean;
+  emitLuau?: boolean;
 };
 
 // Resolves the roblox-ts-native runtime source shipped in the aruna package
@@ -186,10 +203,39 @@ async function emitRobloxRuntime(root: string, generatedDir: string): Promise<vo
 async function runBuild(options: BuildCliOptions): Promise<ArunaCompilerOutput> {
   const input = compilerInput(options);
   const output = await buildProject(input);
-  if (options.emitRuntime && output.ok) {
+  if (options.emitRuntime !== false && output.ok) {
     await emitRobloxRuntime(input.root, generatedDirFromOutput(output));
   }
   return output;
+}
+
+// Renders the rbxtsc Luau-compile step that runs after a successful build.
+// rbxtsc's own stdout/stderr are forwarded verbatim so its diagnostics survive,
+// then a brand-styled status line summarizes the outcome.
+function renderRbxtscResult(result: RbxtscResult, options: BuildCliOptions): void {
+  const colors = resolveColorMode(options);
+  if (result.kind === "skipped") {
+    if (!options.quiet) {
+      writeText("");
+      writeText(formatMuted(`rbxtsc skipped — ${result.reason}`, colors));
+    }
+    return;
+  }
+
+  if (result.stdout.length > 0) {
+    process.stdout.write(result.stdout.endsWith("\n") ? result.stdout : `${result.stdout}\n`);
+  }
+  if (result.stderr.length > 0) {
+    process.stderr.write(result.stderr.endsWith("\n") ? result.stderr : `${result.stderr}\n`);
+  }
+  if (!options.quiet) {
+    writeText("");
+    writeText(
+      result.status === 0
+        ? formatSuccess("rbxtsc compiled the project to Luau", colors)
+        : formatError(`rbxtsc exited with status ${result.status}`, colors),
+    );
+  }
 }
 
 async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
@@ -264,6 +310,29 @@ export async function main(): Promise<number> {
 
       const colors = resolveColorMode(options);
       writeText(formatActionInspection(output, colors));
+      if (!options.quiet && output.diagnostics.length > 0) {
+        const diagnostics = formatDiagnostics(output, colors);
+        if (diagnostics.length > 0) {
+          writeText(diagnostics);
+        }
+      }
+      process.exitCode = output.ok ? 0 : 1;
+    });
+
+  inspect
+    .command("signals")
+    .description("show discovered server-to-client signals")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const output = await runInspect(options);
+      if (options.json) {
+        writeJson(buildSignalInspectionReport(output));
+        process.exitCode = output.ok ? 0 : 1;
+        return;
+      }
+
+      const colors = resolveColorMode(options);
+      writeText(formatSignalInspection(output, colors));
       if (!options.quiet && output.diagnostics.length > 0) {
         const diagnostics = formatDiagnostics(output, colors);
         if (diagnostics.length > 0) {
@@ -350,18 +419,53 @@ export async function main(): Promise<number> {
 
   const build = program
     .command("build")
-    .description("build generated action files and the manifest")
+    .description(
+      "generate action stubs and the manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc",
+    )
+    // Accepted for backward compatibility; vendoring is now the default, so this
+    // is a redundant explicit-on. Disable vendoring with --no-emit-runtime.
+    .option("--emit-runtime", "vendor the Roblox-targeted runtime (default; kept for compatibility)")
     .option(
-      "--emit-runtime",
-      "vendor the Roblox-targeted runtime into the generated dir as project source",
+      "--no-emit-runtime",
+      "skip vendoring the Roblox-targeted runtime into the generated dir",
+    )
+    .option(
+      "--no-emit-luau",
+      "skip the rbxtsc Luau compile step (only generate stubs and vendor the runtime)",
     );
 
   build.action(async () => {
     const options = build.optsWithGlobals<BuildCliOptions>();
     const startedAt = Date.now();
     const output = await runBuild(options);
-    renderCompilerOutput(output, options, Date.now() - startedAt, "build");
-    process.exitCode = output.ok ? 0 : 1;
+    const projectRoot = compilerInput(options).root;
+    let rbxtsc: RbxtscResult | undefined;
+    if (output.ok && options.emitLuau !== false) {
+      // Partition the project into client/server/shared so the emitted out/ maps
+      // onto the Roblox DataModel (server code stays in ServerScriptService).
+      const bin = findRbxtscBin(projectRoot);
+      rbxtsc =
+        bin === undefined
+          ? runRbxtsc({ projectRoot })
+          : runPartitionedRbxtsc({
+              projectRoot,
+              generatedDir: generatedDirFromOutput(output),
+              manifest: output.manifest,
+              rbxtscBin: bin,
+            });
+    }
+
+    if (options.json) {
+      writeJson(rbxtsc ? { ...output, rbxtsc } : output);
+    } else {
+      renderCompilerOutput(output, options, Date.now() - startedAt, "build");
+      if (rbxtsc) {
+        renderRbxtscResult(rbxtsc, options);
+      }
+    }
+
+    const luauOk = rbxtsc === undefined || rbxtscOk(rbxtsc);
+    process.exitCode = output.ok && luauOk ? 0 : 1;
   });
 
   program

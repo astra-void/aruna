@@ -100,6 +100,11 @@ describe("doctor", () => {
     expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
       "src/.aruna/actions.server.generated.ts",
     ]);
+    // The signal registry virtual module is installed alongside the actions so
+    // `import { signals } from "$aruna/signals"` resolves under tsc/rbxtsc.
+    expect(tsconfig.compilerOptions.paths["$aruna/signals"]).toEqual([
+      "src/.aruna/signals.generated.ts",
+    ]);
   });
 
   it("preserves existing paths", () => {

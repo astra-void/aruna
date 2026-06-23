@@ -1,5 +1,5 @@
 use crate::config::ArunaConfig;
-use crate::codegen::{generate_action_files, GeneratedFile};
+use crate::codegen::{generate_action_files, generate_signal_files, GeneratedFile};
 use crate::diagnostics::{
     create_diagnostic, strip_ignored_diagnostics, summarize_diagnostics, ArunaDiagnostic,
 };
@@ -8,7 +8,8 @@ use crate::graph::{build_project_graph, ArunaImportEdge, GraphImportRecord};
 use crate::manifest::{create_manifest, ArunaManifest, ArunaModuleRecord};
 use crate::module_kind::ModuleKind;
 use crate::resolver::{
-    is_bare_specifier, resolve_virtual_generated_action_module, TsconfigResolverOptions,
+    is_bare_specifier, resolve_virtual_generated_action_module,
+    resolve_virtual_generated_signal_module, TsconfigResolverOptions,
 };
 use crate::rules::boundary_code;
 use serde::{Deserialize, Serialize};
@@ -85,6 +86,7 @@ fn internal_error_output(input: &CompilerInput, message: String) -> CompilerOutp
             modules: Vec::new(),
             imports: Vec::new(),
             actions: Vec::new(),
+            signals: Vec::new(),
             diagnostics: vec![diagnostic],
         },
         generated_files: None,
@@ -188,10 +190,13 @@ fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<Aruna
     }
 
     let (message, suggestion) = if edge.edge.specifier.starts_with("$aruna/") {
-        if resolve_virtual_generated_action_module(&edge.edge.specifier).is_some() {
+        let is_known_virtual = resolve_virtual_generated_action_module(&edge.edge.specifier)
+            .is_some()
+            || resolve_virtual_generated_signal_module(&edge.edge.specifier).is_some();
+        if is_known_virtual {
             (
                 format!(
-                    "{} imports {}, but Aruna could not resolve the virtual action module.",
+                    "{} imports {}, but Aruna could not resolve the virtual module.",
                     edge.importer_path, edge.edge.specifier
                 ),
                 "Verify the Aruna-generated module mapping or rebuild the project.".to_string(),
@@ -202,7 +207,7 @@ fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<Aruna
                     "{} imports {}, but {} is not a known Aruna virtual module.",
                     edge.importer_path, edge.edge.specifier, edge.edge.specifier
                 ),
-                "Use $aruna/actions/client or $aruna/actions/server, or import a real source file."
+                "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
                     .to_string(),
             )
         }
@@ -370,20 +375,36 @@ fn run_project_inner(
         let generated = generate_action_files(
             &input.config.generated_dir,
             &graph.actions,
+            &input.config.actions.default_rate_limit,
             input.config.compiler.preserve_generated_comments,
         );
         mutable_diagnostics.extend(strip_ignored_diagnostics(
             &generated.diagnostics,
             &ignore,
         ));
-        Some(generated)
+
+        let mut files = generated.files;
+        if !graph.signals.is_empty() {
+            let generated_signals = generate_signal_files(
+                &input.config.generated_dir,
+                &graph.signals,
+                input.config.compiler.preserve_generated_comments,
+            );
+            mutable_diagnostics.extend(strip_ignored_diagnostics(
+                &generated_signals.diagnostics,
+                &ignore,
+            ));
+            files.extend(generated_signals.files);
+        }
+
+        Some(files)
     } else {
         None
     };
 
-    if let Some(generated_output) = &generated_output {
+    if let Some(generated_files) = &generated_output {
         if input.write_generated {
-            if let Err(error) = write_generated_files(&project_root, &generated_output.files) {
+            if let Err(error) = write_generated_files(&project_root, generated_files) {
                 mutable_diagnostics.push(create_diagnostic(
                     "aruna::701",
                     "Failed to write generated Aruna action files.",
@@ -408,11 +429,12 @@ fn run_project_inner(
             .map(|edge| edge.edge.clone())
             .collect::<Vec<ArunaImportEdge>>(),
         &graph.actions,
+        &graph.signals,
         &mutable_diagnostics,
     );
 
     let mut manifest_path = None;
-    let mut generated_files = generated_output.map(|generated| generated.files);
+    let mut generated_files = generated_output;
     if write_manifest {
         let output_path = if input.config.manifest_output.is_empty() {
             ".aruna/manifest.json".to_string()
@@ -468,6 +490,7 @@ fn run_project_inner(
             .map(|edge| edge.edge.clone())
             .collect::<Vec<ArunaImportEdge>>(),
         &graph.actions,
+        &graph.signals,
         &mutable_diagnostics,
     );
     let summary = summarize_diagnostics(&mutable_diagnostics, warnings_as_errors);

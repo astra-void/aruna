@@ -71,6 +71,9 @@ export type ActionRegistry<TPlayer = unknown> = Record<
 export type DispatchActionOptions<TPlayer = unknown> = {
   readonly rateLimiter?: ActionRateLimiter;
   readonly rateLimitKey?: ActionRateLimitKeyResolver<TPlayer>;
+  // Applied to any action that does not declare its own `rateLimit`. A
+  // per-action `rateLimit` always takes precedence over this fallback.
+  readonly defaultRateLimit?: ActionRateLimitOptions;
   readonly nowMs?: () => number;
 };
 
@@ -95,13 +98,16 @@ export async function dispatchAction<TPlayer = unknown>(
     assertSchema(action.input, input, { actionId, role: "input" });
   }
 
-  if (action.rateLimit !== undefined) {
+  // A per-action `rateLimit` always wins; otherwise fall back to the app-wide
+  // default. Only when neither is present is the action left unthrottled.
+  const effectiveRateLimit = action.rateLimit ?? options?.defaultRateLimit;
+  if (effectiveRateLimit !== undefined) {
     const rateLimiter = options?.rateLimiter ?? defaultActionRateLimiter;
     const rateLimitKey = options?.rateLimitKey ?? defaultActionRateLimitKeyResolver<TPlayer>;
     const result = rateLimiter.check(
       actionId,
       rateLimitKey(actionId, ctx),
-      action.rateLimit,
+      effectiveRateLimit,
       options?.nowMs?.(),
     );
 
@@ -110,8 +116,8 @@ export async function dispatchAction<TPlayer = unknown>(
         `Aruna action ${actionId} is rate limited. Retry after ${result.retryAfterMs}ms.`,
         {
           actionId,
-          max: action.rateLimit.max,
-          windowMs: action.rateLimit.windowMs,
+          max: effectiveRateLimit.max,
+          windowMs: effectiveRateLimit.windowMs,
           retryAfterMs: result.retryAfterMs,
           resetAtMs: result.resetAtMs,
         },

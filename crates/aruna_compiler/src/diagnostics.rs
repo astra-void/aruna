@@ -69,6 +69,11 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::553" => Some(("action-input-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::554" => Some(("action-output-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::560" => Some(("invalid-action-rate-limit", DiagnosticSeverity::Error)),
+        "aruna::564" => Some(("signal-payload-schema-invalid", DiagnosticSeverity::Warning)),
+        "aruna::566" => Some((
+            "generated-signal-payload-type-collision",
+            DiagnosticSeverity::Error,
+        )),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((
