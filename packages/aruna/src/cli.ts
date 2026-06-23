@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 export * from "./cli/cli.js";
 
 import fs from "node:fs";
