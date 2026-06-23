@@ -1,4 +1,5 @@
-import { defineAction, schema } from "aruna";
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
 import { type PurchaseItemInput, type PurchaseItemOutput } from "./schema";
 import { createActionResult } from "../../shared/result";
 

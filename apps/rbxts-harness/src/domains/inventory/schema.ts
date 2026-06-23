@@ -1,4 +1,4 @@
-import { schema, type InferSchema } from "aruna";
+import { schema, type InferSchema } from "aruna/schema";
 import { actionResultSchema } from "../../shared/result";
 
 export const restockItemInputSchema = schema.object({

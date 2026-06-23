@@ -3,15 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "aruna:build": "pnpm --filter aruna build && pnpm --filter aruna aruna build --project .",
-    "rbxts:compile:layout": "tsx scripts/layout-rbxts-output.ts",
-    "aruna:layout": "pnpm rbxts:compile:layout",
-    "typecheck": "pnpm aruna:build && tsc -p tsconfig.typecheck.json --noEmit",
-    "rbxtsc": "pnpm aruna:build && pnpm rbxts:compile:layout",
-    "build": "pnpm typecheck && pnpm rbxtsc",
-    "check": "pnpm typecheck",
-    "verify:layout": "tsx scripts/verify-layout.ts",
-    "test": "pnpm verify:layout"
+    "build": "aruna build",
+    "check": "aruna check",
+    "test": "aruna build"
   },
   "dependencies": {
     "aruna": "workspace:*"

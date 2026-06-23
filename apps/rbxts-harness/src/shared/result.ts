@@ -1,4 +1,4 @@
-import { schema, type InferSchema } from "aruna";
+import { schema, type InferSchema } from "aruna/schema";
 
 export const actionResultSchema = schema.object({
   ok: schema.boolean(),

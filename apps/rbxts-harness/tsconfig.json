@@ -2,16 +2,23 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "module": "CommonJS",
+    "module": "commonjs",
     "moduleDetection": "force",
-    "moduleResolution": "Node",
+    "moduleResolution": "node",
     "declaration": false,
     "declarationMap": false,
     "paths": {
-      "aruna": ["../../packages/aruna/dist/index.d.ts"],
-      "aruna/*": ["../../packages/aruna/dist/*.d.ts"],
       "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
-      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"]
+      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
+      "$aruna/signals": ["src/.aruna/signals.generated.ts"],
+      "aruna/client": ["src/.aruna/runtime/client.ts"],
+      "aruna/client-runtime": ["src/.aruna/runtime/client-runtime.ts"],
+      "aruna/server": ["src/.aruna/runtime/server.ts"],
+      "aruna/server-runtime": ["src/.aruna/runtime/server-runtime.ts"],
+      "aruna/server-app": ["src/.aruna/runtime/server-app.ts"],
+      "aruna/roblox-runtime": ["src/.aruna/runtime/roblox-runtime.ts"],
+      "aruna/runtime": ["src/.aruna/runtime/runtime.ts"],
+      "aruna/schema": ["src/.aruna/runtime/schema.ts"]
     },
     "noLib": true,
     "outDir": "out",
@@ -22,5 +29,5 @@
     "types": ["@rbxts/types", "@rbxts/compiler-types"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["aruna.config.ts", "dist", "node_modules", "out"]
 }
