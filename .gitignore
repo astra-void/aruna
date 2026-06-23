@@ -37,3 +37,6 @@ digest.txt
 
 # Editor
 .vscode/
+
+# Turborepo
+.turbo
