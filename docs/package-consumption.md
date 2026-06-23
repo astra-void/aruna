@@ -2,34 +2,41 @@
 
 Aruna has two package-consumption checks today:
 
-- `apps/package-consumption-harness` validates the workspace-linked package shape quickly.
-- `pnpm verify:package-consumption` builds local tarballs and tries to install them in a standalone consumer.
+- `apps/package-consumption-harness` validates the package-style consumption shape against the workspace-linked package.
+- `pnpm verify:package-consumption` builds local tarballs and installs them in a standalone consumer outside the monorepo source layout.
 
-## Current smoke status
+Both compile a consumer to Luau end-to-end, including the Roblox-facing runtime.
 
-The packed smoke now installs local tarballs for `aruna`, `@arunajs/core`, and `@arunajs/compiler` without registry fallback.
-It runs `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `tsc -p tsconfig.typecheck.json --noEmit` successfully.
+## Final package-consumption model
 
-Latest retained-temp project:
+Roblox-facing code is consumed through a **vendored runtime**, not through direct `node_modules` package imports of Roblox modules:
 
-- temp root: `/private/var/folders/v5/hzcgp7rn3m9051w47880v3180000gn/T/package-consumption-smoke`
-- `tsconfig.json`: `rootDir: "src"`, `include: ["src/**/*.ts", "src/**/*.tsx"]`, `exclude` includes `aruna.config.ts`
-- `tsconfig.typecheck.json`: `rootDir: "."`, `include` includes `aruna.config.ts`
-- `default.project.json`: package-style `node_modules/aruna` mount remains in `rbxts_include`
-- `node_modules/aruna/package.json`: public subpaths point at root shims such as `client.js`, `server.js`, `schema.js`, `roblox-runtime.js`, `client-runtime.js`, `server-app.js`, `runtime.js`, and `server-runtime.js`
-- `node_modules/aruna` tree: root subpath shims are present alongside `package.json`
+- The roblox-ts-native runtime lives at `packages/aruna/roblox/` and is separate from the Node reference runtime under `packages/aruna/src` (which vitest validates). It is intentionally thin: schema (`string`/`number`/`boolean`/`object`/`array`/`optional`/`literal`/`enum`/`union`), `defineAction`, client `invokeAction`, server dispatch, a default `RemoteEvent` action transport, and `plain-data-v1` serialization plus fixed-window rate-limit enforcement in dispatch.
+- The native runtime ships in the published package via `files`.
+- `aruna build --emit-runtime` vendors that runtime into the consumer as project source under `<generatedDir>/runtime/` (e.g. `src/.aruna/runtime/`).
+- `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig `paths` aliases that pair with `build --emit-runtime`.
+- `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer project — including the vendored runtime — to Luau.
 
-`rbxtsc` still fails, but the failure is now isolated:
+Consumers import `defineConfig` from the root package for config only, and use the runtime-safe public subpaths (`aruna/server`, `aruna/schema`, `aruna/client`, `aruna/server-app`, `aruna/client-runtime`, `aruna/roblox-runtime`) for Roblox-facing code; those subpaths resolve to the vendored runtime through the aliases.
 
-- roblox-ts rejects the direct `node_modules` package modules for `aruna/server` and `aruna/schema`
-- the temp Rojo tree still does not cover `out/domains/shop/model.luau` emitted from `src/domains/shop/model.ts`
+`aruna init` scaffolds a turnkey project for this model (`aruna.config.ts`, a roblox-ts `tsconfig.json` with the action + runtime aliases and `@rbxts` typeRoots, and a full-`out` `default.project.json`). A scaffolded project plus an action compiles to Luau via `aruna build --emit-runtime` then `rbxtsc` with no hand-editing.
 
-Current `rbxtsc` log summary:
+## What is now validated
 
-> rbxtsc rejected direct package imports from node_modules.
-> rbxtsc could not map emitted files to the current Rojo project tree.
+- The packed smoke installs local tarballs for `aruna`, `@arunajs/core`, and `@arunajs/compiler` without contacting the npm registry.
+- `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build --emit-runtime`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` run against the package-style layout.
+- `aruna build --emit-runtime` generates the `src/.aruna` action files and vendors the native runtime.
+- The consumer passes TypeScript (`tsc --noEmit`).
+- The consumer compiles to Luau with `rbxtsc`, including the vendored runtime — the earlier "modules directly under node_modules" rejection no longer occurs.
 
-## Current conclusion
+This is package-layout and `rbxtsc` compile validation. It is **not** production Studio validation, and the structural `RemoteEvent`/`RemoteFunction` adapters are not production-complete.
 
-The packed smoke no longer fails because of `aruna.config.ts` leaking into the rbxtsc project or because public Aruna subpaths are missing from the packed tarball.
-The remaining blocker is a rbxtsc package-layout boundary: either Aruna needs a runtime-only package or layout shim for Roblox-facing imports, or the temp consumer needs a compiler-friendly split that does not rely on direct `node_modules` package modules.
+## Remaining follow-ups
+
+- Native-runtime *runtime* execution tests: the dispatch, serialization, and rate-limit logic in `packages/aruna/roblox/` mirrors the vitest-covered Node runtime but is only compiled, not executed, in CI.
+- A Lune/Luau test harness to exercise that native runtime at runtime.
+- Production Studio validation, which remains later work.
+
+## Historical context
+
+Earlier, the packed smoke failed at `rbxtsc` with a package-layout boundary: roblox-ts rejected direct `node_modules` package modules for `aruna/server` and `aruna/schema`, and the temporary Rojo tree did not cover emitted files such as `out/domains/shop/model.luau`. The investigation also surfaced that the Node reference runtime is not roblox-ts-compatible (Node idioms, ~71 `rbxtsc` errors that had been masked by the `rbxts-harness` dist-as-ambient mount). Both findings are what drove the separate roblox-ts-native runtime and the vendored-runtime model documented above; the blocker is now closed.

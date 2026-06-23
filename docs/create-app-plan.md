@@ -3,7 +3,9 @@
 This note is the next-step planning target after package-consumption validation.
 It does not describe an implemented `create-app` command.
 
-Current blocker: the packed package-consumption smoke now installs the local tarballs, runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript. The remaining failure is `rbxtsc`, which now reports a package-layout boundary: roblox-ts rejects direct `node_modules` package modules and the temp Rojo tree does not cover `out/domains/shop/model.luau`. Do not start create-app implementation until that `rbxtsc` issue is resolved.
+Status: create-app RFC / planning is now unblocked. The packed package-consumption smoke installs the local tarballs, runs `doctor --fix --emit-runtime` and `build --emit-runtime`, generates `src/.aruna` action files, vendors the native runtime, passes TypeScript, and compiles to Luau with `rbxtsc` (see [package-consumption.md](package-consumption.md)). The earlier `rbxtsc` package-layout blocker is resolved by the vendored-runtime model, so the prior gate on create-app planning is lifted.
+
+Create-app **implementation** stays deferred until the starter contract is written. Writing this RFC / starter contract is the planning step that unblocks implementation; generated Rojo and generated Roblox Instances remain out of scope.
 
 ## Intended starter output
 
@@ -18,7 +20,8 @@ Current blocker: the packed package-consumption smoke now installs the local tar
 ## Installation strategy
 
 - Prefer a package-based install path for Aruna and its compiler.
-- Keep the current workspace validation harness as a reference until a public install flow is proven.
+- Roblox-facing code uses the vendored-runtime model: `aruna build --emit-runtime` vendors the roblox-ts-native runtime (`packages/aruna/roblox/`) into `src/.aruna/runtime/`, and `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig aliases.
+- Keep the current workspace and packed-tarball validation harnesses as references; the packed install flow already compiles to Luau (see [package-consumption.md](package-consumption.md)).
 - Do not rely on `../../packages/aruna/dist` in starter source or Rojo metadata.
 
 ## Generated `.aruna` policy
@@ -29,8 +32,8 @@ Current blocker: the packed package-consumption smoke now installs the local tar
 
 ## Rojo strategy
 
-- Start with a conventional `default.project.json`.
-- Prefer package-style resolution for Aruna runtime imports.
+- Start with a conventional `default.project.json` that maps the full `out` tree (the shape `aruna init` already scaffolds).
+- Resolve Aruna runtime imports through the vendored runtime under `src/.aruna/runtime/`, not direct `node_modules` package modules.
 - Do not generate Roblox Instances yet.
 
 ## Output layout shim
@@ -49,6 +52,6 @@ Current blocker: the packed package-consumption smoke now installs the local tar
 - sessions
 - resource invalidation
 
-## If split is required
+## Runtime split (resolved)
 
-If the rbxts layout problem cannot be solved without a direct `node_modules` package import, the next step is a runtime-only package split for Roblox-facing APIs, with the CLI/config package kept separate and the smoke updated to consume the runtime package instead of the full root package.
+The rbxts layout problem is solved without a direct `node_modules` package import: instead of publishing a separate runtime-only package, Aruna vendors the roblox-ts-native runtime into the consumer via `aruna build --emit-runtime` and aliases the Roblox-facing `aruna/*` subpaths to it. The CLI/config package and the native runtime already live separately in the source tree (`packages/aruna/src` vs `packages/aruna/roblox`), and the packed smoke consumes the vendored runtime rather than direct package modules.

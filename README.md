@@ -5,7 +5,8 @@ Aruna is a compiler-first Roblox framework for server-authoritative games.
 The model is intentionally closer to Svelte-style compile-time transforms than to a heavy OOP framework. Classes are allowed. Services are not the framework model. Actions are.
 
 Aruna owns boundaries, actions, generated output, and diagnostics. Users own domain taxonomy.
-Its product value comes from compiler-discovered server actions, server-owned resources, policy metadata, and inspectable authority flow, not from a typed remote wrapper alone.
+Aruna complements roblox-ts and TypeScript; it does not replace them.
+Its product value comes from compiler-discovered server actions, an inspectable action contract, and boundary-aware diagnostics, not from a typed remote wrapper alone. Server-owned resources and policy metadata are the intended direction, not yet implemented.
 
 ## Recommended Layout v0
 
@@ -298,38 +299,110 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - the generated files are safe to delete and regenerate
 - structural runtime remoting exists only as a foundation; default Roblox action remote binding exists; this is not production Studio validation
 
+## Signals (server → client push)
+
+`defineSignal` is the push counterpart to `defineAction`. An action is a client → server request/response; a signal is a server → client message that clients subscribe to. A signal declares an `id` and an optional `payload` schema — there is no `run` and no response.
+
+```ts
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const damaged = defineSignal({
+  id: "combat.damaged",
+  payload: schema.object({ amount: schema.number(), source: schema.string() }),
+});
+```
+
+Server — publish to one player, several players, or everyone:
+
+```ts
+import { createRemoteSignalPublisher } from "aruna";
+
+const signals = { "combat.damaged": damaged };
+const publisher = createRemoteSignalPublisher(remote, signals);
+
+publisher.to(player, "combat.damaged", { amount: 12, source: "trap" });
+publisher.toMany(players, "combat.damaged", { amount: 5, source: "fall" });
+publisher.toAll("combat.damaged", { amount: 3, source: "lava" });
+```
+
+Client — subscribe statically at app wiring, dynamically with `.on()`, or both:
+
+```ts
+import { createRemoteSignalSubscriber } from "aruna";
+
+const subscriber = createRemoteSignalSubscriber(remote, signals, {
+  handlers: {
+    "combat.damaged": (payload) => updateHud(payload),
+  },
+});
+
+const connection = subscriber.on("combat.damaged", (payload) => {
+  /* ... */
+});
+connection.disconnect();
+```
+
+- Payloads are validated against the `plain-data-v1` serialization boundary and the declared schema on publish (the server throws on a violation) and dropped on schema mismatch on delivery (the client never invokes a handler with a malformed payload).
+- The roblox-ts native runtime ships default-transport helpers `createDefaultRobloxSignalPublisher` / `createDefaultRobloxSignalSubscriber` over a dedicated `ArunaSignalRemoteEvent`, distinct from the action `ArunaActionRemoteEvent`.
+- Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. (Contract `diff` currently gates action changes; extending the diff to signals is a follow-up.)
+
+## Binary serialization
+
+`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed byte buffer, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only the payload bytes.
+
+```ts
+import { encodeBinary, decodeBinary } from "aruna";
+import { schema } from "aruna/schema";
+
+const hit = schema.object({ amount: schema.number(), source: schema.string() });
+
+const bytes = encodeBinary(hit, { amount: 12, source: "trap" });
+const value = decodeBinary(hit, bytes); // { amount: 12, source: "trap" }
+```
+
+- The wire format is byte-identical across the Node reference runtime (`Uint8Array` + `DataView`) and the roblox-ts native runtime (Luau `buffer`), so a value encoded on one decodes on the other.
+- Layout: string = u32 length + UTF-8; number = the declared numeric width; boolean = u8; literal = 0 bytes; array = u32 count + items; object = fields in sorted key order; optional = u8 present flag + inner; enum = u32 index; union = u32 member index + member.
+- **Numeric width hints** pick a packed encoding per number. `schema.number()` is a full-width `f64`; `schema.f32()`, `schema.u8()`, `schema.u16()`, `schema.u32()`, `schema.i8()`, `schema.i16()`, and `schema.i32()` pack to their declared byte width and (for integer formats) validate the value is a whole number in range. A `{ hp: u16, team: u8 }` element costs 3 bytes instead of 16. Widths flow through the compiler into action/signal schema metadata (`numericFormat`) and the contract summary.
+
+  ```ts
+  const hit = schema.object({ amount: schema.u16(), crit: schema.boolean() });
+  encodeBinary(hit, { amount: 1200, crit: true }).length; // 3 bytes
+  ```
+
+- Encoding assumes the value already matches the schema (the action and signal boundaries validate first); a mismatch throws rather than emitting a corrupt buffer.
+
 ## Spec Cutline
 
-The next MVP work should stay on contract and authority metadata, not more transport expansion:
+Serialization boundary, fixed-window rate limits, the contract snapshot, contract diff, and package-consumption validation are all implemented. The next cutline stays on stabilization and a create-app starter contract, not more transport expansion or a policy/capability system:
 
-1. Stabilize current action runtime, compiler, and harness behavior.
-2. Serialization boundary policy is implemented as the default `plain-data-v1` action boundary:
-   - reject `Instance`, `Player`, function, class-instance, cyclic, non-finite, and other non-plain values across action input/output by default
-   - manifest action records now carry serialization policy metadata
-   - static serialization diagnostics remain limited for now
-3. Basic action rate limit is implemented as a manifest-visible fixed-window contract:
-   - action metadata parsing records `rateLimit` when declared with positive integer literals
-   - runtime enforces per-action/per-player or key buckets before `run()`
-   - invalid payloads and serialization failures do not consume quota
-   - the limiter is not a full anti-abuse or security system yet
-4. Package consumption validation is implemented with the first-party package-consumption harness.
-5. Contract snapshot foundation is implemented with a stable JSON snapshot of actions, schemas, and rate limits.
-6. Action contract diffing is implemented as a deterministic compatibility gate.
+1. Stabilize current compiler, action, runtime, and package-consumption behavior.
+2. Add runtime execution tests for the roblox-ts-native runtime, preferably through a Lune/Luau harness (today the native runtime is compiled but not executed in CI).
+3. Refine thin authority inspection without adding a full policy/capability system.
+4. Write the create-app RFC / starter contract.
+5. Design resources and invalidation after the starter contract is stable.
+6. Implement resources later.
 
 ## Package consumption validation
 
 `apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
 It imports `defineConfig` from the root package for config only, and uses runtime-safe public subpaths such as `aruna/server`, `aruna/schema`, `aruna/client`, `aruna/server-app`, `aruna/client-runtime`, and `aruna/roblox-runtime` for Roblox-facing code.
-It validates `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
+It validates `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build --emit-runtime`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
 It does not implement `create-app`.
-Its workspace `rbxtsc` build now passes: `aruna build --emit-runtime` vendors the roblox-ts-native runtime (`packages/aruna/roblox/`) into `src/.aruna/runtime/`, the harness aliases the Roblox `aruna/*` subpaths to that vendored runtime, and `default.project.json` maps the full `out` tree, so roblox-ts compiles the consumer — including the runtime — to Luau without the "modules directly under node_modules" rejection.
 
-`pnpm verify:package-consumption` now builds local tarballs and installs the packed Aruna dependency graph without contacting the npm registry for `aruna`, `@arunajs/core`, or `@arunajs/compiler`.
-The smoke runs `doctor --fix`, generates `src/.aruna` action files, and passes TypeScript. Re-running the packed-tarball smoke against the new vendored-runtime path is the remaining follow-up.
+Package consumption uses a vendored-runtime model rather than direct `node_modules` imports of Roblox-facing code:
 
-See [docs/package-consumption.md](docs/package-consumption.md) for the exact failure details and current conclusion.
+- The roblox-ts-native runtime lives at `packages/aruna/roblox/` and ships in the package via `files` (it is separate from the Node reference runtime under `packages/aruna/src`).
+- `aruna build --emit-runtime` vendors that native runtime into the consumer as project source under `src/.aruna/runtime/`.
+- `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig path aliases that pair with `build --emit-runtime`.
+- `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer — including the vendored runtime — to Luau without the "modules directly under node_modules" rejection.
 
-Do not move to `defineResource` until that cutline is done.
+`pnpm verify:package-consumption` builds local tarballs and installs the packed Aruna dependency graph without contacting the npm registry for `aruna`, `@arunajs/core`, or `@arunajs/compiler`.
+The packed package-style tarball smoke runs `doctor --fix --emit-runtime` and `build --emit-runtime`, generates `src/.aruna` action files and the vendored runtime, passes TypeScript, and compiles to Luau with `rbxtsc`. This is package-layout and rbxtsc compile validation, not production Studio validation.
+
+See [docs/package-consumption.md](docs/package-consumption.md) for the final package-consumption model and remaining follow-ups.
+
+Do not move to `defineResource` until the Spec Cutline above is done.
 
 ### Generated action imports
 
@@ -350,20 +423,11 @@ For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install t
 
 `apps/rbxts-harness` is a private roblox-ts-style app harness.
 It intentionally mirrors Recommended Layout v0 closely enough to act as the realistic app/starter reference while still remaining a harness rather than create-app output.
-It runs `aruna build` against the real source tree, then uses a temporary, compiler-manifest-driven layout shim to validate the emitted build with both TypeScript and `rbxtsc`.
-Use `pnpm --filter @arunajs/rbxts-harness typecheck` for the TypeScript check and `pnpm --filter @arunajs/rbxts-harness rbxtsc` for the roblox-ts compile.
-The harness covers generated action files, app bootstrap, schema inference, domain-local UI files, and public Aruna runtime imports.
-`default.project.json` now follows a conventional roblox-ts/Rojo-style tree with `ServerScriptService`, `ReplicatedStorage`, `StarterPlayer`, `Workspace`, `HttpService`, and `SoundService`.
-The build output is intentionally partitioned so `rbxtsc` emits a Rojo-friendly tree under `out/client`, `out/server`, and `out/shared`.
-That partitioning is build artifact layout, not source taxonomy.
-`rbxts_include` is used for normal roblox-ts package folders only; it is not an Aruna staging area.
-The harness still keeps a direct workspace `aruna` package mount there for `rbxtsc` resolution, and that mount is harness-only glue rather than create-app behavior.
-Generated `.aruna` files remain compiler and TypeScript inputs, not a special replicated Rojo node.
-The harness keeps those generated files under `src/.aruna` and writes `src/.aruna/rbxts-layout.json` as compiler-derived metadata for the temporary split tree used by `rbxtsc`.
-The server action stub is the only generated file that is duplicated into server output for rbxtsc resolution; the source of truth still stays under `src/.aruna`.
-This is still a temporary harness build-layout shim, not generated Rojo integration.
-The runtime entries live under `src/client.tsx` and `src/server.ts`; the build step is what aligns them with the Rojo mounts.
-`src/app/bootstrap.ts` and `src/app/providers.ts` stay shared-safe and model app composition helpers rather than hidden runtime entry files.
+Its whole build is a single turnkey command — `"build": "aruna build"` — exactly as a real consumer would run it: the bare `aruna build` generates the action (and signal) stubs, vendors the Roblox runtime into `src/.aruna/runtime/`, partitions the project by module classification, and drives `rbxtsc` to compile to Luau. There is no separate typecheck/rbxtsc/layout step.
+The source consumes Aruna through the vendored runtime via subpath imports (`aruna/server`, `aruna/schema`, `$aruna/actions/*`, `$aruna/signals`).
+Because the source uses the `domains/` recommended layout (classification is by convention, not by physical folders), `aruna build` stages the source into `out/client`, `out/server`, and `out/shared` and `default.project.json` maps each onto the Roblox DataModel — server code into `ServerScriptService` (never replicated to clients), client into `StarterPlayerScripts`, shared (plus the vendored runtime and client-callable stubs) into `ReplicatedStorage`.
+The harness covers generated action files, app bootstrap, schema inference (including optional fields), domain-local UI files, and public Aruna runtime imports.
+The runtime entries live under `src/client.tsx` and `src/server.ts`; `src/app/bootstrap.ts` and `src/app/providers.ts` stay shared-safe app composition helpers rather than hidden runtime entry files.
 It is not create-app, Rojo generation, generated Roblox Instance creation, or full Studio validation yet.
 
 ## Post-MVP
