@@ -3,8 +3,15 @@ name: publish
 # Publishes the full Aruna package graph (8 native targets + @arunajs/core +
 # @arunajs/compiler + @arunajs/aruna) to npm when a v* tag is pushed.
 #
-# A single macOS runner can build every native target: cargo-zigbuild covers
-# Linux (gnu + musl) and macOS, cargo-xwin covers Windows MSVC.
+# The 8 native targets are built in parallel, one job per target, each on the
+# cheapest runner that can build it:
+#   - darwin-* → macos-14 (Apple SDK; arm64 is native, x64 cross-builds via Zig)
+#   - linux-*  → ubuntu-latest via cargo-zigbuild (gnu + musl)
+#   - win32-*  → ubuntu-latest via cargo-xwin (MSVC ABI)
+# Each build job stages `.npm/compiler-<target>` and uploads it as an artifact.
+# The publish job downloads every native artifact, builds the TypeScript
+# packages, stages the compiler/core/aruna manifests around the pre-built
+# natives (--assemble), and publishes the whole graph in dependency order.
 #
 # Auth uses npm trusted publishing (OIDC) — no NPM_TOKEN secret. Configure a
 # trusted publisher for each package on npmjs.com pointing at this repo and
@@ -25,8 +32,97 @@ permissions:
   id-token: write # required for npm provenance + OIDC trusted publishing
 
 jobs:
+  build-native:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Don't publish a partial graph: if any native target fails to build, the
+      # publish job (which `needs` this one) is skipped entirely.
+      fail-fast: true
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-14
+            zigbuild: true
+          - target: linux-x64-gnu
+            runner: ubuntu-latest
+            zigbuild: true
+          - target: linux-arm64-gnu
+            runner: ubuntu-latest
+            zigbuild: true
+          - target: linux-x64-musl
+            runner: ubuntu-latest
+            zigbuild: true
+          - target: linux-arm64-musl
+            runner: ubuntu-latest
+            zigbuild: true
+          - target: win32-x64-msvc
+            runner: ubuntu-latest
+            xwin: true
+          - target: win32-arm64-msvc
+            runner: ubuntu-latest
+            xwin: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          # One cache per target: cross builds nest output under
+          # target/<triple>/, so each target has an independent incremental
+          # cache and they never evict one another.
+          key: ${{ matrix.target }}
+
+      - name: Install Zig
+        if: matrix.zigbuild
+        uses: mlugg/setup-zig@v2
+        with:
+          # Pin an explicit released version; "latest" can resolve to a build
+          # that community mirrors haven't propagated yet (404s).
+          version: 0.15.2
+
+      - name: Install cargo-zigbuild
+        if: matrix.zigbuild
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+
+      - name: Install cargo-xwin
+        if: matrix.xwin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-xwin
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native target
+        run: pnpm release:build-native --mode cross --targets ${{ matrix.target }}
+
+      - name: Upload staged native package
+        uses: actions/upload-artifact@v4
+        with:
+          # Artifact name matches the staged directory name so the publish job
+          # can download it straight back into `.npm/compiler-<target>`.
+          name: compiler-${{ matrix.target }}
+          path: .npm/compiler-${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 1
+
   publish:
-    runs-on: macos-14
+    needs: build-native
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -41,24 +137,16 @@ jobs:
       # Publishing goes through `pnpm publish`; pnpm 11.5.1 (pinned via the
       # packageManager field) supports OIDC trusted publishing and provenance.
 
-      - uses: dtolnay/rust-toolchain@stable
-      # Per-target Rust std is installed on demand by the release script
-      # (rustup target add).
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          # Pin an explicit released version; "latest" can resolve to a build
-          # that community mirrors haven't propagated yet (404s).
-          version: 0.15.2
-
-      - name: Install cross-compile tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-zigbuild,cargo-xwin
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download native packages
+        uses: actions/download-artifact@v4
+        with:
+          # Each `compiler-<target>` artifact is extracted into its own
+          # `.npm/compiler-<target>/` directory — exactly what --assemble expects.
+          pattern: compiler-*
+          path: .npm
+
       - name: Publish
-        run: pnpm release:publish --mode full --provenance --no-verify-credentials
+        run: pnpm release:publish --assemble --provenance --no-verify-credentials
