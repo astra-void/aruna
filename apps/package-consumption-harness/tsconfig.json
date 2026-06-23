@@ -11,12 +11,8 @@
       "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
       "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
       "aruna/client": ["src/.aruna/runtime/client.ts"],
-      "aruna/client-runtime": ["src/.aruna/runtime/client-runtime.ts"],
       "aruna/server": ["src/.aruna/runtime/server.ts"],
-      "aruna/server-runtime": ["src/.aruna/runtime/server-runtime.ts"],
-      "aruna/server-app": ["src/.aruna/runtime/server-app.ts"],
-      "aruna/roblox-runtime": ["src/.aruna/runtime/roblox-runtime.ts"],
-      "aruna/runtime": ["src/.aruna/runtime/runtime.ts"],
+      "aruna/roblox": ["src/.aruna/runtime/roblox.ts"],
       "aruna/schema": ["src/.aruna/runtime/schema.ts"]
     },
     "noLib": true,

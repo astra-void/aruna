@@ -4,8 +4,8 @@ import type { ActionInvoker } from "./client-runtime";
 import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding } from "./server-app";
 import {
-	createSignalPublisher,
-	createSignalSubscriber,
+	createRemoteSignalPublisher,
+	createRemoteSignalSubscriber,
 	type SignalMap,
 	type SignalPublisher,
 	type SignalSubscriber,
@@ -48,7 +48,7 @@ function defaultRequestId(): string {
 	return `aruna-${requestCounter}`;
 }
 
-export interface CreateDefaultRobloxActionInvokerOptions {
+export interface CreateActionInvokerOptions {
 	readonly createRequestId?: () => string;
 	// Milliseconds to wait for a server response before rejecting with a timeout
 	// error. 0 or undefined (the default) disables the timeout. Mirrors the Node
@@ -61,8 +61,8 @@ interface PendingActionRequest {
 	timeoutThread?: thread;
 }
 
-export function createDefaultRobloxActionInvoker(
-	options?: CreateDefaultRobloxActionInvokerOptions,
+export function createActionInvoker(
+	options?: CreateActionInvokerOptions,
 ): ActionInvoker {
 	const remote = waitForClientActionRemote();
 	const createRequestId =
@@ -114,7 +114,7 @@ export function createDefaultRobloxActionInvoker(
 	};
 }
 
-export function bindDefaultRobloxActionRemoteEvent<TPlayer>(
+export function bindActions<TPlayer>(
 	registry: ActionRegistry<TPlayer>,
 ): ServerAppBinding {
 	const remote = ensureServerActionRemote();
@@ -159,11 +159,11 @@ function waitForClientSignalRemote(): RemoteEvent {
 }
 
 // Server-side signal emitter over the default Aruna signal RemoteEvent.
-export function createDefaultRobloxSignalPublisher<TSignals extends SignalMap>(
+export function createSignalPublisher<TSignals extends SignalMap>(
 	signals: TSignals,
 ): SignalPublisher<TSignals, Player> {
 	const remote = ensureServerSignalRemote();
-	return createSignalPublisher<TSignals, Player>(
+	return createRemoteSignalPublisher<TSignals, Player>(
 		{
 			FireClient: (player, message) => {
 				remote.FireClient(player, message);
@@ -177,11 +177,11 @@ export function createDefaultRobloxSignalPublisher<TSignals extends SignalMap>(
 }
 
 // Client-side signal subscriber over the default Aruna signal RemoteEvent.
-export function createDefaultRobloxSignalSubscriber<TSignals extends SignalMap>(
+export function createSignalSubscriber<TSignals extends SignalMap>(
 	signals: TSignals,
 ): SignalSubscriber<TSignals> {
 	const remote = waitForClientSignalRemote();
-	return createSignalSubscriber<TSignals>(
+	return createRemoteSignalSubscriber<TSignals>(
 		{
 			OnClientEvent: {
 				Connect: (callback) => remote.OnClientEvent.Connect(callback as (...args: Array<unknown>) => void),

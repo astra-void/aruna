@@ -1,4 +1,4 @@
-import type { ArunaSchemaLiteralMetadata, ArunaSchemaMetadata } from "@arunajs/core";
+import type { SchemaLiteralMetadata, SchemaMetadata } from "@arunajs/core";
 
 export type ActionSchemaSummary = {
   readonly summary: string;
@@ -24,7 +24,7 @@ function renderPropertyKey(key: string): string {
   return isValidIdentifier(key) ? key : JSON.stringify(key);
 }
 
-function renderLiteralMetadata(literal: ArunaSchemaLiteralMetadata): string {
+function renderLiteralMetadata(literal: SchemaLiteralMetadata): string {
   switch (literal.kind) {
     case "string":
       return JSON.stringify(literal.value);
@@ -57,7 +57,7 @@ function sortWarnings(warnings: readonly string[]): string[] {
   });
 }
 
-function summarizeSchema(schema: ArunaSchemaMetadata | undefined): ActionSchemaSummary {
+function summarizeSchema(schema: SchemaMetadata | undefined): ActionSchemaSummary {
   if (!schema) {
     return {
       summary: "unknown (metadata unavailable)",
@@ -173,7 +173,7 @@ function summarizeSchema(schema: ArunaSchemaMetadata | undefined): ActionSchemaS
 }
 
 export function formatActionSchemaSummary(
-  schema: ArunaSchemaMetadata | undefined,
+  schema: SchemaMetadata | undefined,
 ): ActionSchemaSummary {
   const summary = summarizeSchema(schema);
   return {

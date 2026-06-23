@@ -1,4 +1,4 @@
-import type { ArunaCompilerOutput } from "@arunajs/core";
+import type { CompilerOutput } from "@arunajs/core";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatBrandTitle } from "./theme.js";
 import type { CliColorMode } from "./format.js";
@@ -11,12 +11,12 @@ function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function countRateLimitedActions(output: ArunaCompilerOutput): number {
+function countRateLimitedActions(output: CompilerOutput): number {
   return output.manifest.actions.filter((action) => action.rateLimit !== undefined).length;
 }
 
 export function formatActionContractInspection(
-  output: ArunaCompilerOutput,
+  output: CompilerOutput,
   colors: CliColorMode,
 ): string {
   const snapshot = buildActionContractSnapshot(output);

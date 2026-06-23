@@ -3,7 +3,7 @@ import {
   ActionSerializationError,
   assertSerializableActionValue,
   validateSerializableActionValue,
-} from "../src/server-runtime.js";
+} from "../src/server.js";
 
 describe("serialization policy", () => {
   it("accepts wire-safe primitive and plain data values", () => {

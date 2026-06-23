@@ -1,4 +1,4 @@
-export type ArunaModuleKind =
+export type ModuleKind =
   | "client"
   | "server"
   | "shared"
@@ -7,9 +7,9 @@ export type ArunaModuleKind =
   | "serverAction"
   | "unknown";
 
-export type ArunaDiagnosticSeverity = "error" | "warning" | "info";
+export type DiagnosticSeverity = "error" | "warning" | "info";
 
-export type ArunaDiagnosticCode =
+export type DiagnosticCode =
   | "aruna::100"
   | "aruna::102"
   | "aruna::103"
@@ -34,10 +34,10 @@ export type ArunaDiagnosticCode =
   | "aruna::701"
   | "aruna::900";
 
-export type ArunaDiagnostic = {
-  code: ArunaDiagnosticCode;
+export type Diagnostic = {
+  code: DiagnosticCode;
   name: string;
-  severity: ArunaDiagnosticSeverity;
+  severity: DiagnosticSeverity;
   message: string;
   file?: string | undefined;
   span?:
@@ -51,15 +51,15 @@ export type ArunaDiagnostic = {
   docsUrl?: string | undefined;
 };
 
-export type ArunaModuleRecord = {
+export type ModuleRecord = {
   id: string;
   path: string;
-  kind: ArunaModuleKind;
+  kind: ModuleKind;
   reason: "path" | "directive" | "fallback";
   reasonDetail?: string | undefined;
 };
 
-export type ArunaActionRecord = {
+export type ActionRecord = {
   id: string;
   file: string;
   exportName: string;
@@ -76,13 +76,13 @@ export type ArunaActionRecord = {
         max: number;
       }
     | undefined;
-  inputSchema?: ArunaSchemaMetadata | undefined;
-  outputSchema?: ArunaSchemaMetadata | undefined;
+  inputSchema?: SchemaMetadata | undefined;
+  outputSchema?: SchemaMetadata | undefined;
 };
 
 // A server -> client signal discovered by the compiler. The push counterpart to
-// ArunaActionRecord: an id and an optional payload schema, no run/response.
-export type ArunaSignalRecord = {
+// ActionRecord: an id and an optional payload schema, no run/response.
+export type SignalRecord = {
   id: string;
   file: string;
   exportName: string;
@@ -90,10 +90,10 @@ export type ArunaSignalRecord = {
   serialization: {
     policy: "plain-data-v1";
   };
-  payloadSchema?: ArunaSchemaMetadata | undefined;
+  payloadSchema?: SchemaMetadata | undefined;
 };
 
-export type ArunaSchemaLiteralMetadata =
+export type SchemaLiteralMetadata =
   | {
       kind: "string";
       value: string;
@@ -110,23 +110,23 @@ export type ArunaSchemaLiteralMetadata =
       kind: "undefined";
     };
 
-export type ArunaSchemaMetadata = {
+export type SchemaMetadata = {
   kind: string;
   numericFormat?: string | undefined;
-  properties?: Record<string, ArunaSchemaMetadata> | undefined;
-  items?: ArunaSchemaMetadata | undefined;
-  literal?: ArunaSchemaLiteralMetadata | undefined;
-  values?: ArunaSchemaLiteralMetadata[] | undefined;
-  inner?: ArunaSchemaMetadata | undefined;
-  members?: ArunaSchemaMetadata[] | undefined;
+  properties?: Record<string, SchemaMetadata> | undefined;
+  items?: SchemaMetadata | undefined;
+  literal?: SchemaLiteralMetadata | undefined;
+  values?: SchemaLiteralMetadata[] | undefined;
+  inner?: SchemaMetadata | undefined;
+  members?: SchemaMetadata[] | undefined;
 };
 
-export type ArunaGeneratedFile = {
+export type GeneratedFile = {
   path: string;
   contents: string;
 };
 
-export type ArunaImportEdge = {
+export type ImportEdge = {
   from: string;
   to?: string | undefined;
   specifier: string;
@@ -134,18 +134,18 @@ export type ArunaImportEdge = {
   kind?: "static" | "dynamic" | undefined;
 };
 
-export type ArunaManifest = {
+export type Manifest = {
   version: 1;
   projectRoot: string;
-  modules: ArunaModuleRecord[];
-  imports: ArunaImportEdge[];
-  actions: ArunaActionRecord[];
+  modules: ModuleRecord[];
+  imports: ImportEdge[];
+  actions: ActionRecord[];
   // Omitted from manifest JSON when empty; treat as [] when absent.
-  signals?: ArunaSignalRecord[] | undefined;
-  diagnostics: ArunaDiagnostic[];
+  signals?: SignalRecord[] | undefined;
+  diagnostics: Diagnostic[];
 };
 
-export type ArunaCompilerConfig = {
+export type CompilerConfig = {
   readonly generatedDir?: string | undefined;
   readonly manifest?:
     | string
@@ -156,32 +156,32 @@ export type ArunaCompilerConfig = {
   readonly preserveGeneratedComments?: boolean | undefined;
 };
 
-export type ArunaActionsConfig = {
+export type ActionsConfig = {
   readonly transport?: "remote-event" | "remote-function" | "memory" | undefined;
-  readonly defaultRateLimit?: NonNullable<ArunaActionRecord["rateLimit"]> | undefined;
+  readonly defaultRateLimit?: NonNullable<ActionRecord["rateLimit"]> | undefined;
 };
 
-export type ArunaConventionConfig = {
+export type ConventionConfig = {
   readonly client?: readonly string[] | undefined;
   readonly server?: readonly string[] | undefined;
   readonly shared?: readonly string[] | undefined;
 };
 
-export type ArunaStrictConfig = {
+export type StrictConfig = {
   readonly sharedSafety?: boolean | undefined;
   readonly rawRemoteUsage?: "off" | "warning" | "error" | undefined;
   readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
 };
 
-export type ArunaConfig = {
+export type Config = {
   readonly root?: string | undefined;
-  readonly compiler?: ArunaCompilerConfig | undefined;
-  readonly actions?: ArunaActionsConfig | undefined;
-  readonly conventions?: ArunaConventionConfig | undefined;
-  readonly strict?: ArunaStrictConfig | undefined;
+  readonly compiler?: CompilerConfig | undefined;
+  readonly actions?: ActionsConfig | undefined;
+  readonly conventions?: ConventionConfig | undefined;
+  readonly strict?: StrictConfig | undefined;
 };
 
-export type NormalizedArunaConfig = {
+export type NormalizedConfig = {
   readonly root: string;
   readonly generatedDir: string;
   readonly manifestOutput: string;
@@ -190,7 +190,7 @@ export type NormalizedArunaConfig = {
   };
   readonly actions: {
     readonly transport: "remote-event" | "remote-function" | "memory";
-    readonly defaultRateLimit: NonNullable<ArunaActionsConfig["defaultRateLimit"]>;
+    readonly defaultRateLimit: NonNullable<ActionsConfig["defaultRateLimit"]>;
   };
   readonly conventions: {
     readonly client: readonly string[];
@@ -204,10 +204,10 @@ export type NormalizedArunaConfig = {
   };
 };
 
-export type ArunaCompilerInput = {
+export type CompilerInput = {
   root?: string | undefined;
   configPath?: string | undefined;
-  config?: ArunaConfig | undefined;
+  config?: Config | undefined;
   writeManifest?: boolean | undefined;
   writeGenerated?: boolean | undefined;
   json?: boolean | undefined;
@@ -216,7 +216,7 @@ export type ArunaCompilerInput = {
   warningsAsErrors?: boolean | undefined;
 };
 
-export type ArunaCompilerSummary = {
+export type CompilerSummary = {
   modules: number;
   imports: number;
   resolvedImports: number;
@@ -225,18 +225,18 @@ export type ArunaCompilerSummary = {
   infos: number;
 };
 
-export type ArunaCompilerOutput = {
+export type CompilerOutput = {
   ok: boolean;
   projectRoot: string;
-  config: NormalizedArunaConfig;
-  diagnostics: ArunaDiagnostic[];
-  manifest: ArunaManifest;
-  generatedFiles?: ArunaGeneratedFile[] | undefined;
-  summary: ArunaCompilerSummary;
+  config: NormalizedConfig;
+  diagnostics: Diagnostic[];
+  manifest: Manifest;
+  generatedFiles?: GeneratedFile[] | undefined;
+  summary: CompilerSummary;
   manifestPath?: string | undefined;
 };
 
-export const DEFAULT_ARUNA_CONFIG: NormalizedArunaConfig = {
+export const DEFAULT_CONFIG: NormalizedConfig = {
   root: "src",
   generatedDir: "src/.aruna",
   manifestOutput: "src/.aruna/manifest.json",
@@ -263,6 +263,6 @@ export const DEFAULT_ARUNA_CONFIG: NormalizedArunaConfig = {
   },
 };
 
-export function defineConfig(config: ArunaConfig): ArunaConfig {
+export function defineConfig(config: Config): Config {
   return config;
 }

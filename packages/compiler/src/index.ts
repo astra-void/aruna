@@ -1,10 +1,10 @@
 import path from "node:path";
 import type { CompilerOptions } from "typescript";
 import type {
-  ArunaCompilerInput,
-  ArunaCompilerOutput,
-  ArunaDiagnostic,
-  NormalizedArunaConfig,
+  CompilerInput,
+  CompilerOutput,
+  Diagnostic,
+  NormalizedConfig,
 } from "@arunajs/core";
 import { loadProjectConfig } from "./config.js";
 import { loadNativeCompiler } from "./native.js";
@@ -16,8 +16,8 @@ type NativeTsconfigOptions = {
 
 type NativeCompilerInput = {
   projectRoot: string;
-  config: NormalizedArunaConfig;
-  configDiagnostics: ArunaDiagnostic[];
+  config: NormalizedConfig;
+  configDiagnostics: Diagnostic[];
   tsconfigOptions: NativeTsconfigOptions;
   writeManifest: boolean;
   writeGenerated: boolean;
@@ -29,7 +29,7 @@ type NativeCompiler = {
   inspectProject: (input: NativeCompilerInput) => unknown;
 };
 
-function resolveProjectRoot(input: ArunaCompilerInput): string {
+function resolveProjectRoot(input: CompilerInput): string {
   return path.resolve(input.root ?? process.cwd());
 }
 
@@ -45,7 +45,7 @@ function normalizeTsconfigOptions(options: CompilerOptions): NativeTsconfigOptio
 }
 
 function buildNativeInput(
-  input: ArunaCompilerInput,
+  input: CompilerInput,
   writeManifest: boolean,
   writeGenerated: boolean,
 ): NativeCompilerInput {
@@ -64,27 +64,27 @@ function buildNativeInput(
 
 async function runNative<T extends keyof NativeCompiler>(
   method: T,
-  input: ArunaCompilerInput,
+  input: CompilerInput,
   writeManifest: boolean,
   writeGenerated: boolean,
-): Promise<ArunaCompilerOutput> {
+): Promise<CompilerOutput> {
   const native = loadNativeCompiler();
   return native[method](
     buildNativeInput(input, writeManifest, writeGenerated),
-  ) as ArunaCompilerOutput;
+  ) as CompilerOutput;
 }
 
-export async function checkProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {
+export async function checkProject(input: CompilerInput): Promise<CompilerOutput> {
   return runNative("checkProject", input, true, false);
 }
 
-export async function buildProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {
+export async function buildProject(input: CompilerInput): Promise<CompilerOutput> {
   return runNative("checkProject", input, true, true);
 }
 
-export async function inspectProject(input: ArunaCompilerInput): Promise<ArunaCompilerOutput> {
+export async function inspectProject(input: CompilerInput): Promise<CompilerOutput> {
   return runNative("inspectProject", input, false, false);
 }
 
 export { loadNativeCompiler } from "./native.js";
-export { loadProjectConfig, type LoadedArunaConfig } from "./config.js";
+export { loadProjectConfig, type LoadedConfig } from "./config.js";

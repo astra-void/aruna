@@ -1,11 +1,11 @@
 import path from "node:path";
 import type {
-  ArunaActionRecord,
-  ArunaCompilerOutput,
-  ArunaDiagnostic,
-  ArunaModuleRecord,
-  ArunaSchemaMetadata,
-  ArunaSignalRecord,
+  ActionRecord,
+  CompilerOutput,
+  Diagnostic,
+  ModuleRecord,
+  SchemaMetadata,
+  SignalRecord,
 } from "@arunajs/core";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
 
@@ -17,13 +17,13 @@ export type ActionContractProjectMetadata = {
 
 export type ActionContractSchema = {
   readonly summary: string;
-  readonly schema: ArunaSchemaMetadata | null;
+  readonly schema: SchemaMetadata | null;
 };
 
 export type ActionContractRecord = {
   readonly id: string;
   readonly source: string;
-  readonly moduleKind: ArunaModuleRecord["kind"];
+  readonly moduleKind: ModuleRecord["kind"];
   readonly authority: {
     readonly owner: "server";
     readonly clientCallable: true;
@@ -48,7 +48,7 @@ export type ActionContractRecord = {
 export type SignalContractRecord = {
   readonly id: string;
   readonly source: string;
-  readonly moduleKind: ArunaModuleRecord["kind"];
+  readonly moduleKind: ModuleRecord["kind"];
   readonly direction: "server-to-client";
   readonly payload: ActionContractSchema;
   readonly serialization: {
@@ -64,7 +64,7 @@ export type ActionContractSnapshot = {
   // Omitted when the project declares no signals, keeping action-only snapshots
   // byte-stable with pre-signal baselines.
   readonly signals?: readonly SignalContractRecord[];
-  readonly diagnostics: readonly ArunaDiagnostic[];
+  readonly diagnostics: readonly Diagnostic[];
   readonly generatedAt: null;
 };
 
@@ -86,7 +86,7 @@ function sortWarnings(warnings: readonly string[]): string[] {
   return [...new Set(warnings)].sort(compareStrings);
 }
 
-function sortDiagnostics(diagnostics: readonly ArunaDiagnostic[]): ArunaDiagnostic[] {
+function sortDiagnostics(diagnostics: readonly Diagnostic[]): Diagnostic[] {
   return [...diagnostics].sort((left, right) => {
     return (
       compareStrings(left.code, right.code) ||
@@ -99,17 +99,17 @@ function sortDiagnostics(diagnostics: readonly ArunaDiagnostic[]): ArunaDiagnost
   });
 }
 
-function lookupModuleKind(output: ArunaCompilerOutput, file: string): ArunaModuleRecord["kind"] {
+function lookupModuleKind(output: CompilerOutput, file: string): ModuleRecord["kind"] {
   return output.manifest.modules.find((module) => module.path === file)?.kind ?? "unknown";
 }
 
-function summarizeGeneratedExport(action: ArunaActionRecord): string | null {
+function summarizeGeneratedExport(action: ActionRecord): string | null {
   return action.exportName.length > 0 ? action.exportName : null;
 }
 
 function summarizeAction(
-  output: ArunaCompilerOutput,
-  action: ArunaActionRecord,
+  output: CompilerOutput,
+  action: ActionRecord,
 ): ActionContractRecord {
   const input = formatActionSchemaSummary(action.inputSchema);
   const outputSchema = formatActionSchemaSummary(action.outputSchema);
@@ -144,8 +144,8 @@ function summarizeAction(
 }
 
 function summarizeSignal(
-  output: ArunaCompilerOutput,
-  signal: ArunaSignalRecord,
+  output: CompilerOutput,
+  signal: SignalRecord,
 ): SignalContractRecord {
   const payload = formatActionSchemaSummary(signal.payloadSchema);
 
@@ -165,7 +165,7 @@ function summarizeSignal(
   };
 }
 
-export function buildActionContractSnapshot(output: ArunaCompilerOutput): ActionContractSnapshot {
+export function buildActionContractSnapshot(output: CompilerOutput): ActionContractSnapshot {
   const generatedDir = normalizePath(output.config.generatedDir);
   const actions = [...output.manifest.actions]
     .sort(

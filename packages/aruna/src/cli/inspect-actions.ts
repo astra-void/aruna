@@ -1,4 +1,4 @@
-import type { ArunaCompilerOutput } from "@arunajs/core";
+import type { CompilerOutput } from "@arunajs/core";
 import { formatBrandTitle, formatStrong, formatSuccess, formatWarning } from "./theme.js";
 import type { ActionContractRecord } from "./action-contracts.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
@@ -8,8 +8,8 @@ type ActionInspectionEntry = ActionContractRecord;
 
 export type ActionInspectionReport = {
   actions: ActionInspectionEntry[];
-  diagnostics: ArunaCompilerOutput["diagnostics"];
-  summary: ArunaCompilerOutput["summary"];
+  diagnostics: CompilerOutput["diagnostics"];
+  summary: CompilerOutput["summary"];
 };
 
 function commandTitle(command: string, colors: CliColorMode): string {
@@ -28,7 +28,7 @@ function warning(text: string, colors: CliColorMode): string {
   return formatWarning(text, colors);
 }
 
-export function buildActionInspectionReport(output: ArunaCompilerOutput): ActionInspectionReport {
+export function buildActionInspectionReport(output: CompilerOutput): ActionInspectionReport {
   const snapshot = buildActionContractSnapshot(output);
   const actions = snapshot.actions as ActionInspectionEntry[];
 
@@ -75,7 +75,7 @@ function renderActionBlock(action: ActionInspectionEntry, colors: CliColorMode):
   return lines;
 }
 
-export function formatActionInspection(output: ArunaCompilerOutput, colors: CliColorMode): string {
+export function formatActionInspection(output: CompilerOutput, colors: CliColorMode): string {
   const report = buildActionInspectionReport(output);
   const lines: string[] = [
     commandTitle("inspect actions", colors),

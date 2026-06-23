@@ -1,29 +1,36 @@
+// Imports go through the published root shims (../<entry>.js -> ./dist) and the
+// slim root (../dist/index.js) so this exercises the real public-export contract.
 import { afterEach, describe, expect, it } from "vitest";
+import { defineConfig } from "../dist/index.js";
 import {
-  ActionSerializationError,
+  clearActionInvoker,
+  createClientApp,
+  createInMemoryActionInvoker,
+  invokeAction,
+} from "../client.js";
+import {
   ActionRateLimitError,
-  defineConfig,
-  defineAction as defineActionRoot,
-  schema as schemaRoot,
+  ActionSerializationError,
   createActionRateLimiter,
+  createServerApp,
+  defineAction as defineActionRoot,
+  defineAction as defineActionServer,
+  dispatchAction,
   validateSerializableActionValue,
-} from "aruna";
-import { createClientApp } from "aruna/client";
-import { clearActionInvoker, invokeAction } from "aruna/client-runtime";
-import { createInMemoryActionInvoker } from "aruna/runtime";
-import { createServerApp } from "aruna/server-app";
+  type ActionRegistry,
+} from "../server.js";
 import {
-  DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME,
-  DEFAULT_ARUNA_FOLDER_NAME,
-  bindDefaultRobloxActionRemoteEvent,
+  ACTION_REMOTE_NAME,
+  ARUNA_FOLDER_NAME,
+  bindActions,
   bindRemoteEventActions,
   bindRemoteFunctionActions,
-  createDefaultRobloxActionInvoker,
+  createActionInvoker,
   createRemoteEventActionInvoker,
   createRemoteFunctionActionInvoker,
-  ensureDefaultRobloxActionRemoteEvent,
-  getDefaultRobloxActionRemoteEvent,
-  waitForDefaultRobloxActionRemoteEvent,
+  ensureActionRemote,
+  getActionRemote,
+  waitForActionRemote,
   unbindRemoteFunctionActions,
   type RemoteEventActionRequest,
   type RemoteEventActionResponse,
@@ -32,10 +39,8 @@ import {
   type RemoteEventSignalLike,
   type RemoteFunctionClientLike,
   type RemoteFunctionServerLike,
-} from "aruna/roblox-runtime";
-import { defineAction as defineActionServer } from "aruna/server";
-import { dispatchAction, type ActionRegistry } from "aruna/server-runtime";
-import { schema } from "aruna/schema";
+} from "../roblox.js";
+import { schema, schema as schemaRoot } from "../schema.js";
 
 type FakeRemoteFunction = RemoteFunctionClientLike & RemoteFunctionServerLike;
 type FakeRemoteEvent = RemoteEventClientLike & RemoteEventServerLike<unknown>;
@@ -188,12 +193,12 @@ describe("public exports", () => {
   });
 
   it("exposes the default Roblox action remote helpers", () => {
-    expect(DEFAULT_ARUNA_FOLDER_NAME).toBe("Aruna");
-    expect(DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME).toBe("Actions");
-    expect(getDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
-    expect(ensureDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
-    expect(waitForDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
-    expect(createDefaultRobloxActionInvoker).toBeTypeOf("function");
-    expect(bindDefaultRobloxActionRemoteEvent).toBeTypeOf("function");
+    expect(ARUNA_FOLDER_NAME).toBe("Aruna");
+    expect(ACTION_REMOTE_NAME).toBe("Actions");
+    expect(getActionRemote).toBeTypeOf("function");
+    expect(ensureActionRemote).toBeTypeOf("function");
+    expect(waitForActionRemote).toBeTypeOf("function");
+    expect(createActionInvoker).toBeTypeOf("function");
+    expect(bindActions).toBeTypeOf("function");
   });
 });

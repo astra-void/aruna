@@ -32,18 +32,10 @@ export type PackedPackage = {
 export const publicArunaSubpathFiles = [
   "client.d.ts",
   "client.js",
-  "client-runtime.d.ts",
-  "client-runtime.js",
-  "roblox-runtime.d.ts",
-  "roblox-runtime.js",
-  "runtime.d.ts",
-  "runtime.js",
+  "roblox.d.ts",
+  "roblox.js",
   "schema.d.ts",
   "schema.js",
-  "server-app.d.ts",
-  "server-app.js",
-  "server-runtime.d.ts",
-  "server-runtime.js",
   "server.d.ts",
   "server.js",
 ] as const;
@@ -239,7 +231,7 @@ function formatGeneratedActionFileFailure(logPath: string): string {
 function formatGeneratedActionImportFailure(logPath: string): string {
   return [
     "Generated action files did not use public Aruna subpaths.",
-    "Expected the client stub to import aruna/client-runtime.",
+    "Expected the client stub to import aruna/client.",
     "Expected the server stub to stay on relative project imports.",
     `See ${logPath}`,
   ].join("\n");
@@ -306,13 +298,9 @@ export async function assertPublicPackageSubpathFiles(packageRoot: string): Prom
 
   const expectedExports: Record<string, { import: string; types: string }> = {
     "./client": { import: "./client.js", types: "./client.d.ts" },
-    "./client-runtime": { import: "./client-runtime.js", types: "./client-runtime.d.ts" },
-    "./roblox-runtime": { import: "./roblox-runtime.js", types: "./roblox-runtime.d.ts" },
-    "./runtime": { import: "./runtime.js", types: "./runtime.d.ts" },
+    "./roblox": { import: "./roblox.js", types: "./roblox.d.ts" },
     "./schema": { import: "./schema.js", types: "./schema.d.ts" },
     "./server": { import: "./server.js", types: "./server.d.ts" },
-    "./server-app": { import: "./server-app.js", types: "./server-app.d.ts" },
-    "./server-runtime": { import: "./server-runtime.js", types: "./server-runtime.d.ts" },
   };
 
   for (const [subpath, expected] of Object.entries(expectedExports)) {
@@ -426,7 +414,7 @@ export async function assertGeneratedActionImports(projectRoot: string): Promise
 
   if (
     clientPackageImports.length !== 1 ||
-    clientPackageImports[0] !== 'from "aruna/client-runtime"' ||
+    clientPackageImports[0] !== 'from "aruna/client"' ||
     serverPackageImports.length !== 0
   ) {
     throw new Error(formatGeneratedActionImportFailure(buildLogPath));
@@ -780,14 +768,14 @@ async function createConsumerFiles(
     path.join(tempRoot, "src", "client.tsx"),
     [
       'import { createClientApp } from "aruna/client";',
-      'import { createDefaultRobloxActionInvoker } from "aruna/roblox-runtime";',
+      'import { createActionInvoker } from "aruna/roblox";',
       'import { purchaseItem } from "$aruna/actions/client";',
       'import { createHarnessRequestId } from "./app/bootstrap";',
       'import { packageConsumptionLabel } from "./app/providers";',
       "",
       "export function startClientApp() {",
       "  const clientApp = createClientApp({",
-      "    invoker: createDefaultRobloxActionInvoker({",
+      "    invoker: createActionInvoker({",
       "      createRequestId: createHarnessRequestId,",
       "    }),",
       "  });",
@@ -807,15 +795,15 @@ async function createConsumerFiles(
   await writeText(
     path.join(tempRoot, "src", "server.ts"),
     [
-      'import { createServerApp } from "aruna/server-app";',
-      'import { bindDefaultRobloxActionRemoteEvent } from "aruna/roblox-runtime";',
+      'import { createServerApp } from "aruna/server";',
+      'import { bindActions } from "aruna/roblox";',
       'import { actions } from "$aruna/actions/server";',
       "",
       "export function startServerApp() {",
       "  const serverApp = createServerApp<Player>({ actions });",
       "",
       "  return serverApp.bind((registry) => {",
-      "    return bindDefaultRobloxActionRemoteEvent(registry);",
+      "    return bindActions(registry);",
       "  });",
       "}",
       "",

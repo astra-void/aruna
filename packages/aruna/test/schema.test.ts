@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ArunaSchemaValidationError, assertSchema, schema, validateSchema } from "../src/schema.js";
+import { SchemaValidationError, assertSchema, schema, validateSchema } from "../src/schema.js";
 
 describe("schema runtime", () => {
   it("validates strings", () => {
@@ -101,7 +101,7 @@ describe("schema runtime", () => {
         actionId: "shop.purchaseItem",
         role: "input",
       }),
-    ).toThrowError(ArunaSchemaValidationError);
+    ).toThrowError(SchemaValidationError);
 
     try {
       assertSchema(schema.string(), 42, {
@@ -110,7 +110,7 @@ describe("schema runtime", () => {
       });
     } catch (error) {
       expect(error).toMatchObject({
-        name: "ArunaSchemaValidationError",
+        name: "SchemaValidationError",
         actionId: "shop.purchaseItem",
         role: "input",
         issues: [{ path: [], message: "expected string" }],

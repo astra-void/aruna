@@ -1,13 +1,13 @@
 import { createClientApp } from "../src/client.js";
-import { defineConfig } from "aruna";
+import { defineConfig } from "../src/index.js";
 import {
-  bindDefaultRobloxActionRemoteEvent,
+  bindActions,
   createRemoteEventActionInvoker,
-  createDefaultRobloxActionInvoker,
+  createActionInvoker,
   type DisposableActionInvoker,
   type RemoteEventClientLike,
-} from "../src/roblox-runtime.js";
-import { createServerApp } from "../src/server-app.js";
+} from "../src/roblox.js";
+import { createServerApp } from "../src/server.js";
 import { defineAction } from "../src/server.js";
 import { type ServerBinding } from "../src/runtime/binding.js";
 import { schema, type InferSchema } from "../src/schema.js";
@@ -24,8 +24,8 @@ import {
   type SerializationPolicyResult,
   type SerializationPolicyViolation,
   validateSerializableActionValue,
-} from "../src/server-runtime.js";
-import type { ArunaConfig } from "aruna";
+} from "../src/server.js";
+import type { Config } from "../src/index.js";
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -66,7 +66,7 @@ const nestedConfig = defineConfig({
   },
 });
 
-const nestedConfigShape: ArunaConfig = nestedConfig;
+const nestedConfigShape: Config = nestedConfig;
 void nestedConfigShape;
 
 const serializableValue: SerializableActionValue = {
@@ -206,7 +206,7 @@ type _RemoteEventInvoker = Expect<
   Equal<ReturnType<typeof createRemoteEventActionInvoker>, DisposableActionInvoker>
 >;
 type _DefaultRemoteEventInvoker = Expect<
-  Equal<ReturnType<typeof createDefaultRobloxActionInvoker>, DisposableActionInvoker>
+  Equal<ReturnType<typeof createActionInvoker>, DisposableActionInvoker>
 >;
 type _RemoteEventOptionsNoAny = Expect<
   Equal<IsAny<Parameters<typeof createRemoteEventActionInvoker>[1]>, false>
@@ -216,13 +216,13 @@ type _RemoteEventClientNoAny = Expect<
 >;
 type _RemoteEventInvokerDispose = Expect<Equal<typeof remoteEventInvoker.dispose, () => void>>;
 type _DefaultRemoteEventInvokerOptionsNoAny = Expect<
-  Equal<IsAny<Parameters<typeof createDefaultRobloxActionInvoker>[0]>, false>
+  Equal<IsAny<Parameters<typeof createActionInvoker>[0]>, false>
 >;
 type _DefaultRemoteEventBinding = Expect<
-  Equal<ReturnType<typeof bindDefaultRobloxActionRemoteEvent>, ServerBinding>
+  Equal<ReturnType<typeof bindActions>, ServerBinding>
 >;
 type _DefaultRemoteEventBindingOptionsNoAny = Expect<
-  Equal<IsAny<Parameters<typeof bindDefaultRobloxActionRemoteEvent>[1]>, false>
+  Equal<IsAny<Parameters<typeof bindActions>[1]>, false>
 >;
 type _SerializableValueNoAny = Expect<Equal<IsAny<SerializableActionValue>, false>>;
 type _SerializationResultNoAny = Expect<Equal<IsAny<SerializationPolicyResult>, false>>;

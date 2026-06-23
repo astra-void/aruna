@@ -26,3 +26,6 @@ export function createClientApp(options: CreateClientAppOptions): ClientApp {
 		},
 	};
 }
+
+// Re-exported so `aruna/client` is the single client entry.
+export * from "./client-runtime";

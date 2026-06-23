@@ -41,17 +41,9 @@ function buildFullPublicExports() {
       types: "./client.d.ts",
       import: "./client.js",
     },
-    "./client-runtime": {
-      types: "./client-runtime.d.ts",
-      import: "./client-runtime.js",
-    },
-    "./roblox-runtime": {
-      types: "./roblox-runtime.d.ts",
-      import: "./roblox-runtime.js",
-    },
-    "./runtime": {
-      types: "./runtime.d.ts",
-      import: "./runtime.js",
+    "./roblox": {
+      types: "./roblox.d.ts",
+      import: "./roblox.js",
     },
     "./schema": {
       types: "./schema.d.ts",
@@ -60,14 +52,6 @@ function buildFullPublicExports() {
     "./server": {
       types: "./server.d.ts",
       import: "./server.js",
-    },
-    "./server-app": {
-      types: "./server-app.d.ts",
-      import: "./server-app.js",
-    },
-    "./server-runtime": {
-      types: "./server-runtime.d.ts",
-      import: "./server-runtime.js",
     },
   };
 }
@@ -331,7 +315,7 @@ describe("verify-package-consumption args", () => {
     await writeTextFile(
       path.join(root, "src/.aruna/actions.client.generated.ts"),
       [
-        'import { invokeAction } from "aruna/client-runtime";',
+        'import { invokeAction } from "aruna/client";',
         "",
         "export const purchaseItem = () => invokeAction(\"shop.purchaseItem\", {});",
         "",

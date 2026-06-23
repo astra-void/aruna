@@ -1,4 +1,4 @@
-import type { ArunaCompilerOutput } from "@arunajs/core";
+import type { CompilerOutput } from "@arunajs/core";
 import { formatBrandTitle, formatStrong } from "./theme.js";
 import type { SignalContractRecord } from "./action-contracts.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
@@ -6,11 +6,11 @@ import type { CliColorMode } from "./format.js";
 
 export type SignalInspectionReport = {
   signals: SignalContractRecord[];
-  diagnostics: ArunaCompilerOutput["diagnostics"];
-  summary: ArunaCompilerOutput["summary"];
+  diagnostics: CompilerOutput["diagnostics"];
+  summary: CompilerOutput["summary"];
 };
 
-export function buildSignalInspectionReport(output: ArunaCompilerOutput): SignalInspectionReport {
+export function buildSignalInspectionReport(output: CompilerOutput): SignalInspectionReport {
   const snapshot = buildActionContractSnapshot(output);
 
   return {
@@ -30,7 +30,7 @@ function renderSignalBlock(signal: SignalContractRecord, colors: CliColorMode): 
   ];
 }
 
-export function formatSignalInspection(output: ArunaCompilerOutput, colors: CliColorMode): string {
+export function formatSignalInspection(output: CompilerOutput, colors: CliColorMode): string {
   const report = buildSignalInspectionReport(output);
   const lines: string[] = [
     formatBrandTitle("aruna inspect signals", colors),

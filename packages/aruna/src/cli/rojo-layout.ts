@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { ArunaManifest, ArunaModuleKind, ArunaModuleRecord } from "@arunajs/core";
+import type { Manifest, ModuleKind, ModuleRecord } from "@arunajs/core";
 
 // Partitions the project into client/server/shared before compiling to Luau, so
 // the emitted `out/` tree maps cleanly onto the Roblox DataModel — server code
@@ -33,7 +33,7 @@ function stripModuleExtension(filePath: string): string {
   return filePath.replace(/\.(tsx?|jsx?|mjs|cjs)$/, "");
 }
 
-function isEntry(kind: ArunaModuleKind): boolean {
+function isEntry(kind: ModuleKind): boolean {
   return kind === "clientEntry" || kind === "serverEntry";
 }
 
@@ -43,7 +43,7 @@ function isEntry(kind: ArunaModuleKind): boolean {
 // the vendored runtime).
 export function layoutTargetFor(
   modulePath: string,
-  kind: ArunaModuleKind,
+  kind: ModuleKind,
   generatedDirRel: string,
 ): LayoutTarget {
   const normalized = toPosix(modulePath);
@@ -67,7 +67,7 @@ export function layoutTargetFor(
 // to `*.client`/`*.server` so roblox-ts emits a LocalScript/Script.
 export function stagePathFor(
   modulePath: string,
-  kind: ArunaModuleKind,
+  kind: ModuleKind,
   target: LayoutTarget,
 ): string {
   const sourceRel = toPosix(modulePath).replace(/^src\//, "");
@@ -141,7 +141,7 @@ function copyDirSync(from: string, to: string): void {
 export type PartitionOptions = {
   readonly projectRoot: string;
   readonly generatedDir: string;
-  readonly manifest: ArunaManifest;
+  readonly manifest: Manifest;
   readonly rbxtscBin: string;
 };
 
@@ -181,7 +181,7 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
 
     // Build the source -> staged-path map from the module classification.
     const sourceToStage = new Map<string, string>();
-    const records: Array<{ record: ArunaModuleRecord; target: LayoutTarget; stage: string }> = [];
+    const records: Array<{ record: ModuleRecord; target: LayoutTarget; stage: string }> = [];
     for (const record of manifest.modules) {
       if (!toPosix(record.path).startsWith("src/")) {
         continue;

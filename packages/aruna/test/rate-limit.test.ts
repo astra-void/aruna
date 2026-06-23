@@ -9,13 +9,13 @@ import {
   type RemoteEventClientLike,
   type RemoteEventServerLike,
   type RemoteEventSignalLike,
-} from "../src/roblox-runtime.js";
+} from "../src/roblox.js";
 import {
   ActionRateLimitError,
   createActionRateLimiter,
   dispatchAction,
   type ActionRegistry,
-} from "../src/server-runtime.js";
+} from "../src/server.js";
 import { schema } from "../src/schema.js";
 
 type FakeSignal<TArgs extends readonly unknown[]> = {

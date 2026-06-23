@@ -345,7 +345,7 @@ fn render_client_file(
 ) -> GeneratedFile {
     let path = generated_file_path(generated_dir, "actions.client.generated.ts");
     let mut lines = vec![
-        "import { invokeAction } from \"aruna/client-runtime\";".to_string(),
+        "import { invokeAction } from \"aruna/client\";".to_string(),
         "".to_string(),
     ];
 

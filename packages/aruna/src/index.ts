@@ -1,107 +1,29 @@
+// The package root is the config + compiler surface. Runtime APIs live under the
+// dedicated subpaths: `aruna/server`, `aruna/client`, `aruna/roblox`, and
+// `aruna/schema`.
 export {
   defineConfig,
-  type ArunaCompilerInput,
-  type ArunaCompilerOutput,
-  type ArunaConfig,
-  type ArunaCompilerConfig,
-  type ArunaActionsConfig,
-  type ArunaConventionConfig,
-  type ArunaStrictConfig,
-  type ArunaActionRecord,
-  type ArunaDiagnostic,
-  type ArunaDiagnosticCode,
-  type ArunaDiagnosticSeverity,
-  type ArunaGeneratedFile,
-  type ArunaImportEdge,
-  type ArunaManifest,
-  type ArunaModuleKind,
-  type ArunaModuleRecord,
-  type ArunaSchemaLiteralMetadata,
-  type ArunaSchemaMetadata,
+  type CompilerInput,
+  type CompilerOutput,
+  type Config,
+  type CompilerConfig,
+  type ActionsConfig,
+  type ConventionConfig,
+  type StrictConfig,
+  type ActionRecord,
+  type Diagnostic,
+  type DiagnosticCode,
+  type DiagnosticSeverity,
+  type GeneratedFile,
+  type ImportEdge,
+  type Manifest,
+  type ModuleKind,
+  type ModuleRecord,
+  type SchemaLiteralMetadata,
+  type SchemaMetadata,
 } from "@arunajs/core";
 
 export { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
-export { defineAction } from "./server.js";
-export { defineSignal } from "./signals/define-signal.js";
-export {
-  assertPublishableSignalPayload,
-  isDeliverableSignalPayload,
-  type InferSignalPayload,
-  type SignalDefinition,
-  type SignalPayload,
-  type SignalRegistry,
-} from "./runtime/signal.js";
-export {
-  createRemoteSignalPublisher,
-  createRemoteSignalSubscriber,
-  type CreateRemoteSignalSubscriberOptions,
-  type RemoteSignalClientLike,
-  type RemoteSignalConnection,
-  type RemoteSignalMessage,
-  type RemoteSignalPublisher,
-  type RemoteSignalServerLike,
-  type RemoteSignalSubscriber,
-  type SignalHandler,
-  type StaticSignalHandlers,
-} from "./runtime/remote-signal.js";
-export { createClientApp, type ClientApp, type CreateClientAppOptions } from "./client.js";
-export {
-  createServerApp,
-  type CreateServerAppOptions,
-  type ServerActionBinder,
-  type ServerApp,
-  type ServerBinding,
-} from "./server-app.js";
-export {
-  bindRemoteEventActions,
-  createRemoteEventActionInvoker,
-  type BindRemoteEventActionsOptions,
-  type DisposableActionInvoker,
-  type RemoteEventActionContextFactory,
-  type RemoteEventActionErrorPayload,
-  type RemoteEventActionInvokerOptions,
-  type RemoteEventActionRequest,
-  type RemoteEventActionResponse,
-  type RemoteEventClientLike,
-  type RemoteEventRequestIdFactory,
-  type RemoteEventServerLike,
-  type RemoteEventSignalConnectionLike,
-  type RemoteEventSignalLike,
-} from "./runtime/remote-event.js";
-export {
-  bindDefaultRobloxActionRemoteEvent,
-  createDefaultRobloxActionInvoker,
-  DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME,
-  DEFAULT_ARUNA_FOLDER_NAME,
-  ensureDefaultRobloxActionRemoteEvent,
-  getDefaultRobloxActionRemoteEvent,
-  type RobloxActionRemoteEventOptions,
-  waitForDefaultRobloxActionRemoteEvent,
-} from "./runtime/roblox-action-remote.js";
-export { invokeAction } from "./client-runtime.js";
-export { createInMemoryActionInvoker } from "./runtime.js";
-export {
-  dispatchAction,
-  type ActionDefinition,
-  type ActionRegistry,
-  createActionRateLimiter,
-  ActionRateLimitError,
-  type ActionRateLimitConfig,
-  type ActionRateLimitKeyResolver,
-  type ActionRateLimitOptions,
-  type ActionRateLimitResult,
-  type ActionRateLimiter,
-  ActionSerializationError,
-  type DispatchActionOptions,
-  type ActionRunContext,
-  type InferInput,
-  type InferOutput,
-  assertSerializableActionValue,
-  type SerializableActionValue,
-  type SerializationPolicyOptions,
-  type SerializationPolicyResult,
-  type SerializationPolicyViolation,
-  validateSerializableActionValue,
-} from "./server-runtime.js";
-export { schema, type InferSchema, type NumberFormat } from "./schema.js";
+
+// The schema-driven binary codec is wire-level and shared by both runtimes.
 export { decodeBinary, encodeBinary } from "./runtime/binary.js";

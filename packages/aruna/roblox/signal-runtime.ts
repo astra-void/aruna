@@ -103,7 +103,7 @@ function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload
 	}
 }
 
-export function createSignalPublisher<TSignals extends SignalMap, TPlayer>(
+export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(
 	remote: SignalServerLike<TPlayer>,
 	signals: TSignals,
 ): SignalPublisher<TSignals, TPlayer> {
@@ -136,7 +136,7 @@ export function createSignalPublisher<TSignals extends SignalMap, TPlayer>(
 	return publisher as unknown as SignalPublisher<TSignals, TPlayer>;
 }
 
-export function createSignalSubscriber<TSignals extends SignalMap>(
+export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 	remote: SignalClientLike,
 	signals: TSignals,
 ): SignalSubscriber<TSignals> {

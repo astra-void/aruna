@@ -1,4 +1,4 @@
-import type { ArunaCompilerOutput, ArunaDiagnostic, ArunaDiagnosticSeverity } from "@arunajs/core";
+import type { CompilerOutput, Diagnostic, DiagnosticSeverity } from "@arunajs/core";
 import {
   formatBrandTitle,
   formatSectionTitle,
@@ -26,7 +26,7 @@ function sectionTitle(title: string, colors: CliColorMode): string {
   return formatSectionTitle(title, colors);
 }
 
-function statusLabel(severity: ArunaDiagnosticSeverity, colors: CliColorMode): string {
+function statusLabel(severity: DiagnosticSeverity, colors: CliColorMode): string {
   return formatSeverityLabel(severity, severity, colors);
 }
 
@@ -47,7 +47,7 @@ function formatGroupTitle(label: string, colors: CliColorMode): string {
 }
 
 export function formatSummary(
-  output: ArunaCompilerOutput,
+  output: CompilerOutput,
   command: string,
   options: HumanFormatOptions,
 ): string {
@@ -84,7 +84,7 @@ export function formatSummary(
   return lines.join("\n");
 }
 
-export function formatBuildSummary(output: ArunaCompilerOutput, colors: CliColorMode): string {
+export function formatBuildSummary(output: CompilerOutput, colors: CliColorMode): string {
   const generatedFiles = output.generatedFiles?.map((file) => file.path) ?? [];
   if (generatedFiles.length === 0) {
     return formatSummary(output, "build", { colors, includeDuration: false });
@@ -111,7 +111,7 @@ export function formatBuildSummary(output: ArunaCompilerOutput, colors: CliColor
   return lines.join("\n");
 }
 
-function renderDiagnosticBlock(diagnostic: ArunaDiagnostic, colors: CliColorMode): string[] {
+function renderDiagnosticBlock(diagnostic: Diagnostic, colors: CliColorMode): string[] {
   const lines: string[] = [
     `${statusLabel(diagnostic.severity, colors)} ${diagnostic.code} ${diagnostic.name}`,
     "",
@@ -145,7 +145,7 @@ function renderDiagnosticBlock(diagnostic: ArunaDiagnostic, colors: CliColorMode
   return lines;
 }
 
-export function formatDiagnostics(output: ArunaCompilerOutput, colors: CliColorMode): string {
+export function formatDiagnostics(output: CompilerOutput, colors: CliColorMode): string {
   if (output.diagnostics.length === 0) {
     return "";
   }
@@ -162,11 +162,11 @@ export function formatDiagnostics(output: ArunaCompilerOutput, colors: CliColorM
 }
 
 export function formatModuleInspection(
-  output: ArunaCompilerOutput,
+  output: CompilerOutput,
   colors: CliColorMode,
   verbose = false,
 ): string {
-  const groups: Record<ArunaCompilerOutput["manifest"]["modules"][number]["kind"], string[]> = {
+  const groups: Record<CompilerOutput["manifest"]["modules"][number]["kind"], string[]> = {
     client: [],
     clientEntry: [],
     server: [],
@@ -215,10 +215,10 @@ export function formatModuleInspection(
 }
 
 function diagnosticForGraphEdge(
-  output: ArunaCompilerOutput,
+  output: CompilerOutput,
   from: string,
   to?: string,
-): ArunaDiagnostic | undefined {
+): Diagnostic | undefined {
   return output.diagnostics.find((diagnostic) => {
     if (diagnostic.file !== from) {
       return false;
@@ -233,7 +233,7 @@ function diagnosticForGraphEdge(
 }
 
 function graphStatusLabel(
-  diagnostic: ArunaDiagnostic | undefined,
+  diagnostic: Diagnostic | undefined,
   resolved: boolean,
   colors: CliColorMode,
 ): string {
@@ -250,7 +250,7 @@ function graphStatusLabel(
   return formatSeverityLabel(diagnostic.severity, label, colors);
 }
 
-export function formatGraphInspection(output: ArunaCompilerOutput, colors: CliColorMode): string {
+export function formatGraphInspection(output: CompilerOutput, colors: CliColorMode): string {
   const moduleByPath = new Map(
     output.manifest.modules.map((module) => [module.path, module] as const),
   );

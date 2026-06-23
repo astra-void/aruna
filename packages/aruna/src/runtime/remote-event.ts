@@ -69,7 +69,7 @@ export type ActionTimeoutScheduler = (
 // historical "wait for the response forever" behavior.
 export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
-export class ArunaTimeoutError extends Error {
+export class TimeoutError extends Error {
   override readonly name = "ActionTimeoutError";
   readonly actionId: string;
   readonly timeoutMs: number;
@@ -84,7 +84,7 @@ export class ArunaTimeoutError extends Error {
 export type RemoteEventActionInvokerOptions = {
   readonly createRequestId?: RemoteEventRequestIdFactory;
   // Milliseconds to wait for a server response before rejecting with
-  // ArunaTimeoutError. 0 or undefined (the default) disables the timeout.
+  // TimeoutError. 0 or undefined (the default) disables the timeout.
   readonly requestTimeoutMs?: number;
   // Overrides how request timeouts are scheduled. Defaults to a setTimeout
   // based scheduler; inject this under Luau or to drive timers in tests.
@@ -229,7 +229,7 @@ export function createRemoteEventActionInvoker(
           }
 
           pendingRequests.delete(requestId);
-          reject(new ArunaTimeoutError(actionId, requestTimeoutMs));
+          reject(new TimeoutError(actionId, requestTimeoutMs));
         }, requestTimeoutMs);
       }
     });

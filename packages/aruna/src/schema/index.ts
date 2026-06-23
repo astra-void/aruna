@@ -174,8 +174,8 @@ export type SchemaValidationResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly issues: readonly SchemaValidationIssue[] };
 
-export class ArunaSchemaValidationError extends Error {
-  override readonly name = "ArunaSchemaValidationError";
+export class SchemaValidationError extends Error {
+  override readonly name = "SchemaValidationError";
   readonly actionId?: string;
   readonly role?: "input" | "output";
   readonly issues: readonly SchemaValidationIssue[];
@@ -452,7 +452,7 @@ export function assertSchema(
     errorOptions.role = options.role;
   }
 
-  throw new ArunaSchemaValidationError(
+  throw new SchemaValidationError(
     buildValidationMessage(result.issues, options),
     errorOptions,
   );

@@ -7,15 +7,6 @@
     "declarationMap": false,
     "sourceMap": false
   },
-  "include": [
-    "client.ts",
-    "client-runtime.ts",
-    "server.ts",
-    "server-runtime.ts",
-    "server-app.ts",
-    "roblox-runtime.ts",
-    "runtime.ts",
-    "schema.ts"
-  ],
+  "include": ["client.ts", "server.ts", "roblox.ts", "schema.ts"],
   "exclude": ["dist", "node_modules", "src", "test"]
 }

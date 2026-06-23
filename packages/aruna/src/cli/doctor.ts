@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { loadProjectConfig } from "@arunajs/compiler";
-import type { ArunaDiagnostic } from "@arunajs/core";
+import type { Diagnostic } from "@arunajs/core";
 import {
   ARUNA_ACTION_PATHS,
   inspectArunaActionPaths,
@@ -27,8 +27,8 @@ export type DoctorReport = {
   generatedDirResolved: string;
   manifestOutput: string;
   manifestOutputResolved: string;
-  configDiagnostics: ArunaDiagnostic[];
-  tsconfigDiagnostics: ArunaDiagnostic[];
+  configDiagnostics: Diagnostic[];
+  tsconfigDiagnostics: Diagnostic[];
   expectedPaths: {
     client: string[];
     server: string[];
@@ -69,7 +69,7 @@ function readTsconfig(tsconfigPath: string): { value?: TsconfigJsonObject; error
   }
 }
 
-function createTsconfigDiagnostic(tsconfigPath: string, error: string): ArunaDiagnostic {
+function createTsconfigDiagnostic(tsconfigPath: string, error: string): Diagnostic {
   const file = path.basename(tsconfigPath);
   if (error === "missing") {
     return {
@@ -114,7 +114,7 @@ function renderStatusLabel(status: "missing" | "correct" | "incorrect"): string 
   }
 }
 
-function renderDiagnosticSummary(diagnostic: ArunaDiagnostic): string {
+function renderDiagnosticSummary(diagnostic: Diagnostic): string {
   const parts = [`${diagnostic.code} ${diagnostic.message}`];
   if (diagnostic.details) {
     parts.push(diagnostic.details);
@@ -306,7 +306,9 @@ export function fixDoctorProject(options: DoctorOptions): DoctorReport {
   const runtimeChanges: string[] = [];
   if (options.emitRuntime) {
     const runtimePaths = resolveArunaRuntimePaths(report.tsconfigPath, report.generatedDir);
-    const runtimeUpdate = updateArunaRuntimePaths(tsconfig, runtimePaths);
+    const runtimeUpdate = updateArunaRuntimePaths(tsconfig, runtimePaths, {
+      pruneStaleRuntimeAliases: true,
+    });
     finalContents = runtimeUpdate.contents;
     if (runtimeUpdate.changed) {
       changed = true;

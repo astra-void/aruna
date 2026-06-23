@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clearActionInvoker, invokeAction, setActionInvoker } from "../src/client-runtime.js";
-import { createInMemoryActionInvoker } from "../src/runtime.js";
+import { clearActionInvoker, invokeAction, setActionInvoker } from "../src/client.js";
+import { createInMemoryActionInvoker } from "../src/client.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
-import { dispatchAction, type ActionRegistry } from "../src/server-runtime.js";
+import { dispatchAction, type ActionRegistry } from "../src/server.js";
 
 beforeEach(() => {
   clearActionInvoker();
@@ -219,7 +219,7 @@ describe("server runtime", () => {
     await expect(
       dispatchAction(registry, "shop.purchaseItem", {}, { itemId: 123 }),
     ).rejects.toMatchObject({
-      name: "ArunaSchemaValidationError",
+      name: "SchemaValidationError",
       actionId: "shop.purchaseItem",
       role: "input",
     });

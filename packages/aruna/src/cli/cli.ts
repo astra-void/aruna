@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import type { ArunaCompilerOutput } from "@arunajs/core";
+import type { CompilerOutput } from "@arunajs/core";
 import { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
 import {
   formatDiagnostics,
@@ -97,7 +97,7 @@ function writeText(output: string): void {
 }
 
 function renderCompilerOutput(
-  output: ArunaCompilerOutput,
+  output: CompilerOutput,
   options: CliOptions,
   durationMs: number,
   command: "check" | "inspect" | "build",
@@ -136,11 +136,11 @@ function renderCompilerOutput(
   }
 }
 
-async function runCheck(options: CliOptions): Promise<ArunaCompilerOutput> {
+async function runCheck(options: CliOptions): Promise<CompilerOutput> {
   return checkProject(compilerInput(options));
 }
 
-async function runInspect(options: CliOptions): Promise<ArunaCompilerOutput> {
+async function runInspect(options: CliOptions): Promise<CompilerOutput> {
   return inspectProject(compilerInput(options));
 }
 
@@ -173,7 +173,7 @@ async function findRobloxRuntimeSourceDir(): Promise<string | undefined> {
   return undefined;
 }
 
-function generatedDirFromOutput(output: ArunaCompilerOutput): string {
+function generatedDirFromOutput(output: CompilerOutput): string {
   const first = output.generatedFiles?.[0]?.path;
   return first ? path.posix.dirname(first) : "src/.aruna";
 }
@@ -200,7 +200,7 @@ async function emitRobloxRuntime(root: string, generatedDir: string): Promise<vo
   }
 }
 
-async function runBuild(options: BuildCliOptions): Promise<ArunaCompilerOutput> {
+async function runBuild(options: BuildCliOptions): Promise<CompilerOutput> {
   const input = compilerInput(options);
   const output = await buildProject(input);
   if (options.emitRuntime !== false && output.ok) {

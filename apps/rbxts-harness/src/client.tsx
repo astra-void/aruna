@@ -1,11 +1,11 @@
 import { createClientApp } from "aruna/client";
-import { createDefaultRobloxActionInvoker } from "aruna/roblox-runtime";
+import { createActionInvoker } from "aruna/roblox";
 import { purchaseItem, restockItem } from "$aruna/actions/client";
 import { createHarnessRequestId } from "./app/bootstrap";
 
 export function startClientApp() {
   const clientApp = createClientApp({
-    invoker: createDefaultRobloxActionInvoker({
+    invoker: createActionInvoker({
       createRequestId: createHarnessRequestId,
     }),
   });

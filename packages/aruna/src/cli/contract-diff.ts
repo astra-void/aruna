@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type {
-  ArunaCompilerOutput,
-  ArunaDiagnostic,
-  ArunaSchemaLiteralMetadata,
-  ArunaSchemaMetadata,
+  CompilerOutput,
+  Diagnostic,
+  SchemaLiteralMetadata,
+  SchemaMetadata,
 } from "@arunajs/core";
 import {
   buildActionContractSnapshot,
@@ -77,16 +77,16 @@ type ContractDiffRenderContext = {
   readonly currentLabel: string;
 };
 
-type ParsedSchema = ArunaSchemaMetadata;
+type ParsedSchema = SchemaMetadata;
 
 type ParsedActionContractRecord = ActionContractRecord & {
   readonly input: {
     readonly summary: string;
-    readonly schema: ArunaSchemaMetadata | null;
+    readonly schema: SchemaMetadata | null;
   };
   readonly output: {
     readonly summary: string;
-    readonly schema: ArunaSchemaMetadata | null;
+    readonly schema: SchemaMetadata | null;
   };
 };
 
@@ -147,7 +147,7 @@ function severityRank(severity: ContractDiffSeverity): number {
   }
 }
 
-function isLiteralMetadata(value: unknown): value is ArunaSchemaLiteralMetadata {
+function isLiteralMetadata(value: unknown): value is SchemaLiteralMetadata {
   if (!isRecordLike(value) || typeof value["kind"] !== "string") {
     return false;
   }
@@ -166,7 +166,7 @@ function isLiteralMetadata(value: unknown): value is ArunaSchemaLiteralMetadata 
   }
 }
 
-function parseLiteralMetadata(value: unknown, location: string): ArunaSchemaLiteralMetadata {
+function parseLiteralMetadata(value: unknown, location: string): SchemaLiteralMetadata {
   if (!isLiteralMetadata(value)) {
     throw new Error(`${location} must be a schema literal metadata object.`);
   }
@@ -225,7 +225,7 @@ function parseSchemaMetadata(value: unknown, location: string): ParsedSchema {
   return parsed;
 }
 
-function parseDiagnostic(value: unknown, location: string): ArunaDiagnostic {
+function parseDiagnostic(value: unknown, location: string): Diagnostic {
   if (!isRecordLike(value)) {
     throw new Error(`${location} must be an object.`);
   }
@@ -243,10 +243,10 @@ function parseDiagnostic(value: unknown, location: string): ArunaDiagnostic {
     throw new Error(`${location}.message must be a string.`);
   }
 
-  const parsed: ArunaDiagnostic = {
-    code: value["code"] as ArunaDiagnostic["code"],
+  const parsed: Diagnostic = {
+    code: value["code"] as Diagnostic["code"],
     name: value["name"],
-    severity: value["severity"] as ArunaDiagnostic["severity"],
+    severity: value["severity"] as Diagnostic["severity"],
     message: value["message"],
   };
 
@@ -452,7 +452,7 @@ function parseActionContractSnapshotJsonAtPath(
     actions.push(parsed);
   }
 
-  const diagnostics: ArunaDiagnostic[] = [];
+  const diagnostics: Diagnostic[] = [];
   for (const [index, diagnostic] of value["diagnostics"].entries()) {
     diagnostics.push(parseDiagnostic(diagnostic, `${location}.diagnostics[${index}]`));
   }
@@ -495,8 +495,8 @@ function unwrapOptional(schema: ParsedSchema | null | undefined): ParsedSchema |
 }
 
 function compareLiteralValues(
-  left: ArunaSchemaLiteralMetadata | undefined,
-  right: ArunaSchemaLiteralMetadata | undefined,
+  left: SchemaLiteralMetadata | undefined,
+  right: SchemaLiteralMetadata | undefined,
 ): number {
   if (!left && !right) {
     return 0;
@@ -1272,7 +1272,7 @@ export function formatContractDiffReport(
 function formatContractDiffFailure(
   message: string,
   context: ContractDiffRenderContext,
-  diagnostics?: readonly ArunaDiagnostic[],
+  diagnostics?: readonly Diagnostic[],
 ): string {
   const lines: string[] = [commandTitle("contract diff", context.colors), ""];
   lines.push(`  baseline: ${context.baselineLabel}`);
@@ -1387,7 +1387,7 @@ export async function runContractDiffCommand(options: {
   readonly inspectProject: (input: {
     readonly root: string;
     readonly configPath?: string;
-  }) => Promise<ArunaCompilerOutput>;
+  }) => Promise<CompilerOutput>;
 }): Promise<{ readonly status: number; readonly stdout?: string; readonly stderr?: string }> {
   const mode = validateCommandMode(options);
   const colors = options.resolveColorMode(options);

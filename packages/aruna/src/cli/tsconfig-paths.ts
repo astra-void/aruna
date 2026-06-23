@@ -137,16 +137,7 @@ export function inspectArunaActionPaths(
 // `aruna build --emit-runtime`. The bare `aruna/<name>` subpaths are aliased to
 // those project-source files so roblox-ts compiles them instead of rejecting a
 // `node_modules` package import.
-export const ARUNA_RUNTIME_MODULES = [
-  "client",
-  "client-runtime",
-  "server",
-  "server-runtime",
-  "server-app",
-  "roblox-runtime",
-  "runtime",
-  "schema",
-] as const;
+export const ARUNA_RUNTIME_MODULES = ["client", "server", "roblox", "schema"] as const;
 
 export function resolveArunaRuntimePaths(
   tsconfigPath: string,
@@ -164,12 +155,27 @@ export function resolveArunaRuntimePaths(
   return result;
 }
 
+// Matches the bare `aruna/<name>` runtime subpath aliases. Deliberately
+// excludes the `$aruna/...` action/signal virtual-module aliases (those start
+// with `$`), so pruning never touches them.
+const ARUNA_RUNTIME_ALIAS_PATTERN = /^aruna\//;
+
+export type RuntimePathUpdateOptions = {
+  // When true, any existing `aruna/<name>` alias that is NOT one of the keys in
+  // `aliasPaths` is removed. Enables `aruna doctor --fix --emit-runtime` to drop
+  // stale runtime aliases left behind when the set of public entry points shrinks
+  // (e.g. the 8 -> 4 consolidation). Only set this when the caller is managing the
+  // runtime aliases — the signal-alias call leaves it off so it never prunes.
+  pruneStaleRuntimeAliases?: boolean | undefined;
+};
+
 // Merges an arbitrary alias -> target-paths map into compilerOptions.paths,
 // mutating `tsconfig` in place. Used for the runtime aliases alongside the
 // action aliases so both land in a single tsconfig write.
 export function updateArunaRuntimePaths(
   tsconfig: unknown,
   aliasPaths: Record<string, string[]>,
+  options: RuntimePathUpdateOptions = {},
 ): TsconfigEditResult {
   if (!isRecord(tsconfig)) {
     throw new Error("tsconfig must contain a top-level JSON object.");
@@ -197,6 +203,16 @@ export function updateArunaRuntimePaths(
     if (!matches) {
       paths[alias] = [...desired];
       changed = true;
+    }
+  }
+
+  if (options.pruneStaleRuntimeAliases === true) {
+    const expected = new Set(Object.keys(aliasPaths));
+    for (const alias of Object.keys(paths)) {
+      if (ARUNA_RUNTIME_ALIAS_PATTERN.test(alias) && !expected.has(alias)) {
+        delete paths[alias];
+        changed = true;
+      }
     }
   }
 

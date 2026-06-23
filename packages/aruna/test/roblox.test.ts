@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clearActionInvoker, invokeAction, setActionInvoker } from "../src/client-runtime.js";
+import { clearActionInvoker, invokeAction, setActionInvoker } from "../src/client.js";
 import {
   createRemoteFunctionActionInvoker,
   bindRemoteFunctionActions,
-} from "../src/roblox-runtime.js";
+} from "../src/roblox.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
-import { type ActionRegistry } from "../src/server-runtime.js";
+import { type ActionRegistry } from "../src/server.js";
 
 type FakeRemoteFunction = {
   InvokeServer: (actionId: string, input: unknown) => unknown;

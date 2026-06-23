@@ -9,30 +9,19 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 
 const entrypoints = [
   "client.js",
-  "client-runtime.js",
   "server.js",
-  "server-app.js",
   "schema.js",
-  "roblox-runtime.js",
+  "roblox.js",
   "actions/define-action.js",
-  "runtime.js",
 ] as const;
 
 const publicShims = [
   "client.js",
   "client.d.ts",
-  "client-runtime.js",
-  "client-runtime.d.ts",
-  "roblox-runtime.js",
-  "roblox-runtime.d.ts",
-  "runtime.js",
-  "runtime.d.ts",
+  "roblox.js",
+  "roblox.d.ts",
   "schema.js",
   "schema.d.ts",
-  "server-app.js",
-  "server-app.d.ts",
-  "server-runtime.js",
-  "server-runtime.d.ts",
   "server.js",
   "server.d.ts",
 ] as const;
@@ -147,21 +136,9 @@ describe("public subpath reachability", () => {
       types: "./server.d.ts",
       import: "./server.js",
     });
-    expect(packageJson.exports?.["./server-app"]).toEqual({
-      types: "./server-app.d.ts",
-      import: "./server-app.js",
-    });
-    expect(packageJson.exports?.["./client-runtime"]).toEqual({
-      types: "./client-runtime.d.ts",
-      import: "./client-runtime.js",
-    });
-    expect(packageJson.exports?.["./roblox-runtime"]).toEqual({
-      types: "./roblox-runtime.d.ts",
-      import: "./roblox-runtime.js",
-    });
-    expect(packageJson.exports?.["./runtime"]).toEqual({
-      types: "./runtime.d.ts",
-      import: "./runtime.js",
+    expect(packageJson.exports?.["./roblox"]).toEqual({
+      types: "./roblox.d.ts",
+      import: "./roblox.js",
     });
     expect(packageJson.exports?.["./schema"]).toEqual({
       types: "./schema.d.ts",

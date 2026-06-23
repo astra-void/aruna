@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearActionInvoker, invokeAction } from "../src/client-runtime.js";
+import { clearActionInvoker, invokeAction } from "../src/client.js";
 import { createClientApp } from "../src/client.js";
-import { createServerApp } from "../src/server-app.js";
+import { createServerApp } from "../src/server.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
 import {
-  ArunaTimeoutError,
+  TimeoutError,
   bindRemoteEventActions,
   createRemoteEventActionInvoker,
   type ActionTimeoutScheduler,
@@ -14,8 +14,8 @@ import {
   type RemoteEventClientLike,
   type RemoteEventServerLike,
   type RemoteEventSignalLike,
-} from "../src/roblox-runtime.js";
-import { type ActionRegistry } from "../src/server-runtime.js";
+} from "../src/roblox.js";
+import { type ActionRegistry } from "../src/server.js";
 
 type FakeSignal<TArgs extends readonly unknown[]> = {
   readonly signal: RemoteEventSignalLike<TArgs>;
@@ -343,7 +343,7 @@ describe("createRemoteEventActionInvoker request timeout", () => {
     invoker.dispose();
   });
 
-  it("rejects with ArunaTimeoutError and clears the pending entry on timeout", async () => {
+  it("rejects with TimeoutError and clears the pending entry on timeout", async () => {
     const remote = createFakeRemoteEvent({ name: "Ada" });
     const scheduler = createControllableScheduler();
     const invoker = createRemoteEventActionInvoker(remote, {
@@ -357,7 +357,7 @@ describe("createRemoteEventActionInvoker request timeout", () => {
 
     scheduler.fireAll();
 
-    await expect(promise).rejects.toBeInstanceOf(ArunaTimeoutError);
+    await expect(promise).rejects.toBeInstanceOf(TimeoutError);
     await expect(promise).rejects.toMatchObject({
       name: "ActionTimeoutError",
       actionId: "shop.purchaseItem",
@@ -482,7 +482,7 @@ describe("bindRemoteEventActions", () => {
       ok: false,
       error: {
         message: "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
-        name: "ArunaSchemaValidationError",
+        name: "SchemaValidationError",
       },
     });
   });
@@ -553,7 +553,7 @@ describe("bindRemoteEventActions", () => {
       ok: false,
       error: {
         message: "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
-        name: "ArunaSchemaValidationError",
+        name: "SchemaValidationError",
       },
     });
   });

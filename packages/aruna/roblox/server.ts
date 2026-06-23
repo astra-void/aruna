@@ -47,3 +47,9 @@ export function defineAction<
 ): ActionDefinition<TInput, TOutput, TPlayer> {
 	return definition;
 }
+
+// Re-exported so `aruna/server` is the single server entry. The imports these
+// modules take back from this file are type-only, so the Luau require graph has
+// no cycle.
+export * from "./server-runtime";
+export * from "./server-app";

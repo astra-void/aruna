@@ -10,10 +10,10 @@ import {
 import type { ServerBinding } from "./binding.js";
 import type { ActionRegistry } from "./server.js";
 
-export const DEFAULT_ARUNA_FOLDER_NAME = "Aruna";
-export const DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME = "Actions";
+export const ARUNA_FOLDER_NAME = "Aruna";
+export const ACTION_REMOTE_NAME = "Actions";
 
-export type RobloxActionRemoteEventOptions = {
+export type ActionRemoteOptions = {
   readonly folderName?: string;
   readonly remoteName?: string;
 };
@@ -47,11 +47,11 @@ function getFolderPath(folderName: string): string {
 }
 
 function getOptions(
-  options?: RobloxActionRemoteEventOptions,
-): Required<RobloxActionRemoteEventOptions> {
+  options?: ActionRemoteOptions,
+): Required<ActionRemoteOptions> {
   return {
-    folderName: options?.folderName ?? DEFAULT_ARUNA_FOLDER_NAME,
-    remoteName: options?.remoteName ?? DEFAULT_ARUNA_ACTION_REMOTE_EVENT_NAME,
+    folderName: options?.folderName ?? ARUNA_FOLDER_NAME,
+    remoteName: options?.remoteName ?? ACTION_REMOTE_NAME,
   };
 }
 
@@ -163,8 +163,8 @@ function findRemoteEvent(parent: Folder, remoteName: string): RemoteEvent {
   return instance;
 }
 
-export function getDefaultRobloxActionRemoteEvent(
-  options?: RobloxActionRemoteEventOptions,
+export function getActionRemote(
+  options?: ActionRemoteOptions,
 ): RemoteEvent {
   const { folderName, remoteName } = getOptions(options);
   const replicatedStorage = getReplicatedStorage();
@@ -173,8 +173,8 @@ export function getDefaultRobloxActionRemoteEvent(
   return findRemoteEvent(folder, remoteName);
 }
 
-export function ensureDefaultRobloxActionRemoteEvent(
-  options?: RobloxActionRemoteEventOptions,
+export function ensureActionRemote(
+  options?: ActionRemoteOptions,
 ): RemoteEvent {
   const { folderName, remoteName } = getOptions(options);
   const replicatedStorage = getReplicatedStorage();
@@ -183,8 +183,8 @@ export function ensureDefaultRobloxActionRemoteEvent(
   return ensureRemoteEvent(folder, remoteName);
 }
 
-export function waitForDefaultRobloxActionRemoteEvent(
-  options?: RobloxActionRemoteEventOptions,
+export function waitForActionRemote(
+  options?: ActionRemoteOptions,
 ): RemoteEvent {
   const { folderName, remoteName } = getOptions(options);
   const replicatedStorage = getReplicatedStorage();
@@ -193,21 +193,21 @@ export function waitForDefaultRobloxActionRemoteEvent(
   return waitForRemoteEvent(folder, remoteName);
 }
 
-export function createDefaultRobloxActionInvoker(
-  options?: RobloxActionRemoteEventOptions & RemoteEventActionInvokerOptions,
+export function createActionInvoker(
+  options?: ActionRemoteOptions & RemoteEventActionInvokerOptions,
 ): DisposableActionInvoker {
   return createRemoteEventActionInvoker(
-    toRemoteEventClientLike(waitForDefaultRobloxActionRemoteEvent(options)),
+    toRemoteEventClientLike(waitForActionRemote(options)),
     options,
   );
 }
 
-export function bindDefaultRobloxActionRemoteEvent<TPlayer = Player>(
+export function bindActions<TPlayer = Player>(
   registry: ActionRegistry<TPlayer>,
-  options?: RobloxActionRemoteEventOptions & BindRemoteEventActionsOptions<TPlayer>,
+  options?: ActionRemoteOptions & BindRemoteEventActionsOptions<TPlayer>,
 ): ServerBinding {
   return bindRemoteEventActions(
-    toRemoteEventServerLike<TPlayer>(ensureDefaultRobloxActionRemoteEvent(options)),
+    toRemoteEventServerLike<TPlayer>(ensureActionRemote(options)),
     registry,
     options,
   );

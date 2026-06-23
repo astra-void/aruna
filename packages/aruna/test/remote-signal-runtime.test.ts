@@ -7,8 +7,8 @@ import {
   type RemoteSignalClientLike,
   type RemoteSignalMessage,
   type RemoteSignalServerLike,
-} from "../src/roblox-runtime.js";
-import type { RemoteEventSignalLike } from "../src/roblox-runtime.js";
+} from "../src/roblox.js";
+import type { RemoteEventSignalLike } from "../src/roblox.js";
 
 type FakeSignal<TArgs extends readonly unknown[]> = {
   readonly signal: RemoteEventSignalLike<TArgs>;

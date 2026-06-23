@@ -4,22 +4,22 @@ import { createRequire } from "node:module";
 import vm from "node:vm";
 import * as ts from "typescript";
 import type {
-  ArunaActionsConfig,
-  ArunaCompilerConfig,
-  ArunaConfig,
-  ArunaConventionConfig,
-  ArunaDiagnostic,
-  ArunaStrictConfig,
-  NormalizedArunaConfig,
+  ActionsConfig,
+  CompilerConfig,
+  Config,
+  ConventionConfig,
+  Diagnostic,
+  StrictConfig,
+  NormalizedConfig,
 } from "@arunajs/core";
 
-export type LoadedArunaConfig = {
+export type LoadedConfig = {
   projectRoot: string;
   configPath?: string | undefined;
-  config: NormalizedArunaConfig;
+  config: NormalizedConfig;
   tsconfigPath: string;
   tsconfigOptions: ts.CompilerOptions;
-  diagnostics: ArunaDiagnostic[];
+  diagnostics: Diagnostic[];
 };
 
 type RawConfigObject = Record<string, unknown>;
@@ -34,7 +34,7 @@ type MutableCompilerConfig = {
 };
 
 type MutableActionsConfig = {
-  transport?: ArunaActionsConfig["transport"];
+  transport?: ActionsConfig["transport"];
   defaultRateLimit?: {
     key?: string;
     windowMs?: number;
@@ -50,11 +50,11 @@ type MutableConventionConfig = {
 
 type MutableStrictConfig = {
   sharedSafety?: boolean;
-  rawRemoteUsage?: ArunaStrictConfig["rawRemoteUsage"];
-  unresolvedImports?: ArunaStrictConfig["unresolvedImports"];
+  rawRemoteUsage?: StrictConfig["rawRemoteUsage"];
+  unresolvedImports?: StrictConfig["unresolvedImports"];
 };
 
-type MutableArunaConfig = {
+type MutableConfig = {
   root?: string;
   compiler?: MutableCompilerConfig;
   actions?: MutableActionsConfig;
@@ -64,7 +64,7 @@ type MutableArunaConfig = {
 
 const DIAGNOSTIC_META: Record<
   "aruna::100" | "aruna::102" | "aruna::103",
-  { name: string; severity: ArunaDiagnostic["severity"] }
+  { name: string; severity: Diagnostic["severity"] }
 > = {
   "aruna::100": { name: "invalid-config", severity: "error" },
   "aruna::102": { name: "missing-tsconfig", severity: "warning" },
@@ -72,7 +72,7 @@ const DIAGNOSTIC_META: Record<
 };
 
 const DEFAULT_CONVENTIONS: Required<
-  Pick<NormalizedArunaConfig["conventions"], "client" | "server" | "shared">
+  Pick<NormalizedConfig["conventions"], "client" | "server" | "shared">
 > = {
   client: ["**/client/**"],
   server: ["**/server/**"],
@@ -82,7 +82,7 @@ const DEFAULT_CONVENTIONS: Required<
 const DEFAULT_ROOT = "src";
 const DEFAULT_GENERATED_DIR = `${DEFAULT_ROOT}/.aruna`;
 const DEFAULT_MANIFEST_OUTPUT = `${DEFAULT_GENERATED_DIR}/manifest.json`;
-const DEFAULT_RATE_LIMIT: NonNullable<ArunaActionsConfig["defaultRateLimit"]> = {
+const DEFAULT_RATE_LIMIT: NonNullable<ActionsConfig["defaultRateLimit"]> = {
   key: "player",
   windowMs: 1000,
   max: 20,
@@ -91,8 +91,8 @@ const DEFAULT_RATE_LIMIT: NonNullable<ArunaActionsConfig["defaultRateLimit"]> = 
 function createDiagnostic(
   code: keyof typeof DIAGNOSTIC_META,
   message: string,
-  extras: Partial<ArunaDiagnostic> = {},
-): ArunaDiagnostic {
+  extras: Partial<Diagnostic> = {},
+): Diagnostic {
   const meta = DIAGNOSTIC_META[code];
   return {
     code,
@@ -121,13 +121,13 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
-function isTransport(value: unknown): value is NonNullable<ArunaActionsConfig["transport"]> {
+function isTransport(value: unknown): value is NonNullable<ActionsConfig["transport"]> {
   return value === "remote-event" || value === "remote-function" || value === "memory";
 }
 
 function isStrictSeverity(
   value: unknown,
-): value is NonNullable<ArunaStrictConfig["rawRemoteUsage"]> {
+): value is NonNullable<StrictConfig["rawRemoteUsage"]> {
   return value === "off" || value === "warning" || value === "error";
 }
 
@@ -180,9 +180,9 @@ function mergeStringArray(
 }
 
 function mergeCompilerConfig(
-  base: ArunaCompilerConfig | undefined,
-  override: ArunaCompilerConfig | undefined,
-): ArunaCompilerConfig | undefined {
+  base: CompilerConfig | undefined,
+  override: CompilerConfig | undefined,
+): CompilerConfig | undefined {
   if (base === undefined && override === undefined) {
     return undefined;
   }
@@ -194,9 +194,9 @@ function mergeCompilerConfig(
 }
 
 function mergeActionsConfig(
-  base: ArunaActionsConfig | undefined,
-  override: ArunaActionsConfig | undefined,
-): ArunaActionsConfig | undefined {
+  base: ActionsConfig | undefined,
+  override: ActionsConfig | undefined,
+): ActionsConfig | undefined {
   if (base === undefined && override === undefined) {
     return undefined;
   }
@@ -209,9 +209,9 @@ function mergeActionsConfig(
 }
 
 function mergeConventionConfig(
-  base: ArunaConventionConfig | undefined,
-  override: ArunaConventionConfig | undefined,
-): ArunaConventionConfig | undefined {
+  base: ConventionConfig | undefined,
+  override: ConventionConfig | undefined,
+): ConventionConfig | undefined {
   if (base === undefined && override === undefined) {
     return undefined;
   }
@@ -226,9 +226,9 @@ function mergeConventionConfig(
 }
 
 function mergeStrictConfig(
-  base: ArunaStrictConfig | undefined,
-  override: ArunaStrictConfig | undefined,
-): ArunaStrictConfig | undefined {
+  base: StrictConfig | undefined,
+  override: StrictConfig | undefined,
+): StrictConfig | undefined {
   if (base === undefined && override === undefined) {
     return undefined;
   }
@@ -239,7 +239,7 @@ function mergeStrictConfig(
   };
 }
 
-function mergePublicConfig(base: ArunaConfig, override: ArunaConfig): ArunaConfig {
+function mergePublicConfig(base: Config, override: Config): Config {
   return {
     root: override.root ?? base.root,
     compiler: mergeCompilerConfig(base.compiler, override.compiler),
@@ -267,7 +267,7 @@ function validateUnsupportedKeys(
 }
 
 function normalizeConfigObject(value: unknown): {
-  config?: ArunaConfig;
+  config?: Config;
   error?: string;
   flatShape?: boolean;
 } {
@@ -297,7 +297,7 @@ function normalizeConfigObject(value: unknown): {
   }
 
   const diagnostics: string[] = [];
-  const config: MutableArunaConfig = {};
+  const config: MutableConfig = {};
   const allowedTopLevel = ["root", "compiler", "actions", "conventions", "strict"] as const;
   validateUnsupportedKeys(candidateRecord, allowedTopLevel, diagnostics, "top-level config");
 
@@ -505,10 +505,10 @@ function normalizeConfigObject(value: unknown): {
     return { error: diagnostics.join("; ") };
   }
 
-  return { config: config as ArunaConfig };
+  return { config: config as Config };
 }
 
-function normalizeResolvedConfig(config: ArunaConfig): NormalizedArunaConfig {
+function normalizeResolvedConfig(config: Config): NormalizedConfig {
   const root = config.root ?? DEFAULT_ROOT;
   const generatedDir = config.compiler?.generatedDir ?? `${root}/.aruna`;
   const manifestOutput =
@@ -593,8 +593,8 @@ function loadUserConfigFile(
   projectRoot: string,
   configFile: string,
 ): {
-  config?: ArunaConfig;
-  diagnostic?: ArunaDiagnostic;
+  config?: Config;
+  diagnostic?: Diagnostic;
 } {
   try {
     const sourceText = fs.readFileSync(configFile, "utf8");
@@ -613,7 +613,7 @@ function loadUserConfigFile(
       };
     }
 
-    return { config: normalized.config as ArunaConfig };
+    return { config: normalized.config as Config };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -631,9 +631,9 @@ function loadTsConfig(
   tsconfigPath: string,
 ): {
   options: ts.CompilerOptions;
-  diagnostic?: ArunaDiagnostic;
+  diagnostic?: Diagnostic;
 } {
-  const invalidTsconfigDiagnostic = (details: string): ArunaDiagnostic =>
+  const invalidTsconfigDiagnostic = (details: string): Diagnostic =>
     createDiagnostic(
       "aruna::103",
       `Malformed TypeScript config at ${path.basename(tsconfigPath)}.`,
@@ -693,14 +693,14 @@ function loadTsConfig(
 export function loadProjectConfig(
   projectRoot: string,
   explicitConfigPath?: string,
-  overrideConfig?: ArunaConfig,
-): LoadedArunaConfig {
-  const diagnostics: ArunaDiagnostic[] = [];
+  overrideConfig?: Config,
+): LoadedConfig {
+  const diagnostics: Diagnostic[] = [];
   const configCandidates = explicitConfigPath
     ? [path.resolve(projectRoot, explicitConfigPath), path.resolve(projectRoot, "aruna.config.ts")]
     : [path.resolve(projectRoot, "aruna.config.ts")];
 
-  let loadedConfig: ArunaConfig | undefined;
+  let loadedConfig: Config | undefined;
   let discoveredConfigPath: string | undefined;
 
   for (const candidate of configCandidates) {
@@ -720,9 +720,9 @@ export function loadProjectConfig(
     break;
   }
 
-  const mergedConfig: ArunaConfig = overrideConfig
-    ? mergePublicConfig(loadedConfig ?? ({} as ArunaConfig), overrideConfig)
-    : (loadedConfig ?? ({} as ArunaConfig));
+  const mergedConfig: Config = overrideConfig
+    ? mergePublicConfig(loadedConfig ?? ({} as Config), overrideConfig)
+    : (loadedConfig ?? ({} as Config));
   const finalConfig = normalizeResolvedConfig(mergedConfig);
   const resolvedTsconfig = path.resolve(projectRoot, "tsconfig.json");
   const tsconfig = loadTsConfig(projectRoot, resolvedTsconfig);
