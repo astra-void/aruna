@@ -160,24 +160,29 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
 
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-layout-"));
   try {
-    // Mirror node_modules so rbxtsc resolves @rbxts and @types.
+    // Mirror every top-level entry in the consumer's node_modules so rbxtsc
+    // resolves all packages (@rbxts, @types, and any other scopes or flat
+    // packages the project depends on). Each entry is symlinked individually
+    // (not as one whole-directory symlink) so broken nested symlinks inside
+    // packages like roblox-ts don't surface through the staged tree.
     fs.mkdirSync(path.join(tempRoot, "node_modules"), { recursive: true });
-    for (const scope of ["@rbxts", "@types"]) {
-      const src = path.join(nodeModules, scope);
-      if (fs.existsSync(src)) {
-        try {
-          fs.symlinkSync(src, path.join(tempRoot, "node_modules", scope), "dir");
-        } catch {
-          copyDirSync(src, path.join(tempRoot, "node_modules", scope));
-        }
+    for (const entry of fs.readdirSync(nodeModules)) {
+      // Skip hidden directories (.bin, .cache, .pnpm, .modules.yaml, …).
+      if (entry.startsWith(".")) continue;
+      const src = path.join(nodeModules, entry);
+      const dest = path.join(tempRoot, "node_modules", entry);
+      try {
+        fs.symlinkSync(fs.realpathSync(src), dest, "dir");
+      } catch {
+        // Skip packages whose real path can't be resolved (broken symlinks).
       }
     }
-    const includeDir = path.join(projectRoot, "include");
-    if (fs.existsSync(includeDir)) {
-      fs.symlinkSync(includeDir, path.join(tempRoot, "include"), "dir");
-    } else {
-      fs.mkdirSync(path.join(tempRoot, "include"), { recursive: true });
-    }
+    // rbxtsc copies its runtime library (RuntimeLib.lua, Promise, …) into this
+    // folder. Stage it empty here, then copy it back into the project after a
+    // successful compile so the Rojo `rbxts_include` mount ($path: "include")
+    // resolves — otherwise `rojo build` fails on a missing path.
+    const stagedInclude = path.join(tempRoot, "include");
+    fs.mkdirSync(stagedInclude, { recursive: true });
 
     // Build the source -> staged-path map from the module classification.
     const sourceToStage = new Map<string, string>();
@@ -228,12 +233,51 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       }
     }
 
+    // Derive path aliases for baseUrl-relative imports (e.g. "shared/*", "client/*").
+    // Source files at src/{dir}/... are staged at src/{target}/{dir}/..., so a
+    // bare "{dir}/*" import needs an alias to bridge the extra target prefix.
+    //
+    // Only "canonical" kinds (client/server/shared) define these aliases —
+    // serverAction modules live in a different partition and are accessed via
+    // the generated action registry, not bare baseUrl imports. Including them
+    // would map "shared/*" → "src/server/shared/*", breaking cross-partition
+    // imports of plain shared utilities like "shared/constants".
+    const baseUrlAliases: Record<string, string[]> = {};
+    const genDirPrefix = `src/${generatedDirRel}/`;
+    for (const { record, target } of records) {
+      if (record.kind === "serverAction") continue;
+      const recordPath = toPosix(record.path);
+      if (recordPath.startsWith(genDirPrefix)) continue;
+      const sourceRel = recordPath.replace(/^src\//, "");
+      const slash = sourceRel.indexOf("/");
+      if (slash < 0) continue;
+      const prefix = sourceRel.slice(0, slash);
+      const pattern = `${prefix}/*`;
+      if (!(pattern in baseUrlAliases)) {
+        baseUrlAliases[pattern] = [`src/${target}/${prefix}/*`];
+      }
+    }
+
     const paths: Record<string, string[]> = {
+      ...baseUrlAliases,
       "$aruna/actions/client": aliasPath("shared", "actions.client.generated.ts"),
       "$aruna/actions/server": aliasPath("server", "actions.server.generated.ts"),
       "$aruna/signals": aliasPath("shared", "signals.generated.ts"),
       ...runtimeAlias,
     };
+
+    // Build typeRoots: start with "./node_modules" so roblox-ts can resolve the
+    // package paths in the `types` field (e.g. "./node_modules/@rbxts/types").
+    // Then add each scoped (@*) entry from the staged node_modules so roblox-ts
+    // allows imports from those scopes — it rejects "@scope/pkg" imports when
+    // the corresponding "./node_modules/@scope" isn't listed explicitly.
+    const typeRoots: string[] = ["./node_modules"];
+    const stagedNm = path.join(tempRoot, "node_modules");
+    for (const entry of fs.readdirSync(stagedNm)) {
+      if (entry.startsWith("@")) {
+        typeRoots.push(`./node_modules/${entry}`);
+      }
+    }
 
     const tsconfig = {
       compilerOptions: {
@@ -256,7 +300,7 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
         resolveJsonModule: true,
         noUncheckedIndexedAccess: true,
         verbatimModuleSyntax: false,
-        typeRoots: ["./node_modules", "./node_modules/@rbxts"],
+        typeRoots,
         types: ["@rbxts/types", "@rbxts/compiler-types"],
         paths,
       },
@@ -269,9 +313,17 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       `${JSON.stringify({ name: "aruna-staged", version: "0.0.0" }, null, 2)}\n`,
     );
     fs.writeFileSync(path.join(tempRoot, "tsconfig.json"), `${JSON.stringify(tsconfig, null, 2)}\n`);
+    // Pass every scoped (@*) package from staged node_modules so rojo-resolver
+    // can locate their compiled output (e.g. @lattice-ui, @rbxts-js).
+    const extraNpmScopes: string[] = [];
+    for (const entry of fs.readdirSync(stagedNm)) {
+      if (entry.startsWith("@") && entry !== "@rbxts") {
+        extraNpmScopes.push(entry);
+      }
+    }
     fs.writeFileSync(
       path.join(tempRoot, "default.project.json"),
-      `${JSON.stringify(partitionedRojoProject(), null, 2)}\n`,
+      `${JSON.stringify(partitionedRojoProject(extraNpmScopes), null, 2)}\n`,
     );
 
     const result = spawnSync(rbxtscBin, ["--project", tempRoot], {
@@ -288,6 +340,13 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
         fs.rmSync(outRoot, { recursive: true, force: true });
         copyDirSync(stagedOut, outRoot);
       }
+      // Copy the rbxtsc-generated runtime library back so the Rojo `rbxts_include`
+      // mount resolves when `rojo build` runs against the project.
+      if (fs.existsSync(stagedInclude)) {
+        const includeRoot = path.join(projectRoot, "include");
+        fs.rmSync(includeRoot, { recursive: true, force: true });
+        copyDirSync(stagedInclude, includeRoot);
+      }
       // Ensure every partition dir exists so the Rojo $path mounts resolve even
       // when a project declares no modules of a given kind.
       for (const partition of ["client", "server", "shared"]) {
@@ -301,7 +360,11 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
 }
 
 // The Roblox DataModel contract the partitioned `out/` maps onto.
-export function partitionedRojoProject(): unknown {
+export function partitionedRojoProject(extraNpmScopes: string[] = []): unknown {
+  const extraNodeModules: Record<string, { $path: string }> = {};
+  for (const scope of extraNpmScopes) {
+    extraNodeModules[scope] = { $path: `node_modules/${scope}` };
+  }
   return {
     name: "aruna-game",
     globIgnorePaths: ["**/package.json", "**/tsconfig.json"],
@@ -318,6 +381,7 @@ export function partitionedRojoProject(): unknown {
           node_modules: {
             $className: "Folder",
             "@rbxts": { $path: "node_modules/@rbxts" },
+            ...extraNodeModules,
           },
         },
         TS: { $path: "out/shared" },
