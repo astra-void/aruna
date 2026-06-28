@@ -97,7 +97,13 @@ describe.each(fixtureCases)("$name", ({ name, mode }) => {
       expect(output.manifest).toEqual(snapshot.manifest);
       expect(output.manifest.modules).toEqual(snapshot.modules);
       expect(output.manifest.imports).toEqual(snapshot.graph);
-      expect(output.generatedFiles).toEqual(snapshot.generated);
+      // `snapshot.generated` is sorted by path (readGeneratedSnapshot), whereas
+      // `output.generatedFiles` is in codegen emission order. Compare as sets by
+      // sorting both — the split-tree layout makes emission order and path order
+      // diverge (e.g. shared/ stubs emit before the manifest at the base).
+      const sortByPath = <T extends { path: string }>(files: readonly T[]): T[] =>
+        [...files].sort((left, right) => left.path.localeCompare(right.path));
+      expect(sortByPath(output.generatedFiles ?? [])).toEqual(snapshot.generated);
       expect(
         (await readGeneratedSnapshot(path.join(tempRoot, "src/.aruna"))).map((entry) => ({
           ...entry,

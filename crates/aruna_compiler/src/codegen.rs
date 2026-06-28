@@ -4,6 +4,9 @@ use crate::actions::{
 use crate::config::ActionRateLimitConfig;
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic};
 use crate::files::normalize_path;
+use crate::resolver::{
+    GENERATED_CLIENT_ACTIONS_FILE, GENERATED_SERVER_ACTIONS_FILE, GENERATED_SIGNALS_FILE,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
@@ -324,6 +327,24 @@ fn action_import_alias(action: &ArunaActionRecord) -> String {
 }
 
 fn client_stub_lines(action: &ArunaActionRecord, input_type: &str, output_type: &str) -> Vec<String> {
+    // Fire-and-forget actions are one-way: the client does not wait for a server
+    // ack, so the stub resolves void and tells the invoker to skip the response
+    // roundtrip. The declared output type is intentionally ignored — there is no
+    // response to type.
+    if action.fire_and_forget {
+        return vec![
+            format!(
+                "export const {} = (input: {}): Promise<void> => {{",
+                action.export_name, input_type
+            ),
+            format!(
+                "  return invokeAction(\"{}\", input, {{ fireAndForget: true }}) as Promise<void>;",
+                action.id
+            ),
+            "};".to_string(),
+        ];
+    }
+
     vec![
         format!(
             "export const {} = (input: {}): Promise<{}> => {{",
@@ -343,7 +364,7 @@ fn render_client_file(
     diagnostics: &mut Vec<ArunaDiagnostic>,
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
-    let path = generated_file_path(generated_dir, "actions.client.generated.ts");
+    let path = generated_file_path(generated_dir, GENERATED_CLIENT_ACTIONS_FILE);
     let mut lines = vec![
         "import { invokeAction } from \"aruna/client\";".to_string(),
         "".to_string(),
@@ -414,7 +435,7 @@ fn render_server_file(
     default_rate_limit: &ActionRateLimitConfig,
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
-    let path = generated_file_path(generated_dir, "actions.server.generated.ts");
+    let path = generated_file_path(generated_dir, GENERATED_SERVER_ACTIONS_FILE);
     let mut lines = vec![
     ];
 
@@ -555,7 +576,7 @@ fn render_signal_file(
     signals: &[ArunaSignalRecord],
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
-    let path = generated_file_path(generated_dir, "signals.generated.ts");
+    let path = generated_file_path(generated_dir, GENERATED_SIGNALS_FILE);
     let mut lines = Vec::new();
 
     if preserve_generated_comments {
@@ -676,6 +697,7 @@ mod tests {
             has_input_schema: false,
             has_output_schema: false,
             has_run: true,
+            fire_and_forget: false,
             serialization: Default::default(),
             rate_limit: None,
             input_schema: None,
@@ -710,8 +732,8 @@ mod tests {
 
         assert!(output.diagnostics.is_empty());
         assert_eq!(output.files.len(), 2);
-        assert_eq!(output.files[0].path, "src/.aruna/actions.client.generated.ts");
-        assert_eq!(output.files[1].path, "src/.aruna/actions.server.generated.ts");
+        assert_eq!(output.files[0].path, "src/.aruna/shared/actions.client.generated.ts");
+        assert_eq!(output.files[1].path, "src/.aruna/server/actions.server.generated.ts");
         assert!(output
             .files[0]
             .contents
@@ -737,10 +759,10 @@ mod tests {
             .contains("export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {"));
         assert!(output.files[1]
             .contents
-            .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../domains/inventory/actions\";"));
+            .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../../domains/inventory/actions\";"));
         assert!(output.files[1]
             .contents
-            .contains("import { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../domains/shop/actions\";"));
+            .contains("import { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../../domains/shop/actions\";"));
         assert!(output.files[1]
             .contents
             .contains("\"inventory.restockItem\": src_domains_inventory_actions_restockItem,"));
@@ -750,6 +772,27 @@ mod tests {
         assert!(output.files[1].contents.contains(
             "export const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;"
         ));
+    }
+
+    #[test]
+    fn renders_fire_and_forget_client_stub_as_one_way() {
+        let mut paint = action("spray.paint", "src/shared/spray/actions.ts", "paint");
+        paint.fire_and_forget = true;
+        let actions = vec![paint];
+
+        let output = generate_action_files("src/.aruna", &actions, &test_rate_limit(), true);
+
+        assert!(output.diagnostics.is_empty());
+        let client = &output.files[0].contents;
+        // One-way stub: resolves void and asks the invoker to skip the ack.
+        assert!(client.contains("export const paint = (input: PaintInput): Promise<void> => {"));
+        assert!(client.contains(
+            "return invokeAction(\"spray.paint\", input, { fireAndForget: true }) as Promise<void>;"
+        ));
+        // The server registry still imports the definition unchanged.
+        assert!(output.files[1]
+            .contents
+            .contains("\"spray.paint\": src_shared_spray_actions_paint,"));
     }
 
     #[test]
@@ -778,11 +821,11 @@ mod tests {
 
         assert!(output.diagnostics.is_empty());
         assert_eq!(output.files.len(), 1);
-        assert_eq!(output.files[0].path, "src/.aruna/signals.generated.ts");
+        assert_eq!(output.files[0].path, "src/.aruna/shared/signals.generated.ts");
 
         let contents = &output.files[0].contents;
         assert!(contents.contains(
-            "import { damaged as src_shared_combat_signals_damaged } from \"../shared/combat/signals\";"
+            "import { damaged as src_shared_combat_signals_damaged } from \"../../shared/combat/signals\";"
         ));
         assert!(contents.contains("export const signals = {"));
         assert!(contents.contains("\"combat.damaged\": src_shared_combat_signals_damaged,"));
@@ -863,6 +906,7 @@ mod tests {
             has_input_schema: true,
             has_output_schema: true,
             has_run: true,
+            fire_and_forget: false,
             serialization: Default::default(),
             rate_limit: None,
             input_schema: Some(ArunaSchemaMetadata {

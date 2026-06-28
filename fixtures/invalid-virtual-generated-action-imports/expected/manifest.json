@@ -75,7 +75,7 @@
       "kind": "static",
       "resolved": true,
       "specifier": "$aruna/actions/server",
-      "to": "src/.aruna/actions.server.generated.ts"
+      "to": "src/.aruna/server/actions.server.generated.ts"
     },
     {
       "from": "src/app/client.ts",
@@ -88,7 +88,7 @@
       "kind": "static",
       "resolved": true,
       "specifier": "$aruna/actions/client",
-      "to": "src/.aruna/actions.client.generated.ts"
+      "to": "src/.aruna/shared/actions.client.generated.ts"
     },
     {
       "from": "src/client.ts",
@@ -119,16 +119,16 @@
   ],
   "modules": [
     {
-      "id": "src/.aruna/actions.client.generated.ts",
-      "kind": "client",
-      "path": "src/.aruna/actions.client.generated.ts",
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
       "reason": "directive",
       "reasonDetail": "virtual $aruna/actions module"
     },
     {
-      "id": "src/.aruna/actions.server.generated.ts",
-      "kind": "serverAction",
-      "path": "src/.aruna/actions.server.generated.ts",
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
       "reason": "directive",
       "reasonDetail": "virtual $aruna/actions module"
     },

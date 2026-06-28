@@ -215,7 +215,8 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
 
     // The vendored runtime is shared and self-contained — copy it wholesale into
     // the shared partition with its internal structure (relative imports intact).
-    const runtimeSrc = path.join(srcRoot, generatedDirRel, "runtime");
+    // Split-tree layout vendors it under `<generatedDir>/shared/runtime`.
+    const runtimeSrc = path.join(srcRoot, generatedDirRel, "shared", "runtime");
     if (fs.existsSync(runtimeSrc)) {
       copyDirSync(runtimeSrc, path.join(stageSrc, "shared", generatedDirRel, "runtime"));
     }
@@ -260,9 +261,12 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
 
     const paths: Record<string, string[]> = {
       ...baseUrlAliases,
-      "$aruna/actions/client": aliasPath("shared", "actions.client.generated.ts"),
-      "$aruna/actions/server": aliasPath("server", "actions.server.generated.ts"),
-      "$aruna/signals": aliasPath("shared", "signals.generated.ts"),
+      // Split-tree layout: the generated files carry their partition subdir in the
+      // source path (e.g. `<gen>/server/actions.server.generated.ts`), and staging
+      // adds the target prefix on top — so the alias targets include both.
+      "$aruna/actions/client": aliasPath("shared", "shared/actions.client.generated.ts"),
+      "$aruna/actions/server": aliasPath("server", "server/actions.server.generated.ts"),
+      "$aruna/signals": aliasPath("shared", "shared/signals.generated.ts"),
       ...runtimeAlias,
     };
 

@@ -303,6 +303,52 @@ describe("createRemoteEventActionInvoker", () => {
 
     expect(remote.clientSignal.listenerCount()).toBe(0);
   });
+
+  it("fire-and-forget resolves immediately without registering a pending request", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const timers = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId() {
+        return "request-1";
+      },
+      requestTimeoutMs: 1000,
+      scheduleTimeout: timers.scheduler,
+    });
+
+    await expect(
+      invoker("spray.paint", { at: 1 }, { fireAndForget: true }),
+    ).resolves.toBeUndefined();
+
+    // The request was fired, but no timeout is armed and no response is awaited.
+    expect(remote.requests).toEqual([
+      { requestId: "request-1", actionId: "spray.paint", input: { at: 1 } },
+    ]);
+    expect(timers.activeCount()).toBe(0);
+
+    // A late server ack must not throw or settle anything (no pending entry).
+    expect(() =>
+      remote.clientSignal.emit({ requestId: "request-1", ok: true, output: null }),
+    ).not.toThrow();
+
+    invoker.dispose();
+  });
+
+  it("fire-and-forget rejects when FireServer throws", async () => {
+    const clientSignal = createFakeSignal<[RemoteEventActionResponse]>();
+    const remote: RemoteEventClientLike = {
+      OnClientEvent: clientSignal.signal,
+      FireServer() {
+        throw new Error("network down");
+      },
+    };
+    const invoker = createRemoteEventActionInvoker(remote);
+
+    await expect(
+      invoker("spray.paint", { at: 1 }, { fireAndForget: true }),
+    ).rejects.toThrow("network down");
+
+    invoker.dispose();
+  });
 });
 
 describe("createRemoteEventActionInvoker request timeout", () => {
@@ -424,6 +470,58 @@ describe("bindRemoteEventActions", () => {
         },
       },
     ]);
+  });
+
+  it("runs a fire-and-forget action but sends no response", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const runs: unknown[] = [];
+    const registry: ActionRegistry = {
+      "spray.paint": defineAction({
+        id: "spray.paint",
+        fireAndForget: true,
+        run(_ctx, input) {
+          runs.push(input);
+          return { ok: true };
+        },
+      }),
+    };
+
+    bindRemoteEventActions(remote, registry);
+    remote.FireServer({
+      requestId: "request-1",
+      actionId: "spray.paint",
+      input: { at: 1 },
+    });
+
+    await flushMicrotasks();
+
+    // The handler ran (side effect observed) but no ack was fired back.
+    expect(runs).toEqual([{ at: 1 }]);
+    expect(remote.responses).toEqual([]);
+  });
+
+  it("sends no error response when a fire-and-forget action throws", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const registry: ActionRegistry = {
+      "spray.paint": defineAction({
+        id: "spray.paint",
+        fireAndForget: true,
+        run() {
+          throw new Error("boom");
+        },
+      }),
+    };
+
+    bindRemoteEventActions(remote, registry);
+    remote.FireServer({
+      requestId: "request-1",
+      actionId: "spray.paint",
+      input: { at: 1 },
+    });
+
+    await flushMicrotasks();
+
+    expect(remote.responses).toEqual([]);
   });
 
   it("sends an error response for an unknown action id", async () => {

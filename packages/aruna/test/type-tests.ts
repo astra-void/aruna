@@ -4,6 +4,7 @@ import {
   bindActions,
   createRemoteEventActionInvoker,
   createActionInvoker,
+  defineAction as defineRobloxAction,
   type DisposableActionInvoker,
   type RemoteEventClientLike,
 } from "../src/roblox.js";
@@ -138,11 +139,30 @@ const purchaseItem = defineAction({
 
 const noSchemaAction = defineAction({
   id: "shop.noSchema",
-  run(_ctx, input) {
+  run(ctx, input) {
     type _NoSchemaInput = Expect<Equal<typeof input, unknown>>;
+    // The generic `defineAction` from `aruna/server` leaves `TPlayer` as
+    // `unknown`, so `ctx.player` needs an annotation to be Player-typed.
+    type _ServerCtxPlayer = Expect<Equal<typeof ctx.player, unknown>>;
+    void ctx;
     return null;
   },
 });
+
+// The Roblox-flavored `defineAction` from `aruna/roblox` defaults `TPlayer` to
+// `Player`, so `ctx.player` is `Player | undefined` with no annotation.
+const robloxAction = defineRobloxAction({
+  id: "shop.robloxPlayer",
+  input: schema.object({ amount: schema.number() }),
+  run(ctx, input) {
+    type _RobloxCtxPlayer = Expect<Equal<typeof ctx.player, Player | undefined>>;
+    type _RobloxInput = Expect<Equal<typeof input, { amount: number }>>;
+    void ctx;
+    void input;
+    return null;
+  },
+});
+void robloxAction;
 
 const actions = {
   "shop.purchaseItem": purchaseItem,

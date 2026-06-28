@@ -100,6 +100,12 @@ impl SchemaRole {
     }
 }
 
+// serde predicate: skip serializing boolean fields that are false so manifests
+// without the field stay byte-identical to pre-feature snapshots.
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaActionRecord {
@@ -109,6 +115,12 @@ pub struct ArunaActionRecord {
     pub has_input_schema: bool,
     pub has_output_schema: bool,
     pub has_run: bool,
+    // A fire-and-forget action is one-way: the client does not wait for an ack
+    // and the server skips the response, trading delivery confirmation for
+    // throughput on high-frequency commands. Omitted from JSON when false so
+    // pre-fire-and-forget manifest snapshots stay byte-stable.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fire_and_forget: bool,
     pub serialization: ArunaActionSerializationMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit: Option<ArunaActionRateLimitMetadata>,
@@ -1339,6 +1351,40 @@ fn extract_action_rate_limit(
     parse_rate_limit_object(file, action_id, export_name, rate_limit_object, diagnostics)
 }
 
+// Reads the optional `fireAndForget` flag off a defineAction object. Accepts a
+// boolean literal (`true`/`false`); anything else is a hard error so a typo'd
+// value can't silently leave an action request/response when the author meant it
+// to be one-way.
+fn extract_action_fire_and_forget(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> bool {
+    let Some(property) = find_object_property(object, "fireAndForget") else {
+        return false;
+    };
+
+    match &property.value {
+        Expression::BooleanLiteral(literal) => literal.value,
+        _ => {
+            diagnostics.push(create_diagnostic(
+                "aruna::559",
+                format!("Server action {action_id} has an invalid fireAndForget option."),
+                Some(file.to_string()),
+                Some(DiagnosticSpan {
+                    start: property.value.span().start as usize,
+                    end: property.value.span().end as usize,
+                }),
+                Some(format!("export name: {export_name}")),
+                Some("Set fireAndForget to a boolean literal (true or false).".to_string()),
+            ));
+            false
+        }
+    }
+}
+
 fn analyze_define_action_call<'a>(
     file: &str,
     export_name: &str,
@@ -1421,6 +1467,8 @@ fn analyze_define_action_call<'a>(
         diagnostics,
     );
     let rate_limit = extract_action_rate_limit(file, &id, export_name, object, diagnostics);
+    let fire_and_forget =
+        extract_action_fire_and_forget(file, &id, export_name, object, diagnostics);
 
     let Some(run_property) = find_object_property(object, "run") else {
         diagnostics.push(create_diagnostic(
@@ -1438,6 +1486,7 @@ fn analyze_define_action_call<'a>(
             has_input_schema,
             has_output_schema,
             has_run: false,
+            fire_and_forget,
             serialization: ArunaActionSerializationMetadata::default(),
             rate_limit,
             input_schema,
@@ -1467,6 +1516,7 @@ fn analyze_define_action_call<'a>(
         has_input_schema,
         has_output_schema,
         has_run,
+        fire_and_forget,
         serialization: ArunaActionSerializationMetadata::default(),
         rate_limit,
         input_schema,

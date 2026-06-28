@@ -679,16 +679,18 @@ export const restockItem = defineAction({
         assert!(output.ok);
         let generated = output.generated_files.as_ref().expect("generated files");
         assert_eq!(generated.len(), 3);
-        assert_eq!(generated[0].path, "src/.aruna/actions.client.generated.ts");
-        assert_eq!(generated[1].path, "src/.aruna/actions.server.generated.ts");
+        assert_eq!(generated[0].path, "src/.aruna/shared/actions.client.generated.ts");
+        assert_eq!(generated[1].path, "src/.aruna/server/actions.server.generated.ts");
         assert_eq!(generated[2].path, "src/.aruna/manifest.json");
         assert_eq!(
             generated[0].contents,
-            fs::read_to_string(project_root.join("src/.aruna/actions.client.generated.ts")).unwrap()
+            fs::read_to_string(project_root.join("src/.aruna/shared/actions.client.generated.ts"))
+                .unwrap()
         );
         assert_eq!(
             generated[1].contents,
-            fs::read_to_string(project_root.join("src/.aruna/actions.server.generated.ts")).unwrap()
+            fs::read_to_string(project_root.join("src/.aruna/server/actions.server.generated.ts"))
+                .unwrap()
         );
         assert_eq!(
             generated[2].contents,
@@ -714,9 +716,9 @@ export const restockItem = defineAction({
             .contains("return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;"));
         assert!(generated[1]
             .contents
-            .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../domains/inventory/actions\";"));
+            .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../../domains/inventory/actions\";"));
         assert!(generated[1]
             .contents
-            .contains("import { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../domains/shop/actions\";"));
+            .contains("import { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../../domains/shop/actions\";"));
     }
 }

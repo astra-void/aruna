@@ -397,6 +397,81 @@ export const demo = defineAction({
 }
 
 #[test]
+fn captures_fire_and_forget_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const oneWay = defineAction({
+  id: "spray.paint",
+  fireAndForget: true,
+  run() {
+    return null;
+  },
+});
+
+export const twoWay = defineAction({
+  id: "shop.purchase",
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok);
+    let one_way = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "spray.paint")
+        .expect("expected fire-and-forget action metadata");
+    assert!(one_way.fire_and_forget);
+
+    let two_way = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "shop.purchase")
+        .expect("expected two-way action metadata");
+    assert!(!two_way.fire_and_forget);
+}
+
+#[test]
+fn rejects_invalid_fire_and_forget_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const demo = defineAction({
+  id: "demo.fireAndForget",
+  fireAndForget: "yes",
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::559".to_string()]);
+    assert!(!output.ok);
+}
+
+#[test]
 fn rejects_invalid_rate_limit_metadata() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

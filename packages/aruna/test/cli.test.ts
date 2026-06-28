@@ -7,7 +7,12 @@ import { describe, expect, it } from "vitest";
 import { inspectProject } from "@arunajs/compiler";
 import { formatGraphInspection, formatModuleInspection, formatSummary } from "../src/format.js";
 import { buildActionInspectionReport, formatActionInspection } from "../src/cli/inspect-actions.js";
-import { resolveColorMode, serializeJson } from "../src/cli.js";
+import {
+  relativeImportsOf,
+  resolveColorMode,
+  serializeJson,
+  validateRobloxRuntimeSource,
+} from "../src/cli.js";
 import {
   ARUNA_CLI_PALETTES,
   formatMuted,
@@ -354,8 +359,8 @@ describe("cli integration", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("aruna build");
     expect(result.stdout).toContain("generated:");
-    expect(result.stdout).toContain("src/.aruna/actions.client.generated.ts");
-    expect(result.stdout).toContain("src/.aruna/actions.server.generated.ts");
+    expect(result.stdout).toContain("src/.aruna/shared/actions.client.generated.ts");
+    expect(result.stdout).toContain("src/.aruna/server/actions.server.generated.ts");
     expect(result.stdout).toContain("src/.aruna/manifest.json");
     expect(result.stdout).toContain("2 actions discovered");
     expect(result.stdout).toContain("0 errors found");
@@ -484,7 +489,7 @@ describe("cli integration", () => {
     delete env.NO_COLOR;
 
     const projectRoot = copyFixtureInput("action-generated-output");
-    const runtimeMarker = path.join(projectRoot, "src", ".aruna", "runtime", "schema.ts");
+    const runtimeMarker = path.join(projectRoot, "src", ".aruna", "shared", "runtime", "schema.ts");
     const runBuild = (extraArgs: string[]): ReturnType<typeof spawnSync> =>
       spawnSync(
         process.execPath,
@@ -696,5 +701,81 @@ describe("human formatting", () => {
     expect(report.actions[0]?.moduleKind).toBe("serverAction");
     expect(report.actions[0]?.authority).toEqual({ owner: "server", clientCallable: true });
     expect(report.actions[0]?.input.summary).toBe("unknown (metadata unavailable)");
+  });
+});
+
+describe("Roblox runtime vendoring integrity", () => {
+  // A minimal but internally-consistent stand-in for the native runtime source:
+  // every anchor module is present and every relative import resolves.
+  function writeCompleteRuntime(dir: string): void {
+    const modules: Record<string, string> = {
+      "schema.ts": "export type Schema = unknown;\n",
+      "serialization.ts": 'import "./binary";\nexport const isWireSafe = true;\n',
+      "binary.ts": "export const encode = 0;\n",
+      "rate-limit.ts": "export const createActionRateLimiter = 0;\n",
+      "signal-runtime.ts": "export const createRemoteSignalPublisher = 0;\n",
+      "signal.ts": 'import type { Schema } from "./schema";\nexport const defineSignal = 0;\n',
+      "client-runtime.ts": "export type ActionInvoker = unknown;\n",
+      "client.ts": 'export * from "./client-runtime";\n',
+      "server-runtime.ts": 'import "./rate-limit";\nimport "./serialization";\n',
+      "server-app.ts": "export type ServerAppBinding = unknown;\n",
+      "server.ts": 'export { defineSignal } from "./signal";\nexport * from "./server-runtime";\nexport * from "./server-app";\n',
+      "roblox.ts": 'import "./signal-runtime";\nimport type { ActionInvoker } from "./client-runtime";\nexport const bindActions = 0;\n',
+    };
+    for (const [name, contents] of Object.entries(modules)) {
+      fs.writeFileSync(path.join(dir, name), contents, "utf8");
+    }
+  }
+
+  it("extracts relative imports across import/export/side-effect forms", () => {
+    const source = [
+      'import { a } from "./schema";',
+      'import type { B } from "./server-runtime";',
+      'import "./signal-runtime";',
+      'export * from "./server-app";',
+      'export { c } from "./signal.ts";',
+      'import pkg from "@arunajs/core";',
+      'import abs from "node:path";',
+    ].join("\n");
+
+    expect(relativeImportsOf(source).sort()).toEqual([
+      "schema",
+      "server-app",
+      "server-runtime",
+      "signal",
+      "signal-runtime",
+    ]);
+  });
+
+  it("accepts a complete, internally-consistent runtime source", async () => {
+    const dir = makeTempRoot();
+    writeCompleteRuntime(dir);
+
+    const files = await validateRobloxRuntimeSource(dir);
+    expect(files).toContain("signal.ts");
+    expect(files).toContain("roblox.ts");
+  });
+
+  it("rejects a source missing an anchor module (the draw-a-tower incident)", async () => {
+    const dir = makeTempRoot();
+    writeCompleteRuntime(dir);
+    // Simulate a concurrent `git stash` that briefly removed the signal modules.
+    fs.rmSync(path.join(dir, "signal.ts"));
+    fs.rmSync(path.join(dir, "signal-runtime.ts"));
+
+    await expect(validateRobloxRuntimeSource(dir)).rejects.toThrow(/incomplete: missing required/);
+  });
+
+  it("rejects a source with a dangling relative import (non-anchor module missing)", async () => {
+    const dir = makeTempRoot();
+    writeCompleteRuntime(dir);
+    // binary.ts is not an anchor, but it is reachable
+    // (server -> server-runtime -> serialization -> binary). Removing it leaves a
+    // dangling import rather than a missing anchor.
+    fs.rmSync(path.join(dir, "binary.ts"));
+
+    await expect(validateRobloxRuntimeSource(dir)).rejects.toThrow(
+      /dangling import.*binary\.ts \(imported by serialization\)/,
+    );
   });
 });

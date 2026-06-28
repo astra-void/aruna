@@ -173,30 +173,147 @@ async function findRobloxRuntimeSourceDir(): Promise<string | undefined> {
   return undefined;
 }
 
+// The base generatedDir, recovered from the build output. Generated TS files now
+// live in `<base>/server/` and `<base>/shared/` subtrees (split-tree layout), but
+// the manifest JSON is written flat at the base — so its dirname is the base.
+// Falls back to stripping the one subtree segment off a generated TS file, then
+// to the default.
 function generatedDirFromOutput(output: CompilerOutput): string {
-  const first = output.generatedFiles?.[0]?.path;
-  return first ? path.posix.dirname(first) : "src/.aruna";
+  const files = output.generatedFiles ?? [];
+  const manifest = files.find((file) => file.path.endsWith(".json"));
+  if (manifest) {
+    return path.posix.dirname(manifest.path);
+  }
+  const firstTs = files[0]?.path;
+  if (firstTs) {
+    // <base>/shared/actions.client.generated.ts -> <base>
+    return path.posix.dirname(path.posix.dirname(firstTs));
+  }
+  return "src/.aruna";
+}
+
+// Public entry modules of the native runtime. Vendoring a source tree that is
+// missing any of these (or any module they transitively import) yields a runtime
+// that fails to compile under rbxtsc — the exact failure mode that bit
+// draw-a-tower when a concurrent `git stash` briefly emptied the signal modules
+// out of the live source tree. These anchor the integrity check below.
+const ROBLOX_RUNTIME_ANCHOR_MODULES = [
+  "server",
+  "client",
+  "roblox",
+  "schema",
+  "signal",
+  "signal-runtime",
+] as const;
+
+// Pulls every relative module specifier (`./x`, with or without a `.ts`
+// extension) out of a runtime source file, regardless of whether it appears in
+// an `import`, `import type`, side-effect `import`, or `export ... from`.
+export function relativeImportsOf(source: string): string[] {
+  const names: string[] = [];
+  const pattern = /["']\.\/([\w.-]+?)(?:\.ts)?["']/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source)) !== null) {
+    const name = match[1];
+    if (name !== undefined) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+// Verifies the vendoring source is a *complete* runtime before anything is
+// copied: all anchor entry modules must be present, and every relative import
+// reachable from them must resolve to a file in the source set. A partial or
+// torn source (empty dir, missing signal modules, an interrupted checkout) is
+// rejected loudly rather than silently vendored into the consumer. Returns the
+// validated set of runtime file names to copy.
+export async function validateRobloxRuntimeSource(sourceDir: string): Promise<string[]> {
+  const entries = await fs.readdir(sourceDir);
+  const runtimeFiles = entries.filter((name) => name.endsWith(".ts"));
+  const present = new Set(runtimeFiles.map((name) => name.slice(0, -".ts".length)));
+
+  const missingAnchors = ROBLOX_RUNTIME_ANCHOR_MODULES.filter((name) => !present.has(name));
+  if (missingAnchors.length > 0) {
+    throw new Error(
+      `Aruna runtime source at ${sourceDir} is incomplete: missing required ` +
+        `module(s) ${missingAnchors.map((name) => `${name}.ts`).join(", ")}. ` +
+        `Refusing to vendor a partial runtime. If the aruna package was mid-build ` +
+        `or mid-checkout, rebuild it (\`pnpm build\`) and retry.`,
+    );
+  }
+
+  // Walk the relative-import graph from the anchors and flag any specifier that
+  // points at a module not present in the source set.
+  const dangling = new Map<string, Set<string>>();
+  const visited = new Set<string>();
+  const queue: string[] = [...ROBLOX_RUNTIME_ANCHOR_MODULES];
+  while (queue.length > 0) {
+    const moduleName = queue.shift() as string;
+    if (visited.has(moduleName) || !present.has(moduleName)) {
+      continue;
+    }
+    visited.add(moduleName);
+    const source = await fs.readFile(path.join(sourceDir, `${moduleName}.ts`), "utf8");
+    for (const referenced of relativeImportsOf(source)) {
+      if (present.has(referenced)) {
+        queue.push(referenced);
+      } else {
+        const referrers = dangling.get(referenced) ?? new Set<string>();
+        referrers.add(moduleName);
+        dangling.set(referenced, referrers);
+      }
+    }
+  }
+
+  if (dangling.size > 0) {
+    const detail = [...dangling.entries()]
+      .map(([name, referrers]) => `${name}.ts (imported by ${[...referrers].sort().join(", ")})`)
+      .sort()
+      .join("; ");
+    throw new Error(
+      `Aruna runtime source at ${sourceDir} is incomplete: dangling import(s) ${detail}. ` +
+        `Refusing to vendor a partial runtime. Rebuild the aruna package and retry.`,
+    );
+  }
+
+  return runtimeFiles;
 }
 
 // Vendors the Roblox-targeted runtime into the project's generated dir so a
 // consumer compiles it as project source (avoids roblox-ts's "modules directly
 // under node_modules" rule). Distinct from the Node reference runtime.
+//
+// The copy is integrity-checked (see validateRobloxRuntimeSource) and atomic:
+// files are staged into a sibling temp dir, then the existing runtime is
+// replaced in a single rename, so a failure mid-copy can never leave the
+// consumer with a half-written runtime.
 async function emitRobloxRuntime(root: string, generatedDir: string): Promise<void> {
   const sourceDir = await findRobloxRuntimeSourceDir();
   if (sourceDir === undefined) {
     return;
   }
-  const entries = await fs.readdir(sourceDir);
-  const runtimeFiles = entries.filter((name) => name.endsWith(".ts"));
-  if (runtimeFiles.length === 0) {
-    return;
-  }
 
-  const targetDir = path.join(root, generatedDir, "runtime");
-  await fs.rm(targetDir, { recursive: true, force: true });
-  await fs.mkdir(targetDir, { recursive: true });
-  for (const name of runtimeFiles) {
-    await fs.copyFile(path.join(sourceDir, name), path.join(targetDir, name));
+  const runtimeFiles = await validateRobloxRuntimeSource(sourceDir);
+
+  // Vendor into the shared subtree (replication-safe) to match the split-tree
+  // generated layout and the `aruna/<name>` tsconfig path aliases.
+  const baseDir = path.join(root, generatedDir, "shared");
+  const targetDir = path.join(baseDir, "runtime");
+  const stagingDir = path.join(baseDir, ".runtime.tmp");
+
+  await fs.rm(stagingDir, { recursive: true, force: true });
+  await fs.mkdir(stagingDir, { recursive: true });
+  try {
+    for (const name of runtimeFiles) {
+      await fs.copyFile(path.join(sourceDir, name), path.join(stagingDir, name));
+    }
+    // Swap last: the live runtime dir is removed only once staging is fully
+    // populated, then replaced in a single atomic rename.
+    await fs.rm(targetDir, { recursive: true, force: true });
+    await fs.rename(stagingDir, targetDir);
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true });
   }
 }
 

@@ -17,6 +17,10 @@ export interface ActionRegistry<TPlayer = unknown> {
 		actionId: string,
 		input: unknown,
 	) => Promise<ActionDispatchResult>;
+	// True when the action is declared `fireAndForget` (one-way). The transport
+	// binder uses this to decide whether to send a response back to the client.
+	// Unknown action ids return false.
+	readonly isFireAndForget: (actionId: string) => boolean;
 }
 
 type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer>;
@@ -44,6 +48,7 @@ export function createActionRegistry<TPlayer>(
 	const rateLimiter = createActionRateLimiter();
 
 	return {
+		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
 		dispatch: (player, actionId, input) => {
 			return new Promise<ActionDispatchResult>((resolve) => {
 				const definition = actionsById.get(actionId);

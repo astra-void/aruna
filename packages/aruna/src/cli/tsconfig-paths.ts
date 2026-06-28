@@ -5,6 +5,17 @@ export const ARUNA_ACTION_PATHS = {
   server: "$aruna/actions/server",
 } as const;
 
+// Split-tree generated layout (relative to the configured generatedDir). The
+// server action registry imports server implementations, so it lands in a
+// `server/` subtree that maps to a server-only Rojo mount; the client stubs, the
+// signal registry, and the vendored runtime are replication-safe and land in a
+// `shared/` subtree. Mirrors the Rust resolver/codegen constants — keep in sync.
+const GENERATED_CLIENT_ACTIONS_FILE = "shared/actions.client.generated.ts";
+const GENERATED_SERVER_ACTIONS_FILE = "server/actions.server.generated.ts";
+const GENERATED_SIGNALS_FILE = "shared/signals.generated.ts";
+// The vendored runtime is replication-safe, so it lands under the shared subtree.
+export const GENERATED_RUNTIME_DIR = "shared/runtime";
+
 // The generated signal registry virtual module. Installed alongside the action
 // aliases so `import { signals } from "$aruna/signals"` resolves under tsc and
 // rbxtsc; the compiler resolves the same specifier virtually. Points at the
@@ -18,7 +29,7 @@ export function resolveArunaSignalPaths(
 ): Record<string, string[]> {
   const tsconfigDir = path.dirname(tsconfigPath);
   const target = path
-    .relative(tsconfigDir, path.resolve(tsconfigDir, generatedDir, "signals.generated.ts"))
+    .relative(tsconfigDir, path.resolve(tsconfigDir, generatedDir, GENERATED_SIGNALS_FILE))
     .split(path.sep)
     .join("/");
   return { [ARUNA_SIGNALS_ALIAS]: [target] };
@@ -58,14 +69,14 @@ export function resolveArunaActionPaths(
   const clientPath = path
     .relative(
       tsconfigDir,
-      path.resolve(path.dirname(tsconfigPath), generatedDir, "actions.client.generated.ts"),
+      path.resolve(path.dirname(tsconfigPath), generatedDir, GENERATED_CLIENT_ACTIONS_FILE),
     )
     .split(path.sep)
     .join("/");
   const serverPath = path
     .relative(
       tsconfigDir,
-      path.resolve(path.dirname(tsconfigPath), generatedDir, "actions.server.generated.ts"),
+      path.resolve(path.dirname(tsconfigPath), generatedDir, GENERATED_SERVER_ACTIONS_FILE),
     )
     .split(path.sep)
     .join("/");
@@ -133,8 +144,8 @@ export function inspectArunaActionPaths(
   };
 }
 
-// Roblox-facing runtime modules vendored into `<generatedDir>/runtime/` by
-// `aruna build --emit-runtime`. The bare `aruna/<name>` subpaths are aliased to
+// Roblox-facing runtime modules vendored into `<generatedDir>/shared/runtime/`
+// by `aruna build --emit-runtime`. The bare `aruna/<name>` subpaths are aliased to
 // those project-source files so roblox-ts compiles them instead of rejecting a
 // `node_modules` package import.
 export const ARUNA_RUNTIME_MODULES = ["client", "server", "roblox", "schema"] as const;
@@ -147,7 +158,10 @@ export function resolveArunaRuntimePaths(
   const result: Record<string, string[]> = {};
   for (const moduleName of ARUNA_RUNTIME_MODULES) {
     const target = path
-      .relative(tsconfigDir, path.resolve(tsconfigDir, generatedDir, "runtime", `${moduleName}.ts`))
+      .relative(
+        tsconfigDir,
+        path.resolve(tsconfigDir, generatedDir, GENERATED_RUNTIME_DIR, `${moduleName}.ts`),
+      )
       .split(path.sep)
       .join("/");
     result[`aruna/${moduleName}`] = [target];

@@ -77,7 +77,7 @@ describe("doctor", () => {
     expect(report.status.server).toBe("missing");
     expect(formatDoctorReport(report)).toContain("generated dir: src/.aruna");
     expect(formatDoctorReport(report)).toContain(
-      "$aruna/actions/client -> src/.aruna/actions.client.generated.ts  missing",
+      "$aruna/actions/client -> src/.aruna/shared/actions.client.generated.ts  missing",
     );
     expect(doctorExitCode(report)).toBe(1);
   });
@@ -95,15 +95,15 @@ describe("doctor", () => {
     expect(report.fixApplied).toBe(true);
     expect(report.fixChanges).toContain('added compilerOptions.baseUrl = "."');
     expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
-      "src/.aruna/actions.client.generated.ts",
+      "src/.aruna/shared/actions.client.generated.ts",
     ]);
     expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
-      "src/.aruna/actions.server.generated.ts",
+      "src/.aruna/server/actions.server.generated.ts",
     ]);
     // The signal registry virtual module is installed alongside the actions so
     // `import { signals } from "$aruna/signals"` resolves under tsc/rbxtsc.
     expect(tsconfig.compilerOptions.paths["$aruna/signals"]).toEqual([
-      "src/.aruna/signals.generated.ts",
+      "src/.aruna/shared/signals.generated.ts",
     ]);
   });
 
@@ -131,10 +131,10 @@ describe("doctor", () => {
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
     expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
-      "src/.aruna/actions.client.generated.ts",
+      "src/.aruna/shared/actions.client.generated.ts",
     ]);
     expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
-      "src/.aruna/actions.server.generated.ts",
+      "src/.aruna/server/actions.server.generated.ts",
     ]);
   });
 
@@ -192,10 +192,10 @@ describe("doctor", () => {
     expect(report.generatedDir).toBe("src/generated");
     expect(report.manifestOutput).toBe("src/generated/manifest.json");
     expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
-      "src/generated/actions.client.generated.ts",
+      "src/generated/shared/actions.client.generated.ts",
     ]);
     expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
-      "src/generated/actions.server.generated.ts",
+      "src/generated/server/actions.server.generated.ts",
     ]);
   });
 

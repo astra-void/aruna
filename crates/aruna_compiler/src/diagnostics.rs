@@ -68,6 +68,7 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::552" => Some(("action-run-not-function", DiagnosticSeverity::Error)),
         "aruna::553" => Some(("action-input-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::554" => Some(("action-output-schema-invalid", DiagnosticSeverity::Warning)),
+        "aruna::559" => Some(("invalid-action-fire-and-forget", DiagnosticSeverity::Error)),
         "aruna::560" => Some(("invalid-action-rate-limit", DiagnosticSeverity::Error)),
         "aruna::564" => Some(("signal-payload-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::566" => Some((

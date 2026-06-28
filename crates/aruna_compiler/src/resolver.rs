@@ -24,6 +24,17 @@ pub enum VirtualGeneratedActionModule {
     Server,
 }
 
+// Split-tree generated layout (relative to the configured generatedDir). The
+// server action registry imports server implementations, so it lands in a
+// `server/` subtree that maps to a server-only Rojo mount; the client stubs, the
+// signal registry, and the vendored runtime are replication-safe and land in a
+// `shared/` subtree. Single source of truth for both the virtual-module resolver
+// (which makes `$aruna/actions/server` resolve to the right file) and codegen
+// (which writes the file) — keep them identical.
+pub const GENERATED_CLIENT_ACTIONS_FILE: &str = "shared/actions.client.generated.ts";
+pub const GENERATED_SERVER_ACTIONS_FILE: &str = "server/actions.server.generated.ts";
+pub const GENERATED_SIGNALS_FILE: &str = "shared/signals.generated.ts";
+
 impl VirtualGeneratedActionModule {
     pub fn specifier(self) -> &'static str {
         match self {
@@ -34,8 +45,8 @@ impl VirtualGeneratedActionModule {
 
     pub fn filename(self) -> &'static str {
         match self {
-            VirtualGeneratedActionModule::Client => "actions.client.generated.ts",
-            VirtualGeneratedActionModule::Server => "actions.server.generated.ts",
+            VirtualGeneratedActionModule::Client => GENERATED_CLIENT_ACTIONS_FILE,
+            VirtualGeneratedActionModule::Server => GENERATED_SERVER_ACTIONS_FILE,
         }
     }
 }
@@ -62,7 +73,7 @@ impl VirtualGeneratedSignalModule {
     }
 
     pub fn filename(self) -> &'static str {
-        "signals.generated.ts"
+        GENERATED_SIGNALS_FILE
     }
 }
 

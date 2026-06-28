@@ -19,12 +19,12 @@ describe("aruna init", () => {
         compilerOptions: { paths: Record<string, string[]> };
       };
       const paths = tsconfig.compilerOptions.paths;
-      expect(paths["aruna/server"]).toEqual(["src/.aruna/runtime/server.ts"]);
-      expect(paths["aruna/schema"]).toEqual(["src/.aruna/runtime/schema.ts"]);
+      expect(paths["aruna/server"]).toEqual(["src/.aruna/shared/runtime/server.ts"]);
+      expect(paths["aruna/schema"]).toEqual(["src/.aruna/shared/runtime/schema.ts"]);
       expect(paths["$aruna/actions/server"]).toEqual([
-        "src/.aruna/actions.server.generated.ts",
+        "src/.aruna/server/actions.server.generated.ts",
       ]);
-      expect(paths["$aruna/signals"]).toEqual(["src/.aruna/signals.generated.ts"]);
+      expect(paths["$aruna/signals"]).toEqual(["src/.aruna/shared/signals.generated.ts"]);
 
       const project = JSON.parse(
         await fs.readFile(path.join(root, "default.project.json"), "utf8"),

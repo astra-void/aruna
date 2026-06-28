@@ -41,6 +41,10 @@ export type ActionDefinition<
 > = {
   readonly id: string;
   readonly rateLimit?: ActionRateLimitOptions;
+  // One-way action: the client does not wait for an ack and the server skips the
+  // response, trading delivery confirmation for throughput on high-frequency
+  // commands. The default (false/undefined) keeps the request/response roundtrip.
+  readonly fireAndForget?: boolean;
   readonly input?: TInputSchema;
   readonly output?: TOutputSchema;
   run(

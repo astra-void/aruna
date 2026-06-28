@@ -196,12 +196,24 @@ export function createRemoteEventActionInvoker(
     pending.reject(error);
   });
 
-  const invoke: ActionInvoker = (actionId, input) => {
+  const invoke: ActionInvoker = (actionId, input, invokeOptions) => {
     if (disposed) {
       return Promise.reject(new Error("RemoteEvent action invoker is disposed."));
     }
 
     const requestId = createRequestId();
+
+    // Fire-and-forget: fire the request and resolve immediately. No pending
+    // entry is registered (so the ignored server ack, if any, is dropped) and no
+    // timeout is armed. Matches the server binder skipping its response.
+    if (invokeOptions?.fireAndForget === true) {
+      try {
+        remote.FireServer({ requestId, actionId, input });
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return Promise.resolve(undefined);
+    }
 
     return new Promise<unknown>((resolve, reject) => {
       const pending: PendingRequest = { resolve, reject };
@@ -281,6 +293,11 @@ export function bindRemoteEventActions<TPlayer = unknown>(
 
     const context = options?.createContext?.(player) ?? ({ player } as ActionRunContext<TPlayer>);
 
+    // Fire-and-forget actions are one-way: dispatch still runs (for its side
+    // effects and rate limiting), but no response — success or error — is sent
+    // back, since the client is not waiting for one.
+    const fireAndForget = registry[request.actionId]?.fireAndForget === true;
+
     try {
       const dispatchOptions =
         options === undefined
@@ -298,17 +315,21 @@ export function bindRemoteEventActions<TPlayer = unknown>(
         dispatchOptions,
       );
 
-      remote.FireClient(player, {
-        requestId: request.requestId,
-        ok: true,
-        output,
-      });
+      if (!fireAndForget) {
+        remote.FireClient(player, {
+          requestId: request.requestId,
+          ok: true,
+          output,
+        });
+      }
     } catch (error) {
-      remote.FireClient(player, {
-        requestId: request.requestId,
-        ok: false,
-        error: toRemoteEventErrorPayload(error),
-      });
+      if (!fireAndForget) {
+        remote.FireClient(player, {
+          requestId: request.requestId,
+          ok: false,
+          error: toRemoteEventErrorPayload(error),
+        });
+      }
     }
   });
 

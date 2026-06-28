@@ -57,8 +57,8 @@ return function(ctx)
 		t.it("delivers a published payload to a dynamic subscriber", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createSignalPublisher(remote, signals)
-			local subscriber = signalRuntime.createSignalSubscriber(remote, signals)
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local received = nil
 			subscriber.on("combat.damaged", function(payload)
@@ -76,8 +76,8 @@ return function(ctx)
 		t.it("broadcasts to all subscribers", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createSignalPublisher(remote, signals)
-			local subscriber = signalRuntime.createSignalSubscriber(remote, signals)
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
 			subscriber.on("combat.damaged", function()
@@ -92,8 +92,8 @@ return function(ctx)
 		t.it("stops delivering after disconnect", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createSignalPublisher(remote, signals)
-			local subscriber = signalRuntime.createSignalSubscriber(remote, signals)
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
 			local connection = subscriber.on("combat.damaged", function()
@@ -111,7 +111,7 @@ return function(ctx)
 		t.it("rejects an unknown signal id on publish", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createSignalPublisher(remote, signals)
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
 
 			local ok = pcall(function()
 				publisher.to("Ada", "combat.unknown", { amount = 1, source = "a" })
@@ -122,8 +122,8 @@ return function(ctx)
 		t.it("rejects a schema-invalid payload before the wire", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createSignalPublisher(remote, signals)
-			local subscriber = signalRuntime.createSignalSubscriber(remote, signals)
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
 			subscriber.on("combat.damaged", function()
@@ -143,7 +143,7 @@ return function(ctx)
 			-- validation to assert the subscriber-side schema guard independently.
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local subscriber = signalRuntime.createSignalSubscriber(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
 			subscriber.on("combat.damaged", function()

@@ -66,6 +66,9 @@ export type ActionRecord = {
   hasInputSchema: boolean;
   hasOutputSchema: boolean;
   hasRun: boolean;
+  // One-way action: the client does not wait for an ack and the server skips the
+  // response. Omitted from the manifest JSON when false.
+  fireAndForget?: boolean | undefined;
   serialization: {
     policy: "plain-data-v1";
   };

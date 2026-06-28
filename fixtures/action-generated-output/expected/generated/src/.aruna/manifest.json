@@ -3,16 +3,16 @@
   "projectRoot": ".",
   "modules": [
     {
-      "id": "src/.aruna/actions.client.generated.ts",
-      "path": "src/.aruna/actions.client.generated.ts",
-      "kind": "client",
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
       "reason": "directive",
       "reasonDetail": "virtual $aruna/actions module"
     },
     {
-      "id": "src/.aruna/actions.server.generated.ts",
-      "path": "src/.aruna/actions.server.generated.ts",
-      "kind": "serverAction",
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
       "reason": "directive",
       "reasonDetail": "virtual $aruna/actions module"
     },

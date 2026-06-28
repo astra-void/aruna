@@ -1,8 +1,10 @@
 // Aruna roblox-ts native runtime — default RemoteEvent action transport.
 
 import type { ActionInvoker } from "./client-runtime";
+import type { ActionDefinition } from "./server";
 import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding } from "./server-app";
+import type { Schema } from "./schema";
 import {
 	createRemoteSignalPublisher,
 	createRemoteSignalSubscriber,
@@ -10,6 +12,23 @@ import {
 	type SignalPublisher,
 	type SignalSubscriber,
 } from "./signal-runtime";
+
+// Roblox-flavored definition helpers. `defineSignal` is unchanged from
+// `aruna/server`; `defineAction` defaults `TPlayer` to `Player` so `ctx.player`
+// is typed without a per-action annotation. Both are identity functions — the
+// `ActionDefinition` import is type-only, so the Luau require graph stays
+// acyclic.
+export { defineSignal } from "./signal";
+
+export function defineAction<
+	TInput extends Schema | undefined = undefined,
+	TOutput extends Schema | undefined = undefined,
+	TPlayer = Player,
+>(
+	definition: ActionDefinition<TInput, TOutput, TPlayer>,
+): ActionDefinition<TInput, TOutput, TPlayer> {
+	return definition;
+}
 
 const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
 const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
@@ -84,7 +103,16 @@ export function createActionInvoker(
 		}
 	});
 
-	return (actionId, input) => {
+	return (actionId, input, options) => {
+		// Fire-and-forget: fire the request and resolve immediately. No pending
+		// entry is registered (the server's ignored ack, if any, is dropped) and
+		// no timeout is armed. Matches the server binder skipping its response.
+		if (options !== undefined && options.fireAndForget === true) {
+			const requestId = createRequestId();
+			remote.FireServer(requestId, actionId, input);
+			return Promise.resolve(undefined);
+		}
+
 		return new Promise<unknown>((resolve, reject) => {
 			const requestId = createRequestId();
 			const entry: PendingActionRequest = {
@@ -128,8 +156,14 @@ export function bindActions<TPlayer>(
 			return;
 		}
 
+		// Fire-and-forget actions are one-way: dispatch still runs (for its side
+		// effects and rate limiting), but no response is sent back, since the
+		// client is not waiting for one.
+		const fireAndForget = registry.isFireAndForget(actionId);
 		void registry.dispatch(player as unknown as TPlayer, actionId, input).then((result) => {
-			remote.FireClient(player, requestId, result);
+			if (!fireAndForget) {
+				remote.FireClient(player, requestId, result);
+			}
 		});
 	});
 
