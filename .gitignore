@@ -13,6 +13,7 @@ yarn-error.log*
 # Build / artifacts
 dist/
 out/
+include/
 coverage/
 target/
 tmp/
