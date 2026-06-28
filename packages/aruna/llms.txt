@@ -1,0 +1,46 @@
+# Aruna
+
+> Aruna is a type-safe networking framework for roblox-ts. You define server actions
+> (client → server RPC) and signals (server → client push) once, in TypeScript, with
+> schemas; the `aruna build` compiler generates typed client/server stubs, a runtime,
+> and a Rojo-buildable project layout. This file is written for coding agents: it
+> describes the public API and the things that are easy to get wrong.
+
+## What you are looking at
+
+You are reading this from inside `node_modules/@arunajs/aruna`. This is a published
+library. Consumer code imports from four runtime entry points and three generated
+virtual modules:
+
+- `aruna/server`  — `defineAction`, `defineSignal`, `createServerApp`, dispatch/validation
+- `aruna/client`  — `createClientApp`, `invokeAction`, in-memory invoker (tests)
+- `aruna/roblox`  — RemoteEvent/RemoteFunction transports, `createActionInvoker`, `bindActions`, signal pub/sub
+- `aruna/schema`  — `schema.*` builders + `InferSchema`
+- `$aruna/actions/server` — generated server action registry (`actions`, `defaultRateLimit`)
+- `$aruna/actions/client` — generated per-action client call functions
+- `$aruna/signals` — generated signal registry (`signals`)
+
+The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
+`aruna build` / `aruna doctor --fix`. They are NOT the npm subpath exports
+(`@arunajs/aruna/server`); in a real project you import the short `aruna/*` form.
+
+## Docs
+
+- [Getting started](./docs/getting-started.md): install, project shape, the build loop, a full minimal action round-trip.
+- [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits, fire-and-forget, `ctx.player`.
+- [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber.
+- [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
+- [CLI](./docs/cli.md): `aruna build`/`check`/`init`/`doctor`/`inspect`/`contract`, flags, what each generates.
+- [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the dual runtime, binary codec.
+
+## Rules of thumb (read before writing Aruna code)
+
+- Action and signal definitions are discovered by file classification (client/server/shared
+  by path convention). Server-only logic must live in server-classified files or the
+  compiler reports a boundary violation. See architecture.md.
+- After adding or changing any `defineAction`/`defineSignal`, run `aruna build` — `aruna check`
+  does NOT regenerate stubs or the manifest, so client stubs go stale.
+- `ctx.player` is optional at runtime (tests call actions with no player). Import
+  `defineAction` from `aruna/roblox` to get `ctx.player: Player` typing.
+- Schemas are plain immutable objects with zero runtime cost; compose by spreading
+  `.shape`, never mutate.

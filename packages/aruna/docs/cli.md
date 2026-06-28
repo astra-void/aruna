@@ -1,0 +1,86 @@
+# CLI
+
+The `aruna` binary drives the compiler. Run it via your package manager (e.g.
+`pnpm aruna build`) or the local bin.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `aruna init` | Scaffold `aruna.config.ts`, `tsconfig.json`, and `default.project.json`. |
+| `aruna check` | Type-check the project and validate module boundaries. Does **not** generate. |
+| `aruna build` | Generate action stubs + manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc. |
+| `aruna doctor [--fix]` | Inspect (and with `--fix`, write) the `aruna/*` and `$aruna/*` tsconfig path aliases. |
+| `aruna inspect actions` | List discovered actions and contract metadata. |
+| `aruna inspect signals` | List discovered server → client signals. |
+| `aruna inspect contract` | Print a deterministic action contract snapshot. |
+| `aruna inspect modules` | Print how each file is classified (client/server/shared). |
+| `aruna inspect graph` | Print the import graph. |
+| `aruna contract diff` | Compare action contract snapshots (`--baseline`, `--from`, `--to`). |
+
+## The check vs build distinction
+
+`aruna check` is fast and read-only: it reports diagnostics and boundary violations but
+writes nothing. `aruna build` is what regenerates `$aruna/actions/*`, `$aruna/signals`,
+the manifest, and the vendored runtime. **After changing any action or signal you must
+run `aruna build`** — otherwise the generated client stubs reference the old contract.
+
+## Global flags
+
+Available on every command:
+
+```
+--project <path>        project root (default: cwd)
+--config <path>         config file path
+--json                  emit machine-readable JSON (for CI/tooling)
+--quiet                 reduce human-readable output
+--verbose               show additional output
+--no-color              disable color
+--warnings-as-errors    treat warnings as failures (non-zero exit)
+```
+
+## `aruna build` flags
+
+```
+--no-emit-runtime   skip vendoring the Roblox-targeted runtime into the generated dir
+--no-emit-luau      only generate stubs + vendor the runtime; skip the rbxtsc Luau compile
+--emit-runtime      explicit-on (now the default; kept for backward compatibility)
+```
+
+By default `build` vendors the runtime and runs rbxtsc, partitioning the project into
+client/server/shared so the emitted `out/` maps onto the Roblox DataModel (server code
+stays in `ServerScriptService`, never replicated). See [architecture.md](./architecture.md).
+
+## `aruna doctor`
+
+If `aruna/server`, `aruna/schema`, `$aruna/actions/client`, etc. fail to resolve, the
+tsconfig path aliases are missing or stale. `aruna doctor` reports their status;
+`aruna doctor --fix` writes the correct ones. Add `--emit-runtime` to also alias the
+`aruna/*` subpaths to the vendored runtime (pair with `build`'s default vendoring).
+
+## Config (`aruna.config.ts`)
+
+```ts
+import { defineConfig } from "aruna";
+
+export default defineConfig({
+  actions: {
+    transport: "remote-event",               // "remote-event" | "remote-function" | "memory"
+    defaultRateLimit: { key: "player", windowMs: 1000, max: 20 },
+  },
+  conventions: {
+    client: ["**/client/**"],
+    server: ["**/server/**"],
+    shared: ["**/shared/**"],
+  },
+  strict: {
+    sharedSafety: true,                       // forbid shared → server leaks
+    rawRemoteUsage: "warning",                // "off" | "warning" | "error"
+    unresolvedImports: "warning",
+  },
+});
+```
+
+`defineConfig` is exported from the package root (`aruna` / `@arunajs/aruna`), alongside
+the programmatic `buildProject` / `checkProject` / `inspectProject` APIs if you want to
+run the compiler from a script instead of the CLI.

@@ -12,6 +12,8 @@
   "files": [
     "dist",
     "roblox",
+    "docs",
+    "llms.txt",
     "*.js",
     "*.d.ts"
   ],
