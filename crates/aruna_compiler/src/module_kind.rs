@@ -178,7 +178,28 @@ pub fn classify_module(
         shared: convention_patterns(config, &ModuleKind::Shared),
     };
 
-    classify_relative_path(&relative, &convention_set)
+    // Aruna owns the layout under `generatedDir` (server registry under
+    // `server/`, stubs/signals/runtime under `shared/`). Classify generated
+    // files by their path *relative to* `generatedDir` so a convention segment in
+    // the generatedDir's own ancestry — e.g. `src/shared/.aruna` matching
+    // `**/shared/**` — does not collide with the generated subtree's own kind and
+    // produce a spurious multi-convention (ambiguous) match.
+    let match_path = strip_generated_dir_prefix(&relative, &config.generated_dir).unwrap_or(relative);
+
+    classify_relative_path(&match_path, &convention_set)
+}
+
+// Returns `path` with the `generated_dir` prefix removed when `path` lives inside
+// it, or `None` when it does not. Both are normalized first so the comparison is
+// slash- and segment-accurate.
+fn strip_generated_dir_prefix(path: &str, generated_dir: &str) -> Option<String> {
+    let generated_dir = normalize_path(generated_dir);
+    if generated_dir.is_empty() {
+        return None;
+    }
+
+    let prefix = format!("{generated_dir}/");
+    path.strip_prefix(&prefix).map(|rest| rest.to_string())
 }
 
 #[cfg(test)]
@@ -227,6 +248,39 @@ mod tests {
             .kind,
             ModuleKind::ServerEntry
         );
+    }
+
+    #[test]
+    fn classifies_generated_files_relative_to_generated_dir() {
+        // generatedDir nested inside a `shared/` convention path. The generated
+        // server registry must classify as Server (not ambiguous Unknown) because
+        // the generatedDir's own `shared/` ancestry is stripped before matching.
+        let mut config = ArunaConfig::default();
+        config.generated_dir = "src/shared/.aruna".to_string();
+
+        let server = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/shared/.aruna/server/actions.server.generated.ts"),
+            &config,
+        );
+        assert_eq!(server.kind, ModuleKind::Server);
+        assert!(server.matched_kinds.len() <= 1);
+
+        let shared = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/shared/.aruna/shared/actions.client.generated.ts"),
+            &config,
+        );
+        assert_eq!(shared.kind, ModuleKind::Shared);
+
+        // A non-generated file under the same `shared/` tree still classifies
+        // normally as Shared.
+        let regular = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/shared/schema.ts"),
+            &config,
+        );
+        assert_eq!(regular.kind, ModuleKind::Shared);
     }
 
     #[test]
