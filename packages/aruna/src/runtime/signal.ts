@@ -1,4 +1,4 @@
-import { assertSchema, validateSchema, type InferSchema, type Schema } from "../schema/index.js";
+import { assertSchema, validateSchema, type Infer, type Schema } from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
 
 // A signal is a server -> client push channel. Unlike an action it has no
@@ -8,7 +8,7 @@ import { assertSerializableActionValue } from "./serialization.js";
 export type SignalPayload<TPayloadSchema extends Schema | undefined> = [TPayloadSchema] extends [
   Schema,
 ]
-  ? InferSchema<TPayloadSchema>
+  ? Infer<TPayloadSchema>
   : unknown;
 
 export type SignalDefinition<TPayloadSchema extends Schema | undefined = undefined> = {

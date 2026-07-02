@@ -2,6 +2,7 @@
 
 import type { ActionContext, ActionDefinition, ActionRateLimitOptions } from "./server";
 import type { Schema } from "./schema";
+import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
 
@@ -27,15 +28,20 @@ type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema 
 
 export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinition<TPlayer> };
 
-export interface ActionRegistryOptions {
+export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Applied to any action that does not declare its own `rateLimit`. A
 	// per-action `rateLimit` always takes precedence over this fallback.
 	readonly defaultRateLimit?: ActionRateLimitOptions;
+	// The app-owned signal publisher, injected into every action ctx so `run` can
+	// publish signals. Carried registry- and player-erased (`unknown`) — the precise
+	// typing lives on the action ctx via `createActionDefiner`; dispatch only
+	// forwards it.
+	readonly publisher?: SignalPublisher<SignalMap, unknown>;
 }
 
 export function createActionRegistry<TPlayer>(
 	actions: ActionMap<TPlayer>,
-	options?: ActionRegistryOptions,
+	options?: ActionRegistryOptions<TPlayer>,
 ): ActionRegistry<TPlayer> {
 	const actionsById = new Map<string, AnyActionDefinition<TPlayer>>();
 	for (const [actionId, definition] of pairs(
@@ -45,6 +51,7 @@ export function createActionRegistry<TPlayer>(
 	}
 
 	const defaultRateLimit = options?.defaultRateLimit;
+	const publisher = options?.publisher;
 	const rateLimiter = createActionRateLimiter();
 
 	return {
@@ -81,7 +88,8 @@ export function createActionRegistry<TPlayer>(
 					}
 				}
 
-				const context: ActionContext<TPlayer> = { player };
+				const context: ActionContext<TPlayer> =
+					publisher !== undefined ? { player, publisher } : { player };
 
 				// Invoke the handler inside a pcall so a *synchronous* throw becomes
 				// a result payload rather than rejecting the dispatch promise. A

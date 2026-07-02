@@ -2,11 +2,12 @@ import { createServerBinding, type ServerBinding } from "./binding.js";
 import type { ActionInvoker } from "./client.js";
 import {
   dispatchAction,
-  type ActionRateLimitKeyResolver,
+  type ActionRateLimitOptions,
   type ActionRateLimiter,
   type ActionRegistry,
   type ActionRunContext,
   type DispatchActionOptions,
+  type RateLimitKeyResolver,
 } from "./server.js";
 
 export type RemoteEventActionRequest = {
@@ -81,7 +82,7 @@ export class TimeoutError extends Error {
   }
 }
 
-export type RemoteEventActionInvokerOptions = {
+export type ActionInvokerOptions = {
   readonly createRequestId?: RemoteEventRequestIdFactory;
   // Milliseconds to wait for a server response before rejecting with
   // TimeoutError. 0 or undefined (the default) disables the timeout.
@@ -95,14 +96,23 @@ export type DisposableActionInvoker = ActionInvoker & {
   readonly dispose: () => void;
 };
 
-export type RemoteEventActionContextFactory<TPlayer = unknown> = (
+export type ActionContextFactory<TPlayer = unknown> = (
   player: TPlayer,
 ) => ActionRunContext<TPlayer>;
 
-export type BindRemoteEventActionsOptions<TPlayer = unknown> = {
-  readonly createContext?: RemoteEventActionContextFactory<TPlayer>;
+export type BindActionsOptions<TPlayer = unknown> = {
+  readonly createContext?: ActionContextFactory<TPlayer>;
   readonly rateLimiter?: ActionRateLimiter;
-  readonly rateLimitKey?: ActionRateLimitKeyResolver<TPlayer>;
+  readonly rateLimitKey?: RateLimitKeyResolver<TPlayer>;
+  // Applied to any action that does not declare its own `rateLimit`. A
+  // per-action `rateLimit` always takes precedence over this fallback. Forwarded
+  // straight into the dispatch options so a config-level `defaultRateLimit`
+  // actually throttles the wire, not just the in-process `dispatch` helper.
+  readonly defaultRateLimit?: ActionRateLimitOptions;
+  // The app-owned signal publisher, forwarded into dispatch so a wire-dispatched
+  // action's `ctx.publisher` is the same one `app.dispatch` injects. Set by
+  // `createServerApp` via the transport's dispatch options.
+  readonly publisher?: DispatchActionOptions<TPlayer>["publisher"];
   readonly nowMs?: () => number;
 };
 
@@ -156,7 +166,7 @@ function toRemoteEventErrorPayload(error: unknown): RemoteEventActionErrorPayloa
 
 export function createRemoteEventActionInvoker(
   remote: RemoteEventClientLike,
-  options?: RemoteEventActionInvokerOptions,
+  options?: ActionInvokerOptions,
 ): DisposableActionInvoker {
   const createRequestId = options?.createRequestId ?? createDefaultRequestId;
   const requestTimeoutMs = options?.requestTimeoutMs ?? 0;
@@ -268,7 +278,7 @@ export function createRemoteEventActionInvoker(
 export function bindRemoteEventActions<TPlayer = unknown>(
   remote: RemoteEventServerLike<TPlayer>,
   registry: ActionRegistry<TPlayer>,
-  options?: BindRemoteEventActionsOptions<TPlayer>,
+  options?: BindActionsOptions<TPlayer>,
 ): ServerBinding {
   const connection = remote.OnServerEvent.Connect(async (player, request) => {
     // Clients can fire arbitrary payloads. Reject malformed envelopes before
@@ -305,6 +315,10 @@ export function bindRemoteEventActions<TPlayer = unknown>(
           : ({
               ...(options.rateLimiter !== undefined ? { rateLimiter: options.rateLimiter } : {}),
               ...(options.rateLimitKey !== undefined ? { rateLimitKey: options.rateLimitKey } : {}),
+              ...(options.defaultRateLimit !== undefined
+                ? { defaultRateLimit: options.defaultRateLimit }
+                : {}),
+              ...(options.publisher !== undefined ? { publisher: options.publisher } : {}),
               ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
             } satisfies DispatchActionOptions<TPlayer>);
       const output = await dispatchAction(

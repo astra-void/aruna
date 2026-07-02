@@ -63,7 +63,7 @@ describe("createClientApp", () => {
     app.dispose();
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).rejects.toThrowError(
-      "Aruna action runtime is not installed: shop.purchaseItem",
+      /Aruna action invoker is not installed; cannot invoke "shop.purchaseItem"/,
     );
   });
 
@@ -78,7 +78,7 @@ describe("createClientApp", () => {
     app.dispose();
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).rejects.toThrowError(
-      "Aruna action runtime is not installed: shop.purchaseItem",
+      /Aruna action invoker is not installed; cannot invoke "shop.purchaseItem"/,
     );
   });
 });
@@ -121,7 +121,7 @@ describe("createServerApp", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("accepts binders that return nothing", () => {
+  it("accepts a transport that returns nothing", () => {
     const actions = {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
@@ -130,20 +130,22 @@ describe("createServerApp", () => {
         },
       }),
     };
-    const app = createServerApp({ actions });
     let called = 0;
 
-    const binding = app.bind(() => {
-      called += 1;
+    const app = createServerApp({
+      actions,
+      transport: () => {
+        called += 1;
+      },
     });
 
     expect(called).toBe(1);
 
-    binding.dispose();
-    binding.dispose();
+    app.dispose();
+    app.dispose();
   });
 
-  it("accepts binders that return a cleanup function", () => {
+  it("accepts a transport that returns a cleanup function", () => {
     const actions = {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
@@ -152,21 +154,21 @@ describe("createServerApp", () => {
         },
       }),
     };
-    const app = createServerApp({ actions });
     let cleaned = 0;
 
-    const binding = app.bind(() => {
-      return () => {
+    const app = createServerApp({
+      actions,
+      transport: () => () => {
         cleaned += 1;
-      };
+      },
     });
 
-    binding.dispose();
+    app.dispose();
 
     expect(cleaned).toBe(1);
   });
 
-  it("accepts binders that return a disposable object", () => {
+  it("accepts a transport that returns a disposable object", () => {
     const actions = {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
@@ -175,23 +177,23 @@ describe("createServerApp", () => {
         },
       }),
     };
-    const app = createServerApp({ actions });
     let cleaned = 0;
 
-    const binding = app.bind(() => {
-      return {
+    const app = createServerApp({
+      actions,
+      transport: () => ({
         dispose() {
           cleaned += 1;
         },
-      };
+      }),
     });
 
-    binding.dispose();
+    app.dispose();
 
     expect(cleaned).toBe(1);
   });
 
-  it("makes the returned binding dispose idempotent", () => {
+  it("makes the owned transport dispose idempotent", () => {
     const actions = {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
@@ -200,17 +202,17 @@ describe("createServerApp", () => {
         },
       }),
     };
-    const app = createServerApp({ actions });
     let cleaned = 0;
 
-    const binding = app.bind(() => {
-      return () => {
+    const app = createServerApp({
+      actions,
+      transport: () => () => {
         cleaned += 1;
-      };
+      },
     });
 
-    binding.dispose();
-    binding.dispose();
+    app.dispose();
+    app.dispose();
 
     expect(cleaned).toBe(1);
   });
@@ -269,9 +271,9 @@ describe("fake RemoteFunction round-trip", () => {
       }),
     };
 
-    const serverApp = createServerApp({ actions });
-    const serverBinding = serverApp.bind((registry) => {
-      return bindRemoteFunctionActions(remote, registry);
+    const serverApp = createServerApp({
+      actions,
+      transport: ({ registry, dispatch }) => bindRemoteFunctionActions(remote, registry, dispatch),
     });
     const clientApp = createClientApp({
       invoker: createRemoteFunctionActionInvoker(remote),
@@ -290,6 +292,6 @@ describe("fake RemoteFunction round-trip", () => {
     );
 
     clientApp.dispose();
-    serverBinding.dispose();
+    serverApp.dispose();
   });
 });

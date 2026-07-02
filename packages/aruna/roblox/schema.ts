@@ -62,11 +62,6 @@ const NUMBER_FORMAT_RANGES = new Map<NumberFormat, NumberFormatRange>([
 
 export type Infer<S> = S extends Schema<infer T> ? T : never;
 
-// Alias for parity with the Node reference schema's `InferSchema`, so consumer
-// code that imports `InferSchema` from `aruna/schema` works against the vendored
-// runtime too.
-export type InferSchema<S> = Infer<S>;
-
 type FieldRecord = { readonly [key: string]: Schema };
 
 type Simplify<T> = { [K in keyof T]: T[K] };

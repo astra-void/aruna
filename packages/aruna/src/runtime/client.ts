@@ -28,7 +28,11 @@ export async function invokeAction(
   options?: ActionInvokeOptions,
 ): Promise<unknown> {
   if (actionInvoker === undefined) {
-    throw new Error(`Aruna action runtime is not installed: ${actionId}`);
+    throw new Error(
+      `Aruna action invoker is not installed; cannot invoke "${actionId}". ` +
+        `Call createClientApp({ invoker }) during client boot before any controller invokes an action, ` +
+        `or use the app handle's invoke() to avoid global install-order dependencies.`,
+    );
   }
 
   return await Promise.resolve(actionInvoker(actionId, input, options));

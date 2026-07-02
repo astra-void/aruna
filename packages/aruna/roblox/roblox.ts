@@ -3,7 +3,7 @@
 import type { ActionInvoker } from "./client-runtime";
 import type { ActionDefinition } from "./server";
 import type { ActionRegistry } from "./server-runtime";
-import type { ServerAppBinding } from "./server-app";
+import type { ServerAppBinding, ServerTransport } from "./server-app";
 import type { Schema } from "./schema";
 import {
 	createRemoteSignalPublisher,
@@ -19,14 +19,18 @@ import {
 // `ActionDefinition` import is type-only, so the Luau require graph stays
 // acyclic.
 export { defineSignal } from "./signal";
+// `createActionDefiner` (Player-defaulting) is shared with the `aruna/server`
+// surface so a registry-typed `ctx.publisher` is available from either import.
+export { createActionDefiner } from "./server";
 
 export function defineAction<
 	TInput extends Schema | undefined = undefined,
 	TOutput extends Schema | undefined = undefined,
 	TPlayer = Player,
+	TSignals extends SignalMap = SignalMap,
 >(
-	definition: ActionDefinition<TInput, TOutput, TPlayer>,
-): ActionDefinition<TInput, TOutput, TPlayer> {
+	definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals>,
+): ActionDefinition<TInput, TOutput, TPlayer, TSignals> {
 	return definition;
 }
 
@@ -71,7 +75,7 @@ export interface CreateActionInvokerOptions {
 	readonly createRequestId?: () => string;
 	// Milliseconds to wait for a server response before rejecting with a timeout
 	// error. 0 or undefined (the default) disables the timeout. Mirrors the Node
-	// reference runtime's RemoteEventActionInvokerOptions.requestTimeoutMs.
+	// reference runtime's ActionInvokerOptions.requestTimeoutMs.
 	readonly requestTimeoutMs?: number;
 }
 
@@ -140,6 +144,13 @@ export function createActionInvoker(
 			}
 		});
 	};
+}
+
+// Server transport over the default Aruna RemoteEvent, for
+// `createServerApp({ transport: robloxRemoteEvent() })`. The native registry
+// already bakes `defaultRateLimit` into dispatch, so the transport just binds.
+export function robloxRemoteEvent<TPlayer = Player>(): ServerTransport<TPlayer> {
+	return (registry) => bindActions(registry);
 }
 
 export function bindActions<TPlayer>(

@@ -1,14 +1,15 @@
 import {
   bindRemoteEventActions,
   createRemoteEventActionInvoker,
-  type BindRemoteEventActionsOptions,
+  type ActionInvokerOptions,
+  type BindActionsOptions,
   type DisposableActionInvoker,
-  type RemoteEventActionInvokerOptions,
   type RemoteEventClientLike,
   type RemoteEventServerLike,
 } from "./remote-event.js";
 import type { ServerBinding } from "./binding.js";
 import type { ActionRegistry } from "./server.js";
+import type { ServerTransport } from "../app/server.js";
 
 export const ARUNA_FOLDER_NAME = "Aruna";
 export const ACTION_REMOTE_NAME = "Actions";
@@ -194,7 +195,7 @@ export function waitForActionRemote(
 }
 
 export function createActionInvoker(
-  options?: ActionRemoteOptions & RemoteEventActionInvokerOptions,
+  options?: ActionRemoteOptions & ActionInvokerOptions,
 ): DisposableActionInvoker {
   return createRemoteEventActionInvoker(
     toRemoteEventClientLike(waitForActionRemote(options)),
@@ -204,11 +205,27 @@ export function createActionInvoker(
 
 export function bindActions<TPlayer = Player>(
   registry: ActionRegistry<TPlayer>,
-  options?: ActionRemoteOptions & BindRemoteEventActionsOptions<TPlayer>,
+  options?: ActionRemoteOptions & BindActionsOptions<TPlayer>,
 ): ServerBinding {
   return bindRemoteEventActions(
     toRemoteEventServerLike<TPlayer>(ensureActionRemote(options)),
     registry,
     options,
   );
+}
+
+// Server transport over the default Aruna RemoteEvent, for
+// `createServerApp({ transport: robloxRemoteEvent() })`. The app injects its
+// resolved dispatch options (rate limiter, key resolver, `defaultRateLimit`,
+// clock) so the fallback rate limit reaches the wire without any per-binder
+// wiring. `createContext` and remote folder/name overrides may still be set
+// here; dispatch options always win.
+export function robloxRemoteEvent<TPlayer = Player>(
+  options?: ActionRemoteOptions & Pick<BindActionsOptions<TPlayer>, "createContext">,
+): ServerTransport<TPlayer, ActionRegistry<TPlayer>> {
+  return ({ registry, dispatch }) =>
+    bindRemoteEventActions(toRemoteEventServerLike<TPlayer>(ensureActionRemote(options)), registry, {
+      ...(options?.createContext !== undefined ? { createContext: options.createContext } : {}),
+      ...dispatch,
+    });
 }

@@ -12,7 +12,7 @@ beforeEach(() => {
 describe("client runtime", () => {
   it("fails clearly when no invoker is installed", async () => {
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).rejects.toThrowError(
-      "Aruna action runtime is not installed: shop.purchaseItem",
+      /Aruna action invoker is not installed; cannot invoke "shop.purchaseItem"/,
     );
   });
 
@@ -34,7 +34,7 @@ describe("client runtime", () => {
     clearActionInvoker();
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).rejects.toThrowError(
-      "Aruna action runtime is not installed: shop.purchaseItem",
+      /Aruna action invoker is not installed; cannot invoke "shop.purchaseItem"/,
     );
   });
 });

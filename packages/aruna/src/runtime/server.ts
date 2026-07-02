@@ -1,12 +1,14 @@
-import { assertSchema, type InferSchema, type Schema } from "../schema/index.js";
+import { assertSchema, type Infer, type Schema } from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
+import type { RemoteSignalPublisher } from "./remote-signal.js";
+import type { SignalRegistry } from "./signal.js";
 import {
   ActionRateLimitError,
   createActionRateLimiter,
   defaultActionRateLimitKeyResolver,
-  type ActionRateLimitKeyResolver,
   type ActionRateLimitOptions,
   type ActionRateLimiter,
+  type RateLimitKeyResolver,
 } from "./rate-limit.js";
 
 export {
@@ -16,28 +18,56 @@ export {
 } from "./rate-limit.js";
 export type {
   ActionRateLimitConfig,
-  ActionRateLimitKeyResolver,
   ActionRateLimitOptions,
   ActionRateLimitResult,
   ActionRateLimiter,
+  RateLimitKeyResolver,
 } from "./rate-limit.js";
 
-export type ActionRunContext<TPlayer = unknown> = {
-  player?: TPlayer;
+export type ActionRunContext<
+  TPlayer = unknown,
+  TSignals extends SignalRegistry = SignalRegistry,
+> = {
+  readonly player?: TPlayer;
+  // The app-owned signal publisher, injected by `createServerApp` when it owns a
+  // publisher (`{ signals, createPublisher }`). Lets an action push server→client
+  // signals from inside `run` without a hand-written plumbing module. Optional on
+  // the base context (an app may own no publisher); use the typed definer from
+  // `createActionDefiner` to get a non-optional, signal-registry-checked publisher.
+  //
+  // The player type is deliberately `unknown` here, NOT `TPlayer`: a publisher's
+  // `to(player, ...)` is contravariant in the player, so tying it to `TPlayer`
+  // would make an `unknown`-player action (`defineAction` from `aruna/server`)
+  // no longer assignable into a `createServerApp<Player>` registry. The precise,
+  // player-typed publisher lives on `PublishingActionRunContext` via the definer.
+  readonly publisher?: RemoteSignalPublisher<TSignals, unknown>;
 };
 
-type ActionSchemaInput<TSchema extends Schema | undefined> = [TSchema] extends [Schema]
-  ? InferSchema<TSchema>
+// Like ActionRunContext but with `publisher` guaranteed present and typed against
+// a concrete signal registry and player. Produced by `createActionDefiner<TSignals,
+// TPlayer>()`, whose authored action's `TPlayer` matches the app, so the precise
+// player typing introduces no variance hazard. Defined as an intersection so it
+// stays a structural subtype of ActionRunContext (the definer returns it as one).
+export type PublishingActionRunContext<
+  TPlayer,
+  TSignals extends SignalRegistry,
+> = ActionRunContext<TPlayer, TSignals> & {
+  readonly publisher: RemoteSignalPublisher<TSignals, TPlayer>;
+};
+
+export type ActionSchemaInput<TSchema extends Schema | undefined> = [TSchema] extends [Schema]
+  ? Infer<TSchema>
   : unknown;
 
-type ActionSchemaOutput<TSchema extends Schema | undefined> = [TSchema] extends [Schema]
-  ? InferSchema<TSchema>
+export type ActionSchemaOutput<TSchema extends Schema | undefined> = [TSchema] extends [Schema]
+  ? Infer<TSchema>
   : unknown;
 
 export type ActionDefinition<
   TInputSchema extends Schema | undefined = undefined,
   TOutputSchema extends Schema | undefined = undefined,
   TPlayer = unknown,
+  TSignals extends SignalRegistry = SignalRegistry,
 > = {
   readonly id: string;
   readonly rateLimit?: ActionRateLimitOptions;
@@ -48,7 +78,7 @@ export type ActionDefinition<
   readonly input?: TInputSchema;
   readonly output?: TOutputSchema;
   run(
-    ctx: ActionRunContext<TPlayer>,
+    ctx: ActionRunContext<TPlayer, TSignals>,
     input: ActionSchemaInput<TInputSchema>,
   ): ActionSchemaOutput<TOutputSchema> | Promise<ActionSchemaOutput<TOutputSchema>>;
 };
@@ -74,10 +104,15 @@ export type ActionRegistry<TPlayer = unknown> = Record<
 
 export type DispatchActionOptions<TPlayer = unknown> = {
   readonly rateLimiter?: ActionRateLimiter;
-  readonly rateLimitKey?: ActionRateLimitKeyResolver<TPlayer>;
+  readonly rateLimitKey?: RateLimitKeyResolver<TPlayer>;
   // Applied to any action that does not declare its own `rateLimit`. A
   // per-action `rateLimit` always takes precedence over this fallback.
   readonly defaultRateLimit?: ActionRateLimitOptions;
+  // The app-owned signal publisher, injected into the action ctx so `run` can
+  // publish signals. Carried registry- and player-erased (`unknown`) — the precise
+  // typing lives on the action ctx via `createActionDefiner`; dispatch only
+  // forwards the object, it never invokes it.
+  readonly publisher?: RemoteSignalPublisher<SignalRegistry, unknown>;
   readonly nowMs?: () => number;
 };
 
@@ -129,7 +164,15 @@ export async function dispatchAction<TPlayer = unknown>(
     }
   }
 
-  const output = await Promise.resolve(action.run(ctx, input));
+  // Inject the app-owned publisher into the ctx so `run` can publish signals.
+  // Only fills it in when the caller did not already supply one — a custom
+  // `createContext` always wins.
+  const runCtx =
+    options?.publisher !== undefined && ctx.publisher === undefined
+      ? { ...ctx, publisher: options.publisher }
+      : ctx;
+
+  const output = await Promise.resolve(action.run(runCtx, input));
 
   if (action.output !== undefined) {
     assertSchema(action.output, output, { actionId, role: "output" });

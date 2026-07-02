@@ -2,10 +2,12 @@
 // and the remote-event / remote-signal primitives. Renamed from /roblox-runtime.
 export * from "./runtime/roblox.js";
 export * from "./runtime/roblox-action-remote.js";
+export * from "./runtime/roblox-signal-remote.js";
 export * from "./runtime/remote-event.js";
 export * from "./runtime/remote-signal.js";
 
-import type { ActionDefinition } from "./runtime/server.js";
+import type { ActionDefinition, PublishingActionDefinition } from "./actions/define-action.js";
+import type { SignalRegistry } from "./runtime/signal.js";
 import type { Schema } from "./schema/index.js";
 
 // Roblox-flavored definition helpers. `defineSignal` is unchanged from
@@ -28,4 +30,20 @@ export function defineAction<
   >,
 >(definition: ActionDefinition<TInputSchema, TOutputSchema, TPlayer> & TDefinition): TDefinition {
   return definition;
+}
+
+// `createActionDefiner` flavored for Roblox: `TPlayer` defaults to `Player`, to
+// match this surface's `defineAction`. Otherwise identical to the one on
+// `aruna/server` — binds a `defineAction` to your signal registry so an action's
+// `ctx.publisher.to/toMany/toAll(...)` is checked against the real signal ids and
+// payloads, with the publisher present (no `?`) and still injected by the app.
+export function createActionDefiner<TSignals extends SignalRegistry, TPlayer = Player>() {
+  return function defineSignalAction<
+    TInputSchema extends Schema | undefined = undefined,
+    TOutputSchema extends Schema | undefined = undefined,
+  >(
+    definition: PublishingActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals>,
+  ): ActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals> {
+    return definition;
+  };
 }

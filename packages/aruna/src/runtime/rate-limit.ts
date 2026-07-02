@@ -20,7 +20,7 @@ export type ActionRateLimitResult =
       readonly resetAtMs: number;
     };
 
-export type ActionRateLimitKeyResolver<TPlayer = unknown> = (
+export type RateLimitKeyResolver<TPlayer = unknown> = (
   actionId: string,
   ctx: ActionRunContext<TPlayer>,
 ) => string;

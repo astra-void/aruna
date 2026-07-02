@@ -123,17 +123,20 @@ type Simplify<T> = {
 
 type InferObjectSchema<TShape extends SchemaShape> = Simplify<
   {
-    [TKey in RequiredKeys<TShape>]: InferSchema<TShape[TKey]>;
+    [TKey in RequiredKeys<TShape>]: Infer<TShape[TKey]>;
   } & {
     [TKey in OptionalKeys<TShape>]?: TShape[TKey] extends OptionalSchema
       ? TShape[TKey]["inner"] extends Schema
-        ? InferSchema<TShape[TKey]["inner"]> | undefined
+        ? Infer<TShape[TKey]["inner"]> | undefined
         : unknown
       : never;
   }
 >;
 
-export type InferSchema<TSchema extends Schema> = TSchema extends StringSchema
+// Canonical schema type inference. `aruna/schema` exports this name in both the
+// Node reference runtime and the roblox-ts native runtime, so consumer code can
+// import `Infer` from either and get the same result.
+export type Infer<TSchema extends Schema> = TSchema extends StringSchema
   ? string
   : TSchema extends NumberSchema
     ? number
@@ -143,19 +146,19 @@ export type InferSchema<TSchema extends Schema> = TSchema extends StringSchema
         ? TValue
         : TSchema extends ArraySchema
           ? TSchema["item"] extends Schema
-            ? InferSchema<TSchema["item"]>[]
+            ? Infer<TSchema["item"]>[]
             : never
           : TSchema extends ObjectSchema<infer TShape>
             ? InferObjectSchema<TShape>
             : TSchema extends OptionalSchema
               ? TSchema["inner"] extends Schema
-                ? InferSchema<TSchema["inner"]> | undefined
+                ? Infer<TSchema["inner"]> | undefined
                 : unknown
               : TSchema extends EnumSchema<infer TValues>
                 ? TValues[number]
                 : TSchema extends UnionSchema
                   ? TSchema["members"][number] extends Schema
-                    ? InferSchema<TSchema["members"][number]>
+                    ? Infer<TSchema["members"][number]>
                     : never
                   : TSchema extends Vector3Schema
                     ? Vector3Value

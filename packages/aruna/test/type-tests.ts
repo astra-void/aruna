@@ -10,14 +10,15 @@ import {
 } from "../src/roblox.js";
 import { createServerApp } from "../src/server.js";
 import { defineAction } from "../src/server.js";
+import { createActionDefiner, defineSignal } from "../src/server.js";
 import { type ServerBinding } from "../src/runtime/binding.js";
-import { schema, type InferSchema } from "../src/schema.js";
+import { schema, type Infer } from "../src/schema.js";
 import {
   ActionRateLimitError,
   ActionSerializationError,
   createActionRateLimiter,
   assertSerializableActionValue,
-  type ActionRateLimitKeyResolver,
+  type RateLimitKeyResolver,
   type ActionRateLimitOptions,
   type InferInput,
   type InferOutput,
@@ -87,16 +88,16 @@ if (!serializationResult.ok) {
   void firstViolation;
 }
 
-type _StringSchema = Expect<Equal<InferSchema<typeof stringSchema>, string>>;
-type _NumberSchema = Expect<Equal<InferSchema<typeof numberSchema>, number>>;
-type _BooleanSchema = Expect<Equal<InferSchema<typeof booleanSchema>, boolean>>;
-type _LiteralSchema = Expect<Equal<InferSchema<typeof literalSchema>, "sword">>;
-type _OptionalSchema = Expect<Equal<InferSchema<typeof optionalSchema>, string | undefined>>;
-type _ArraySchema = Expect<Equal<InferSchema<typeof arraySchema>, string[]>>;
-type _EnumSchema = Expect<Equal<InferSchema<typeof enumSchema>, "a" | "b">>;
+type _StringSchema = Expect<Equal<Infer<typeof stringSchema>, string>>;
+type _NumberSchema = Expect<Equal<Infer<typeof numberSchema>, number>>;
+type _BooleanSchema = Expect<Equal<Infer<typeof booleanSchema>, boolean>>;
+type _LiteralSchema = Expect<Equal<Infer<typeof literalSchema>, "sword">>;
+type _OptionalSchema = Expect<Equal<Infer<typeof optionalSchema>, string | undefined>>;
+type _ArraySchema = Expect<Equal<Infer<typeof arraySchema>, string[]>>;
+type _EnumSchema = Expect<Equal<Infer<typeof enumSchema>, "a" | "b">>;
 type _ObjectSchema = Expect<
   Equal<
-    InferSchema<typeof objectSchema>,
+    Infer<typeof objectSchema>,
     {
       itemId: string;
       quantity: number;
@@ -219,7 +220,7 @@ type _ClientOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createClientApp>
 type _ServerOptionsNoAny = Expect<Equal<IsAny<Parameters<typeof createServerApp>[0]>, false>>;
 type _ServerDispatch = Expect<Equal<ReturnType<typeof serverApp.dispatch>, Promise<unknown>>>;
 type _RateLimitOptionsNoAny = Expect<Equal<IsAny<ActionRateLimitOptions>, false>>;
-type _RateLimitKeyResolverNoAny = Expect<Equal<IsAny<ActionRateLimitKeyResolver>, false>>;
+type _RateLimitKeyResolverNoAny = Expect<Equal<IsAny<RateLimitKeyResolver>, false>>;
 type _RateLimitErrorNoAny = Expect<Equal<IsAny<ActionRateLimitError>, false>>;
 type _RateLimiterNoAny = Expect<Equal<IsAny<typeof createActionRateLimiter>, false>>;
 type _RemoteEventInvoker = Expect<
@@ -252,3 +253,40 @@ type _SerializationHelpersNoAny = Expect<
   Equal<IsAny<typeof validateSerializableActionValue>, false>
 >;
 type _SerializationAssertNoAny = Expect<Equal<IsAny<typeof assertSerializableActionValue>, false>>;
+
+// --- Gap 2: a registry-typed publisher on the action ctx ---------------------
+// A `createActionDefiner`-bound `defineAction` makes `ctx.publisher` non-optional
+// and checks `to/toMany/toAll` against the real signal ids and payloads.
+const signalRegistryForTypes = {
+  scoreChanged: defineSignal({
+    id: "scoreChanged",
+    payload: schema.object({ score: schema.number() }),
+  }),
+};
+
+const definePublishingAction = createActionDefiner<typeof signalRegistryForTypes, string>();
+
+definePublishingAction({
+  id: "score.bump",
+  input: schema.object({ amount: schema.number() }),
+  run(ctx, input) {
+    // No optional chaining required: the publisher is guaranteed present.
+    ctx.publisher.toAll("scoreChanged", { score: input.amount });
+    ctx.publisher.to("p1", "scoreChanged", { score: input.amount });
+    // @ts-expect-error unknown signal id
+    ctx.publisher.toAll("doesNotExist", { score: 1 });
+    // @ts-expect-error payload does not match the signal's schema
+    ctx.publisher.toAll("scoreChanged", { score: "not a number" });
+    return undefined;
+  },
+});
+
+// The base `defineAction` ctx exposes the publisher optionally (an app may own
+// none), so it must be accessed with optional chaining.
+defineAction({
+  id: "score.peek",
+  run(ctx) {
+    ctx.publisher?.toAll("anything", {});
+    return undefined;
+  },
+});

@@ -106,7 +106,7 @@ export type StaticSignalHandlers<TSignals extends SignalRegistry> = {
   readonly [TId in SignalId<TSignals>]?: SignalHandler<InferSignalPayload<TSignals[TId]>>;
 };
 
-export type CreateRemoteSignalSubscriberOptions<TSignals extends SignalRegistry> = {
+export type SignalSubscriberOptions<TSignals extends SignalRegistry> = {
   // Statically bound handlers, connected immediately. Equivalent to calling
   // `.on(id, handler)` for each entry; useful for app-level wiring.
   readonly handlers?: StaticSignalHandlers<TSignals>;
@@ -135,7 +135,7 @@ function isValidSignalMessage(value: unknown): value is RemoteSignalMessage {
 export function createRemoteSignalSubscriber<TSignals extends SignalRegistry>(
   remote: RemoteSignalClientLike,
   signals: TSignals,
-  options?: CreateRemoteSignalSubscriberOptions<TSignals>,
+  options?: SignalSubscriberOptions<TSignals>,
 ): RemoteSignalSubscriber<TSignals> {
   const handlersBySignal = new Map<string, Set<SignalHandler<unknown>>>();
   let disposed = false;

@@ -94,8 +94,6 @@ describe("public exports", () => {
       }),
     };
 
-    const serverApp = createServerApp({ actions: registry });
-
     const remote: FakeRemoteFunction = {
       InvokeServer(actionId, input) {
         if (this.OnServerInvoke === undefined) {
@@ -106,8 +104,10 @@ describe("public exports", () => {
       },
     };
 
-    const serverBinding = serverApp.bind((actions) => {
-      return bindRemoteFunctionActions(remote, actions);
+    const serverApp = createServerApp({
+      actions: registry,
+      transport: ({ registry: actions, dispatch }) =>
+        bindRemoteFunctionActions(remote, actions, dispatch),
     });
     const clientApp = createClientApp({
       invoker: createRemoteFunctionActionInvoker(remote),
@@ -147,7 +147,7 @@ describe("public exports", () => {
     ).toBe("shop.purchaseItem");
 
     clientApp.dispose();
-    serverBinding.dispose();
+    serverApp.dispose();
     unbindRemoteFunctionActions(remote);
   });
 
@@ -173,10 +173,11 @@ describe("public exports", () => {
       }),
     };
 
-    const serverApp = createServerApp({ actions: registry });
     const invoker = createRemoteEventActionInvoker(remote);
-    const serverBinding = serverApp.bind((actions) => {
-      return bindRemoteEventActions(remote, actions);
+    const serverApp = createServerApp({
+      actions: registry,
+      transport: ({ registry: actions, dispatch }) =>
+        bindRemoteEventActions(remote, actions, dispatch),
     });
     const clientApp = createClientApp({
       invoker,
@@ -188,7 +189,7 @@ describe("public exports", () => {
     });
 
     clientApp.dispose();
-    serverBinding.dispose();
+    serverApp.dispose();
     invoker.dispose();
   });
 

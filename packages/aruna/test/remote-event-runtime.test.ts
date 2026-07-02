@@ -831,14 +831,14 @@ describe("RemoteEvent round trip", () => {
       }),
     };
 
-    const serverApp = createServerApp({ actions });
     const invoker = createRemoteEventActionInvoker(remote, {
       createRequestId() {
         return "request-1";
       },
     });
-    const serverBinding = serverApp.bind((registry) => {
-      return bindRemoteEventActions(remote, registry);
+    const serverApp = createServerApp({
+      actions,
+      transport: ({ registry, dispatch }) => bindRemoteEventActions(remote, registry, dispatch),
     });
 
     const clientApp = createClientApp({
@@ -856,7 +856,7 @@ describe("RemoteEvent round trip", () => {
     });
 
     clientApp.dispose();
-    serverBinding.dispose();
+    serverApp.dispose();
     invoker.dispose();
   });
 

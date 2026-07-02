@@ -1,12 +1,14 @@
 import type { ActionInvoker } from "./client.js";
 import {
   dispatchAction,
-  type ActionRateLimitKeyResolver,
+  type RateLimitKeyResolver,
+  type ActionRateLimitOptions,
   type ActionRateLimiter,
   type ActionRegistry,
   type ActionRunContext,
   type DispatchActionOptions,
 } from "./server.js";
+import type { ServerTransport } from "../app/server.js";
 
 export type RobloxPlayer = Player;
 export type RobloxRemoteFunction = RemoteFunction;
@@ -25,14 +27,24 @@ export type RemoteFunctionBinding = {
   readonly dispose: () => void;
 };
 
+// The RemoteFunction transport always receives a concrete `RobloxPlayer`, so its
+// context factory fixes the player parameter (unlike the RemoteEvent transport's
+// generic `ActionContextFactory`). Kept under its own name for that reason.
 export type RemoteActionContextFactory<TPlayer = RobloxPlayer> = (
   player: RobloxPlayer,
 ) => ActionRunContext<TPlayer>;
 
-export type BindRemoteFunctionActionsOptions<TPlayer = RobloxPlayer> = {
+export type BindFunctionActionsOptions<TPlayer = RobloxPlayer> = {
   readonly createContext?: RemoteActionContextFactory<TPlayer>;
   readonly rateLimiter?: ActionRateLimiter;
-  readonly rateLimitKey?: ActionRateLimitKeyResolver<TPlayer>;
+  readonly rateLimitKey?: RateLimitKeyResolver<TPlayer>;
+  // Applied to any action that does not declare its own `rateLimit`. Mirrors
+  // BindActionsOptions so config-level `defaultRateLimit` throttles the
+  // RemoteFunction transport too.
+  readonly defaultRateLimit?: ActionRateLimitOptions;
+  // The app-owned signal publisher, forwarded into dispatch so `ctx.publisher` is
+  // available to actions dispatched over the RemoteFunction transport.
+  readonly publisher?: DispatchActionOptions<TPlayer>["publisher"];
   readonly nowMs?: () => number;
 };
 
@@ -48,7 +60,7 @@ export function bindRemoteFunctionActions<
 >(
   remote: RemoteFunctionServerLike,
   registry: TActions,
-  options?: BindRemoteFunctionActionsOptions<TPlayer> | RemoteActionContextFactory<TPlayer>,
+  options?: BindFunctionActionsOptions<TPlayer> | RemoteActionContextFactory<TPlayer>,
 ): RemoteFunctionBinding {
   const resolvedOptions = typeof options === "function" ? { createContext: options } : options;
   const previousOnServerInvoke = remote.OnServerInvoke;
@@ -72,6 +84,12 @@ export function bindRemoteFunctionActions<
               : {}),
             ...(resolvedOptions.rateLimitKey !== undefined
               ? { rateLimitKey: resolvedOptions.rateLimitKey }
+              : {}),
+            ...(resolvedOptions.defaultRateLimit !== undefined
+              ? { defaultRateLimit: resolvedOptions.defaultRateLimit }
+              : {}),
+            ...(resolvedOptions.publisher !== undefined
+              ? { publisher: resolvedOptions.publisher }
               : {}),
             ...(resolvedOptions.nowMs !== undefined ? { nowMs: resolvedOptions.nowMs } : {}),
           } satisfies DispatchActionOptions<TPlayer>);
@@ -101,4 +119,19 @@ export function bindRemoteFunctionActions<
 
 export function unbindRemoteFunctionActions(remote: RemoteFunctionServerLike): void {
   remote.OnServerInvoke = undefined;
+}
+
+// Server transport over a RemoteFunction, for
+// `createServerApp({ transport: robloxRemoteFunction(remote) })`. Like
+// `robloxRemoteEvent`, the app injects its resolved dispatch options so
+// `defaultRateLimit` reaches dispatch.
+export function robloxRemoteFunction<TPlayer = RobloxPlayer>(
+  remote: RemoteFunctionServerLike,
+  options?: Pick<BindFunctionActionsOptions<TPlayer>, "createContext">,
+): ServerTransport<TPlayer, ActionRegistry<TPlayer>> {
+  return ({ registry, dispatch }) =>
+    bindRemoteFunctionActions(remote, registry, {
+      ...(options?.createContext !== undefined ? { createContext: options.createContext } : {}),
+      ...dispatch,
+    });
 }
