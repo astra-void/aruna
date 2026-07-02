@@ -398,11 +398,16 @@ fn render_client_file(
             .as_ref()
             .map(render_schema_metadata)
             .unwrap_or_else(|| "unknown".to_string());
+        // An action with no declared output schema resolves to `void` (not
+        // `unknown`): the handler may return nothing and the client awaits a
+        // `Promise<void>`. Only a declared output schema produces a concrete
+        // payload type. Input keeps `unknown` when unschematized — an unvalidated
+        // request body genuinely has no known shape.
         let output_type = action
             .output_schema
             .as_ref()
             .map(render_schema_metadata)
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|| "void".to_string());
 
         lines.push(format!("export type {} = {};", input_alias, input_type));
         lines.push(String::new());
@@ -741,7 +746,7 @@ mod tests {
         assert!(output
             .files[0]
             .contents
-            .contains("export type RestockItemOutput = unknown;"));
+            .contains("export type RestockItemOutput = void;"));
         assert!(output.files[0]
             .contents
             .contains("return invokeAction(\"inventory.restockItem\", input) as Promise<RestockItemOutput>;"));
@@ -753,7 +758,7 @@ mod tests {
             .contains("export type PurchaseItemInput = unknown;"));
         assert!(output.files[0]
             .contents
-            .contains("export type PurchaseItemOutput = unknown;"));
+            .contains("export type PurchaseItemOutput = void;"));
         assert!(output.files[0]
             .contents
             .contains("export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {"));

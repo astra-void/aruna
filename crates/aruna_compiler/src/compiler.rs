@@ -701,7 +701,7 @@ export const restockItem = defineAction({
             .contains("export type RestockItemInput = unknown;"));
         assert!(generated[0]
             .contents
-            .contains("export type RestockItemOutput = unknown;"));
+            .contains("export type RestockItemOutput = void;"));
         assert!(generated[0]
             .contents
             .contains("return invokeAction(\"inventory.restockItem\", input) as Promise<RestockItemOutput>;"));
@@ -710,7 +710,7 @@ export const restockItem = defineAction({
             .contains("export type PurchaseItemInput = unknown;"));
         assert!(generated[0]
             .contents
-            .contains("export type PurchaseItemOutput = unknown;"));
+            .contains("export type PurchaseItemOutput = void;"));
         assert!(generated[0]
             .contents
             .contains("return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;"));
