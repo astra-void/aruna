@@ -6,8 +6,8 @@
     "moduleResolution": "Bundler",
     "rootDir": ".",
     "paths": {
-      "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
-      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"]
+      "$aruna/actions/client": ["src/.aruna/shared/actions.client.generated.ts"],
+      "$aruna/actions/server": ["src/.aruna/server/actions.server.generated.ts"]
     },
     "jsx": "preserve",
     "noEmit": true,
