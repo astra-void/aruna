@@ -242,6 +242,37 @@ function encodeValue(schema: Schema, value: unknown, writer: BinaryWriter): void
 			writer.writeU8(1);
 			encodeValue(inner, value, writer);
 		}
+	} else if (typeName === "record") {
+		// u32 entry count, then key/value pairs sorted by key — byte-identical to
+		// the reference codec.
+		const valueSchema = schema.item;
+		if (valueSchema === undefined) {
+			throw "Aruna binary encode: record schema is missing its value schema.";
+		}
+		const record = value as { [key: string]: unknown };
+		const keys: Array<string> = [];
+		for (const [key] of pairs(record)) {
+			keys.push(key as string);
+		}
+		keys.sort();
+		writer.writeU32(keys.size());
+		for (const key of keys) {
+			writer.writeString(key);
+			encodeValue(valueSchema, record[key], writer);
+		}
+	} else if (typeName === "tuple") {
+		// Fixed sequence — the length is part of the schema, nothing on the wire.
+		const itemSchemas = schema.items;
+		if (itemSchemas === undefined) {
+			throw "Aruna binary encode: tuple schema is missing its items.";
+		}
+		const items = value as Array<unknown>;
+		for (let i = 0; i < itemSchemas.size(); i++) {
+			const itemSchema = itemSchemas[i];
+			if (itemSchema !== undefined) {
+				encodeValue(itemSchema, items[i], writer);
+			}
+		}
 	} else if (typeName === "enum") {
 		const values = schema.values;
 		if (values === undefined) {
@@ -357,6 +388,28 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
 			return undefined;
 		}
 		return decodeValue(inner, reader);
+	} else if (typeName === "record") {
+		const valueSchema = schema.item;
+		if (valueSchema === undefined) {
+			throw "Aruna binary decode: record schema is missing its value schema.";
+		}
+		const count = reader.readU32();
+		const record: { [key: string]: unknown } = {};
+		for (let i = 0; i < count; i++) {
+			const key = reader.readString();
+			record[key] = decodeValue(valueSchema, reader);
+		}
+		return record;
+	} else if (typeName === "tuple") {
+		const itemSchemas = schema.items;
+		if (itemSchemas === undefined) {
+			throw "Aruna binary decode: tuple schema is missing its items.";
+		}
+		const items = new Array<defined>();
+		for (const itemSchema of itemSchemas) {
+			items.push(decodeValue(itemSchema, reader) as defined);
+		}
+		return items;
 	} else if (typeName === "enum") {
 		const values = schema.values;
 		if (values === undefined) {

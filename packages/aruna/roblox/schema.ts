@@ -15,6 +15,8 @@ export type SchemaTypeName =
 	| "object"
 	| "array"
 	| "optional"
+	| "record"
+	| "tuple"
 	| "literal"
 	| "enum"
 	| "union"
@@ -32,12 +34,15 @@ export interface Schema<T = unknown> {
 	readonly typeName: SchemaTypeName;
 	readonly validate: (value: unknown) => boolean;
 	readonly _output?: T;
+	// Array item schema; also the value schema of a `record` (string-keyed map).
 	readonly item?: Schema;
 	readonly fields?: { readonly [key: string]: Schema };
 	readonly inner?: Schema;
 	readonly value?: SchemaLiteral;
 	readonly values?: readonly SchemaLiteral[];
 	readonly members?: readonly Schema[];
+	// Tuple element schemas, in positional order.
+	readonly items?: readonly Schema[];
 	readonly format?: NumberFormat;
 }
 
@@ -170,6 +175,61 @@ function objectSchema<F extends FieldRecord>(fields: F): Schema<InferFields<F>> 
 	};
 }
 
+// A homogeneous string-keyed map (`{ [key: string]: V }`). Keys must be strings
+// — a table with a non-string key fails validation, since non-string keys don't
+// survive the plain-data boundary. Carried on the shared `item` field.
+function recordSchema<S extends Schema>(value: S): Schema<{ [key: string]: Infer<S> }> {
+	return {
+		typeName: "record",
+		item: value,
+		validate: (candidate) => {
+			if (!typeIs(candidate, "table")) {
+				return false;
+			}
+			for (const [key, entry] of pairs(candidate as { [key: string]: unknown })) {
+				if (!typeIs(key, "string")) {
+					return false;
+				}
+				if (!value.validate(entry)) {
+					return false;
+				}
+			}
+			return true;
+		},
+	};
+}
+
+type InferTupleItems<TItems extends readonly Schema[]> = {
+	-readonly [TIndex in keyof TItems]: Infer<TItems[TIndex]>;
+};
+
+// A fixed-length heterogeneous array (`[A, B, ...]`). Length is part of the
+// contract: a value with a different length fails validation.
+function tupleSchema<const TItems extends readonly Schema[]>(
+	items: TItems,
+): Schema<InferTupleItems<TItems>> {
+	return {
+		typeName: "tuple",
+		items,
+		validate: (candidate) => {
+			if (!typeIs(candidate, "table")) {
+				return false;
+			}
+			const list = candidate as Array<unknown>;
+			if (list.size() !== items.size()) {
+				return false;
+			}
+			for (let index = 0; index < items.size(); index += 1) {
+				const itemSchema = items[index];
+				if (itemSchema === undefined || !itemSchema.validate(list[index])) {
+					return false;
+				}
+			}
+			return true;
+		},
+	};
+}
+
 function literalSchema<const TValue extends SchemaLiteral>(value: TValue): Schema<TValue> {
 	return {
 		typeName: "literal",
@@ -249,6 +309,8 @@ export const schema = {
 	boolean: booleanSchema,
 	array: arraySchema,
 	optional: optionalSchema,
+	record: recordSchema,
+	tuple: tupleSchema,
 	object: objectSchema,
 	literal: literalSchema,
 	enum: enumSchema,

@@ -74,6 +74,37 @@ describe("schema runtime", () => {
     });
   });
 
+  it("validates record values against the value schema", () => {
+    const counts = schema.record(schema.number());
+    expect(validateSchema(counts, { sword: 1, shield: 2 })).toEqual({ ok: true });
+    expect(validateSchema(counts, {})).toEqual({ ok: true });
+    expect(validateSchema(counts, { sword: "one" })).toEqual({
+      ok: false,
+      issues: [{ path: ["sword"], message: "expected finite number" }],
+    });
+    expect(validateSchema(counts, "not a record")).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected record object" }],
+    });
+  });
+
+  it("validates tuples positionally with exact length", () => {
+    const pair = schema.tuple([schema.string(), schema.number()]);
+    expect(validateSchema(pair, ["sword", 3])).toEqual({ ok: true });
+    expect(validateSchema(pair, ["sword"])).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected tuple of length 2, got 1" }],
+    });
+    expect(validateSchema(pair, ["sword", "three"])).toEqual({
+      ok: false,
+      issues: [{ path: ["[1]"], message: "expected finite number" }],
+    });
+    expect(validateSchema(pair, { 0: "sword", 1: 3 })).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected tuple array" }],
+    });
+  });
+
   it("allows undefined for optional schemas", () => {
     const optionalName = schema.optional(schema.string());
 

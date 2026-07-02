@@ -33,6 +33,17 @@ not a deprecation cycle — migrate call sites to the canonical names.
   payloads travel server → client. Signal-free baselines from before signals
   existed still parse and diff cleanly.
 
+- **`schema.record(value)` and `schema.tuple([...])` — maps and fixed-shape
+  arrays are first-class.** `record` is a homogeneous string-keyed map
+  (`Record<string, V>`; non-string keys fail validation), `tuple` a fixed-length
+  heterogeneous array validated positionally. Both work end-to-end: runtime
+  validation in both runtimes, compiler-extracted metadata, typed generated
+  stubs, contract snapshots/diff (a record value-type change or tuple re-shape is
+  breaking), and the binary codec with a deterministic byte-identical layout
+  (records sort entries by key; tuples encode a fixed sequence, no length
+  prefix). `nullable` was deliberately left out: Luau collapses nil/undefined, so
+  it cannot be distinguished from `optional` on the wire.
+
 ### Changed
 
 - **`createClientApp({ transport })` — the client and server now share one wiring

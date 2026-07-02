@@ -314,6 +314,29 @@ function encodeValue(schema: Schema, value: unknown, writer: BinaryWriter): void
       encodeValue(schema.inner, value, writer);
       return;
     }
+    case "record": {
+      // u32 entry count, then key/value pairs sorted by key so the encoding is
+      // deterministic and byte-identical across runtimes.
+      const record = value as Record<string, unknown>;
+      const keys = Object.keys(record).sort();
+      writer.writeU32(keys.length);
+      for (const key of keys) {
+        writer.writeString(key);
+        encodeValue(schema.value, record[key], writer);
+      }
+      return;
+    }
+    case "tuple": {
+      // Fixed sequence — the length is part of the schema, nothing on the wire.
+      const items = value as readonly unknown[];
+      for (let index = 0; index < schema.items.length; index += 1) {
+        const itemSchema = schema.items[index];
+        if (itemSchema !== undefined) {
+          encodeValue(itemSchema, items[index], writer);
+        }
+      }
+      return;
+    }
     case "enum": {
       const index = schema.values.findIndex((candidate) => Object.is(candidate, value));
       if (index < 0) {
@@ -401,6 +424,22 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
         return undefined;
       }
       return decodeValue(schema.inner, reader);
+    }
+    case "record": {
+      const count = reader.readU32();
+      const record: Record<string, unknown> = {};
+      for (let index = 0; index < count; index += 1) {
+        const key = reader.readString();
+        record[key] = decodeValue(schema.value, reader);
+      }
+      return record;
+    }
+    case "tuple": {
+      const items: unknown[] = [];
+      for (const itemSchema of schema.items) {
+        items.push(decodeValue(itemSchema, reader));
+      }
+      return items;
     }
     case "enum": {
       const index = reader.readU32();

@@ -643,9 +643,21 @@ function schemaNodesEqual(
     case "enum":
       return compareArrays(normalizeEnumValues(left), normalizeEnumValues(right));
     case "array":
+    // A record's value schema rides the `items` slot, so it compares like array.
+    case "record":
       return schemaNodesEqual(left.items ?? null, right.items ?? null);
     case "optional":
       return schemaNodesEqual(left.inner ?? null, right.inner ?? null);
+    case "tuple": {
+      const leftMembers = left.members ?? [];
+      const rightMembers = right.members ?? [];
+      if (leftMembers.length !== rightMembers.length) {
+        return false;
+      }
+      return leftMembers.every((member, index) =>
+        schemaNodesEqual(member, rightMembers[index] ?? null),
+      );
+    }
     case "object": {
       const leftProperties = left.properties ?? {};
       const rightProperties = right.properties ?? {};
@@ -1092,6 +1104,49 @@ function diffSchema(
         `${pathPrefix}.items`,
       );
       return;
+    case "record":
+      // The value schema rides the `items` slot; a value-type change hits every
+      // entry of the map, so it reports at `<path>.value`.
+      diffSchema(
+        role,
+        actionId,
+        before.items ?? null,
+        after.items ?? null,
+        entries,
+        `${pathPrefix}.value`,
+      );
+      return;
+    case "tuple": {
+      const beforeMembers = before.members ?? [];
+      const afterMembers = after.members ?? [];
+      if (beforeMembers.length !== afterMembers.length) {
+        // A length change re-shapes the whole value — report once at the tuple.
+        makeEntry(
+          {
+            severity: "breaking",
+            kind: kindForPath,
+            actionId,
+            path: pathPrefix,
+            message: `${actionId} ${role} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
+            before: schemaSummary(before),
+            after: schemaSummary(after),
+          },
+          entries,
+        );
+        return;
+      }
+      for (let index = 0; index < beforeMembers.length; index += 1) {
+        diffSchema(
+          role,
+          actionId,
+          beforeMembers[index] ?? null,
+          afterMembers[index] ?? null,
+          entries,
+          `${pathPrefix}.${index}`,
+        );
+      }
+      return;
+    }
     case "optional": {
       const beforeInner = before.inner ?? null;
       const afterInner = after.inner ?? null;

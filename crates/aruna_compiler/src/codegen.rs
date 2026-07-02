@@ -151,6 +151,27 @@ fn render_schema_metadata(schema: &ArunaSchemaMetadata) -> String {
             .unwrap_or_else(|| "unknown".to_string()),
         "enum" => render_enum_schema(schema.values.as_ref()),
         "union" => render_union_schema(schema.members.as_ref()),
+        // Record's value schema rides the `items` slot (see actions.rs).
+        "record" => schema
+            .items
+            .as_deref()
+            .map(|value| format!("Record<string, {}>", render_schema_metadata(value)))
+            .unwrap_or_else(|| "unknown".to_string()),
+        // Tuple element schemas ride the `members` slot, in positional order.
+        "tuple" => schema
+            .members
+            .as_ref()
+            .map(|items| {
+                format!(
+                    "[{}]",
+                    items
+                        .iter()
+                        .map(render_schema_metadata)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+            .unwrap_or_else(|| "unknown".to_string()),
         // Roblox userdata kinds render to the native @rbxts/types globals so the
         // generated client/signal stubs are typed against the real value types.
         "vector3" => "Vector3".to_string(),
@@ -692,6 +713,28 @@ mod tests {
 
     fn test_rate_limit() -> ActionRateLimitConfig {
         ActionRateLimitConfig::default()
+    }
+
+    #[test]
+    fn renders_record_and_tuple_types() {
+        let leaf = |kind: &str| ArunaSchemaMetadata {
+            kind: kind.to_string(),
+            ..Default::default()
+        };
+
+        let record = ArunaSchemaMetadata {
+            kind: "record".to_string(),
+            items: Some(Box::new(leaf("number"))),
+            ..Default::default()
+        };
+        assert_eq!(render_schema_metadata(&record), "Record<string, number>");
+
+        let tuple = ArunaSchemaMetadata {
+            kind: "tuple".to_string(),
+            members: Some(vec![leaf("string"), leaf("number")]),
+            ..Default::default()
+        };
+        assert_eq!(render_schema_metadata(&tuple), "[string, number]");
     }
 
     fn action(id: &str, file: &str, export_name: &str) -> ArunaActionRecord {

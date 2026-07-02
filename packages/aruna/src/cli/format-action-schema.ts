@@ -147,6 +147,36 @@ function summarizeSchema(schema: SchemaMetadata | undefined): ActionSchemaSummar
         warnings: inner.warnings,
       };
     }
+    case "record": {
+      // The value schema rides the `items` metadata slot.
+      if (!schema.items) {
+        return {
+          summary: "unknown (metadata unavailable)",
+          warnings: ["record value metadata missing"],
+        };
+      }
+
+      const value = summarizeSchema(schema.items);
+      return {
+        summary: `Record<string, ${value.summary}>`,
+        warnings: value.warnings,
+      };
+    }
+    case "tuple": {
+      // Element schemas ride the `members` metadata slot, in positional order.
+      if (!schema.members) {
+        return {
+          summary: "unknown (metadata unavailable)",
+          warnings: ["tuple member metadata missing"],
+        };
+      }
+
+      const members = schema.members.map((member) => summarizeSchema(member));
+      return {
+        summary: `[${members.map((member) => member.summary).join(", ")}]`,
+        warnings: members.flatMap((member) => member.warnings),
+      };
+    }
     case "enum": {
       if (!schema.values) {
         return {

@@ -53,6 +53,21 @@ export type OptionalSchema = {
   readonly inner: Schema;
 };
 
+// A homogeneous string-keyed map (`{ [key: string]: V }`). Keys are always
+// strings — the wire format is a Luau table, and non-string keys don't survive
+// the plain-data boundary.
+export type RecordSchema = {
+  readonly kind: "record";
+  readonly value: Schema;
+};
+
+// A fixed-length heterogeneous array (`[A, B, ...]`). Length is part of the
+// contract: a value with a different length fails validation.
+export type TupleSchema = {
+  readonly kind: "tuple";
+  readonly items: readonly Schema[];
+};
+
 export type EnumSchema<TValues extends readonly SchemaLiteral[] = readonly SchemaLiteral[]> = {
   readonly kind: "enum";
   readonly values: TValues;
@@ -105,6 +120,8 @@ export type Schema =
   | ArraySchema
   | ObjectSchema
   | OptionalSchema
+  | RecordSchema
+  | TupleSchema
   | EnumSchema
   | UnionSchema
   | Vector3Schema
@@ -154,19 +171,29 @@ export type Infer<TSchema extends Schema> = TSchema extends StringSchema
               ? TSchema["inner"] extends Schema
                 ? Infer<TSchema["inner"]> | undefined
                 : unknown
-              : TSchema extends EnumSchema<infer TValues>
-                ? TValues[number]
-                : TSchema extends UnionSchema
-                  ? TSchema["members"][number] extends Schema
-                    ? Infer<TSchema["members"][number]>
+              : TSchema extends TupleSchema
+                ? InferTupleSchema<TSchema["items"]>
+                : TSchema extends RecordSchema
+                  ? TSchema["value"] extends Schema
+                    ? Record<string, Infer<TSchema["value"]>>
                     : never
-                  : TSchema extends Vector3Schema
-                    ? Vector3Value
-                    : TSchema extends Color3Schema
-                      ? Color3Value
-                      : TSchema extends CFrameSchema
-                        ? CFrameValue
-                        : never;
+                  : TSchema extends EnumSchema<infer TValues>
+                    ? TValues[number]
+                    : TSchema extends UnionSchema
+                      ? TSchema["members"][number] extends Schema
+                        ? Infer<TSchema["members"][number]>
+                        : never
+                      : TSchema extends Vector3Schema
+                        ? Vector3Value
+                        : TSchema extends Color3Schema
+                          ? Color3Value
+                          : TSchema extends CFrameSchema
+                            ? CFrameValue
+                            : never;
+
+type InferTupleSchema<TItems extends readonly Schema[]> = {
+  -readonly [TIndex in keyof TItems]: Infer<TItems[TIndex]>;
+};
 
 export type SchemaValidationIssue = {
   readonly path: readonly string[];
@@ -364,6 +391,48 @@ function validateSchemaAtPath(
     }
     case "optional":
       return value === undefined ? [] : validateSchemaAtPath(schema.inner, value, path);
+    case "record": {
+      if (!isRecordLike(value)) {
+        return [createIssue(path, "expected record object")];
+      }
+
+      const issues: SchemaValidationIssue[] = [];
+
+      for (const key of Object.keys(value)) {
+        issues.push(
+          ...validateSchemaAtPath(schema.value, value[key], appendPathSegment(path, key)),
+        );
+      }
+
+      return issues;
+    }
+    case "tuple": {
+      if (!Array.isArray(value)) {
+        return [createIssue(path, "expected tuple array")];
+      }
+      if (value.length !== schema.items.length) {
+        return [
+          createIssue(
+            path,
+            `expected tuple of length ${schema.items.length}, got ${value.length}`,
+          ),
+        ];
+      }
+
+      const issues: SchemaValidationIssue[] = [];
+
+      for (let index = 0; index < schema.items.length; index += 1) {
+        const itemSchema = schema.items[index];
+        if (itemSchema === undefined) {
+          continue;
+        }
+        issues.push(
+          ...validateSchemaAtPath(itemSchema, value[index], appendIndexSegment(path, index)),
+        );
+      }
+
+      return issues;
+    }
     case "enum": {
       const allowed = schema.values.some((candidate) => Object.is(candidate, value));
 
@@ -520,6 +589,21 @@ export const schema = {
     readonly inner: TInner;
   } {
     return { kind: "optional", inner };
+  },
+
+  // Returned as an exact object type (not `RecordSchema & {...}`): an
+  // intersection here makes `Infer`'s indexed accesses produce `Schema & TValue`
+  // intersections, which TypeScript expands explosively (TS2589).
+  record<const TValue extends Schema>(
+    value: TValue,
+  ): { readonly kind: "record"; readonly value: TValue } {
+    return { kind: "record", value };
+  },
+
+  tuple<const TItems extends readonly Schema[]>(
+    items: TItems,
+  ): { readonly kind: "tuple"; readonly items: TItems } {
+    return { kind: "tuple", items };
   },
 
   enum<const TValues extends readonly SchemaLiteral[]>(values: TValues): EnumSchema<TValues> {

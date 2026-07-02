@@ -47,6 +47,25 @@ describe("binary codec round trips", () => {
     expect(encodeBinary(s, value)).toEqual(encodeBinary(s, reordered));
   });
 
+  it("round trips records with deterministic key order", () => {
+    const s = schema.record(schema.number());
+    const value = { sword: 1, shield: 2, potion: 3 };
+    expect(roundTrip(s, value)).toEqual(value);
+    expect(roundTrip(s, {})).toEqual({});
+
+    // Insertion order in the input must not change the bytes.
+    const reordered = { potion: 3, sword: 1, shield: 2 };
+    expect(encodeBinary(s, value)).toEqual(encodeBinary(s, reordered));
+  });
+
+  it("round trips tuples as a fixed sequence without a length prefix", () => {
+    const s = schema.tuple([schema.string(), schema.u8(), schema.boolean()]);
+    expect(roundTrip(s, ["sword", 3, true])).toEqual(["sword", 3, true]);
+
+    // string("ab") = u32 len + 2 bytes = 6, u8 = 1, bool = 1 — no extra bytes.
+    expect(encodeBinary(s, ["ab", 7, false]).byteLength).toBe(8);
+  });
+
   it("round trips present and absent optionals", () => {
     const s = schema.object({
       name: schema.string(),

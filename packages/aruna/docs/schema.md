@@ -47,7 +47,17 @@ schema.object({
 schema.optional(schema.number())            // number | undefined
 schema.enum(["red", "green", "blue"])       // "red" | "green" | "blue"
 schema.union([schema.string(), schema.number()]) // string | number
+
+schema.record(schema.number())              // Record<string, number> — string keys only
+schema.tuple([schema.string(), schema.u8()]) // [string, number] — exact length enforced
 ```
+
+`record` is a homogeneous string-keyed map: every key must be a string (non-string keys
+don't survive the plain-data boundary) and every value must match the value schema.
+`tuple` is a fixed-length heterogeneous array validated positionally — a value with a
+different length fails. Both cross the binary codec with a deterministic layout
+(records encode entries sorted by key; tuples encode a fixed sequence with no length
+prefix).
 
 Schemas are immutable. To extend an object schema, spread its `.shape` into a new one —
 never mutate:

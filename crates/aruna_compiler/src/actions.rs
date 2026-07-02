@@ -211,7 +211,7 @@ fn schema_invalid_diagnostic(
         Some(span),
         Some(format!("export name: {export_name}\n{details}")),
         Some(
-            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), or schema.enum([...])."
+            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), or a Roblox userdata schema (vector3/color3/cframe)."
                 .to_string(),
         ),
     )
@@ -1081,6 +1081,124 @@ fn parse_schema_call<'a>(
                 ..Default::default()
             })
         }
+        // A homogeneous string-keyed map. The value schema rides the `items`
+        // metadata slot (like an array's element), so no new metadata field is
+        // needed and existing snapshot consumers stay parseable.
+        "record" => {
+            let Some(argument) = call.arguments.first() else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "record schemas require exactly one schema argument.".to_string(),
+                ));
+                return None;
+            };
+
+            if call.arguments.len() != 1 {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "record schemas require exactly one schema argument.".to_string(),
+                ));
+                return None;
+            }
+
+            let Some(items) = parse_schema_argument(
+                file,
+                action_id,
+                export_name,
+                role,
+                argument,
+                env,
+                diagnostics,
+            ) else {
+                return None;
+            };
+
+            Some(ArunaSchemaMetadata {
+                kind: kind.to_string(),
+                items: Some(Box::new(items)),
+                ..Default::default()
+            })
+        }
+        // A fixed-length heterogeneous array. Element schemas ride the `members`
+        // metadata slot (like a union's members), in positional order.
+        "tuple" => {
+            let Some(argument) = call.arguments.first() else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "tuple schemas require exactly one array literal argument.".to_string(),
+                ));
+                return None;
+            };
+
+            if call.arguments.len() != 1 {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "tuple schemas require exactly one array literal argument.".to_string(),
+                ));
+                return None;
+            }
+
+            let Argument::ArrayExpression(array) = argument else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: argument.span().start as usize,
+                        end: argument.span().end as usize,
+                    },
+                    "tuple schemas require an array literal of element schemas.".to_string(),
+                ));
+                return None;
+            };
+
+            let Some(members) = parse_schema_union_members(
+                file,
+                action_id,
+                export_name,
+                role,
+                array,
+                env,
+                diagnostics,
+            ) else {
+                return None;
+            };
+
+            Some(ArunaSchemaMetadata {
+                kind: kind.to_string(),
+                members: Some(members),
+                ..Default::default()
+            })
+        }
         _ => {
             diagnostics.push(schema_invalid_diagnostic(
                 file,
@@ -1858,6 +1976,75 @@ export const tick = defineSignal({ id: "world.tick" });
         assert_eq!(tick.id, "world.tick");
         assert!(!tick.has_payload_schema);
         assert_eq!(tick.payload_schema, None);
+    }
+
+    #[test]
+    fn parses_record_and_tuple_schemas() {
+        let (action, diagnostics) = collect_single_action(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const syncInventory = defineAction({
+  id: "inventory.sync",
+  input: schema.object({
+    counts: schema.record(schema.u16()),
+    position: schema.tuple([schema.number(), schema.number()]),
+  }),
+  run() {
+    return undefined;
+  },
+});
+"#,
+        );
+
+        assert!(diagnostics.is_empty());
+        let input = action.input_schema.expect("input schema");
+        let properties = input.properties.expect("object properties");
+
+        let counts = properties.get("counts").expect("counts field");
+        assert_eq!(counts.kind, "record");
+        assert_eq!(counts.items.as_deref().map(|item| item.kind.as_str()), Some("number"));
+
+        let position = properties.get("position").expect("position field");
+        assert_eq!(position.kind, "tuple");
+        let members = position.members.as_ref().expect("tuple members");
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().all(|member| member.kind == "number"));
+    }
+
+    #[test]
+    fn reports_record_without_value_schema() {
+        let (_, diagnostics) = collect_single_action_allow_empty(
+            r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const broken = defineAction({
+  id: "inventory.broken",
+  input: schema.record(),
+  run() {
+    return undefined;
+  },
+});
+"#,
+        );
+
+        assert!(diagnostics.iter().any(|d| d
+            .details
+            .as_deref()
+            .is_some_and(|details| details.contains("record schemas require exactly one schema argument"))));
+    }
+
+    fn collect_single_action_allow_empty(source: &str) -> (Option<ArunaActionRecord>, Vec<ArunaDiagnostic>) {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let path = write_file(root, "src/action.ts", source);
+
+        let result = collect_action_definitions(root, &path, &std::fs::read_to_string(&path).unwrap())
+            .unwrap();
+
+        (result.actions.first().cloned(), result.diagnostics)
     }
 
     #[test]

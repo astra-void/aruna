@@ -42,6 +42,8 @@ const literalSchema = schema.literal("sword");
 const optionalSchema = schema.optional(schema.string());
 const arraySchema = schema.array(schema.string());
 const enumSchema = schema.enum(["a", "b"] as const);
+const recordSchema = schema.record(schema.number());
+const tupleSchema = schema.tuple([schema.string(), schema.number()]);
 const objectSchema = schema.object({
   itemId: schema.string(),
   quantity: schema.number(),
@@ -95,6 +97,8 @@ type _LiteralSchema = Expect<Equal<Infer<typeof literalSchema>, "sword">>;
 type _OptionalSchema = Expect<Equal<Infer<typeof optionalSchema>, string | undefined>>;
 type _ArraySchema = Expect<Equal<Infer<typeof arraySchema>, string[]>>;
 type _EnumSchema = Expect<Equal<Infer<typeof enumSchema>, "a" | "b">>;
+type _RecordSchema = Expect<Equal<Infer<typeof recordSchema>, Record<string, number>>>;
+type _TupleSchema = Expect<Equal<Infer<typeof tupleSchema>, [string, number]>>;
 type _ObjectSchema = Expect<
   Equal<
     Infer<typeof objectSchema>,
