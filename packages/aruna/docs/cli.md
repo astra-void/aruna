@@ -56,11 +56,19 @@ Available on every command:
 --no-emit-runtime   skip vendoring the Roblox-targeted runtime into the generated dir
 --no-emit-luau      only generate stubs + vendor the runtime; skip the rbxtsc Luau compile
 --emit-runtime      explicit-on (now the default; kept for backward compatibility)
+--watch             stay running and rebuild on source changes
 ```
 
 By default `build` vendors the runtime and runs rbxtsc, partitioning the project into
 client/server/shared so the emitted `out/` maps onto the Roblox DataModel (server code
 stays in `ServerScriptService`, never replicated). See [architecture.md](./architecture.md).
+
+`--watch` keeps the process alive and re-runs the full build (stubs + vendored runtime +
+rbxtsc) whenever project source changes, so stubs and contracts never go stale while you
+work — this replaces re-running `aruna build` by hand after every action/signal edit.
+Save bursts are debounced into one rebuild, a change landing mid-build queues exactly one
+follow-up, and the build's own output trees (the generated dir, `out/`, `include/`,
+`node_modules/`) never re-trigger it. Not combinable with `--json`.
 
 ## `aruna doctor`
 

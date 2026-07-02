@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
@@ -28,6 +29,7 @@ import {
   collectLayoutDesyncDiagnostics,
   reconcileOwnedArtifacts,
 } from "./owned-artifacts.js";
+import { createRebuildScheduler, shouldRebuildOnChange } from "./watch.js";
 import { formatError, formatMuted, formatSuccess } from "./theme.js";
 
 type CliOptions = {
@@ -193,7 +195,12 @@ type BuildCliOptions = CliOptions & {
   // leaves these undefined by default, so callers gate on `!== false`.
   emitRuntime?: boolean;
   emitLuau?: boolean;
+  watch?: boolean;
 };
+
+// Long enough to coalesce an editor's save burst (format-on-save, multi-file
+// save-all) into one rebuild, short enough to feel immediate.
+const WATCH_DEBOUNCE_MS = 200;
 
 // Resolves the roblox-ts-native runtime source shipped in the aruna package
 // ("roblox/" at the package root, shipped via package "files"). The compiled
@@ -629,10 +636,17 @@ export async function main(): Promise<number> {
     .option(
       "--no-emit-luau",
       "skip the rbxtsc Luau compile step (only generate stubs and vendor the runtime)",
+    )
+    .option(
+      "--watch",
+      "stay running and rebuild on source changes (generated/emitted trees are ignored)",
     );
 
-  build.action(async () => {
-    const options = build.optsWithGlobals<BuildCliOptions>();
+  // One full build pass: stub generation + runtime vendoring + rbxtsc, with the
+  // same rendering as a one-shot `aruna build`. Returns what watch mode needs.
+  async function executeBuildPass(
+    options: BuildCliOptions,
+  ): Promise<{ ok: boolean; generatedDir: string }> {
     const startedAt = Date.now();
     const { output, pruned } = await runBuild(options);
     const projectRoot = compilerInput(options).root;
@@ -672,7 +686,66 @@ export async function main(): Promise<number> {
     }
 
     const luauOk = rbxtsc === undefined || rbxtscOk(rbxtsc);
-    process.exitCode = output.ok && luauOk ? 0 : 1;
+    return { ok: output.ok && luauOk, generatedDir: generatedDirFromOutput(output) };
+  }
+
+  build.action(async () => {
+    const options = build.optsWithGlobals<BuildCliOptions>();
+
+    if (options.watch !== true) {
+      const { ok } = await executeBuildPass(options);
+      process.exitCode = ok ? 0 : 1;
+      return;
+    }
+
+    if (options.json) {
+      process.stderr.write("aruna build --watch does not support --json output.\n");
+      process.exitCode = 1;
+      return;
+    }
+
+    const projectRoot = compilerInput(options).root;
+    const colors = resolveColorMode(options);
+    const first = await executeBuildPass(options);
+    // The generatedDir is stable across rebuilds (it comes from config), so the
+    // first pass's answer is enough to filter the build's own writes.
+    const generatedDir = first.generatedDir;
+
+    const scheduler = createRebuildScheduler(async () => {
+      if (!options.quiet) {
+        writeText("");
+        writeText(formatMuted("change detected — rebuilding…", colors));
+      }
+      await executeBuildPass(options);
+      if (!options.quiet) {
+        writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
+      }
+    }, WATCH_DEBOUNCE_MS);
+
+    const watcher = fsSync.watch(projectRoot, { recursive: true }, (_event, fileName) => {
+      if (fileName === null || fileName === undefined) {
+        return;
+      }
+      if (shouldRebuildOnChange(fileName, { generatedDir })) {
+        scheduler.notify();
+      }
+    });
+
+    if (!options.quiet) {
+      writeText("");
+      writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
+    }
+
+    // Keep the process alive until the user interrupts; the watcher handle owns
+    // the event-loop reference.
+    await new Promise<void>((resolve) => {
+      const stop = (): void => {
+        watcher.close();
+        resolve();
+      };
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+    });
   });
 
   program

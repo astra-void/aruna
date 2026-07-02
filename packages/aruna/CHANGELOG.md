@@ -11,6 +11,15 @@ These changes close gaps found by dogfooding Aruna from a downstream consumer.
 This is a pre-1.0 release: the renamed/removed symbols below are a hard break,
 not a deprecation cycle — migrate call sites to the canonical names.
 
+### Added
+
+- **`aruna build --watch` — the build loop is now automatic.** The CLI stays
+  running and re-runs the full build (stub generation, runtime vendoring, rbxtsc)
+  whenever project source changes, removing the stale-stub footgun of forgetting
+  to rebuild after an action/signal edit. Save bursts debounce into one rebuild, a
+  change landing mid-build queues exactly one follow-up, and the build's own
+  output trees (generated dir, `out/`, `include/`) never re-trigger it.
+
 ### Changed
 
 - **`createClientApp({ transport })` — the client and server now share one wiring
