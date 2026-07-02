@@ -28,6 +28,30 @@ type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema 
 
 export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinition<TPlayer> };
 
+// Around-run middleware. Runs after input validation and rate limiting (so a
+// throttled or malformed request never reaches it) and wraps the action's `run`.
+// Short-circuit by rejecting (or by not calling `next`); observe/transform by
+// awaiting `next()`. Mirrors the Node reference runtime's ActionMiddleware.
+export type ActionMiddleware<TPlayer = unknown> = (
+	info: {
+		readonly actionId: string;
+		readonly ctx: ActionContext<TPlayer>;
+		readonly input: unknown;
+	},
+	next: () => Promise<unknown>,
+) => Promise<unknown>;
+
+// Observability hook for errors raised from the action execution chain
+// (middleware or `run`), called before dispatch converts the error into the
+// `{ ok: false }` wire result.
+export type ActionErrorHandler<TPlayer = unknown> = (
+	error: unknown,
+	info: {
+		readonly actionId: string;
+		readonly player: TPlayer;
+	},
+) => void;
+
 export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Applied to any action that does not declare its own `rateLimit`. A
 	// per-action `rateLimit` always takes precedence over this fallback.
@@ -37,6 +61,9 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// typing lives on the action ctx via `createActionDefiner`; dispatch only
 	// forwards it.
 	readonly publisher?: SignalPublisher<SignalMap, unknown>;
+	// Around-run middleware, applied outermost-first to every action.
+	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
+	readonly onError?: ActionErrorHandler<TPlayer>;
 }
 
 export function createActionRegistry<TPlayer>(
@@ -52,6 +79,8 @@ export function createActionRegistry<TPlayer>(
 
 	const defaultRateLimit = options?.defaultRateLimit;
 	const publisher = options?.publisher;
+	const middleware = options?.middleware;
+	const onError = options?.onError;
 	const rateLimiter = createActionRateLimiter();
 
 	return {
@@ -95,13 +124,32 @@ export function createActionRegistry<TPlayer>(
 				// a result payload rather than rejecting the dispatch promise. A
 				// rejection would leave the transport's `.then` success handler
 				// unfired and the client waiting forever for a response.
-				const [invoked, runResult] = pcall(() => definition.run(context, input as never));
-				if (!invoked) {
-					resolve({ ok: false, error: tostring(runResult) });
-					return;
+				const runAction = (): Promise<unknown> => {
+					const [invoked, runResult] = pcall(() => definition.run(context, input as never));
+					if (!invoked) {
+						return Promise.reject(runResult);
+					}
+					return Promise.resolve(runResult);
+				};
+
+				// Compose middleware outermost-first around the run: middleware[0]
+				// is the outermost layer, `runAction` the innermost `next`. Each
+				// layer call is routed through a resolved promise so a synchronous
+				// throw inside a layer becomes a rejection, not an unhandled error.
+				let invoke = runAction;
+				if (middleware !== undefined) {
+					const info = { actionId, ctx: context, input };
+					for (let index = middleware.size() - 1; index >= 0; index -= 1) {
+						const layer = middleware[index];
+						if (layer === undefined) {
+							continue;
+						}
+						const nextInvoke = invoke;
+						invoke = () => Promise.resolve().then(() => layer(info, nextInvoke));
+					}
 				}
 
-				Promise.resolve(runResult).then(
+				invoke().then(
 					(output) => {
 						if (!isWireSafe(output)) {
 							resolve({ ok: false, error: "non-serializable action output" });
@@ -109,7 +157,12 @@ export function createActionRegistry<TPlayer>(
 						}
 						resolve({ ok: true, output });
 					},
-					(reason) => resolve({ ok: false, error: tostring(reason) }),
+					(reason) => {
+						if (onError !== undefined) {
+							onError(reason, { actionId, player });
+						}
+						resolve({ ok: false, error: tostring(reason) });
+					},
 				);
 			});
 		},

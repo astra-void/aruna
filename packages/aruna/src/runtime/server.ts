@@ -102,6 +102,30 @@ export type ActionRegistry<TPlayer = unknown> = Record<
   ActionDefinition<Schema | undefined, Schema | undefined, TPlayer>
 >;
 
+// Around-run middleware. Runs after input validation and rate limiting (so a
+// throttled or malformed request never reaches it) and wraps the action's `run`
+// plus output validation. Short-circuit by throwing (or by not calling `next`);
+// observe/transform by awaiting `next()`.
+export type ActionMiddleware<TPlayer = unknown> = (
+  info: {
+    readonly actionId: string;
+    readonly ctx: ActionRunContext<TPlayer>;
+    readonly input: unknown;
+  },
+  next: () => Promise<unknown>,
+) => Promise<unknown>;
+
+// Observability hook for errors thrown from the action execution chain
+// (middleware, `run`, output validation). Called before the error propagates to
+// the transport; rate-limit and input-validation rejections are not routed here.
+export type ActionErrorHandler<TPlayer = unknown> = (
+  error: unknown,
+  info: {
+    readonly actionId: string;
+    readonly ctx: ActionRunContext<TPlayer>;
+  },
+) => void;
+
 export type DispatchActionOptions<TPlayer = unknown> = {
   readonly rateLimiter?: ActionRateLimiter;
   readonly rateLimitKey?: RateLimitKeyResolver<TPlayer>;
@@ -113,6 +137,9 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   // typing lives on the action ctx via `createActionDefiner`; dispatch only
   // forwards the object, it never invokes it.
   readonly publisher?: RemoteSignalPublisher<SignalRegistry, unknown>;
+  // Applied outermost-first around every action's execution.
+  readonly middleware?: readonly ActionMiddleware<TPlayer>[];
+  readonly onError?: ActionErrorHandler<TPlayer>;
   readonly nowMs?: () => number;
 };
 
@@ -172,13 +199,38 @@ export async function dispatchAction<TPlayer = unknown>(
       ? { ...ctx, publisher: options.publisher }
       : ctx;
 
-  const output = await Promise.resolve(action.run(runCtx, input));
+  const runAction = async (): Promise<unknown> => {
+    const output = await Promise.resolve(action.run(runCtx, input));
 
-  if (action.output !== undefined) {
-    assertSchema(action.output, output, { actionId, role: "output" });
+    if (action.output !== undefined) {
+      assertSchema(action.output, output, { actionId, role: "output" });
+    }
+
+    assertSerializableActionValue(output, "output", actionId);
+
+    return output;
+  };
+
+  // Compose middleware outermost-first around the run: middleware[0] is the
+  // outermost layer, `runAction` the innermost `next`.
+  let invoke = runAction;
+  const middleware = options?.middleware;
+  if (middleware !== undefined && middleware.length > 0) {
+    const info = { actionId, ctx: runCtx, input };
+    for (let index = middleware.length - 1; index >= 0; index -= 1) {
+      const layer = middleware[index];
+      if (layer === undefined) {
+        continue;
+      }
+      const next = invoke;
+      invoke = () => Promise.resolve(layer(info, next));
+    }
   }
 
-  assertSerializableActionValue(output, "output", actionId);
-
-  return output;
+  try {
+    return await invoke();
+  } catch (error) {
+    options?.onError?.(error, { actionId, ctx: runCtx });
+    throw error;
+  }
 }

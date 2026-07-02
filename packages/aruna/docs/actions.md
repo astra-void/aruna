@@ -156,6 +156,35 @@ shared `"anonymous"` bucket. Override with `rateLimitKey` if you need finer buck
 a limit is exceeded the dispatcher throws `ActionRateLimitError` (`retryAfterMs`,
 `resetAtMs`, `max`, `windowMs`).
 
+## Middleware & error observability
+
+`createServerApp({ middleware, onError })` wraps every action on every dispatch path:
+
+```ts
+import { createServerApp, type ActionMiddleware } from "aruna/server";
+
+const requireAdmin: ActionMiddleware<Player> = async (info, next) => {
+  if (info.actionId.startsWith("admin.") && !isAdmin(info.ctx.player)) {
+    throw new Error("not authorized");
+  }
+  return next(); // continue to the next layer / the action's run
+};
+
+createServerApp<Player>({
+  actions,
+  transport: robloxRemoteEvent(),
+  middleware: [requireAdmin],
+  onError: (error, info) => log.warn(`${info.actionId} failed`, error),
+});
+```
+
+Middleware is applied **outermost-first** and runs **inside rate limiting and input
+validation** — a throttled or malformed request never reaches it, and `info.input` is
+already validated. Short-circuit by throwing (the client gets the error response);
+observe or transform by awaiting `next()`. `onError` fires for errors raised from the
+execution chain (middleware and `run`) before they propagate to the transport;
+rate-limit and input-validation rejections are not routed through it.
+
 ## Fire-and-forget
 
 Set `fireAndForget: true` for one-way actions (logging, telemetry) that don't need a

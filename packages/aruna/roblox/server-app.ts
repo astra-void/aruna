@@ -2,7 +2,9 @@
 
 import {
 	createActionRegistry,
+	type ActionErrorHandler,
 	type ActionMap,
+	type ActionMiddleware,
 	type ActionRegistry,
 	type ActionRegistryOptions,
 } from "./server-runtime";
@@ -52,6 +54,13 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
 	// Aruna emits the configured `actions.defaultRateLimit` into the generated
 	// server module; pass it here to enforce it at runtime.
 	readonly defaultRateLimit?: ActionRateLimitOptions;
+	// Around-run middleware, applied outermost-first to every action on every
+	// dispatch path: auth checks, logging, timing. Runs inside rate limiting and
+	// input validation.
+	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
+	// Observability hook for errors raised from the action execution chain,
+	// called before dispatch converts the error into the wire result.
+	readonly onError?: ActionErrorHandler<TPlayer>;
 }
 
 export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = SignalMap>(
@@ -73,6 +82,8 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 		...(publisher !== undefined
 			? { publisher: publisher as unknown as SignalPublisher<SignalMap, unknown> }
 			: {}),
+		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
+		...(options.onError !== undefined ? { onError: options.onError } : {}),
 	};
 	const registry = createActionRegistry<TPlayer>(options.actions, registryOptions);
 

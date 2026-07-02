@@ -35,6 +35,67 @@ return function(ctx)
 			t.eq(value.output.value, 7)
 		end)
 
+		t.it("runs middleware outermost-first around the handler", function()
+			local order = {}
+			local r = createActionRegistry({
+				echo = {
+					id = "echo",
+					run = function(_self, _context, input)
+						table.insert(order, "run")
+						return { value = input.value }
+					end,
+				},
+			}, {
+				middleware = {
+					function(info, nextInvoke)
+						table.insert(order, "outer:" .. info.actionId)
+						return nextInvoke():andThen(function(output)
+							table.insert(order, "outer:done")
+							return output
+						end)
+					end,
+					function(_info, nextInvoke)
+						table.insert(order, "inner")
+						return nextInvoke()
+					end,
+				},
+			})
+			local _, _, value = t.await(r.dispatch(player, "echo", { value = 7 }))
+			t.isTrue(value.ok)
+			t.eq(value.output.value, 7)
+			t.eq(table.concat(order, ","), "outer:echo,inner,run,outer:done")
+		end)
+
+		t.it("short-circuits when middleware rejects and reports via onError", function()
+			local sawError, sawActionId
+			local ran = false
+			local r = createActionRegistry({
+				guarded = {
+					id = "guarded",
+					run = function()
+						ran = true
+						return { ok = true }
+					end,
+				},
+			}, {
+				middleware = {
+					function()
+						error("not authorized")
+					end,
+				},
+				onError = function(err, info)
+					sawError = tostring(err)
+					sawActionId = info.actionId
+				end,
+			})
+			local _, _, value = t.await(r.dispatch(player, "guarded", nil))
+			t.isFalse(value.ok)
+			t.contains(value.error, "not authorized")
+			t.isFalse(ran, "handler never ran")
+			t.contains(sawError, "not authorized")
+			t.eq(sawActionId, "guarded")
+		end)
+
 		t.it("passes the player through the context", function()
 			local r = createActionRegistry({
 				whoami = {

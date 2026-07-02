@@ -43,6 +43,8 @@ const CONTRACT: Record<keyof typeof ENTRIES, readonly string[]> = {
     "ServerApp",
     "ServerTransport",
     "ServerSignalPublisherFactory",
+    "ActionMiddleware",
+    "ActionErrorHandler",
     "SignalDefinition",
     "InferInput",
     "InferOutput",

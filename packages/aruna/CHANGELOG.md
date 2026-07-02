@@ -44,6 +44,15 @@ not a deprecation cycle — migrate call sites to the canonical names.
   prefix). `nullable` was deliberately left out: Luau collapses nil/undefined, so
   it cannot be distinguished from `optional` on the wire.
 
+- **`createServerApp({ middleware, onError })` — around-run action middleware.**
+  Middleware is applied outermost-first to every action on every dispatch path,
+  running inside rate limiting and input validation (a throttled or malformed
+  request never reaches it): auth checks, logging, timing. Throw to
+  short-circuit; await `next()` to observe/transform. `onError` observes errors
+  raised from the execution chain before they reach the transport. Both
+  runtimes; `ActionMiddleware` / `ActionErrorHandler` join the export-parity
+  contract.
+
 ### Changed
 
 - **`createClientApp({ transport })` — the client and server now share one wiring

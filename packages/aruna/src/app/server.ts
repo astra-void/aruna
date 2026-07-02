@@ -1,5 +1,7 @@
 import {
   dispatchAction,
+  type ActionErrorHandler,
+  type ActionMiddleware,
   type ActionRegistry,
   type ActionRateLimiter,
   type ActionRateLimitOptions,
@@ -92,6 +94,13 @@ export type CreateServerAppOptions<
   readonly rateLimitKey?: RateLimitKeyResolver<TPlayer>;
   // Fallback rate limit for actions that do not declare their own `rateLimit`.
   readonly defaultRateLimit?: ActionRateLimitOptions;
+  // Around-run middleware, applied outermost-first to every action on every
+  // dispatch path (in-process and over the owned transport): auth checks,
+  // logging, timing. Runs inside rate limiting and input validation.
+  readonly middleware?: readonly ActionMiddleware<TPlayer>[];
+  // Observability hook for errors thrown from the action execution chain,
+  // called before the error propagates to the transport.
+  readonly onError?: ActionErrorHandler<TPlayer>;
   readonly nowMs?: () => number;
 };
 
@@ -126,6 +135,8 @@ export function createServerApp<
     ...(publisher !== undefined
       ? { publisher: publisher as unknown as RemoteSignalPublisher<SignalRegistry, unknown> }
       : {}),
+    ...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
+    ...(options.onError !== undefined ? { onError: options.onError } : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
   } satisfies DispatchActionOptions<TPlayer>;
 
