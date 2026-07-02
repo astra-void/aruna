@@ -210,12 +210,19 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
+// Split-tree generated layout (see packages/aruna/src/cli/tsconfig-paths.ts):
+// client stubs + signals land in shared/, the server registry in server/, and the
+// vendored runtime in shared/runtime/.
+const GENERATED_CLIENT_ACTIONS_REL = "src/.aruna/shared/actions.client.generated.ts";
+const GENERATED_SERVER_ACTIONS_REL = "src/.aruna/server/actions.server.generated.ts";
+const GENERATED_RUNTIME_CLIENT_REL = "src/.aruna/shared/runtime/client.ts";
+
 function formatGeneratedActionAliasFailure(logPath: string): string {
   return [
     "aruna doctor --fix did not install generated action aliases in tsconfig.json.",
     "Expected:",
-    "  $aruna/actions/client -> src/.aruna/actions.client.generated.ts",
-    "  $aruna/actions/server -> src/.aruna/actions.server.generated.ts",
+    `  $aruna/actions/client -> ${GENERATED_CLIENT_ACTIONS_REL}`,
+    `  $aruna/actions/server -> ${GENERATED_SERVER_ACTIONS_REL}`,
     `See ${logPath}`,
   ].join("\n");
 }
@@ -353,10 +360,10 @@ export async function assertGeneratedActionAliases(projectRoot: string): Promise
   if (
     !isStringArray(clientAlias) ||
     clientAlias.length !== 1 ||
-    clientAlias[0] !== "src/.aruna/actions.client.generated.ts" ||
+    clientAlias[0] !== GENERATED_CLIENT_ACTIONS_REL ||
     !isStringArray(serverAlias) ||
     serverAlias.length !== 1 ||
-    serverAlias[0] !== "src/.aruna/actions.server.generated.ts"
+    serverAlias[0] !== GENERATED_SERVER_ACTIONS_REL
   ) {
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
@@ -365,8 +372,8 @@ export async function assertGeneratedActionAliases(projectRoot: string): Promise
 export async function assertGeneratedActionFiles(projectRoot: string): Promise<void> {
   const buildLogPath = path.join(projectRoot, "logs", "08-build.log");
   const expectedFiles = [
-    "src/.aruna/actions.client.generated.ts",
-    "src/.aruna/actions.server.generated.ts",
+    GENERATED_CLIENT_ACTIONS_REL,
+    GENERATED_SERVER_ACTIONS_REL,
     "src/.aruna/manifest.json",
   ] as const;
 
@@ -383,7 +390,7 @@ export async function assertGeneratedActionFiles(projectRoot: string): Promise<v
   }
 
   const clientContents = await fs.readFile(
-    path.join(projectRoot, "src/.aruna/actions.client.generated.ts"),
+    path.join(projectRoot, GENERATED_CLIENT_ACTIONS_REL),
     "utf8",
   );
   if (!clientContents.includes("export const purchaseItem =")) {
@@ -391,7 +398,7 @@ export async function assertGeneratedActionFiles(projectRoot: string): Promise<v
   }
 
   const serverContents = await fs.readFile(
-    path.join(projectRoot, "src/.aruna/actions.server.generated.ts"),
+    path.join(projectRoot, GENERATED_SERVER_ACTIONS_REL),
     "utf8",
   );
   if (!serverContents.includes("export const actions = {")) {
@@ -402,11 +409,11 @@ export async function assertGeneratedActionFiles(projectRoot: string): Promise<v
 export async function assertGeneratedActionImports(projectRoot: string): Promise<void> {
   const buildLogPath = path.join(projectRoot, "logs", "08-build.log");
   const clientContents = await fs.readFile(
-    path.join(projectRoot, "src/.aruna/actions.client.generated.ts"),
+    path.join(projectRoot, GENERATED_CLIENT_ACTIONS_REL),
     "utf8",
   );
   const serverContents = await fs.readFile(
-    path.join(projectRoot, "src/.aruna/actions.server.generated.ts"),
+    path.join(projectRoot, GENERATED_SERVER_ACTIONS_REL),
     "utf8",
   );
   const clientPackageImports = clientContents.match(/from "aruna[^"]*"/g) ?? [];
@@ -418,6 +425,105 @@ export async function assertGeneratedActionImports(projectRoot: string): Promise
     serverPackageImports.length !== 0
   ) {
     throw new Error(formatGeneratedActionImportFailure(buildLogPath));
+  }
+}
+
+// Regression for the silent-oncompile bug: a project upgraded from the flat
+// codegen layout must (1) have `aruna check` surface the desync, (2) have
+// `aruna build` prune the stale flat artifacts, and (3) have `aruna doctor --fix`
+// realign the tsconfig aliases onto the split-tree layout. Runs last, against the
+// already-built smoke project.
+export async function assertLayoutTransitionRegression(projectRoot: string): Promise<void> {
+  // 1. Simulate the upgrade: plant flat-layout artifacts and point the aliases
+  // back at them, exactly the state a pre-split-tree project lands in.
+  const flatArtifacts = [
+    "src/.aruna/actions.client.generated.ts",
+    "src/.aruna/actions.server.generated.ts",
+    "src/.aruna/signals.generated.ts",
+    "src/.aruna/runtime/client.ts",
+    "src/.aruna/runtime/server.ts",
+  ];
+  for (const relativePath of flatArtifacts) {
+    await writeText(path.join(projectRoot, relativePath), "// stale flat-layout artifact\n");
+  }
+
+  const tsconfigPath = path.join(projectRoot, "tsconfig.json");
+  const tsconfig = await readJson<TsconfigJson>(tsconfigPath);
+  const compilerOptions = (
+    isRecord(tsconfig.compilerOptions) ? tsconfig.compilerOptions : {}
+  ) as JsonRecord;
+  compilerOptions.paths = {
+    ...(isRecord(compilerOptions.paths) ? compilerOptions.paths : {}),
+    "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
+    "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
+    "$aruna/signals": ["src/.aruna/signals.generated.ts"],
+    "aruna/client": ["src/.aruna/runtime/client.ts"],
+  };
+  tsconfig.compilerOptions = compilerOptions;
+  await writeJson(tsconfigPath, tsconfig);
+
+  // 2. `aruna check` must surface the desync (it exits 0 with warnings).
+  await runCommand(
+    "aruna check (stale layout)",
+    "pnpm",
+    ["exec", "aruna", "check", "--project", "."],
+    projectRoot,
+    "13-check-stale.log",
+  );
+  const checkLog = await fs.readFile(path.join(logsRoot, "13-check-stale.log"), "utf8");
+  if (!checkLog.includes("Stale generated artifact") || !checkLog.includes("current emit layout")) {
+    throw new Error(
+      [
+        "`aruna check` did not flag the flat-layout desync (expected aruna::110 + aruna::111).",
+        `See ${path.join(logsRoot, "13-check-stale.log")}`,
+      ].join("\n"),
+    );
+  }
+
+  // 3. `aruna build` must prune the stale flat artifacts.
+  await runCommand(
+    "aruna build (prune stale)",
+    "pnpm",
+    ["exec", "aruna", "build", "--emit-runtime", "--no-emit-luau", "--project", "."],
+    projectRoot,
+    "14-build-prune.log",
+  );
+  for (const relativePath of [
+    "src/.aruna/actions.client.generated.ts",
+    "src/.aruna/actions.server.generated.ts",
+    "src/.aruna/signals.generated.ts",
+    "src/.aruna/runtime",
+  ]) {
+    if (await exists(path.join(projectRoot, relativePath))) {
+      throw new Error(
+        [
+          `aruna build did not prune the stale artifact ${relativePath}.`,
+          `See ${path.join(logsRoot, "14-build-prune.log")}`,
+        ].join("\n"),
+      );
+    }
+  }
+
+  // 4. `aruna doctor --fix` must realign every alias onto the split-tree layout.
+  await runCommand(
+    "aruna doctor --fix (realign)",
+    "pnpm",
+    ["exec", "aruna", "doctor", "--fix", "--emit-runtime", "--project", "."],
+    projectRoot,
+    "15-doctor-realign.log",
+  );
+  await assertGeneratedActionAliases(projectRoot);
+  const realigned = await readJson<TsconfigJson>(tsconfigPath);
+  const realignedOptions = isRecord(realigned.compilerOptions) ? realigned.compilerOptions : {};
+  const realignedPaths = isRecord(realignedOptions.paths) ? realignedOptions.paths : {};
+  const runtimeClient = realignedPaths["aruna/client"];
+  if (!isStringArray(runtimeClient) || runtimeClient[0] !== GENERATED_RUNTIME_CLIENT_REL) {
+    throw new Error(
+      [
+        `aruna doctor --fix did not realign aruna/client to ${GENERATED_RUNTIME_CLIENT_REL}.`,
+        `See ${path.join(logsRoot, "15-doctor-realign.log")}`,
+      ].join("\n"),
+    );
   }
 }
 
@@ -796,15 +902,18 @@ async function createConsumerFiles(
     path.join(tempRoot, "src", "server.ts"),
     [
       'import { createServerApp } from "aruna/server";',
-      'import { bindActions } from "aruna/roblox";',
+      'import { robloxRemoteEvent } from "aruna/roblox";',
       'import { actions } from "$aruna/actions/server";',
       "",
       "export function startServerApp() {",
-      "  const serverApp = createServerApp<Player>({ actions });",
-      "",
-      "  return serverApp.bind((registry) => {",
-      "    return bindActions(registry);",
+      "  // The app owns the transport binding (recommended wiring): every dispatch",
+      "  // option, including defaultRateLimit, reaches the wire.",
+      "  const serverApp = createServerApp<Player>({",
+      "    actions,",
+      "    transport: robloxRemoteEvent(),",
       "  });",
+      "",
+      "  return serverApp;",
       "}",
       "",
       "startServerApp();",
@@ -1016,11 +1125,15 @@ async function runChecks(): Promise<void> {
     "11-typecheck.log",
   );
   await assertPublicPackageSubpathFiles(path.join(tempRoot, "node_modules", "aruna"));
+  // Final Luau-compile gate. Use the turnkey `aruna build` (which partitions the
+  // project into client/server/shared and runs rbxtsc against the service-separated
+  // default.project.json) rather than a bare `rbxtsc --project .`: the partition
+  // contract means plain rbxtsc can't map the emitted out/ onto the Rojo tree.
   try {
     await runCommand(
-      "rbxtsc",
+      "aruna build (luau compile)",
       "pnpm",
-      ["exec", "rbxtsc", "--project", "."],
+      ["exec", "aruna", "build", "--emit-runtime", "--project", "."],
       tempRoot,
       "12-rbxtsc.log",
     );
@@ -1082,6 +1195,11 @@ async function runChecks(): Promise<void> {
       }
     }
   }
+
+  // Last, exercise the flat -> split-tree layout transition (stale prune + check
+  // desync + doctor realign). Runs after the main flow so it can perturb the
+  // already-validated project without disturbing the earlier assertions.
+  await assertLayoutTransitionRegression(tempRoot);
 }
 
 function getRegistryLookupsForLocalPackages(

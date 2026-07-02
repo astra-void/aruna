@@ -212,8 +212,8 @@ describe("verify-package-consumption args", () => {
       compilerOptions: {
         baseUrl: ".",
         paths: {
-          "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
-          "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
+          "$aruna/actions/client": ["src/.aruna/shared/actions.client.generated.ts"],
+          "$aruna/actions/server": ["src/.aruna/server/actions.server.generated.ts"],
         },
       },
     });
@@ -256,11 +256,11 @@ describe("verify-package-consumption args", () => {
   it("accepts the expected generated action files", async () => {
     const root = await makeTempRoot("aruna-package-consumption-files-");
     await writeTextFile(
-      path.join(root, "src/.aruna/actions.client.generated.ts"),
+      path.join(root, "src/.aruna/shared/actions.client.generated.ts"),
       "export const purchaseItem = () => Promise.resolve({ ok: true });\n",
     );
     await writeTextFile(
-      path.join(root, "src/.aruna/actions.server.generated.ts"),
+      path.join(root, "src/.aruna/server/actions.server.generated.ts"),
       "export const actions = { purchaseItem: () => undefined };\n",
     );
     await writeTextFile(path.join(root, "src/.aruna/manifest.json"), "{\n  \"actions\": []\n}\n");
@@ -313,7 +313,7 @@ describe("verify-package-consumption args", () => {
   it("accepts generated action files that use public package imports", async () => {
     const root = await makeTempRoot("aruna-package-consumption-imports-");
     await writeTextFile(
-      path.join(root, "src/.aruna/actions.client.generated.ts"),
+      path.join(root, "src/.aruna/shared/actions.client.generated.ts"),
       [
         'import { invokeAction } from "aruna/client";',
         "",
@@ -322,8 +322,8 @@ describe("verify-package-consumption args", () => {
       ].join("\n"),
     );
     await writeTextFile(
-      path.join(root, "src/.aruna/actions.server.generated.ts"),
-      'import { purchaseItem } from "../domains/shop/actions";\nexport const actions = { purchaseItem };\n',
+      path.join(root, "src/.aruna/server/actions.server.generated.ts"),
+      'import { purchaseItem } from "../../domains/shop/actions";\nexport const actions = { purchaseItem };\n',
     );
     await writeTextFile(path.join(root, "src/.aruna/manifest.json"), "{\n  \"actions\": []\n}\n");
 
@@ -333,7 +333,7 @@ describe("verify-package-consumption args", () => {
   it("rejects generated action files that import the root package entry", async () => {
     const root = await makeTempRoot("aruna-package-consumption-imports-");
     await writeTextFile(
-      path.join(root, "src/.aruna/actions.client.generated.ts"),
+      path.join(root, "src/.aruna/shared/actions.client.generated.ts"),
       [
         'import { invokeAction } from "aruna";',
         "",
@@ -342,8 +342,8 @@ describe("verify-package-consumption args", () => {
       ].join("\n"),
     );
     await writeTextFile(
-      path.join(root, "src/.aruna/actions.server.generated.ts"),
-      'import { purchaseItem } from "../domains/shop/actions";\nexport const actions = { purchaseItem };\n',
+      path.join(root, "src/.aruna/server/actions.server.generated.ts"),
+      'import { purchaseItem } from "../../domains/shop/actions";\nexport const actions = { purchaseItem };\n',
     );
     await writeTextFile(path.join(root, "src/.aruna/manifest.json"), "{\n  \"actions\": []\n}\n");
 
