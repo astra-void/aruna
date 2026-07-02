@@ -33,9 +33,13 @@ This is package-layout and `rbxtsc` compile validation. It is **not** production
 
 ## Remaining follow-ups
 
-- Native-runtime *runtime* execution tests: the dispatch, serialization, and rate-limit logic in `packages/aruna/roblox/` mirrors the vitest-covered Node runtime but is only compiled, not executed, in CI.
-- A Lune/Luau test harness to exercise that native runtime at runtime.
 - Production Studio validation, which remains later work.
+
+Native-runtime *runtime* execution is now covered: `apps/roblox-runtime-test` compiles
+`packages/aruna/roblox/` to Luau with rbxtsc and executes it under Lune against
+in-process RemoteEvent fakes (`pnpm --filter @arunajs/roblox-runtime-test test`) —
+dispatch, serialization, rate limiting, and the action/signal transports run for real,
+not just compile.
 
 ## Historical context
 
