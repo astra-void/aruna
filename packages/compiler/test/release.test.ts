@@ -23,6 +23,14 @@ import {
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+// The native target packages are pinned to the compiler's own version at stage
+// time. Read it from source so these assertions survive a version bump.
+const compilerVersion = (
+  JSON.parse(
+    fs.readFileSync(path.join(workspaceRoot, "packages", "compiler", "package.json"), "utf8"),
+  ) as { version: string }
+).version;
+
 async function cleanReleaseArtifacts(): Promise<void> {
   await fsp.rm(path.join(workspaceRoot, ".npm"), { recursive: true, force: true });
   await fsp.rm(path.join(workspaceRoot, ".npm-pack"), { recursive: true, force: true });
@@ -178,7 +186,7 @@ describe("release orchestrator", () => {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName(hostTarget)]: "0.1.2",
+      [nativePackageName(hostTarget)]: compilerVersion,
     });
 
     const stagedPackageJsons = await Promise.all(
@@ -293,8 +301,8 @@ describe("release orchestrator", () => {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName("linux-x64-gnu")]: "0.1.2",
-      [nativePackageName("linux-arm64-gnu")]: "0.1.2",
+      [nativePackageName("linux-x64-gnu")]: compilerVersion,
+      [nativePackageName("linux-arm64-gnu")]: compilerVersion,
     });
   });
 
@@ -457,7 +465,7 @@ describe("release orchestrator", () => {
       await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
     ) as { optionalDependencies: Record<string, string> };
     expect(compilerPackageJson.optionalDependencies).toEqual({
-      [nativePackageName(hostTarget)]: "0.1.2",
+      [nativePackageName(hostTarget)]: compilerVersion,
     });
 
     const publishCalls = spawnCalls.filter((entry) => entry.args.includes("publish"));
