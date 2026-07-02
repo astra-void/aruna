@@ -95,6 +95,65 @@ describe("createServerApp signal publisher ownership", () => {
   });
 });
 
+describe("createClientApp signal subscriber ownership", () => {
+  it("builds the subscriber at boot and receives published payloads", () => {
+    const remote = createFakeSignalRemote();
+    const serverApp = createServerApp({
+      actions: {},
+      signals,
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
+    });
+
+    const invoker = vi.fn(async () => undefined);
+    const clientApp = createClientApp({
+      transport: invoker,
+      signals,
+      createSubscriber: (registry) => createRemoteSignalSubscriber(remote, registry),
+    });
+
+    expect(clientApp.subscriber).toBeDefined();
+
+    const received: Array<{ score: number }> = [];
+    const connection = clientApp.subscriber?.on("scoreChanged", (payload) =>
+      received.push(payload),
+    );
+
+    serverApp.publisher?.toAll("scoreChanged", { score: 11 });
+    expect(received).toEqual([{ score: 11 }]);
+
+    connection?.disconnect();
+    clientApp.dispose();
+  });
+
+  it("disposes the owned subscriber with the app", () => {
+    const remote = createFakeSignalRemote();
+    const serverApp = createServerApp({
+      actions: {},
+      signals,
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
+    });
+
+    const clientApp = createClientApp({
+      transport: async () => undefined,
+      signals,
+      createSubscriber: (registry) => createRemoteSignalSubscriber(remote, registry),
+    });
+
+    const received: Array<{ score: number }> = [];
+    clientApp.subscriber?.on("scoreChanged", (payload) => received.push(payload));
+    clientApp.dispose();
+
+    serverApp.publisher?.toAll("scoreChanged", { score: 3 });
+    expect(received).toEqual([]);
+  });
+
+  it("omits the subscriber when no createSubscriber is supplied", () => {
+    const clientApp = createClientApp({ transport: async () => undefined });
+    expect(clientApp.subscriber).toBeUndefined();
+    clientApp.dispose();
+  });
+});
+
 describe("createClientApp invoke injection", () => {
   it("invokes through the app handle without relying on the global install", async () => {
     const invoker = vi.fn(async (actionId: string, input: unknown) => ({ actionId, input }));

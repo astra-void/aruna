@@ -137,9 +137,25 @@ typing sugar that carries the registry type to `ctx.publisher` — it holds no r
 
 ## Client: subscribing
 
-`createSignalSubscriber(signals, options?)` (from `aruna/roblox`) is the turnkey subscriber:
-it waits for the default signal remote and returns a typed subscriber. Register handlers up
-front via `handlers`, or dynamically via `on`.
+The recommended wiring lets the client app own the subscriber, mirroring the server app
+owning the publisher — no plumbing module, disposed with the app:
+
+```ts
+import { createClientApp } from "aruna/client";
+import { createSignalSubscriber } from "aruna/roblox";
+import { signals } from "$aruna/signals";
+
+const clientApp = createClientApp({
+  signals,
+  createSubscriber: createSignalSubscriber,
+});
+
+clientApp.subscriber?.on("combat.playerDamaged", (p) => updateHud(p)); // typed
+```
+
+Standalone, `createSignalSubscriber(signals, options?)` (from `aruna/roblox`) is the
+turnkey subscriber: it waits for the default signal remote and returns a typed subscriber.
+Register handlers up front via `handlers`, or dynamically via `on`.
 
 ```ts
 import { createSignalSubscriber } from "aruna/roblox";

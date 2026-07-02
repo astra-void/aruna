@@ -20,6 +20,13 @@ not a deprecation cycle — migrate call sites to the canonical names.
   change landing mid-build queues exactly one follow-up, and the build's own
   output trees (generated dir, `out/`, `include/`) never re-trigger it.
 
+- **`createClientApp({ signals, createSubscriber })` — the client app can own the
+  signal subscriber**, mirroring the server app owning the publisher. Pass the
+  generated registry plus `createSignalSubscriber` (from `aruna/roblox`) and the
+  app builds a typed subscriber at boot, exposed as `clientApp.subscriber` and
+  disposed with the app. Exported `ClientSignalSubscriberFactory` in both
+  runtimes.
+
 ### Changed
 
 - **`createClientApp({ transport })` — the client and server now share one wiring
