@@ -1,4 +1,4 @@
-import { schema, type InferSchema } from "aruna/schema";
+import { schema, type Infer } from "aruna/schema";
 
 export const startWaveInputSchema = schema.object({
   waveId: schema.string(),
@@ -9,5 +9,5 @@ export const startWaveOutputSchema = schema.object({
   started: schema.boolean(),
 });
 
-export type StartWaveInput = InferSchema<typeof startWaveInputSchema>;
-export type StartWaveOutput = InferSchema<typeof startWaveOutputSchema>;
+export type StartWaveInput = Infer<typeof startWaveInputSchema>;
+export type StartWaveOutput = Infer<typeof startWaveOutputSchema>;

@@ -1,4 +1,4 @@
-import { schema, type InferSchema } from "aruna/schema";
+import { schema, type Infer } from "aruna/schema";
 import { actionResultSchema } from "../../shared/result";
 
 export const purchaseItemInputSchema = schema.object({
@@ -15,5 +15,5 @@ export const purchaseItemOutputSchema = schema.object({
   currency: schema.literal("coins"),
 });
 
-export type PurchaseItemInput = InferSchema<typeof purchaseItemInputSchema>;
-export type PurchaseItemOutput = InferSchema<typeof purchaseItemOutputSchema>;
+export type PurchaseItemInput = Infer<typeof purchaseItemInputSchema>;
+export type PurchaseItemOutput = Infer<typeof purchaseItemOutputSchema>;
