@@ -95,7 +95,7 @@ describe("createServerApp defaultRateLimit reaches the RemoteEvent dispatch path
       transport: ({ registry, dispatch }) => bindRemoteEventActions(remote, registry, dispatch),
     });
     const invoker = createRemoteEventActionInvoker(remote);
-    const clientApp = createClientApp({ invoker });
+    const clientApp = createClientApp({ transport: invoker });
 
     await expect(invokeAction(actionId, {})).resolves.toBe("pong");
     await expect(invokeAction(actionId, {})).rejects.toThrowError(/rate limited/);
@@ -119,7 +119,7 @@ describe("createServerApp defaultRateLimit reaches the RemoteEvent dispatch path
       transport: ({ registry, dispatch }) => bindRemoteEventActions(remote, registry, dispatch),
     });
     const invoker = createRemoteEventActionInvoker(remote);
-    const clientApp = createClientApp({ invoker });
+    const clientApp = createClientApp({ transport: invoker });
 
     await expect(invokeAction(actionId, {})).resolves.toBe("pong");
     await expect(invokeAction(actionId, {})).resolves.toBe("pong");
@@ -147,7 +147,7 @@ describe("createServerApp defaultRateLimit reaches the RemoteEvent dispatch path
       transport: ({ registry, dispatch }) => bindRemoteEventActions(remote, registry, dispatch),
     });
     const invoker = createRemoteEventActionInvoker(remote);
-    const clientApp = createClientApp({ invoker });
+    const clientApp = createClientApp({ transport: invoker });
 
     const accepted: boolean[] = [];
     for (let i = 0; i < 4; i += 1) {

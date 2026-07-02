@@ -110,7 +110,7 @@ describe("public exports", () => {
         bindRemoteFunctionActions(remote, actions, dispatch),
     });
     const clientApp = createClientApp({
-      invoker: createRemoteFunctionActionInvoker(remote),
+      transport: createRemoteFunctionActionInvoker(remote),
     });
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({
@@ -180,7 +180,7 @@ describe("public exports", () => {
         bindRemoteEventActions(remote, actions, dispatch),
     });
     const clientApp = createClientApp({
-      invoker,
+      transport: invoker,
     });
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({

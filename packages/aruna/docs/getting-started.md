@@ -102,11 +102,10 @@ startServerApp();
 
 ```ts
 import { createClientApp } from "aruna/client";
-import { createActionInvoker } from "aruna/roblox";
 import { purchaseItem } from "$aruna/actions/client"; // generated typed stub
 
 export function startClientApp() {
-  const clientApp = createClientApp({ invoker: createActionInvoker() });
+  const clientApp = createClientApp(); // defaults to the Roblox action transport
 
   // Typed call; returns Promise<{ ok: boolean; total: number }>
   void purchaseItem({ itemId: "sword", quantity: 1 });
@@ -117,9 +116,11 @@ export function startClientApp() {
 startClientApp();
 ```
 
-`createActionInvoker()` (from `aruna/roblox`) waits for the
-`ReplicatedStorage/Aruna/Actions` RemoteEvent that the server transport sets up, and
-`robloxRemoteEvent()` ensures that remote exists on the server. That is the whole
-transport — you never touch a raw RemoteEvent.
+Argless `createClientApp()` builds the default Roblox transport
+(`createActionInvoker()` from `aruna/roblox`), which waits for the
+`ReplicatedStorage/Aruna/Actions` RemoteEvent that the server-side
+`robloxRemoteEvent()` transport creates. That is the whole wire — you never touch a
+raw RemoteEvent. Pass `createClientApp({ transport })` to customize it (request ids,
+timeouts, a RemoteFunction invoker, or an in-memory invoker in tests).
 
 Next: [actions.md](./actions.md), [signals.md](./signals.md), [schema.md](./schema.md).

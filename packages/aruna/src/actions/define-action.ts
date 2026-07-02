@@ -59,7 +59,7 @@ export type PublishingActionDefinition<
 //     },
 //   });
 export function createActionDefiner<TSignals extends SignalRegistry, TPlayer = unknown>() {
-  return function defineSignalAction<
+  return function definePublishingAction<
     TInputSchema extends Schema | undefined = undefined,
     TOutputSchema extends Schema | undefined = undefined,
   >(

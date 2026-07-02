@@ -842,7 +842,7 @@ describe("RemoteEvent round trip", () => {
     });
 
     const clientApp = createClientApp({
-      invoker,
+      transport: invoker,
     });
 
     const purchaseItem = (input: { readonly itemId: string }) => {

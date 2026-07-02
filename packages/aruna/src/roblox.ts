@@ -38,7 +38,7 @@ export function defineAction<
 // `ctx.publisher.to/toMany/toAll(...)` is checked against the real signal ids and
 // payloads, with the publisher present (no `?`) and still injected by the app.
 export function createActionDefiner<TSignals extends SignalRegistry, TPlayer = Player>() {
-  return function defineSignalAction<
+  return function definePublishingAction<
     TInputSchema extends Schema | undefined = undefined,
     TOutputSchema extends Schema | undefined = undefined,
   >(

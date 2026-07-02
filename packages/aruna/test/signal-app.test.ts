@@ -98,7 +98,7 @@ describe("createServerApp signal publisher ownership", () => {
 describe("createClientApp invoke injection", () => {
   it("invokes through the app handle without relying on the global install", async () => {
     const invoker = vi.fn(async (actionId: string, input: unknown) => ({ actionId, input }));
-    const app = createClientApp({ invoker });
+    const app = createClientApp({ transport: invoker });
 
     await expect(app.invoke("shop.buy", { itemId: "sword" })).resolves.toEqual({
       actionId: "shop.buy",

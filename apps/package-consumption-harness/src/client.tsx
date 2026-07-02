@@ -6,7 +6,7 @@ import { packageConsumptionLabel } from "./app/providers";
 
 export function startClientApp() {
   const clientApp = createClientApp({
-    invoker: createActionInvoker({
+    transport: createActionInvoker({
       createRequestId: createHarnessRequestId,
     }),
   });

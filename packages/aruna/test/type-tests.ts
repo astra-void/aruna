@@ -171,7 +171,7 @@ const actions = {
 };
 
 const clientApp = createClientApp({
-  invoker: async () => {
+  transport: async () => {
     return { ok: true };
   },
 });

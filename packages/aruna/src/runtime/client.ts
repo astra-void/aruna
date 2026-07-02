@@ -30,7 +30,7 @@ export async function invokeAction(
   if (actionInvoker === undefined) {
     throw new Error(
       `Aruna action invoker is not installed; cannot invoke "${actionId}". ` +
-        `Call createClientApp({ invoker }) during client boot before any controller invokes an action, ` +
+        `Call createClientApp() during client boot before any controller invokes an action, ` +
         `or use the app handle's invoke() to avoid global install-order dependencies.`,
     );
   }

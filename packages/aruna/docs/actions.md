@@ -119,18 +119,20 @@ named after the export, with the action id and serialization baked in:
 
 ```ts
 import { createClientApp } from "aruna/client";
-import { createActionInvoker } from "aruna/roblox";
 import { purchaseItem } from "$aruna/actions/client";
 
-createClientApp({ invoker: createActionInvoker() });
+createClientApp(); // defaults to the Roblox action transport
 
 const result = await purchaseItem({ itemId: "sword", quantity: 1 });
 // result: { ok: boolean; total: number }
 ```
 
-`createClientApp({ invoker })` installs the invoker process-wide so the generated stubs
-can find it; call its `.dispose()` to clear it. `createActionInvoker(options?)` builds the
-default RemoteEvent invoker; useful options: `createRequestId`, `requestTimeoutMs`.
+`createClientApp(options?)` installs its transport process-wide so the generated stubs
+can find it; call its `.dispose()` to clear it. The default transport is
+`createActionInvoker()` (from `aruna/roblox`), the RemoteEvent invoker paired with the
+server's `robloxRemoteEvent()`. Pass `createClientApp({ transport })` to customize it —
+e.g. `createActionInvoker({ createRequestId, requestTimeoutMs })`, a RemoteFunction
+invoker, or an in-memory invoker in tests.
 
 You can also call the low-level `invokeAction(actionId, input, options?)` from
 `aruna/client` directly, but prefer the generated typed stubs.

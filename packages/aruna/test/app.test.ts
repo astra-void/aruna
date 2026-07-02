@@ -40,7 +40,7 @@ afterEach(() => {
 describe("createClientApp", () => {
   it("installs an invoker used by invokeAction", async () => {
     const app = createClientApp({
-      invoker: async (actionId, input) => {
+      transport: async (actionId, input) => {
         return { actionId, input };
       },
     });
@@ -55,7 +55,7 @@ describe("createClientApp", () => {
 
   it("clears the invoker when disposed", async () => {
     const app = createClientApp({
-      invoker: async () => {
+      transport: async () => {
         return { ok: true };
       },
     });
@@ -69,7 +69,7 @@ describe("createClientApp", () => {
 
   it("can be disposed twice safely", async () => {
     const app = createClientApp({
-      invoker: async () => {
+      transport: async () => {
         return { ok: true };
       },
     });
@@ -276,7 +276,7 @@ describe("fake RemoteFunction round-trip", () => {
       transport: ({ registry, dispatch }) => bindRemoteFunctionActions(remote, registry, dispatch),
     });
     const clientApp = createClientApp({
-      invoker: createRemoteFunctionActionInvoker(remote),
+      transport: createRemoteFunctionActionInvoker(remote),
     });
     const purchaseItem = (input: { itemId: string }): Promise<unknown> => {
       return invokeAction("shop.purchaseItem", input);

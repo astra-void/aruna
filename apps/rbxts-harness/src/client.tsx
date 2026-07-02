@@ -5,7 +5,7 @@ import { createHarnessRequestId } from "./app/bootstrap";
 
 export function startClientApp() {
   const clientApp = createClientApp({
-    invoker: createActionInvoker({
+    transport: createActionInvoker({
       createRequestId: createHarnessRequestId,
     }),
   });

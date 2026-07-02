@@ -54,6 +54,7 @@ const CONTRACT: Record<keyof typeof ENTRIES, readonly string[]> = {
     "clearActionInvoker",
     "setActionInvoker",
     "ClientApp",
+    "ClientTransport",
     "ActionInvoker",
     "ActionInvokeOptions",
     "CreateClientAppOptions",

@@ -11,6 +11,16 @@ These changes close gaps found by dogfooding Aruna from a downstream consumer.
 This is a pre-1.0 release: the renamed/removed symbols below are a hard break,
 not a deprecation cycle — migrate call sites to the canonical names.
 
+### Changed
+
+- **`createClientApp({ transport })` — the client and server now share one wiring
+  vocabulary.** The `invoker` option is renamed to `transport`, the client
+  counterpart of `createServerApp({ transport })`; the `ClientTransport` type is
+  exported from `aruna/client` in both runtimes. When `transport` is omitted,
+  `createClientApp()` builds the default Roblox invoker (`createActionInvoker()`),
+  so client boot is one argless call. The app disposes a default-built transport;
+  a caller-supplied transport stays caller-owned.
+
 ### Fixed
 
 - **Layout-transition safety: stale generated artifacts are pruned (correctness).**
