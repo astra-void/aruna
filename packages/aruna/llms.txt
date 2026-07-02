@@ -14,8 +14,8 @@ virtual modules:
 
 - `aruna/server`  — `defineAction`, `defineSignal`, `createServerApp`, dispatch/validation
 - `aruna/client`  — `createClientApp`, `invokeAction`, in-memory invoker (tests)
-- `aruna/roblox`  — RemoteEvent/RemoteFunction transports, `createActionInvoker`, `bindActions`, signal pub/sub
-- `aruna/schema`  — `schema.*` builders + `InferSchema`
+- `aruna/roblox`  — server transports (`robloxRemoteEvent`/`robloxRemoteFunction` for `createServerApp({ transport })`), `createActionInvoker`, low-level `bindActions`, signal pub/sub
+- `aruna/schema`  — `schema.*` builders + `Infer` (the single schema-inference type)
 - `$aruna/actions/server` — generated server action registry (`actions`, `defaultRateLimit`)
 - `$aruna/actions/client` — generated per-action client call functions
 - `$aruna/signals` — generated signal registry (`signals`)
@@ -27,8 +27,8 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 ## Docs
 
 - [Getting started](./docs/getting-started.md): install, project shape, the build loop, a full minimal action round-trip.
-- [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits, fire-and-forget, `ctx.player`.
-- [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber.
+- [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits, fire-and-forget, `ctx.player`, `ctx.publisher`.
+- [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber, publishing from inside an action (`ctx.publisher` / `createActionDefiner`).
 - [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
 - [CLI](./docs/cli.md): `aruna build`/`check`/`init`/`doctor`/`inspect`/`contract`, flags, what each generates.
 - [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the dual runtime, binary codec.
@@ -42,5 +42,11 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
   does NOT regenerate stubs or the manifest, so client stubs go stale.
 - `ctx.player` is optional at runtime (tests call actions with no player). Import
   `defineAction` from `aruna/roblox` to get `ctx.player: Player` typing.
+- To publish a signal from inside an action, use `ctx.publisher` (injected when
+  `createServerApp` owns a publisher). Bind `createActionDefiner<Signals, Player>()`
+  in a shared module for a non-optional, registry-checked `ctx.publisher`.
+- If `aruna check` reports `aruna::110`/`aruna::111` (stale artifact / alias desync),
+  run `aruna build` (prunes stale output) and `aruna doctor --fix --emit-runtime`
+  (realigns tsconfig aliases). Generated output under `generatedDir` is fully owned.
 - Schemas are plain immutable objects with zero runtime cost; compose by spreading
   `.shape`, never mutate.

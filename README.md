@@ -141,7 +141,7 @@ export default defineConfig({
 2. Action:
 
    ```ts
-   import { defineAction } from "aruna/server";
+   import { defineAction } from "aruna/roblox"; // ctx.player typed Player; aruna/server defaults it to unknown
    import { schema } from "aruna/schema";
 
    export const purchaseItem = defineAction({
@@ -182,9 +182,10 @@ export default defineConfig({
 - source discovery, entry classification, module classification, import graph construction, action discovery, boundary validation, diagnostics, and manifest generation in Rust
 - OXC-based TS/TSX import parsing in the Rust core (replaces the earlier SWC parser path)
 - deterministic compiler output
-- `aruna check`
+- `aruna check` (also flags layout desync: stale generated artifacts `aruna::110`, tsconfig aliases pointing at an old emit path `aruna::111`)
 - `aruna inspect`
 - running `aruna` with no subcommand aliases to `aruna check`
+- `aruna build` prunes stale artifacts from a previous codegen layout (tracked in `.aruna-build.json`, confined to `generatedDir`)
 - fixture-based tests without Roblox Studio
 - `packages/compiler` loads the Rust native compiler
 - no TypeScript analyzer fallback
@@ -344,7 +345,8 @@ connection.disconnect();
 ```
 
 - Payloads are validated against the `plain-data-v1` serialization boundary and the declared schema on publish (the server throws on a violation) and dropped on schema mismatch on delivery (the client never invokes a handler with a malformed payload).
-- The roblox-ts native runtime ships default-transport helpers `createSignalPublisher` / `createSignalSubscriber` over a dedicated `ArunaSignalRemoteEvent`, distinct from the action `ArunaActionRemoteEvent`.
+- Both runtimes ship turnkey default-transport helpers `createSignalPublisher(signals)` / `createSignalSubscriber(signals)` over a dedicated signal RemoteEvent, distinct from the action remote. They ensure / wait for the remote on call, so no hand-written boot-order plumbing is needed; `createServerApp({ signals, createPublisher })` can own the publisher so the remote is created at boot.
+- An app-owned publisher is injected into every action's `ctx`, so an action's `run` can publish signals directly (`ctx.publisher?.toAll(...)`). Bind a `defineAction` with `createActionDefiner<Signals, Player>()` for a non-optional, registry-checked `ctx.publisher` — no plumbing module. See [docs/signals.md](packages/aruna/docs/signals.md#publishing-from-inside-an-action).
 - Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. (Contract `diff` currently gates action changes; extending the diff to signals is a follow-up.)
 
 ## Binary serialization

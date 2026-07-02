@@ -3,10 +3,10 @@
 `aruna/schema` defines the wire contract for action inputs/outputs and signal payloads.
 Builders return plain immutable objects — there is **no runtime validation cost to build
 them**; validation happens at the boundary when a message crosses the wire. The same
-schema drives type inference (`InferSchema`) and the binary codec.
+schema drives type inference (`Infer`) and the binary codec.
 
 ```ts
-import { schema, type InferSchema } from "aruna/schema";
+import { schema, type Infer } from "aruna/schema";
 ```
 
 ## Primitives
@@ -70,10 +70,12 @@ schema.cframe()   // { components: readonly number[] }  (12 floats)
 
 ## Inference
 
-`InferSchema<typeof s>` turns a schema into its TypeScript type. Define a schema once and
+`Infer<typeof s>` turns a schema into its TypeScript type. Define a schema once and
 derive the type from it rather than declaring both:
 
 ```ts
+import { schema, type Infer } from "aruna/schema";
+
 const purchaseInput = schema.object({
   itemId: schema.string(),
   quantity: schema.number(),
@@ -81,9 +83,11 @@ const purchaseInput = schema.object({
   coupon: schema.optional(schema.string()),
 });
 
-type PurchaseInput = InferSchema<typeof purchaseInput>;
+type PurchaseInput = Infer<typeof purchaseInput>;
 // { itemId: string; quantity: number; currency: "coins"; coupon?: string | undefined }
 ```
+
+> `Infer` is the single schema-inference type name, identical across both runtimes.
 
 There are matching helpers for definitions: `InferInput`/`InferOutput` (from
 `aruna/server`) on an action, and `InferSignalPayload` on a signal.

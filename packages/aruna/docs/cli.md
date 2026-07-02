@@ -25,6 +25,17 @@ writes nothing. `aruna build` is what regenerates `$aruna/actions/*`, `$aruna/si
 the manifest, and the vendored runtime. **After changing any action or signal you must
 run `aruna build`** — otherwise the generated client stubs reference the old contract.
 
+`check` also flags **layout desync** so an upgrade can't pass silently: `aruna::110` for a
+stale generated artifact still on disk from a previous codegen layout, and `aruna::111` for
+a tsconfig alias pointing at a path that no longer matches the current emit layout. Fix them
+with `aruna build` (prunes stale output) and `aruna doctor --fix --emit-runtime` (realigns
+aliases).
+
+`aruna build` tracks the files it emits in a `.aruna-build.json` ledger inside `generatedDir`
+and **prunes stale artifacts** it no longer emits (e.g. flat `*.generated.ts` and a flat
+`runtime/` left by the split-tree migration). Pruning is confined to the `generatedDir` and
+the owned ledger, so hand-written files are never touched.
+
 ## Global flags
 
 Available on every command:

@@ -46,20 +46,20 @@ calls will reference stale contracts if you only `check`. See [cli.md](./cli.md)
 **1. Define the schema** (`src/domains/shop/schema.ts`) — shared:
 
 ```ts
-import { schema, type InferSchema } from "aruna/schema";
+import { schema, type Infer } from "aruna/schema";
 
 export const purchaseItemInputSchema = schema.object({
   itemId: schema.string(),
   quantity: schema.number(),
 });
 
-export type PurchaseItemInput = InferSchema<typeof purchaseItemInputSchema>;
+export type PurchaseItemInput = Infer<typeof purchaseItemInputSchema>;
 ```
 
 **2. Define the action** (`src/domains/shop/actions.ts`) — server-classified:
 
 ```ts
-import { defineAction } from "aruna/server";
+import { defineAction } from "aruna/roblox"; // ctx.player is typed Player (use aruna/server for unknown)
 import { schema } from "aruna/schema";
 
 export const purchaseItem = defineAction({
@@ -84,12 +84,15 @@ export const purchaseItem = defineAction({
 
 ```ts
 import { createServerApp } from "aruna/server";
-import { bindActions } from "aruna/roblox";
+import { robloxRemoteEvent } from "aruna/roblox";
 import { actions, defaultRateLimit } from "$aruna/actions/server"; // generated
 
 export function startServerApp() {
-  const serverApp = createServerApp<Player>({ actions, defaultRateLimit });
-  return serverApp.bind((registry) => bindActions(registry));
+  return createServerApp<Player>({
+    actions,
+    defaultRateLimit,
+    transport: robloxRemoteEvent(), // app owns the binding
+  });
 }
 
 startServerApp();
@@ -115,8 +118,8 @@ startClientApp();
 ```
 
 `createActionInvoker()` (from `aruna/roblox`) waits for the
-`ReplicatedStorage/Aruna/Actions` RemoteEvent that `bindActions` sets up, and
-`bindActions(registry)` ensures that remote exists on the server. That is the whole
+`ReplicatedStorage/Aruna/Actions` RemoteEvent that the server transport sets up, and
+`robloxRemoteEvent()` ensures that remote exists on the server. That is the whole
 transport — you never touch a raw RemoteEvent.
 
 Next: [actions.md](./actions.md), [signals.md](./signals.md), [schema.md](./schema.md).

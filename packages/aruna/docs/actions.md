@@ -9,8 +9,12 @@ function.
 `defineAction` is an identity helper — it returns the definition unchanged but pins the
 literal types so the compiler and generated stubs can read them.
 
+Import `defineAction` from **`aruna/roblox`** so `ctx.player` is typed as `Player` out of
+the box (see [`ctx.player` typing](#ctxplayer-typing) — `aruna/server` exposes the same
+helper but defaults `TPlayer` to `unknown`):
+
 ```ts
-import { defineAction } from "aruna/server";
+import { defineAction } from "aruna/roblox";
 import { schema } from "aruna/schema";
 
 export const purchaseItem = defineAction({
@@ -20,7 +24,7 @@ export const purchaseItem = defineAction({
   input: schema.object({ itemId: schema.string(), quantity: schema.number() }),
   output: schema.object({ ok: schema.boolean(), total: schema.number() }),
   run(ctx, input) {
-    // ctx: { player?: TPlayer }, input: inferred from `input` schema
+    // ctx: { player?: Player }, input: inferred from `input` schema
     return { ok: input.quantity > 0, total: input.quantity * 50 };
   },
 });
@@ -35,12 +39,23 @@ type ActionDefinition<TInput, TOutput, TPlayer> = {
   readonly fireAndForget?: boolean;
   readonly input?: Schema;
   readonly output?: Schema;
-  run(ctx: { player?: TPlayer }, input: InferInput): InferOutput | Promise<InferOutput>;
+  run(
+    ctx: { player?: TPlayer; publisher?: SignalPublisher },
+    input: InferInput,
+  ): InferOutput | Promise<InferOutput>;
 };
 ```
 
 `input` and `output` are both optional. Omit `input` for a no-argument action; omit
 `output` for an action that returns nothing meaningful. `run` may be async.
+
+### Publishing signals from an action
+
+When `createServerApp` owns a publisher (`{ signals, createPublisher }`), it is injected as
+`ctx.publisher`, so an action can push server → client signals from inside `run` without a
+plumbing module. For a non-optional, registry-typed `ctx.publisher`, bind your `defineAction`
+with `createActionDefiner<Signals, Player>()`. See
+[Publishing from inside an action](./signals.md#publishing-from-inside-an-action).
 
 ### `ctx.player` typing
 
@@ -59,17 +74,21 @@ with no player (see in-memory invoker below). Guard it: `ctx.player?.UserId`.
 ## Server registration
 
 The generated `$aruna/actions/server` module exports `actions` (the registry of every
-discovered action) and `defaultRateLimit` (if your config sets one). Pass them to
-`createServerApp`, then `bind` a transport.
+discovered action) and `defaultRateLimit` (if your config sets one). Pass them — together
+with a `transport` — to `createServerApp`. The app **owns** the binding, so every dispatch
+option (including `defaultRateLimit`) reaches the wire.
 
 ```ts
 import { createServerApp } from "aruna/server";
-import { bindActions } from "aruna/roblox";
+import { robloxRemoteEvent } from "aruna/roblox";
 import { actions, defaultRateLimit } from "$aruna/actions/server";
 
-const serverApp = createServerApp<Player>({ actions, defaultRateLimit });
-const binding = serverApp.bind((registry) => bindActions(registry));
-// binding.dispose() tears down the RemoteEvent handler (idempotent)
+const serverApp = createServerApp<Player>({
+  actions,
+  defaultRateLimit,
+  transport: robloxRemoteEvent(),
+});
+// serverApp.dispose() tears down the RemoteEvent handler (idempotent)
 ```
 
 `createServerApp` options:
@@ -77,6 +96,7 @@ const binding = serverApp.bind((registry) => bindActions(registry));
 ```ts
 {
   actions: ActionRegistry;
+  transport?: ServerTransport;                      // owns the remote binding (recommended)
   defaultRateLimit?: { key: "player"; windowMs: number; max: number };
   rateLimiter?: ActionRateLimiter;                  // custom limiter instance
   rateLimitKey?: (actionId, ctx) => string;         // custom bucket key
@@ -84,11 +104,13 @@ const binding = serverApp.bind((registry) => bindActions(registry));
 }
 ```
 
-`bindActions(registry, options?)` (from `aruna/roblox`) ensures
-`ReplicatedStorage/Aruna/Actions` exists and routes incoming requests through the
-registry with validation + rate limiting. Lower-level transports
-(`bindRemoteEventActions`, `bindRemoteFunctionActions`) are also exported if you need to
-supply your own RemoteEvent/RemoteFunction.
+`robloxRemoteEvent(options?)` (from `aruna/roblox`) is the default transport: it ensures
+`ReplicatedStorage/Aruna/Actions` exists and routes incoming requests through the registry
+with validation + rate limiting. `robloxRemoteFunction(remote, options?)` does the same over
+a RemoteFunction. Lower-level binders (`bindActions`, `bindRemoteEventActions`,
+`bindRemoteFunctionActions`) remain exported if you wire your own remote — wrap one in an
+inline `transport: ({ registry, dispatch }) => bindActions(registry, dispatch)` so the app
+still owns the binding and `defaultRateLimit` reaches the wire.
 
 ## Client calls
 
