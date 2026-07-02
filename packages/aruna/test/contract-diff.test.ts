@@ -7,6 +7,7 @@ import {
   buildActionContractSnapshot,
   type ActionContractRecord,
   type ActionContractSnapshot,
+  type SignalContractRecord,
 } from "../src/cli/action-contracts.js";
 import {
   diffActionContractSnapshots,
@@ -67,6 +68,26 @@ function action(overrides: Record<string, unknown> = {}): ActionContractRecord {
     rateLimit: null,
     warnings: [],
     ...(overrides as Partial<ActionContractRecord>),
+  };
+}
+
+function signal(overrides: Record<string, unknown> = {}): SignalContractRecord {
+  return {
+    id: "combat.playerDamaged",
+    source: "src/domains/combat/signals.ts",
+    moduleKind: "shared",
+    direction: "server-to-client",
+    payload: {
+      summary: "object { amount: number }",
+      schema: objectSchema({
+        amount: { kind: "number" },
+      }),
+    },
+    serialization: {
+      policy: "plain-data-v1",
+    },
+    warnings: [],
+    ...(overrides as Partial<SignalContractRecord>),
   };
 }
 
@@ -355,6 +376,113 @@ describe("contract diff", () => {
     expect(() => parseActionContractSnapshotJson({ version: 2 })).toThrow(
       "snapshot.version must be 1.",
     );
+  });
+
+  it("classifies signal additions and removals", () => {
+    const before = snapshot([action()]);
+    const after = { ...snapshot([action()]), signals: [signal()] };
+
+    const added = diffActionContractSnapshots(before, after);
+    expect(added.summary).toEqual({ breaking: 0, nonBreaking: 1, info: 0 });
+    expect(added.entries[0]).toMatchObject({
+      severity: "non-breaking",
+      kind: "signal-added",
+      actionId: "combat.playerDamaged",
+    });
+
+    const removed = diffActionContractSnapshots(after, before);
+    expect(removed.summary).toEqual({ breaking: 1, nonBreaking: 0, info: 0 });
+    expect(removed.entries[0]).toMatchObject({
+      severity: "breaking",
+      kind: "signal-removed",
+      actionId: "combat.playerDamaged",
+    });
+  });
+
+  it("classifies signal payload field changes with output compatibility rules", () => {
+    const before = {
+      ...snapshot([]),
+      signals: [signal()],
+    };
+    const withExtraField = {
+      ...snapshot([]),
+      signals: [
+        signal({
+          payload: {
+            summary: "object { amount: number; source: string }",
+            schema: objectSchema({
+              amount: { kind: "number" },
+              source: { kind: "string" },
+            }),
+          },
+        }),
+      ],
+    };
+
+    const added = diffActionContractSnapshots(before, withExtraField);
+    expect(added.summary).toEqual({ breaking: 0, nonBreaking: 1, info: 0 });
+    expect(added.entries[0]).toMatchObject({
+      kind: "signal-payload-field-added",
+      actionId: "combat.playerDamaged",
+      path: "payload.source",
+    });
+
+    const removed = diffActionContractSnapshots(withExtraField, before);
+    expect(removed.summary).toEqual({ breaking: 1, nonBreaking: 0, info: 0 });
+    expect(removed.entries[0]).toMatchObject({
+      severity: "breaking",
+      kind: "signal-payload-field-removed",
+      actionId: "combat.playerDamaged",
+      path: "payload.source",
+    });
+  });
+
+  it("flags a retyped signal payload field as breaking", () => {
+    const before = { ...snapshot([]), signals: [signal()] };
+    const retyped = {
+      ...snapshot([]),
+      signals: [
+        signal({
+          payload: {
+            summary: "object { amount: string }",
+            schema: objectSchema({ amount: { kind: "string" } }),
+          },
+        }),
+      ],
+    };
+
+    const result = diffActionContractSnapshots(before, retyped);
+    expect(result.summary.breaking).toBe(1);
+    expect(result.entries[0]).toMatchObject({
+      severity: "breaking",
+      kind: "signal-payload-field-type-changed",
+      actionId: "combat.playerDamaged",
+      path: "payload.amount",
+    });
+  });
+
+  it("treats a signals-free baseline against a signals-free current as unchanged", () => {
+    const result = diffActionContractSnapshots(snapshot([action()]), snapshot([action()]));
+    expect(result.entries).toHaveLength(0);
+  });
+
+  it("round-trips signals through snapshot JSON parsing", () => {
+    const withSignals = { ...snapshot([action()]), signals: [signal()] };
+    const parsed = parseActionContractSnapshotJson(
+      JSON.parse(JSON.stringify(withSignals)) as unknown,
+    );
+    expect(parsed.signals).toHaveLength(1);
+    expect(parsed.signals?.[0]).toMatchObject({ id: "combat.playerDamaged" });
+
+    const result = diffActionContractSnapshots(parsed, withSignals);
+    expect(result.entries).toHaveLength(0);
+  });
+
+  it("rejects duplicate signal ids in a snapshot", () => {
+    const withSignals = { ...snapshot([]), signals: [signal(), signal()] };
+    expect(() =>
+      parseActionContractSnapshotJson(JSON.parse(JSON.stringify(withSignals)) as unknown),
+    ).toThrow("duplicate signal id");
   });
 
   it("matches the fixture snapshot against the current project", async () => {

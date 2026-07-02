@@ -27,6 +27,12 @@ not a deprecation cycle — migrate call sites to the canonical names.
   disposed with the app. Exported `ClientSignalSubscriberFactory` in both
   runtimes.
 
+- **`aruna contract diff` now gates signals.** A removed signal, a removed or
+  retyped payload field, or a serialization-policy change is breaking; an added
+  signal or payload field is non-breaking — output compatibility rules, since
+  payloads travel server → client. Signal-free baselines from before signals
+  existed still parse and diff cleanly.
+
 ### Changed
 
 - **`createClientApp({ transport })` — the client and server now share one wiring

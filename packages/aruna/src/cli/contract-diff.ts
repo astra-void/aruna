@@ -10,6 +10,7 @@ import {
   buildActionContractSnapshot,
   type ActionContractRecord,
   type ActionContractSnapshot,
+  type SignalContractRecord,
 } from "./action-contracts.js";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
 import { formatBrandTitle, formatError, formatMuted } from "./theme.js";
@@ -37,6 +38,13 @@ export type ContractDiffKind =
   | "rate-limit-loosened"
   | "authority-changed"
   | "generated-export-changed"
+  | "signal-added"
+  | "signal-removed"
+  | "signal-source-changed"
+  | "signal-payload-changed"
+  | "signal-payload-field-added"
+  | "signal-payload-field-removed"
+  | "signal-payload-field-type-changed"
   | "metadata-changed";
 
 export type ContractDiffEntry = {
@@ -90,8 +98,16 @@ type ParsedActionContractRecord = ActionContractRecord & {
   };
 };
 
-type ParsedActionContractSnapshot = Omit<ActionContractSnapshot, "actions"> & {
+type ParsedSignalContractRecord = SignalContractRecord & {
+  readonly payload: {
+    readonly summary: string;
+    readonly schema: SchemaMetadata | null;
+  };
+};
+
+type ParsedActionContractSnapshot = Omit<ActionContractSnapshot, "actions" | "signals"> & {
   readonly actions: readonly ParsedActionContractRecord[];
+  readonly signals?: readonly ParsedSignalContractRecord[];
 };
 
 function compareStrings(left: string, right: string): number {
@@ -412,6 +428,66 @@ function parseActionRecord(value: unknown, location: string): ParsedActionContra
   return parsed;
 }
 
+function parseSignalRecord(value: unknown, location: string): ParsedSignalContractRecord {
+  if (!isRecordLike(value)) {
+    throw new Error(`${location} must be an object.`);
+  }
+
+  if (typeof value["id"] !== "string") {
+    throw new Error(`${location}.id must be a string.`);
+  }
+  if (typeof value["source"] !== "string") {
+    throw new Error(`${location}.source must be a string.`);
+  }
+  if (value["direction"] !== "server-to-client") {
+    throw new Error(`${location}.direction must be "server-to-client".`);
+  }
+  if (!isRecordLike(value["payload"])) {
+    throw new Error(`${location}.payload must be an object.`);
+  }
+  if (typeof value["payload"]["summary"] !== "string") {
+    throw new Error(`${location}.payload.summary must be a string.`);
+  }
+  if (!isRecordLike(value["serialization"])) {
+    throw new Error(`${location}.serialization must be an object.`);
+  }
+  if (typeof value["serialization"]["policy"] !== "string") {
+    throw new Error(`${location}.serialization.policy must be a string.`);
+  }
+  if (!Array.isArray(value["warnings"])) {
+    throw new Error(`${location}.warnings must be an array.`);
+  }
+
+  const parsedWarnings: string[] = [];
+  for (const [index, warning] of value["warnings"].entries()) {
+    if (typeof warning !== "string") {
+      throw new Error(`${location}.warnings[${index}] must be a string.`);
+    }
+    parsedWarnings.push(warning);
+  }
+
+  return {
+    id: value["id"],
+    source: normalizePath(value["source"]),
+    moduleKind:
+      typeof value["moduleKind"] === "string"
+        ? (value["moduleKind"] as SignalContractRecord["moduleKind"])
+        : "unknown",
+    direction: "server-to-client",
+    payload: {
+      summary: value["payload"]["summary"],
+      schema:
+        value["payload"]["schema"] === null || value["payload"]["schema"] === undefined
+          ? null
+          : parseSchemaMetadata(value["payload"]["schema"], `${location}.payload.schema`),
+    },
+    serialization: {
+      policy: value["serialization"]["policy"] as "plain-data-v1",
+    },
+    warnings: parsedWarnings,
+  };
+}
+
 function parseActionContractSnapshotJsonAtPath(
   value: unknown,
   location: string,
@@ -452,6 +528,25 @@ function parseActionContractSnapshotJsonAtPath(
     actions.push(parsed);
   }
 
+  // `signals` is omitted from action-only snapshots (pre-signal baselines stay
+  // parseable); when present it must be a well-formed array.
+  let signals: ParsedSignalContractRecord[] | undefined;
+  if (value["signals"] !== undefined) {
+    if (!Array.isArray(value["signals"])) {
+      throw new Error(`${location}.signals must be an array.`);
+    }
+    signals = [];
+    const seenSignalIds = new Set<string>();
+    for (const [index, signal] of value["signals"].entries()) {
+      const parsed = parseSignalRecord(signal, `${location}.signals[${index}]`);
+      if (seenSignalIds.has(parsed.id)) {
+        throw new Error(`${location}.signals contains a duplicate signal id: ${parsed.id}.`);
+      }
+      seenSignalIds.add(parsed.id);
+      signals.push(parsed);
+    }
+  }
+
   const diagnostics: Diagnostic[] = [];
   for (const [index, diagnostic] of value["diagnostics"].entries()) {
     diagnostics.push(parseDiagnostic(diagnostic, `${location}.diagnostics[${index}]`));
@@ -469,6 +564,7 @@ function parseActionContractSnapshotJsonAtPath(
       manifest: normalizePath(value["project"]["manifest"]),
     },
     actions,
+    ...(signals !== undefined ? { signals } : {}),
     diagnostics,
     generatedAt: null,
   };
@@ -885,7 +981,7 @@ function diffRateLimit(
 }
 
 function diffSchema(
-  role: "input" | "output",
+  role: "input" | "output" | "payload",
   actionId: string,
   before: ParsedSchema | null | undefined,
   after: ParsedSchema | null | undefined,
@@ -896,10 +992,14 @@ function diffSchema(
     pathPrefix === role
       ? role === "input"
         ? "input-schema-changed"
-        : "output-schema-changed"
+        : role === "output"
+          ? "output-schema-changed"
+          : "signal-payload-changed"
       : role === "input"
         ? "input-field-type-changed"
-        : "output-field-type-changed";
+        : role === "output"
+          ? "output-field-type-changed"
+          : "signal-payload-field-type-changed";
 
   if (schemaNodesEqual(before, after)) {
     return;
@@ -1019,7 +1119,10 @@ function diffSchema(
 }
 
 function diffObjectSchema(
-  role: "input" | "output",
+  // `payload` (a signal's push body) follows `output` compatibility rules — both
+  // travel server → client, so an added field is ignored by old clients while a
+  // removed or retyped field breaks them.
+  role: "input" | "output" | "payload",
   actionId: string,
   before: ParsedSchema,
   after: ParsedSchema,
@@ -1044,18 +1147,15 @@ function diffObjectSchema(
     if (!beforeProperty && afterProperty) {
       makeEntry(
         {
-          severity:
-            role === "input" && !afterOptional
-              ? "breaking"
-              : role === "output"
-                ? "non-breaking"
-                : "non-breaking",
+          severity: role === "input" && !afterOptional ? "breaking" : "non-breaking",
           kind:
             role === "input"
               ? afterOptional
                 ? "input-field-added-optional"
                 : "input-field-added-required"
-              : "output-field-added",
+              : role === "output"
+                ? "output-field-added"
+                : "signal-payload-field-added",
           actionId,
           path: fieldPath,
           message:
@@ -1074,8 +1174,13 @@ function diffObjectSchema(
     if (beforeProperty && !afterProperty) {
       makeEntry(
         {
-          severity: role === "output" ? "breaking" : "info",
-          kind: role === "input" ? "input-field-removed" : "output-field-removed",
+          severity: role === "input" ? "info" : "breaking",
+          kind:
+            role === "input"
+              ? "input-field-removed"
+              : role === "output"
+                ? "output-field-removed"
+                : "signal-payload-field-removed",
           actionId,
           path: fieldPath,
           message:
@@ -1131,6 +1236,105 @@ function diffObjectSchema(
   }
 }
 
+function diffSignals(
+  before: ActionContractSnapshot,
+  after: ActionContractSnapshot,
+  entries: ContractDiffEntry[],
+): void {
+  const beforeById = new Map((before.signals ?? []).map((signal) => [signal.id, signal] as const));
+  const afterById = new Map((after.signals ?? []).map((signal) => [signal.id, signal] as const));
+  const ids = [...new Set([...beforeById.keys(), ...afterById.keys()])].sort(compareStrings);
+
+  for (const signalId of ids) {
+    const previous = beforeById.get(signalId);
+    const current = afterById.get(signalId);
+
+    if (!previous && current) {
+      makeEntry(
+        {
+          severity: "non-breaking",
+          kind: "signal-added",
+          actionId: signalId,
+          message: `${signalId} signal added.`,
+        },
+        entries,
+      );
+      continue;
+    }
+
+    if (previous && !current) {
+      // Subscribed clients keep waiting on a push that will never arrive.
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "signal-removed",
+          actionId: signalId,
+          message: `${signalId} signal removed.`,
+        },
+        entries,
+      );
+      continue;
+    }
+
+    if (!previous || !current) {
+      continue;
+    }
+
+    if (previous.source !== current.source) {
+      makeEntry(
+        {
+          severity: "non-breaking",
+          kind: "signal-source-changed",
+          actionId: signalId,
+          path: "source",
+          message: `${signalId} source path changed from ${previous.source} to ${current.source}.`,
+          before: previous.source,
+          after: current.source,
+        },
+        entries,
+      );
+    }
+
+    if (previous.moduleKind !== current.moduleKind) {
+      makeEntry(
+        {
+          severity: "info",
+          kind: "metadata-changed",
+          actionId: signalId,
+          path: "moduleKind",
+          message: `${signalId} module classification changed from ${previous.moduleKind} to ${current.moduleKind}.`,
+          before: previous.moduleKind,
+          after: current.moduleKind,
+        },
+        entries,
+      );
+    }
+
+    if (previous.serialization.policy !== current.serialization.policy) {
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "serialization-policy-changed",
+          actionId: signalId,
+          path: "serialization.policy",
+          message: `${signalId} serialization policy changed from ${previous.serialization.policy} to ${current.serialization.policy}.`,
+          before: previous.serialization.policy,
+          after: current.serialization.policy,
+        },
+        entries,
+      );
+    }
+
+    diffSchema(
+      "payload",
+      signalId,
+      previous.payload.schema ?? null,
+      current.payload.schema ?? null,
+      entries,
+    );
+  }
+}
+
 export function diffActionContractSnapshots(
   before: ActionContractSnapshot,
   after: ActionContractSnapshot,
@@ -1139,6 +1343,7 @@ export function diffActionContractSnapshots(
 
   diffProjectMetadata(before, after, entries);
   diffActions(before, after, entries);
+  diffSignals(before, after, entries);
 
   entries.sort(
     (left, right) =>

@@ -16,7 +16,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna inspect contract` | Print a deterministic action contract snapshot. |
 | `aruna inspect modules` | Print how each file is classified (client/server/shared). |
 | `aruna inspect graph` | Print the import graph. |
-| `aruna contract diff` | Compare action contract snapshots (`--baseline`, `--from`, `--to`). |
+| `aruna contract diff` | Compare contract snapshots — actions and signals (`--baseline`, `--from`, `--to`). |
 
 ## The check vs build distinction
 
