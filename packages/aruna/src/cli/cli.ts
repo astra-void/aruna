@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import type { CompilerOutput } from "@arunajs/core";
+import type { CompilerOutput, Diagnostic } from "@arunajs/core";
 import { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
 import {
   formatDiagnostics,
@@ -23,6 +23,11 @@ import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
 import { runPartitionedRbxtsc } from "./rojo-layout.js";
+import { GENERATED_RUNTIME_DIR } from "./tsconfig-paths.js";
+import {
+  collectLayoutDesyncDiagnostics,
+  reconcileOwnedArtifacts,
+} from "./owned-artifacts.js";
 import { formatError, formatMuted, formatSuccess } from "./theme.js";
 
 type CliOptions = {
@@ -136,8 +141,44 @@ function renderCompilerOutput(
   }
 }
 
+// Recomputes `ok` and the warning count after appending CLI-side diagnostics, so
+// that `--warnings-as-errors` still fails on a desync the compiler never saw.
+function withExtraDiagnostics(
+  output: CompilerOutput,
+  extra: readonly Diagnostic[],
+  warningsAsErrors: boolean | undefined,
+): CompilerOutput {
+  if (extra.length === 0) {
+    return output;
+  }
+  const diagnostics = [...output.diagnostics, ...extra];
+  const warnings = extra.filter((diagnostic) => diagnostic.severity === "warning").length;
+  const infos = extra.filter((diagnostic) => diagnostic.severity === "info").length;
+  const errors = extra.filter((diagnostic) => diagnostic.severity === "error").length;
+  const ok = output.ok && errors === 0 && !(warningsAsErrors === true && warnings > 0);
+  return {
+    ...output,
+    ok,
+    diagnostics,
+    summary: {
+      ...output.summary,
+      errors: output.summary.errors + errors,
+      warnings: output.summary.warnings + warnings,
+      infos: output.summary.infos + infos,
+    },
+  };
+}
+
 async function runCheck(options: CliOptions): Promise<CompilerOutput> {
-  return checkProject(compilerInput(options));
+  const input = compilerInput(options);
+  const output = await checkProject(input);
+  // Surface layout desync (stale artifacts / aliases pointing at an old emit
+  // path) that the compiler can't see — its silent pass is the whole bug.
+  const desync = await collectLayoutDesyncDiagnostics({
+    projectRoot: input.root,
+    configPath: input.configPath,
+  });
+  return withExtraDiagnostics(output, desync, options.warningsAsErrors);
 }
 
 async function runInspect(options: CliOptions): Promise<CompilerOutput> {
@@ -288,10 +329,16 @@ export async function validateRobloxRuntimeSource(sourceDir: string): Promise<st
 // files are staged into a sibling temp dir, then the existing runtime is
 // replaced in a single rename, so a failure mid-copy can never leave the
 // consumer with a half-written runtime.
-async function emitRobloxRuntime(root: string, generatedDir: string): Promise<void> {
+// Returns the vendored runtime file paths relative to generatedDir (posix), or
+// undefined when no runtime source is available — so the build can record them in
+// the owned-file ledger and prune a previously-vendored runtime that moved.
+async function emitRobloxRuntime(
+  root: string,
+  generatedDir: string,
+): Promise<string[] | undefined> {
   const sourceDir = await findRobloxRuntimeSourceDir();
   if (sourceDir === undefined) {
-    return;
+    return undefined;
   }
 
   const runtimeFiles = await validateRobloxRuntimeSource(sourceDir);
@@ -315,15 +362,48 @@ async function emitRobloxRuntime(root: string, generatedDir: string): Promise<vo
   } finally {
     await fs.rm(stagingDir, { recursive: true, force: true });
   }
+
+  return runtimeFiles.map((name) => `${GENERATED_RUNTIME_DIR}/${name}`);
 }
 
-async function runBuild(options: BuildCliOptions): Promise<CompilerOutput> {
+export type BuildRunResult = {
+  readonly output: CompilerOutput;
+  // Stale artifacts (generatedDir-relative) pruned during this build.
+  readonly pruned: string[];
+};
+
+async function runBuild(options: BuildCliOptions): Promise<BuildRunResult> {
   const input = compilerInput(options);
   const output = await buildProject(input);
-  if (options.emitRuntime !== false && output.ok) {
-    await emitRobloxRuntime(input.root, generatedDirFromOutput(output));
+  if (!output.ok) {
+    return { output, pruned: [] };
   }
-  return output;
+
+  const generatedDir = generatedDirFromOutput(output);
+  const generatedDirAbs = path.resolve(input.root, generatedDir);
+
+  let runtimeRel: string[] | undefined;
+  if (options.emitRuntime !== false) {
+    runtimeRel = await emitRobloxRuntime(input.root, generatedDir);
+  }
+
+  // Files the compiler wrote, made relative to the generatedDir. Anything that
+  // resolves outside it (e.g. a manifest configured elsewhere) is not owned here
+  // and is excluded from the ledger.
+  const generatedRel: string[] = [];
+  for (const file of output.generatedFiles ?? []) {
+    const relative = path.posix.relative(generatedDir, file.path);
+    if (!relative.startsWith("..") && !path.posix.isAbsolute(relative)) {
+      generatedRel.push(relative);
+    }
+  }
+
+  const { pruned } = await reconcileOwnedArtifacts({
+    generatedDirAbs,
+    current: { generated: generatedRel, runtime: runtimeRel },
+  });
+
+  return { output, pruned };
 }
 
 // Renders the rbxtsc Luau-compile step that runs after a successful build.
@@ -554,7 +634,7 @@ export async function main(): Promise<number> {
   build.action(async () => {
     const options = build.optsWithGlobals<BuildCliOptions>();
     const startedAt = Date.now();
-    const output = await runBuild(options);
+    const { output, pruned } = await runBuild(options);
     const projectRoot = compilerInput(options).root;
     let rbxtsc: RbxtscResult | undefined;
     if (output.ok && options.emitLuau !== false) {
@@ -573,9 +653,19 @@ export async function main(): Promise<number> {
     }
 
     if (options.json) {
-      writeJson(rbxtsc ? { ...output, rbxtsc } : output);
+      writeJson({ ...output, ...(pruned.length > 0 ? { pruned } : {}), ...(rbxtsc ? { rbxtsc } : {}) });
     } else {
       renderCompilerOutput(output, options, Date.now() - startedAt, "build");
+      if (pruned.length > 0 && !options.quiet) {
+        const colors = resolveColorMode(options);
+        writeText("");
+        writeText(
+          formatMuted(
+            `pruned ${pruned.length} stale generated artifact${pruned.length === 1 ? "" : "s"}: ${pruned.join(", ")}`,
+            colors,
+          ),
+        );
+      }
       if (rbxtsc) {
         renderRbxtscResult(rbxtsc, options);
       }
