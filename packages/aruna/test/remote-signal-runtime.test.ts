@@ -166,6 +166,43 @@ describe("createRemoteSignalPublisher", () => {
     ).toThrowError(/not serializable/);
     expect(remote.sent).toEqual([]);
   });
+
+  it("toBatched sends every payload to one player, yielding between chunks", async () => {
+    const remote = createFakeRemote<string>();
+    const publisher = createRemoteSignalPublisher(remote, signals);
+    const payloads = Array.from({ length: 5 }, (_, index) => ({
+      amount: index,
+      source: "replay",
+    }));
+    let yields = 0;
+
+    await publisher.toBatched("Ada", "combat.damaged", payloads, {
+      chunkSize: 2,
+      yield: () => {
+        yields += 1;
+        return Promise.resolve();
+      },
+    });
+
+    expect(remote.sent).toHaveLength(5);
+    expect(remote.sent.map((entry) => entry.message.payload)).toEqual(payloads);
+    // 5 payloads / chunkSize 2 -> yields after index 1 and 3, not after the
+    // last payload.
+    expect(yields).toBe(2);
+  });
+
+  it("toBatched rejects the whole batch on the first invalid payload", async () => {
+    const remote = createFakeRemote<string>();
+    const publisher = createRemoteSignalPublisher(remote, signals);
+
+    await expect(
+      publisher.toBatched("Ada", "combat.damaged", [
+        { amount: 1, source: "ok" },
+        { amount: "nope", source: "bad" } as unknown as { amount: number; source: string },
+      ]),
+    ).rejects.toThrowError(/amount: expected finite number/);
+    expect(remote.sent).toHaveLength(1);
+  });
 });
 
 describe("createRemoteSignalSubscriber", () => {

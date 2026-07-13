@@ -47,6 +47,19 @@ export interface RemoteSignalConnection {
 
 export type SignalHandler<TPayload = unknown> = (payload: TPayload) => void;
 
+// Options for `toBatched`. `chunkSize` caps how many payloads go out before a
+// yield; `yield` swaps the wait strategy (defaults to `task.wait()`).
+export interface SignalBatchOptions {
+	readonly chunkSize?: number;
+	readonly yield?: () => void;
+}
+
+const DEFAULT_BATCH_CHUNK_SIZE = 50;
+
+function defaultBatchYield(): void {
+	task.wait();
+}
+
 export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
 	readonly to: <TId extends SignalId<TSignals>>(
 		player: TPlayer,
@@ -61,6 +74,17 @@ export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
 	readonly toAll: <TId extends SignalId<TSignals>>(
 		signalId: TId,
 		payload: SignalPayloadOf<TSignals, TId>,
+	) => void;
+	// Sends a large payload batch to a single player in fixed-size chunks,
+	// yielding (`task.wait()` by default) between chunks instead of firing
+	// every payload in one tick. Meant for bulk one-time sends (e.g. late-join
+	// replay of a stored broadcast log) where firing hundreds/thousands of
+	// messages synchronously would spike outbound bandwidth for that frame.
+	readonly toBatched: <TId extends SignalId<TSignals>>(
+		player: TPlayer,
+		signalId: TId,
+		payloads: ReadonlyArray<SignalPayloadOf<TSignals, TId>>,
+		options?: SignalBatchOptions,
 	) => void;
 }
 
@@ -130,6 +154,27 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
 			remote.FireAllClients({ signalId, payload });
+		},
+		toBatched: (
+			player: TPlayer,
+			signalId: string,
+			payloads: ReadonlyArray<unknown>,
+			options?: SignalBatchOptions,
+		) => {
+			const signal = resolveSignal(index, signalId);
+			const chunkSize = options?.chunkSize ?? DEFAULT_BATCH_CHUNK_SIZE;
+			const yieldBetweenChunks = options?.yield ?? defaultBatchYield;
+
+			for (let index = 0; index < payloads.size(); index += 1) {
+				const payload = payloads[index];
+				assertPublishable(signal, payload);
+				remote.FireClient(player, { signalId, payload });
+
+				const isChunkBoundary = (index + 1) % chunkSize === 0;
+				if (isChunkBoundary && index + 1 < payloads.size()) {
+					yieldBetweenChunks();
+				}
+			}
 		},
 	};
 

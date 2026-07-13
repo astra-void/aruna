@@ -138,6 +138,37 @@ return function(ctx)
 			subscriber.dispose()
 		end)
 
+		t.it("toBatched sends every payload to one player, yielding between chunks", function()
+			local remote = makeSignalRemote()
+			local signals = makeSignals()
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+
+			local received = {}
+			subscriber.on("combat.damaged", function(payload)
+				table.insert(received, payload)
+			end)
+
+			local payloads = {}
+			for index = 1, 5 do
+				table.insert(payloads, { amount = index, source = "replay" })
+			end
+
+			local yields = 0
+			publisher.toBatched("Ada", "combat.damaged", payloads, {
+				chunkSize = 2,
+				["yield"] = function()
+					yields += 1
+				end,
+			})
+
+			t.eq(#received, 5)
+			-- 5 payloads / chunkSize 2 -> yields after index 2 and 4, not after
+			-- the last payload.
+			t.eq(yields, 2)
+			subscriber.dispose()
+		end)
+
 		t.it("drops a schema-invalid payload on delivery", function()
 			-- Publisher and subscriber on separate remotes: bypass the publisher's
 			-- validation to assert the subscriber-side schema guard independently.
