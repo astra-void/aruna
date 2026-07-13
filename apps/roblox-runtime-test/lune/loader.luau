@@ -16,7 +16,13 @@ local task = require("@lune/task")
 -- carry them in-engine.
 local roblox = require("@lune/roblox")
 
-local function makeLoader(runtimeDir, promisePath, fakes)
+-- `runtimeDirs` is a compiled-output directory (string) or an ordered list of
+-- them (table). Multiple dirs let a consumer project point this loader at
+-- both the vendored aruna runtime output and its own compiled action modules
+-- without merging the two into one directory — each is searched in order for
+-- `{name}.luau`, so base names must stay unique across all of them.
+local function makeLoader(runtimeDirs, promisePath, fakes)
+	local dirs = type(runtimeDirs) == "table" and runtimeDirs or { runtimeDirs }
 	-- Shared `_G`; each module reads `local TS = _G[script]`.
 	local globalTable = {}
 	local folder = setmetatable({ Name = "runtime" }, {
@@ -66,13 +72,25 @@ local function makeLoader(runtimeDir, promisePath, fakes)
 	local ts = { Promise = Promise }
 	local cache = {}
 
+	local function findModulePath(name)
+		for _, dir in dirs do
+			local path = `{dir}/{name}.luau`
+			if fs.isFile(path) then
+				return path
+			end
+		end
+		return nil
+	end
+
 	local function loadModule(name)
 		local cached = cache[name]
 		if cached ~= nil then
 			return cached
 		end
 
-		local source = fs.readFile(`{runtimeDir}/{name}.luau`)
+		local path = findModulePath(name)
+		assert(path ~= nil, `module not found in any runtime dir: {name}`)
+		local source = fs.readFile(path)
 		local fn = luau.load(source, {
 			debugName = name,
 			environment = baseEnv(newScript(name), ts),
