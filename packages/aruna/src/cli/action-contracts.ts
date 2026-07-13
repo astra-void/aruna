@@ -112,7 +112,12 @@ function summarizeAction(
   action: ActionRecord,
 ): ActionContractRecord {
   const input = formatActionSchemaSummary(action.inputSchema);
-  const outputSchema = formatActionSchemaSummary(action.outputSchema);
+  // hasOutputSchema is false for actions that never declare `output` (void
+  // return) — that's a deliberate absence, not missing metadata, so it must
+  // not be rendered as "unknown (metadata unavailable)" or warn.
+  const outputSchema = action.hasOutputSchema
+    ? formatActionSchemaSummary(action.outputSchema)
+    : { summary: "void", warnings: [] as readonly string[] };
   const warnings = sortWarnings([...input.warnings, ...outputSchema.warnings]);
 
   return {
