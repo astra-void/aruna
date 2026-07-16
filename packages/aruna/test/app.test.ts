@@ -169,6 +169,40 @@ describe("createServerApp", () => {
     expect(cleaned).toBe(1);
   });
 
+  it("owns the PlayerRemoving connection for per-player cleanup", () => {
+    type FakePlayer = { readonly UserId: number };
+    const listeners = new Set<(player: FakePlayer) => void>();
+    const players = {
+      PlayerRemoving: {
+        Connect(callback: (player: FakePlayer) => void) {
+          listeners.add(callback);
+          return {
+            Disconnect() {
+              listeners.delete(callback);
+            },
+          };
+        },
+      },
+    };
+    const removed: number[] = [];
+
+    const app = createServerApp<FakePlayer>({
+      actions: {},
+      players,
+      onPlayerRemoving(player) {
+        removed.push(player.UserId);
+      },
+    });
+
+    for (const listener of listeners) {
+      listener({ UserId: 7 });
+    }
+    expect(removed).toEqual([7]);
+
+    app.dispose();
+    expect(listeners.size).toBe(0);
+  });
+
   it("makes the owned transport dispose idempotent", () => {
     const actions = {
       "shop.purchaseItem": defineAction({

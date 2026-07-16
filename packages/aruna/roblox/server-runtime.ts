@@ -10,6 +10,13 @@ export interface ActionDispatchResult {
 	readonly ok: boolean;
 	readonly output?: unknown;
 	readonly error?: string;
+	// Structured error metadata alongside the message, so the client can
+	// discriminate failures (and back off on rate limits) instead of string
+	// matching: "ActionRateLimitError" | "ActionValidationError" |
+	// "ActionSerializationError" | a thrown table's own `name`.
+	readonly errorName?: string;
+	readonly retryAfterMs?: number;
+	readonly resetAtMs?: number;
 }
 
 export interface ActionRegistry<TPlayer = unknown> {
@@ -95,7 +102,11 @@ export function createActionRegistry<TPlayer>(
 
 				// Reject non-wire-safe input before validation or user code runs.
 				if (!isWireSafe(input)) {
-					resolve({ ok: false, error: "non-serializable action input" });
+					resolve({
+						ok: false,
+						error: "non-serializable action input",
+						errorName: "ActionSerializationError",
+					});
 					return;
 				}
 
@@ -108,6 +119,7 @@ export function createActionRegistry<TPlayer>(
 						ok: false,
 						error:
 							issue !== undefined ? `invalid action input: ${issue}` : "invalid action input",
+						errorName: "ActionValidationError",
 					});
 					return;
 				}
@@ -118,8 +130,15 @@ export function createActionRegistry<TPlayer>(
 				const rateLimit = definition.rateLimit ?? defaultRateLimit;
 				if (rateLimit !== undefined) {
 					const limitKey = resolveRateLimitKey(rateLimit, player);
-					if (!rateLimiter.check(actionId, limitKey, rateLimit)) {
-						resolve({ ok: false, error: "rate limit exceeded" });
+					const limitResult = rateLimiter.check(actionId, limitKey, rateLimit);
+					if (!limitResult.ok) {
+						resolve({
+							ok: false,
+							error: `Aruna action ${actionId} is rate limited. Retry after ${limitResult.retryAfterMs}ms.`,
+							errorName: "ActionRateLimitError",
+							retryAfterMs: limitResult.retryAfterMs,
+							resetAtMs: limitResult.resetAtMs,
+						});
 						return;
 					}
 				}
@@ -159,7 +178,11 @@ export function createActionRegistry<TPlayer>(
 				invoke().then(
 					(output) => {
 						if (!isWireSafe(output)) {
-							resolve({ ok: false, error: "non-serializable action output" });
+							resolve({
+								ok: false,
+								error: "non-serializable action output",
+								errorName: "ActionSerializationError",
+							});
 							return;
 						}
 						resolve({ ok: true, output });
@@ -168,7 +191,24 @@ export function createActionRegistry<TPlayer>(
 						if (onError !== undefined) {
 							onError(reason, { actionId, player });
 						}
-						resolve({ ok: false, error: tostring(reason) });
+						// A thrown table with `name`/`message` string fields keeps its
+						// identity across the wire; anything else is stringified.
+						const asRecord = typeIs(reason, "table")
+							? (reason as { name?: unknown; message?: unknown })
+							: undefined;
+						const reasonName =
+							asRecord !== undefined && typeIs(asRecord.name, "string")
+								? asRecord.name
+								: undefined;
+						const reasonMessage =
+							asRecord !== undefined && typeIs(asRecord.message, "string")
+								? asRecord.message
+								: tostring(reason);
+						resolve({
+							ok: false,
+							error: reasonMessage,
+							...(reasonName !== undefined ? { errorName: reasonName } : {}),
+						});
 					},
 				);
 			});

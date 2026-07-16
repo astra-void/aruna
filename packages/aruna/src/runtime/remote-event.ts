@@ -1,4 +1,5 @@
 import { createServerBinding, type ServerBinding } from "./binding.js";
+import { ActionRateLimitError } from "./rate-limit.js";
 import type { ActionInvoker } from "./client.js";
 import {
   dispatchAction,
@@ -19,6 +20,10 @@ export type RemoteEventActionRequest = {
 export type RemoteEventActionErrorPayload = {
   readonly message: string;
   readonly name?: string;
+  // Present on rate-limit rejections so the client can back off precisely
+  // instead of string-matching the message.
+  readonly retryAfterMs?: number;
+  readonly resetAtMs?: number;
 };
 
 export type RemoteEventActionResponse =
@@ -65,9 +70,8 @@ export type ActionTimeoutScheduler = (
   delayMs: number,
 ) => ActionTimeoutCanceler;
 
-// Recommended request timeout. Timeouts are opt-in: invoke() arms a timer only
-// when requestTimeoutMs is a positive number; 0 or undefined keeps the
-// historical "wait for the response forever" behavior.
+// The default request timeout, applied when requestTimeoutMs is not given.
+// Pass requestTimeoutMs: 0 to explicitly opt out (wait forever).
 export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
 export class TimeoutError extends Error {
@@ -85,7 +89,8 @@ export class TimeoutError extends Error {
 export type ActionInvokerOptions = {
   readonly createRequestId?: RemoteEventRequestIdFactory;
   // Milliseconds to wait for a server response before rejecting with
-  // TimeoutError. 0 or undefined (the default) disables the timeout.
+  // TimeoutError. Defaults to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0
+  // to disable the timeout entirely.
   readonly requestTimeoutMs?: number;
   // Overrides how request timeouts are scheduled. Defaults to a setTimeout
   // based scheduler; inject this under Luau or to drive timers in tests.
@@ -146,6 +151,15 @@ function isValidRequestEnvelope(value: unknown): value is RemoteEventActionReque
 }
 
 function toRemoteEventErrorPayload(error: unknown): RemoteEventActionErrorPayload {
+  if (error instanceof ActionRateLimitError) {
+    return {
+      message: error.message,
+      name: error.name,
+      retryAfterMs: error.retryAfterMs,
+      resetAtMs: error.resetAtMs,
+    };
+  }
+
   if (error instanceof Error) {
     if (isString(error.name)) {
       return {
@@ -169,7 +183,9 @@ export function createRemoteEventActionInvoker(
   options?: ActionInvokerOptions,
 ): DisposableActionInvoker {
   const createRequestId = options?.createRequestId ?? createDefaultRequestId;
-  const requestTimeoutMs = options?.requestTimeoutMs ?? 0;
+  // Timeouts are on by default: a dropped response (disconnect, server crash
+  // mid-dispatch) must not leave the caller pending forever. Pass 0 to opt out.
+  const requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_ACTION_REQUEST_TIMEOUT_MS;
   const scheduleTimeout = options?.scheduleTimeout ?? createDefaultTimeoutScheduler();
   type PendingRequest = {
     readonly resolve: (value: unknown) => void;
@@ -200,6 +216,16 @@ export function createRemoteEventActionInvoker(
       Object.defineProperty(error, "name", {
         configurable: true,
         value: response.error.name,
+      });
+    }
+
+    // Rate-limit metadata survives the wire so callers can back off precisely.
+    if (typeof response.error.retryAfterMs === "number") {
+      Object.assign(error, {
+        retryAfterMs: response.error.retryAfterMs,
+        ...(typeof response.error.resetAtMs === "number"
+          ? { resetAtMs: response.error.resetAtMs }
+          : {}),
       });
     }
 

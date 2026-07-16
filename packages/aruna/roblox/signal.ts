@@ -11,6 +11,12 @@ export interface SignalDefinition<
 > {
 	readonly id: TId;
 	readonly payload?: TPayload;
+	// Route this signal over the dedicated UnreliableRemoteEvent: no delivery
+	// or ordering guarantee, in exchange for congestion-friendly throughput.
+	// For high-frequency, latest-value-wins channels (movement, VFX) — never
+	// for state a client must not miss. Payloads must stay under Roblox's
+	// ~900-byte unreliable limit.
+	readonly unreliable?: boolean;
 }
 
 export type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;

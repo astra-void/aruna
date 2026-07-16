@@ -8,8 +8,10 @@ import type { Schema } from "./schema";
 import {
 	createRemoteSignalPublisher,
 	createRemoteSignalSubscriber,
+	type SignalClientLike,
 	type SignalMap,
 	type SignalPublisher,
+	type SignalServerLike,
 	type SignalSubscriber,
 } from "./signal-runtime";
 
@@ -36,11 +38,35 @@ export function defineAction<
 
 export const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
 export const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
+export const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemoteEvent";
 
 interface ActionResponsePayload {
 	readonly ok: boolean;
 	readonly output?: unknown;
 	readonly error?: string;
+	readonly errorName?: string;
+	readonly retryAfterMs?: number;
+	readonly resetAtMs?: number;
+}
+
+// The structured rejection every failed invoke carries: `message` is always
+// present; `name` discriminates the failure ("ActionRateLimitError",
+// "ActionValidationError", "ActionTimeoutError", ...) and rate limits carry
+// `retryAfterMs`/`resetAtMs` so callers can back off instead of string-matching.
+export interface ActionError {
+	readonly message: string;
+	readonly name?: string;
+	readonly retryAfterMs?: number;
+	readonly resetAtMs?: number;
+}
+
+function toActionError(payload: ActionResponsePayload): ActionError {
+	return {
+		message: payload.error !== undefined ? payload.error : "action failed",
+		...(payload.errorName !== undefined ? { name: payload.errorName } : {}),
+		...(payload.retryAfterMs !== undefined ? { retryAfterMs: payload.retryAfterMs } : {}),
+		...(payload.resetAtMs !== undefined ? { resetAtMs: payload.resetAtMs } : {}),
+	};
 }
 
 function getReplicatedStorage(): ReplicatedStorage {
@@ -71,11 +97,17 @@ function defaultRequestId(): string {
 	return `aruna-${requestCounter}`;
 }
 
+// The default request timeout, applied when requestTimeoutMs is not given.
+// Pass requestTimeoutMs: 0 to explicitly opt out (wait forever). Mirrors the
+// Node reference runtime.
+export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
+
 export interface CreateActionInvokerOptions {
 	readonly createRequestId?: () => string;
 	// Milliseconds to wait for a server response before rejecting with a timeout
-	// error. 0 or undefined (the default) disables the timeout. Mirrors the Node
-	// reference runtime's ActionInvokerOptions.requestTimeoutMs.
+	// error. Defaults to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0 to
+	// disable the timeout entirely. Mirrors the Node reference runtime's
+	// ActionInvokerOptions.requestTimeoutMs.
 	readonly requestTimeoutMs?: number;
 }
 
@@ -92,8 +124,12 @@ export function createActionInvoker(
 		options !== undefined && options.createRequestId !== undefined
 			? options.createRequestId
 			: defaultRequestId;
+	// Timeouts are on by default: a dropped response (disconnect, server crash
+	// mid-dispatch) must not leave the caller pending forever. 0 opts out.
 	const requestTimeoutMs =
-		options !== undefined && options.requestTimeoutMs !== undefined ? options.requestTimeoutMs : 0;
+		options !== undefined && options.requestTimeoutMs !== undefined
+			? options.requestTimeoutMs
+			: DEFAULT_ACTION_REQUEST_TIMEOUT_MS;
 	const pending = new Map<string, PendingActionRequest>();
 
 	remote.OnClientEvent.Connect((requestId: string, payload: ActionResponsePayload) => {
@@ -124,7 +160,7 @@ export function createActionInvoker(
 					if (payload.ok) {
 						resolve(payload.output);
 					} else {
-						reject(payload.error !== undefined ? payload.error : "action failed");
+						reject(toActionError(payload));
 					}
 				},
 			};
@@ -139,7 +175,10 @@ export function createActionInvoker(
 						return;
 					}
 					pending.delete(requestId);
-					reject(`Aruna action ${actionId} timed out after ${requestTimeoutMs}ms.`);
+					reject({
+						message: `Aruna action ${actionId} timed out after ${requestTimeoutMs}ms.`,
+						name: "ActionTimeoutError",
+					} satisfies ActionError);
 				});
 			}
 		});
@@ -198,40 +237,95 @@ function ensureServerSignalRemote(): RemoteEvent {
 	return remote;
 }
 
+function ensureServerUnreliableSignalRemote(): UnreliableRemoteEvent {
+	const storage = getReplicatedStorage();
+	const existing = storage.FindFirstChild(SIGNAL_UNRELIABLE_REMOTE_NAME);
+	if (existing !== undefined && existing.IsA("UnreliableRemoteEvent")) {
+		return existing;
+	}
+
+	const remote = new Instance("UnreliableRemoteEvent");
+	remote.Name = SIGNAL_UNRELIABLE_REMOTE_NAME;
+	remote.Parent = storage;
+	return remote;
+}
+
 function waitForClientSignalRemote(): RemoteEvent {
 	const storage = getReplicatedStorage();
 	return storage.WaitForChild(SIGNAL_REMOTE_NAME) as RemoteEvent;
 }
 
+function waitForClientUnreliableSignalRemote(): UnreliableRemoteEvent {
+	const storage = getReplicatedStorage();
+	return storage.WaitForChild(SIGNAL_UNRELIABLE_REMOTE_NAME) as UnreliableRemoteEvent;
+}
+
+// Whether any signal in the registry opts into the unreliable channel; the
+// dedicated UnreliableRemoteEvent is only created/waited on when one does.
+function hasUnreliableSignal(signals: SignalMap): boolean {
+	for (const [, definition] of pairs(signals as { [key: string]: { unreliable?: boolean } })) {
+		if (definition.unreliable === true) {
+			return true;
+		}
+	}
+	return false;
+}
+
+type SignalRemoteInstance = RemoteEvent | UnreliableRemoteEvent;
+
+// UnreliableRemoteEvent shares RemoteEvent's structural API, but the nominal
+// union can't call methods directly; adapt through the RemoteEvent shape.
+function toSignalServerLike(remote: SignalRemoteInstance): SignalServerLike<Player> {
+	const fireable = remote as unknown as RemoteEvent;
+	return {
+		FireClient: (player, message) => {
+			fireable.FireClient(player, message);
+		},
+		FireAllClients: (message) => {
+			fireable.FireAllClients(message);
+		},
+	};
+}
+
+function toSignalClientLike(remote: SignalRemoteInstance): SignalClientLike {
+	const listenable = remote as unknown as RemoteEvent;
+	return {
+		OnClientEvent: {
+			Connect: (callback) =>
+				listenable.OnClientEvent.Connect(callback as (...args: Array<unknown>) => void),
+		},
+	};
+}
+
 // Server-side signal emitter over the default Aruna signal RemoteEvent.
+// Registries containing `unreliable: true` signals also get the dedicated
+// UnreliableRemoteEvent; those signals route over it automatically.
 export function createSignalPublisher<TSignals extends SignalMap>(
 	signals: TSignals,
 ): SignalPublisher<TSignals, Player> {
 	const remote = ensureServerSignalRemote();
+	const unreliableRemote = hasUnreliableSignal(signals)
+		? ensureServerUnreliableSignalRemote()
+		: undefined;
 	return createRemoteSignalPublisher<TSignals, Player>(
-		{
-			FireClient: (player, message) => {
-				remote.FireClient(player, message);
-			},
-			FireAllClients: (message) => {
-				remote.FireAllClients(message);
-			},
-		},
+		toSignalServerLike(remote),
 		signals,
+		unreliableRemote !== undefined ? toSignalServerLike(unreliableRemote) : undefined,
 	);
 }
 
-// Client-side signal subscriber over the default Aruna signal RemoteEvent.
+// Client-side signal subscriber over the default Aruna signal RemoteEvent (and
+// the unreliable channel, when the registry declares unreliable signals).
 export function createSignalSubscriber<TSignals extends SignalMap>(
 	signals: TSignals,
 ): SignalSubscriber<TSignals> {
 	const remote = waitForClientSignalRemote();
+	const unreliableRemote = hasUnreliableSignal(signals)
+		? waitForClientUnreliableSignalRemote()
+		: undefined;
 	return createRemoteSignalSubscriber<TSignals>(
-		{
-			OnClientEvent: {
-				Connect: (callback) => remote.OnClientEvent.Connect(callback as (...args: Array<unknown>) => void),
-			},
-		},
+		toSignalClientLike(remote),
 		signals,
+		unreliableRemote !== undefined ? toSignalClientLike(unreliableRemote) : undefined,
 	);
 }

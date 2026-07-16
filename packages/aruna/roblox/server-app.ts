@@ -73,6 +73,10 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
 	// Observability hook for errors raised from the action execution chain,
 	// called before dispatch converts the error into the wire result.
 	readonly onError?: ActionErrorHandler<TPlayer>;
+	// Called when a player leaves the server. The app owns the
+	// Players.PlayerRemoving connection (disconnected on dispose) — the home for
+	// per-player cleanup: session state, caches, anything keyed by the player.
+	readonly onPlayerRemoving?: (player: TPlayer) => void;
 }
 
 export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = SignalMap>(
@@ -101,6 +105,14 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 
 	const binding = options.transport !== undefined ? options.transport(registry) : undefined;
 
+	const onPlayerRemoving = options.onPlayerRemoving;
+	const playerRemovingConnection =
+		onPlayerRemoving !== undefined
+			? game.GetService("Players").PlayerRemoving.Connect((player) => {
+					onPlayerRemoving(player as unknown as TPlayer);
+				})
+			: undefined;
+
 	return {
 		actions: options.actions,
 		dispatch: (actionId, ctx, input) =>
@@ -108,13 +120,23 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 				if (result.ok) {
 					return result.output;
 				}
-				throw result.error !== undefined ? result.error : "action failed";
+				// Same structured rejection shape the client invoker produces, so
+				// in-process callers and wire callers handle failures identically.
+				throw {
+					message: result.error !== undefined ? result.error : "action failed",
+					...(result.errorName !== undefined ? { name: result.errorName } : {}),
+					...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
+					...(result.resetAtMs !== undefined ? { resetAtMs: result.resetAtMs } : {}),
+				};
 			}),
 		...(binding !== undefined ? { binding } : {}),
 		...(publisher !== undefined ? { publisher } : {}),
 		dispose: () => {
 			if (binding !== undefined) {
 				binding.disconnect();
+			}
+			if (playerRemovingConnection !== undefined) {
+				playerRemovingConnection.Disconnect();
 			}
 		},
 	};

@@ -354,11 +354,29 @@ describe("createRemoteEventActionInvoker", () => {
 });
 
 describe("createRemoteEventActionInvoker request timeout", () => {
-  it("does not arm a timer when requestTimeoutMs is omitted", async () => {
+  it("arms the default 10s timer when requestTimeoutMs is omitted", async () => {
     const remote = createFakeRemoteEvent({ name: "Ada" });
     const scheduler = createControllableScheduler();
     const invoker = createRemoteEventActionInvoker(remote, {
       createRequestId: () => "request-1",
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" });
+    expect(scheduler.activeCount()).toBe(1);
+
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+
+    invoker.dispose();
+  });
+
+  it("does not arm a timer when requestTimeoutMs is 0 (explicit opt-out)", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 0,
       scheduleTimeout: scheduler.scheduler,
     });
 

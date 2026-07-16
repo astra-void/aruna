@@ -5,6 +5,7 @@
 return function(ctx)
 	local t = ctx.t
 	local serverApp = ctx.load("server-app")
+	local fakes = ctx.fakes
 
 	local player = { UserId = 1, Name = "Tester" }
 
@@ -54,13 +55,32 @@ return function(ctx)
 			local settled, ok, reason = t.await(app.dispatch("boom", { player = player }, nil))
 			t.isTrue(settled, "dispatch settled")
 			t.isFalse(ok, "dispatch should reject on action error")
-			t.contains(tostring(reason), "kaboom")
+			t.contains(reason.message, "kaboom")
 
 			local settledMissing, okMissing, missingReason = t.await(app.dispatch("missing", { player = player }, nil))
 			t.isTrue(settledMissing, "missing-action dispatch settled")
 			t.isFalse(okMissing, "missing action should reject")
-			t.contains(tostring(missingReason), "unknown action")
+			t.contains(missingReason.message, "unknown action")
 			app.dispose()
+		end)
+
+		t.it("owns the PlayerRemoving connection for per-player cleanup", function()
+			local removed = {}
+			local app = serverApp.createServerApp({
+				actions = {},
+				onPlayerRemoving = function(leaving)
+					table.insert(removed, leaving.UserId)
+				end,
+			})
+
+			fakes.playerRemoving:Fire({ UserId = 7, Name = "Leaver" })
+			t.eq(#removed, 1)
+			t.eq(removed[1], 7)
+
+			-- Disposing the app disconnects the hook.
+			app.dispose()
+			fakes.playerRemoving:Fire({ UserId = 8, Name = "Late" })
+			t.eq(#removed, 1, "no callback after dispose")
 		end)
 
 		t.it("dispatch passes the ctx player through to the action", function()

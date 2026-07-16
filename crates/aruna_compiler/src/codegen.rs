@@ -996,6 +996,7 @@ mod tests {
             file: file.to_string(),
             export_name: export_name.to_string(),
             has_payload_schema: payload_schema.is_some(),
+            unreliable: false,
             serialization: Default::default(),
             payload_schema,
         }

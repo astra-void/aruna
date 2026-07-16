@@ -178,3 +178,24 @@ subscriber.dispose();
 
 Payloads that fail validation on arrival are dropped rather than thrown — a malformed
 push from a misbehaving peer won't crash the client.
+
+## Unreliable signals
+
+High-frequency, latest-value-wins channels (movement replication, VFX ticks) can opt out
+of reliable ordered delivery:
+
+```ts
+export const playerMoved = defineSignal({
+  id: "player.moved",
+  unreliable: true, // routed over ArunaSignalUnreliableRemoteEvent
+  payload: schema.object({ x: schema.f32(), y: schema.f32(), z: schema.f32() }),
+});
+```
+
+When any signal in the registry declares `unreliable: true`, the turnkey publisher and
+subscriber automatically create/wait for a dedicated
+`ReplicatedStorage/ArunaSignalUnreliableRemoteEvent` and route those signals over it —
+reliable signals are untouched, and no unreliable remote is created when nothing needs
+it. Caveats: delivery and ordering are **not guaranteed** (never use it for state a
+client must not miss), and Roblox caps unreliable payloads at roughly **900 bytes**.
+The flag is compiler-discovered and recorded in the manifest.

@@ -8,8 +8,18 @@ interface RateLimitBucket {
 	count: number;
 }
 
+// Structured check result, mirroring the Node reference limiter: a rejection
+// carries when the caller may retry, so the wire can surface it to the client.
+export type RateLimitCheckResult =
+	| { readonly ok: true }
+	| { readonly ok: false; readonly retryAfterMs: number; readonly resetAtMs: number };
+
 export interface ActionRateLimiter {
-	readonly check: (actionId: string, key: string, options: ActionRateLimitOptions) => boolean;
+	readonly check: (
+		actionId: string,
+		key: string,
+		options: ActionRateLimitOptions,
+	) => RateLimitCheckResult;
 	// Removes buckets whose window has fully elapsed at `now` (seconds, defaults
 	// to os.clock()) and returns how many were removed. Mirrors the Node
 	// reference runtime's leftover-key cleanup path.
@@ -55,15 +65,17 @@ export function createActionRateLimiter(): ActionRateLimiter {
 
 			if (bucket === undefined || bucket.windowStart !== windowStart) {
 				buckets.set(id, { windowStart, windowSeconds, count: 1 });
-				return true;
+				return { ok: true };
 			}
 
 			if (bucket.count >= options.max) {
-				return false;
+				const resetAtSeconds = bucket.windowStart + bucket.windowSeconds;
+				const retryAfterMs = math.max(0, math.floor((resetAtSeconds - now) * 1000));
+				return { ok: false, retryAfterMs, resetAtMs: math.floor(resetAtSeconds * 1000) };
 			}
 
 			bucket.count += 1;
-			return true;
+			return { ok: true };
 		},
 		purge: (now) => {
 			return purgeExpired(now !== undefined ? now : os.clock());

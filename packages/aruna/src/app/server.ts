@@ -101,7 +101,23 @@ export type CreateServerAppOptions<
   // Observability hook for errors thrown from the action execution chain,
   // called before the error propagates to the transport.
   readonly onError?: ActionErrorHandler<TPlayer>;
+  // Called when a player leaves the server. The app owns the connection
+  // (disconnected on dispose) — the home for per-player cleanup: session
+  // state, caches, anything keyed by the player. On the native runtime the
+  // source is the real Players service; here the reference runtime takes an
+  // injectable `players` signal source (tests provide a fake).
+  readonly onPlayerRemoving?: (player: TPlayer) => void;
+  readonly players?: PlayerRemovingSource<TPlayer>;
   readonly nowMs?: () => number;
+};
+
+// A Players-service-shaped signal source for `onPlayerRemoving`.
+export type PlayerRemovingSource<TPlayer = unknown> = {
+  readonly PlayerRemoving: {
+    readonly Connect: (
+      callback: (player: TPlayer) => void,
+    ) => { readonly Disconnect: () => void };
+  };
 };
 
 export function createServerApp<
@@ -147,6 +163,11 @@ export function createServerApp<
     );
   }
 
+  const playerRemovingConnection =
+    options.onPlayerRemoving !== undefined && options.players !== undefined
+      ? options.players.PlayerRemoving.Connect(options.onPlayerRemoving)
+      : undefined;
+
   return {
     actions: options.actions,
     dispatch(actionId, ctx, input) {
@@ -156,6 +177,7 @@ export function createServerApp<
     ...(publisher !== undefined ? { publisher } : {}),
     dispose() {
       transportBinding?.dispose();
+      playerRemovingConnection?.Disconnect();
     },
   };
 }

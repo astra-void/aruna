@@ -171,6 +171,66 @@ return function(ctx)
 			subscriber.dispose()
 		end)
 
+		t.it("routes unreliable signals over the unreliable remote", function()
+			local reliableRemote = makeSignalRemote()
+			local unreliableRemote = makeSignalRemote()
+			local signals = {
+				["combat.damaged"] = {
+					id = "combat.damaged",
+					payload = makeSignals()["combat.damaged"].payload,
+				},
+				["player.moved"] = {
+					id = "player.moved",
+					unreliable = true,
+				},
+			}
+			local publisher =
+				signalRuntime.createRemoteSignalPublisher(reliableRemote, signals, unreliableRemote)
+			local subscriber =
+				signalRuntime.createRemoteSignalSubscriber(reliableRemote, signals, unreliableRemote)
+
+			local reliableCount, movedCount = 0, 0
+			subscriber.on("combat.damaged", function()
+				reliableCount += 1
+			end)
+			subscriber.on("player.moved", function()
+				movedCount += 1
+			end)
+
+			publisher.toAll("combat.damaged", { amount = 1, source = "trap" })
+			publisher.toAll("player.moved", { x = 1 })
+
+			t.eq(reliableCount, 1, "reliable signal delivered via the reliable remote")
+			t.eq(movedCount, 1, "unreliable signal delivered via the unreliable remote")
+
+			-- Prove the routing: a subscriber without the unreliable channel
+			-- never sees the unreliable signal.
+			local reliableOnly = signalRuntime.createRemoteSignalSubscriber(reliableRemote, signals)
+			local missed = 0
+			reliableOnly.on("player.moved", function()
+				missed += 1
+			end)
+			publisher.toAll("player.moved", { x = 2 })
+			t.eq(missed, 0, "unreliable signal does not travel the reliable remote")
+			reliableOnly.dispose()
+			subscriber.dispose()
+		end)
+
+		t.it("falls back to the reliable remote when no unreliable remote is given", function()
+			local remote = makeSignalRemote()
+			local signals = { ["player.moved"] = { id = "player.moved", unreliable = true } }
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+
+			local count = 0
+			subscriber.on("player.moved", function()
+				count += 1
+			end)
+			publisher.toAll("player.moved", { x = 1 })
+			t.eq(count, 1)
+			subscriber.dispose()
+		end)
+
 		t.it("drops a schema-invalid payload on delivery", function()
 			-- Publisher and subscriber on separate remotes: bypass the publisher's
 			-- validation to assert the subscriber-side schema guard independently.

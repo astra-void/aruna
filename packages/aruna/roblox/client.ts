@@ -43,6 +43,10 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap> 
 	// Builds the subscriber from `signals`. Pass `createSignalSubscriber` from
 	// `aruna/roblox`. Owned by the app: built once at creation, disposed with it.
 	readonly createSubscriber?: ClientSignalSubscriberFactory<TSignals>;
+	// Request timeout for the app-owned default invoker (milliseconds). Defaults
+	// to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0 to wait forever. Ignored
+	// when a caller-supplied `transport` is given.
+	readonly requestTimeoutMs?: number;
 }
 
 export function createClientApp<TSignals extends SignalMap = SignalMap>(
@@ -51,7 +55,11 @@ export function createClientApp<TSignals extends SignalMap = SignalMap>(
 	const transport =
 		options !== undefined && options.transport !== undefined
 			? options.transport
-			: createActionInvoker();
+			: createActionInvoker(
+					options !== undefined && options.requestTimeoutMs !== undefined
+						? { requestTimeoutMs: options.requestTimeoutMs }
+						: undefined,
+				);
 
 	setActionInvoker(transport);
 

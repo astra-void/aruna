@@ -85,7 +85,49 @@ const signals = {
     }),
   }),
   "world.tick": defineSignal({ id: "world.tick" }),
+  "player.moved": defineSignal({
+    id: "player.moved",
+    unreliable: true,
+    payload: schema.object({ x: schema.f32() }),
+  }),
 } as const;
+
+describe("unreliable signal routing", () => {
+  it("routes unreliable signals over the unreliable remote when present", () => {
+    const reliable = createFakeRemote<{ name: string }>();
+    const unreliable = createFakeRemote<{ name: string }>();
+    const publisher = createRemoteSignalPublisher(reliable, signals, unreliable);
+
+    publisher.toAll("combat.damaged", { amount: 1, source: "trap" });
+    publisher.toAll("player.moved", { x: 1.5 });
+
+    expect(reliable.sent.map((entry) => entry.message.signalId)).toEqual(["combat.damaged"]);
+    expect(unreliable.sent.map((entry) => entry.message.signalId)).toEqual(["player.moved"]);
+  });
+
+  it("falls back to the reliable remote when no unreliable remote is given", () => {
+    const reliable = createFakeRemote<{ name: string }>();
+    const publisher = createRemoteSignalPublisher(reliable, signals);
+
+    publisher.toAll("player.moved", { x: 1.5 });
+
+    expect(reliable.sent.map((entry) => entry.message.signalId)).toEqual(["player.moved"]);
+  });
+
+  it("delivers unreliable-channel messages through the subscriber", () => {
+    const reliable = createFakeRemote<{ name: string }>();
+    const unreliable = createFakeRemote<{ name: string }>();
+    const subscriber = createRemoteSignalSubscriber(reliable, signals, unreliable);
+    const handler = vi.fn();
+    subscriber.on("player.moved", handler);
+
+    unreliable.clientSignal.emit({ signalId: "player.moved", payload: { x: 2 } });
+    expect(handler).toHaveBeenCalledWith({ x: 2 });
+
+    subscriber.dispose();
+    expect(unreliable.clientSignal.listenerCount()).toBe(0);
+  });
+});
 
 describe("createRemoteSignalPublisher", () => {
   it("validates and fires a payload to a single player", () => {

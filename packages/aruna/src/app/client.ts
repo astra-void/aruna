@@ -51,6 +51,11 @@ export type CreateClientAppOptions<TSignals extends SignalRegistry = SignalRegis
   // `aruna/roblox`. Owned by the app: it runs once at creation and is disposed
   // with the app.
   readonly createSubscriber?: ClientSignalSubscriberFactory<TSignals>;
+  // Request timeout for the app-owned default invoker (milliseconds). Defaults
+  // to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0 to wait forever. Ignored
+  // when a caller-supplied `transport` is given — configure that invoker
+  // directly instead.
+  readonly requestTimeoutMs?: number;
 };
 
 export function createClientApp<TSignals extends SignalRegistry = SignalRegistry>(
@@ -59,7 +64,11 @@ export function createClientApp<TSignals extends SignalRegistry = SignalRegistry
   let ownedTransport: ReturnType<typeof createActionInvoker> | undefined;
   let transport = options?.transport;
   if (transport === undefined) {
-    ownedTransport = createActionInvoker();
+    ownedTransport = createActionInvoker(
+      options?.requestTimeoutMs !== undefined
+        ? { requestTimeoutMs: options.requestTimeoutMs }
+        : undefined,
+    );
     transport = ownedTransport;
   }
 

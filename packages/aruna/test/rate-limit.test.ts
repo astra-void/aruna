@@ -564,8 +564,13 @@ describe("action rate limits", () => {
       error: {
         name: "ActionRateLimitError",
         message: "Aruna action shop.purchaseItem is rate limited. Retry after 1000ms.",
+        // Structured backoff metadata crosses the wire.
+        retryAfterMs: 1000,
       },
     });
+    expect(
+      errorResponse !== undefined && !errorResponse.ok ? errorResponse.error.resetAtMs : undefined,
+    ).toBeTypeOf("number");
   });
 
   it("purges only fully-elapsed buckets and reports the count", () => {

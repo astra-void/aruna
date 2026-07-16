@@ -100,6 +100,9 @@ export type SignalRecord = {
   file: string;
   exportName: string;
   hasPayloadSchema: boolean;
+  // Routed over the dedicated UnreliableRemoteEvent (no delivery/ordering
+  // guarantee). Omitted from the manifest JSON when false.
+  unreliable?: boolean | undefined;
   serialization: {
     policy: "plain-data-v1";
   };

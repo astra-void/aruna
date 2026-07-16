@@ -101,6 +101,7 @@ const serverApp = createServerApp<Player>({
   signals?: SignalRegistry;                         // + createPublisher: app-owned publisher
   middleware?: ActionMiddleware[];
   onError?: (err, info) => void;                    // see below
+  onPlayerRemoving?: (player) => void;              // per-player cleanup; app owns the connection
 }
 ```
 
@@ -131,6 +132,10 @@ can find it; call its `.dispose()` to clear it. The default transport is
 server's `robloxRemoteEvent()`. Pass `createClientApp({ transport })` to customize it —
 e.g. `createActionInvoker({ createRequestId, requestTimeoutMs })`.
 
+Every request has a **10-second timeout by default** (a dropped response — disconnect,
+server crash mid-dispatch — rejects instead of hanging forever). Tune it with
+`createClientApp({ requestTimeoutMs })`; pass `0` to wait forever.
+
 You can also call the low-level `invokeAction(actionId, input, options?)` from
 `aruna/client` directly, but prefer the generated typed stubs.
 
@@ -155,6 +160,12 @@ The default key resolver uses `ctx.player.UserId`; players that are missing coll
 shared `"anonymous"` bucket. Override with `rateLimitKey` if you need finer buckets. When
 a limit is exceeded the dispatcher throws `ActionRateLimitError` (`retryAfterMs`,
 `resetAtMs`, `max`, `windowMs`).
+
+**Failures are typed across the wire.** A rejected invoke carries a structured error —
+`err.message` plus `err.name` (`"ActionRateLimitError"`, `"ActionValidationError"`,
+`"ActionSerializationError"`, `"ActionTimeoutError"`) — and rate-limit rejections also
+carry `err.retryAfterMs` / `err.resetAtMs`, so clients can back off precisely instead of
+string-matching messages.
 
 ## Middleware & error observability
 

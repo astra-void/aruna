@@ -147,6 +147,10 @@ pub struct ArunaSignalRecord {
     pub file: String,
     pub export_name: String,
     pub has_payload_schema: bool,
+    // Routed over the dedicated UnreliableRemoteEvent (no delivery/ordering
+    // guarantee). Omitted from the manifest JSON when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unreliable: bool,
     pub serialization: ArunaActionSerializationMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload_schema: Option<ArunaSchemaMetadata>,
@@ -1698,6 +1702,39 @@ fn extract_action_fire_and_forget(
     }
 }
 
+// Reads the optional `unreliable` flag off a defineSignal object. Accepts a
+// boolean literal; anything else is a hard error so a typo'd value can't
+// silently change which remote a signal travels over.
+fn extract_signal_unreliable(
+    file: &str,
+    signal_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> bool {
+    let Some(property) = find_object_property(object, "unreliable") else {
+        return false;
+    };
+
+    match &property.value {
+        Expression::BooleanLiteral(literal) => literal.value,
+        _ => {
+            diagnostics.push(create_diagnostic(
+                "aruna::560",
+                format!("Signal {signal_id} has an invalid unreliable option."),
+                Some(file.to_string()),
+                Some(DiagnosticSpan {
+                    start: property.value.span().start as usize,
+                    end: property.value.span().end as usize,
+                }),
+                Some(format!("export name: {export_name}")),
+                Some("Set unreliable to a boolean literal (true or false).".to_string()),
+            ));
+            false
+        }
+    }
+}
+
 fn analyze_define_action_call<'a>(
     file: &str,
     export_name: &str,
@@ -1958,11 +1995,14 @@ fn analyze_define_signal_call<'a>(
         diagnostics,
     );
 
+    let unreliable = extract_signal_unreliable(file, &id, export_name, object, diagnostics);
+
     Some(ArunaSignalRecord {
         id,
         file: file.to_string(),
         export_name: export_name.to_string(),
         has_payload_schema,
+        unreliable,
         serialization: ArunaActionSerializationMetadata::default(),
         payload_schema,
     })
@@ -2179,6 +2219,41 @@ export const tick = defineSignal({ id: "world.tick" });
         assert_eq!(tick.id, "world.tick");
         assert!(!tick.has_payload_schema);
         assert_eq!(tick.payload_schema, None);
+        assert!(!tick.unreliable);
+    }
+
+    #[test]
+    fn records_the_unreliable_signal_flag() {
+        let result = collect_signals(
+            r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const moved = defineSignal({
+  id: "player.moved",
+  unreliable: true,
+  payload: schema.object({ x: schema.f32(), y: schema.f32(), z: schema.f32() }),
+});
+
+export const broken = defineSignal({
+  id: "player.broken",
+  unreliable: "yes",
+});
+"#,
+        );
+
+        assert_eq!(result.signals.len(), 2);
+        let moved = result.signals.iter().find(|s| s.id == "player.moved").unwrap();
+        assert!(moved.unreliable);
+
+        // Non-literal flag is a hard error and falls back to reliable.
+        let broken = result.signals.iter().find(|s| s.id == "player.broken").unwrap();
+        assert!(!broken.unreliable);
+        assert!(result
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.details.as_deref().is_some_and(|d| d.contains("broken"))
+                && diagnostic.message.contains("invalid unreliable option")));
     }
 
     #[test]

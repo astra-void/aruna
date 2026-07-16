@@ -18,6 +18,7 @@ import {
 import type { SignalRegistry } from "./signal.js";
 
 export const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
+export const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemoteEvent";
 
 function getRobloxGame(): DataModel {
   if (typeof game === "undefined") {
@@ -83,24 +84,88 @@ export function waitForSignalRemote(): RemoteEvent {
   return instance;
 }
 
+function isUnreliableRemoteEvent(instance: Instance): instance is UnreliableRemoteEvent {
+  return instance.IsA("UnreliableRemoteEvent");
+}
+
+// Whether any signal in the registry opts into the unreliable channel; the
+// dedicated UnreliableRemoteEvent is only created/waited on when one does.
+function hasUnreliableSignal(signals: SignalRegistry): boolean {
+  for (const key of Object.keys(signals)) {
+    if (signals[key]?.unreliable === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Ensures the default unreliable signal remote exists (server side).
+export function ensureUnreliableSignalRemote(): UnreliableRemoteEvent {
+  const storage = getReplicatedStorage();
+  const existing = storage.FindFirstChild(SIGNAL_UNRELIABLE_REMOTE_NAME);
+
+  if (existing !== undefined) {
+    if (!isUnreliableRemoteEvent(existing)) {
+      throw new Error(
+        `Aruna Roblox unreliable signal remote has wrong class: ReplicatedStorage/${SIGNAL_UNRELIABLE_REMOTE_NAME} (${describeClass(existing)})`,
+      );
+    }
+
+    return existing;
+  }
+
+  const remote = new Instance("UnreliableRemoteEvent");
+  remote.Name = SIGNAL_UNRELIABLE_REMOTE_NAME;
+  remote.Parent = storage;
+  return remote;
+}
+
+// Waits for the default unreliable signal remote (client side).
+export function waitForUnreliableSignalRemote(): UnreliableRemoteEvent {
+  const instance = getReplicatedStorage().WaitForChild(SIGNAL_UNRELIABLE_REMOTE_NAME);
+
+  if (!isUnreliableRemoteEvent(instance)) {
+    throw new Error(
+      `Aruna Roblox unreliable signal remote has wrong class: ReplicatedStorage/${SIGNAL_UNRELIABLE_REMOTE_NAME} (${describeClass(instance)})`,
+    );
+  }
+
+  return instance;
+}
+
 // Turnkey server-side publisher over the default Aruna signal RemoteEvent. The
 // single-argument form is the recommended entry point: it ensures the remote at
-// call time (boot), so no lazy-singleton plumbing module is required. Use the
+// call time (boot), so no lazy-singleton plumbing module is required. Registries
+// containing `unreliable: true` signals also get the dedicated
+// UnreliableRemoteEvent; those signals route over it automatically. Use the
 // advanced `createRemoteSignalPublisher(remote, signals)` overload when you
 // supply your own RemoteEvent.
 export function createSignalPublisher<TSignals extends SignalRegistry, TPlayer = Player>(
   signals: TSignals,
 ): RemoteSignalPublisher<TSignals, TPlayer> {
+  const unreliableRemote = hasUnreliableSignal(signals)
+    ? toSignalServerLike<TPlayer>(ensureUnreliableSignalRemote() as unknown as RemoteEvent)
+    : undefined;
   return createRemoteSignalPublisher<TSignals, TPlayer>(
     toSignalServerLike<TPlayer>(ensureSignalRemote()),
     signals,
+    unreliableRemote,
   );
 }
 
-// Turnkey client-side subscriber over the default Aruna signal RemoteEvent.
+// Turnkey client-side subscriber over the default Aruna signal RemoteEvent (and
+// the unreliable channel, when the registry declares unreliable signals).
 // `.on(id, handler)` is the subscribe API.
 export function createSignalSubscriber<TSignals extends SignalRegistry>(
   signals: TSignals,
 ): RemoteSignalSubscriber<TSignals> {
-  return createRemoteSignalSubscriber<TSignals>(toSignalClientLike(waitForSignalRemote()), signals);
+  const unreliableRemote = hasUnreliableSignal(signals)
+    ? toSignalClientLike(waitForUnreliableSignalRemote() as unknown as RemoteEvent)
+    : undefined;
+  return createRemoteSignalSubscriber<TSignals>(
+    toSignalClientLike(waitForSignalRemote()),
+    signals,
+    unreliableRemote,
+  );
 }

@@ -37,20 +37,21 @@ end
 -- A RemoteEvent that wires FireServer -> OnServerEvent (prepending a fake
 -- player) and FireClient -> OnClientEvent in-process, so a client invoker and a
 -- server binding sharing the instance complete a real round trip.
-local function makeRemoteEvent()
+local function makeRemoteEvent(className)
+	local remoteClassName = className or "RemoteEvent"
 	local onServer = makeSignal()
 	local onClient = makeSignal()
 	local fakePlayer = { UserId = 1, Name = "Tester" }
 
 	local fields = {
-		ClassName = "RemoteEvent",
-		Name = "RemoteEvent",
+		ClassName = remoteClassName,
+		Name = remoteClassName,
 		Parent = nil,
 		OnServerEvent = onServer,
 		OnClientEvent = onClient,
 		_fakePlayer = fakePlayer,
-		IsA = function(_self, className)
-			return className == "RemoteEvent"
+		IsA = function(_self, queried)
+			return queried == remoteClassName
 		end,
 		FireServer = function(_self, ...)
 			onServer:Fire(fakePlayer, ...)
@@ -94,6 +95,7 @@ end
 local function makeFakes()
 	local storage = makeStorage()
 	local heartbeat = makeSignal()
+	local playerRemoving = makeSignal()
 
 	local game = {
 		GetService = function(_self, name)
@@ -101,6 +103,8 @@ local function makeFakes()
 				return storage
 			elseif name == "RunService" then
 				return { Heartbeat = heartbeat }
+			elseif name == "Players" then
+				return { PlayerRemoving = playerRemoving }
 			end
 			error(`unhandled GetService: {name}`)
 		end,
@@ -108,8 +112,8 @@ local function makeFakes()
 
 	local Instance = {
 		new = function(className)
-			if className == "RemoteEvent" then
-				return makeRemoteEvent()
+			if className == "RemoteEvent" or className == "UnreliableRemoteEvent" then
+				return makeRemoteEvent(className)
 			end
 			error(`unhandled Instance.new: {className}`)
 		end,
@@ -120,6 +124,7 @@ local function makeFakes()
 		Instance = Instance,
 		storage = storage,
 		makeRemoteEvent = makeRemoteEvent,
+		playerRemoving = playerRemoving,
 	}
 end
 

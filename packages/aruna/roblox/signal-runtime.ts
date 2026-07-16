@@ -135,8 +135,15 @@ function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload
 export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(
 	remote: SignalServerLike<TPlayer>,
 	signals: TSignals,
+	// The unreliable channel (an UnreliableRemoteEvent in the default wiring).
+	// Signals declared `unreliable: true` route here when present; otherwise
+	// they fall back to the reliable remote.
+	unreliableRemote?: SignalServerLike<TPlayer>,
 ): SignalPublisher<TSignals, TPlayer> {
 	const index = buildSignalIndex(signals);
+
+	const remoteFor = (signal: SignalDefinition<Schema | undefined>): SignalServerLike<TPlayer> =>
+		signal.unreliable === true && unreliableRemote !== undefined ? unreliableRemote : remote;
 
 	// Implemented against loose signatures and re-typed on the way out, mirroring
 	// the Node reference runtime: inferring the heavy generic publisher surface
@@ -145,20 +152,21 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 		to: (player: TPlayer, signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			remote.FireClient(player, { signalId, payload });
+			remoteFor(signal).FireClient(player, { signalId, payload });
 		},
 		toMany: (players: ReadonlyArray<TPlayer>, signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
 			const message: RemoteSignalMessage = { signalId, payload };
+			const wire = remoteFor(signal);
 			for (const player of players) {
-				remote.FireClient(player, message);
+				wire.FireClient(player, message);
 			}
 		},
 		toAll: (signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			remote.FireAllClients({ signalId, payload });
+			remoteFor(signal).FireAllClients({ signalId, payload });
 		},
 		toBatched: (
 			player: TPlayer,
@@ -169,6 +177,7 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 			const signal = resolveSignal(index, signalId);
 			const chunkSize = options?.chunkSize ?? DEFAULT_BATCH_CHUNK_SIZE;
 			const yieldBetweenChunks = options?.yield ?? defaultBatchYield;
+			const wire = remoteFor(signal);
 
 			// The chunk loop yields between chunks, so it runs on its own thread;
 			// the returned promise settles when the last chunk went out (or a
@@ -180,7 +189,7 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 						for (let itemIndex = 0; itemIndex < payloads.size(); itemIndex += 1) {
 							const payload = payloads[itemIndex];
 							assertPublishable(signal, payload);
-							remote.FireClient(player, { signalId, payload });
+							wire.FireClient(player, { signalId, payload });
 
 							const isChunkBoundary = (itemIndex + 1) % chunkSize === 0;
 							if (isChunkBoundary && itemIndex + 1 < payloads.size()) {
@@ -204,12 +213,15 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 	remote: SignalClientLike,
 	signals: TSignals,
+	// The unreliable channel; unreliable signals arrive here in the default
+	// wiring. The same handler fan-out serves both remotes.
+	unreliableRemote?: SignalClientLike,
 ): SignalSubscriber<TSignals> {
 	const index = buildSignalIndex(signals);
 	const handlersBySignal = new Map<string, Set<SignalHandler>>();
 	let disposed = false;
 
-	const connection = remote.OnClientEvent.Connect((message) => {
+	const onMessage = (message: RemoteSignalMessage): void => {
 		if (!typeIs(message, "table")) {
 			return;
 		}
@@ -233,7 +245,11 @@ export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 		for (const handler of snapshot) {
 			handler(message.payload);
 		}
-	});
+	};
+
+	const connection = remote.OnClientEvent.Connect(onMessage);
+	const unreliableConnection =
+		unreliableRemote !== undefined ? unreliableRemote.OnClientEvent.Connect(onMessage) : undefined;
 
 	const subscriber = {
 		on: (signalId: string, handler: SignalHandler) => {
@@ -263,6 +279,9 @@ export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 			}
 			disposed = true;
 			connection.Disconnect();
+			if (unreliableConnection !== undefined) {
+				unreliableConnection.Disconnect();
+			}
 			handlersBySignal.clear();
 		},
 	};
