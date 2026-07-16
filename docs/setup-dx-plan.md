@@ -1,7 +1,12 @@
 # Setup DX Plan — codegen-owned project wiring
 
-Status: Draft RFC. Companion to [create-app-plan.md](create-app-plan.md); this doc defines
-the setup/everyday-DX contract that create-app scaffolding will target.
+Status: Implemented (all phases). Companion to [create-app-plan.md](create-app-plan.md); this
+doc defines the setup/everyday-DX contract the scaffolding targets. Phases A/B landed with
+the recommended-layout conventions + generated entries rounds; Phase C is `aruna dev`
+(watch build + rojo serve child, `dev.rojo` config); Phase D is `aruna add domain` and the
+`create-aruna` package (scaffold → install → `aruna init` → `aruna add domain shop --with ui`
+→ `aruna build`, so a new project builds green in one command). `aruna doctor` also gained
+the roblox-ts ↔ typescript version-skew check.
 
 ## Problem statement
 

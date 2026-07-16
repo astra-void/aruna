@@ -1,7 +1,11 @@
 # Create App Plan
 
-This note is the next-step planning target after package-consumption validation.
-It does not describe an implemented `create-app` command.
+This note was the planning target after package-consumption validation; the scaffolder
+now exists as the `create-aruna` package (`npm create aruna@latest my-game`). It writes
+only the framework-owned base files (package.json with the pinned rbxts toolchain
+matrix, aruna.config.ts with `entries: "generated"`, .gitignore, rokit.toml, VS Code
+settings, README) and delegates everything the aruna CLI can generate to post-install
+steps: `aruna init` → `aruna add domain shop --with ui` → `aruna build`.
 
 Status: create-app RFC / planning is now unblocked. The packed package-consumption smoke installs the local tarballs, runs `doctor --fix --emit-runtime` and `build --emit-runtime`, generates `src/.aruna` action files, vendors the native runtime, passes TypeScript, and compiles to Luau with `rbxtsc` (see [package-consumption.md](package-consumption.md)). The earlier `rbxtsc` package-layout blocker is resolved by the vendored-runtime model, so the prior gate on create-app planning is lifted.
 
