@@ -3,12 +3,13 @@ import type { Schema } from "../schema/index.js";
 
 export type { InferSignalPayload, SignalDefinition, SignalRegistry } from "../runtime/signal.js";
 
-// Mirror of defineAction for server -> client push channels. The identity helper
-// preserves the literal definition type so payload inference and signal ids stay
-// precise at the call site.
+// Mirror of defineAction for server -> client push channels. The identity
+// helper captures the id as a literal type (`TId extends string` forces literal
+// inference), so `definition.id` never widens to `string` and call sites can
+// key publishes/subscribes off it without retyping the literal.
 export function defineSignal<
+  TId extends string,
   TPayloadSchema extends Schema | undefined = undefined,
-  TDefinition extends SignalDefinition<TPayloadSchema> = SignalDefinition<TPayloadSchema>,
->(definition: SignalDefinition<TPayloadSchema> & TDefinition): TDefinition {
+>(definition: SignalDefinition<TPayloadSchema, TId>): SignalDefinition<TPayloadSchema, TId> {
   return definition;
 }

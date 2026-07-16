@@ -8,6 +8,6 @@
     "verbatimModuleSyntax": false,
     "types": ["@rbxts/types", "@rbxts/compiler-types"]
   },
-  "include": ["roblox/**/*.ts"],
-  "exclude": ["dist", "node_modules", "src", "test"]
+  "include": ["roblox/**/*.ts", "test/roblox-type-tests.ts"],
+  "exclude": ["dist", "node_modules", "src"]
 }

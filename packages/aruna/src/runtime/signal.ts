@@ -11,8 +11,11 @@ export type SignalPayload<TPayloadSchema extends Schema | undefined> = [TPayload
   ? Infer<TPayloadSchema>
   : unknown;
 
-export type SignalDefinition<TPayloadSchema extends Schema | undefined = undefined> = {
-  readonly id: string;
+export type SignalDefinition<
+  TPayloadSchema extends Schema | undefined = undefined,
+  TId extends string = string,
+> = {
+  readonly id: TId;
   readonly payload?: TPayloadSchema;
 };
 

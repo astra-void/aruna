@@ -267,6 +267,12 @@ const signalRegistryForTypes = {
   }),
 };
 
+// Gap 2a: defineSignal must keep the id literal — consumers key publishes and
+// subscribes off `definition.id`, so widening to `string` forces retyping.
+type _SignalIdStaysLiteral = Expect<
+  Equal<(typeof signalRegistryForTypes)["scoreChanged"]["id"], "scoreChanged">
+>;
+
 const definePublishingAction = createActionDefiner<typeof signalRegistryForTypes, string>();
 
 definePublishingAction({
