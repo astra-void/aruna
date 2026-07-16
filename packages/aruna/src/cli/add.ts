@@ -89,23 +89,22 @@ export function format${pascal}Reply(message: string): string {
 }
 
 function actionsTemplate(name: string, pascal: string): string {
-  // Schemas are declared inline (or as module-level consts in this file):
-  // the compiler extracts contract metadata from the defineAction call site and
-  // does not resolve schema variables imported from other modules. ./schema
-  // stays the home of the Infer'd types shared with client code.
+  // Schemas live in ./schema and are referenced by import — the compiler
+  // resolves schema identifiers through one relative import hop, so the
+  // contract metadata still extracts and ./schema stays the single home of
+  // the wire shapes and their Infer'd types.
   return `import { defineAction } from "aruna/server";
-import { schema } from "aruna/schema";
-import { type Ping${pascal}Output } from "./schema";
+import {
+  ping${pascal}InputSchema,
+  ping${pascal}OutputSchema,
+  type Ping${pascal}Output,
+} from "./schema";
 import { format${pascal}Reply } from "./model";
 
 export const ping${pascal} = defineAction({
   id: "${name}.ping",
-  input: schema.object({
-    message: schema.string(),
-  }),
-  output: schema.object({
-    reply: schema.string(),
-  }),
+  input: ping${pascal}InputSchema,
+  output: ping${pascal}OutputSchema,
   run(_ctx, input): Ping${pascal}Output {
     return { reply: format${pascal}Reply(input.message) };
   },
