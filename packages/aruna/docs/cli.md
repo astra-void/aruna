@@ -11,6 +11,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna check` | Type-check the project and validate module boundaries. Does **not** generate. |
 | `aruna build` | Generate action stubs + manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc. |
 | `aruna dev` | One-terminal dev loop: `build --watch` plus a `rojo serve` child. |
+| `aruna add domain <name>` | Scaffold `<root>/domains/<name>/{schema,model,actions}.ts` (`--with ui,runtime` for extras). |
 | `aruna doctor [--fix]` | Inspect (and with `--fix`, write) the `aruna/*` and `$aruna/*` tsconfig path aliases. |
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |
@@ -97,6 +98,16 @@ export default defineConfig({
   },
 });
 ```
+
+## `aruna add`
+
+`aruna add domain shop` scaffolds a Recommended Layout domain under the configured
+source root: `src/domains/shop/{schema,model,actions}.ts`, plus `ui.tsx` and/or
+`runtime.ts` with `--with ui,runtime`. The file names are the classifier's own
+conventions (`**/schema.ts`/`**/model.ts` shared, `**/actions.ts`/`**/runtime.ts`
+server, `**/ui.tsx` client), so scaffolded files are correctly classified by
+construction. Existing files are never overwritten. Follow up with `aruna build` (or
+just save under a running `aruna dev`) to regenerate stubs for the new domain.
 
 ## `aruna doctor`
 

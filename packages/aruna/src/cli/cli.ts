@@ -45,6 +45,12 @@ import {
   resolveRojoServePlan,
   rojoProjectFileExists,
 } from "./dev.js";
+import {
+  formatAddDomainReport,
+  parseAddExtras,
+  runAddDomain,
+  validateDomainName,
+} from "./add.js";
 import { formatError, formatMuted, formatSuccess, formatWarning } from "./theme.js";
 
 type CliOptions = {
@@ -906,6 +912,50 @@ export async function main(): Promise<number> {
 
       return spawnRojoServe(input.root, plan.args, options, colors);
     });
+  });
+
+  const add = program.command("add").description("scaffold project files from the conventions");
+  const addDomain = add
+    .command("domain <name>")
+    .description(
+      "scaffold <root>/domains/<name>/{schema,model,actions}.ts (extend with --with ui,runtime)",
+    )
+    .option("--with <parts>", `comma-separated extras: ui, runtime`);
+
+  addDomain.action(async (name: string) => {
+    const options = addDomain.optsWithGlobals<CliOptions & { with?: string }>();
+    const colors = resolveColorMode(options);
+
+    const nameError = validateDomainName(name);
+    if (nameError !== undefined) {
+      process.stderr.write(`${formatError(nameError, colors)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const parsedExtras = parseAddExtras(options.with);
+    if (parsedExtras.error !== undefined) {
+      process.stderr.write(`${formatError(parsedExtras.error, colors)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const input = compilerInput(options);
+    // The domain lands under the configured source root so the scaffolded files
+    // sit where the classifier conventions expect them.
+    const root = loadProjectConfig(input.root, input.configPath).config.root;
+    const result = runAddDomain({
+      projectRoot: input.root,
+      root,
+      name,
+      extras: parsedExtras.extras ?? [],
+    });
+
+    if (options.json) {
+      writeJson({ name, ...result });
+      return;
+    }
+    writeText(formatAddDomainReport(name, result));
   });
 
   program
