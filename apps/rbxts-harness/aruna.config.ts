@@ -1,6 +1,7 @@
 import { defineConfig } from "aruna";
 
 export default defineConfig({
+  entries: "generated",
   compiler: {
     generatedDir: "src/.aruna",
     manifest: "src/.aruna/manifest.json",
@@ -12,10 +13,5 @@ export default defineConfig({
       windowMs: 1000,
       max: 20,
     },
-  },
-  conventions: {
-    client: ["src/client.tsx", "src/domains/**/ui.tsx"],
-    server: ["src/server.ts", "src/domains/**/actions.ts", "src/domains/**/runtime.ts"],
-    shared: ["src/app/**", "src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],
   },
 });
