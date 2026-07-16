@@ -64,6 +64,7 @@ export type PreparedRelease = {
   compilerPackageDirectory: string;
   corePackageDirectory: string;
   arunaPackageDirectory: string;
+  createArunaPackageDirectory: string;
 };
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -72,8 +73,10 @@ const compilerPackageRoot = path.join(workspaceRoot, "packages", "compiler");
 const compilerPackageJsonPath = path.join(compilerPackageRoot, "package.json");
 const corePackageRoot = path.join(workspaceRoot, "packages", "core");
 const arunaPackageRoot = path.join(workspaceRoot, "packages", "aruna");
+const createArunaPackageRoot = path.join(workspaceRoot, "packages", "create-aruna");
 const stagedCoreDirectory = path.join(workspaceRoot, ".npm", "core");
 const stagedArunaDirectory = path.join(workspaceRoot, ".npm", "aruna");
+const stagedCreateArunaDirectory = path.join(workspaceRoot, ".npm", "create-aruna");
 const releaseProfile: NativeBuildProfile = "release";
 
 export function parseTargetList(value: string | undefined): NativeTarget[] {
@@ -375,6 +378,7 @@ async function validateStagedRelease(
     "compiler",
     "core",
     "aruna",
+    "create-aruna",
   ];
 
   if (
@@ -392,6 +396,7 @@ async function validateStagedRelease(
   await validateCompilerPackage(compilerPackageDirectory, expectedTargets);
   await ensureNoWorkspaceProtocols(path.join(stagedCoreDirectory, "package.json"));
   await ensureNoWorkspaceProtocols(path.join(stagedArunaDirectory, "package.json"));
+  await ensureNoWorkspaceProtocols(path.join(stagedCreateArunaDirectory, "package.json"));
 }
 
 type StagedNativePackage = { packageDirectory: string; target: NativeTarget };
@@ -412,6 +417,7 @@ function buildPublishableTypeScriptPackages(spawn: typeof spawnSync): void {
       "--filter=@arunajs/core",
       "--filter=@arunajs/compiler",
       "--filter=@arunajs/aruna",
+      "--filter=create-aruna",
     ],
     workspaceRoot,
     "Failed to build TypeScript packages",
@@ -497,6 +503,11 @@ async function stagePublishablePackages(
     stagedPackageDirectory: stagedArunaDirectory,
     version,
   });
+  await stageWorkspacePackage({
+    sourcePackageDirectory: createArunaPackageRoot,
+    stagedPackageDirectory: stagedCreateArunaDirectory,
+    version,
+  });
 
   return { compilerPackageDirectory: compilerPackage.packageDirectory };
 }
@@ -521,6 +532,7 @@ function toPreparedRelease(args: {
     compilerPackageDirectory: args.compilerPackageDirectory,
     corePackageDirectory: stagedCoreDirectory,
     arunaPackageDirectory: stagedArunaDirectory,
+    createArunaPackageDirectory: stagedCreateArunaDirectory,
   };
 }
 
@@ -647,6 +659,7 @@ async function packRelease(prepared: PreparedRelease, deps: ReleaseDeps): Promis
   tarballs.push(await packPackage(prepared.corePackageDirectory, packDestination, spawn));
   tarballs.push(await packPackage(prepared.compilerPackageDirectory, packDestination, spawn));
   tarballs.push(await packPackage(prepared.arunaPackageDirectory, packDestination, spawn));
+  tarballs.push(await packPackage(prepared.createArunaPackageDirectory, packDestination, spawn));
   return tarballs;
 }
 
@@ -751,12 +764,14 @@ async function publishRelease(
   }
   const pnpmInvocation = await resolvePnpmInvocation();
 
-  // Dependency order: native binaries → core → compiler → aruna.
+  // Dependency order: native binaries → core → compiler → aruna → create-aruna
+  // (the scaffolder installs @arunajs/aruna, so it publishes last).
   const orderedDirectories = [
     ...prepared.nativePackageDirectories,
     prepared.corePackageDirectory,
     prepared.compilerPackageDirectory,
     prepared.arunaPackageDirectory,
+    prepared.createArunaPackageDirectory,
   ];
 
   for (const packageDirectory of orderedDirectories) {

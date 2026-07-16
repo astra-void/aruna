@@ -15,7 +15,7 @@
     "build": "pnpm typecheck && pnpm rbxtsc"
   },
   "dependencies": {
-    "aruna": "workspace:*"
+    "aruna": "workspace:@arunajs/aruna@*"
   },
   "devDependencies": {
     "@rbxts/compiler-types": "3.0.0-types.0",

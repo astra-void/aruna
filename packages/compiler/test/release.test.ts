@@ -250,7 +250,7 @@ describe("release orchestrator", () => {
     const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter(
       (entry) => !entry.startsWith("."),
     );
-    expect([...rootEntries].sort()).toEqual(["aruna", "compiler", "core"]);
+    expect([...rootEntries].sort()).toEqual(["aruna", "compiler", "core", "create-aruna"]);
   });
 
   it("stages cross mode targets with target-qualified artifacts", async () => {
@@ -372,12 +372,16 @@ describe("release orchestrator", () => {
 
     const packCalls = spawnCalls.filter((entry) => entry.args.includes("pack"));
     const packCwds = packCalls.map((entry) => entry.cwd);
-    // Dependency order: native binaries first, then core → compiler → aruna.
+    // Dependency order: native binaries first, then core → compiler → aruna →
+    // create-aruna.
     expect(packCwds[0]).toBe(path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`));
     expect(packCwds.indexOf(path.join(workspaceRoot, ".npm", "core"))).toBeLessThan(
       packCwds.indexOf(path.join(workspaceRoot, ".npm", "compiler")),
     );
-    expect(packCwds[packCwds.length - 1]).toBe(path.join(workspaceRoot, ".npm", "aruna"));
+    expect(packCwds.indexOf(path.join(workspaceRoot, ".npm", "aruna"))).toBeLessThan(
+      packCwds.indexOf(path.join(workspaceRoot, ".npm", "create-aruna")),
+    );
+    expect(packCwds[packCwds.length - 1]).toBe(path.join(workspaceRoot, ".npm", "create-aruna"));
     expect(await fsp.readdir(packDestination)).toContain("compiler.tgz");
   });
 
@@ -470,12 +474,13 @@ describe("release orchestrator", () => {
 
     const publishCalls = spawnCalls.filter((entry) => entry.args.includes("publish"));
     expect(publishCalls.length).toBeGreaterThan(0);
-    // Native package publishes first (dependency order), aruna last.
+    // Native package publishes first (dependency order), create-aruna last —
+    // it scaffolds installs of @arunajs/aruna, so the CLI must exist first.
     expect(publishCalls[0].args).toContain(
       path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`),
     );
     expect(publishCalls[publishCalls.length - 1].args).toContain(
-      path.join(workspaceRoot, ".npm", "aruna"),
+      path.join(workspaceRoot, ".npm", "create-aruna"),
     );
   });
 

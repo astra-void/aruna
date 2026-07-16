@@ -45,7 +45,7 @@ importers:
   apps/package-consumption-harness:
     dependencies:
       aruna:
-        specifier: workspace:*
+        specifier: workspace:@arunajs/aruna@*
         version: link:../../packages/aruna
     devDependencies:
       '@rbxts/compiler-types':
@@ -64,7 +64,7 @@ importers:
   apps/rbxts-harness:
     dependencies:
       aruna:
-        specifier: workspace:*
+        specifier: workspace:@arunajs/aruna@*
         version: link:../../packages/aruna
     devDependencies:
       '@rbxts/compiler-types':
@@ -130,6 +130,15 @@ importers:
         version: 5.9.3
 
   packages/core: {}
+
+  packages/create-aruna:
+    dependencies:
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
 
 packages:
 
