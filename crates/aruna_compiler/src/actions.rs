@@ -217,6 +217,39 @@ fn schema_invalid_diagnostic(
     )
 }
 
+// An identifier used as a schema that resolves to nothing — locally or through
+// one import hop. Unlike the shape warnings (aruna::553/554/564) this is an
+// Error: the author clearly meant a named schema, and degrading silently would
+// produce `unknown`-typed clients and an empty contract entry.
+fn schema_unresolved_diagnostic(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    role: SchemaRole,
+    span: DiagnosticSpan,
+    details: String,
+) -> ArunaDiagnostic {
+    let subject = if matches!(role, SchemaRole::Payload) {
+        "Signal"
+    } else {
+        "Server action"
+    };
+    create_diagnostic(
+        "aruna::565",
+        format!(
+            "{subject} {action_id} references an unresolved {} schema.",
+            role.label()
+        ),
+        Some(file.to_string()),
+        Some(span),
+        Some(format!("export name: {export_name}\n{details}")),
+        Some(
+            "Declare the schema as a module-level `const` in this file, or import it (one hop) from the module that declares it as a module-level `const` schema."
+                .to_string(),
+        ),
+    )
+}
+
 fn rate_limit_invalid_diagnostic(
     file: &str,
     action_id: &str,
@@ -294,6 +327,145 @@ fn collect_schema_bindings<'a>(program: &'a oxc_ast::ast::Program<'a>) -> Schema
     env
 }
 
+/// Outcome of pre-resolving a named import as a schema (single hop).
+enum ImportedSchemaResolution {
+    Resolved(ArunaSchemaMetadata),
+    Failed(String),
+}
+
+/// Local `const` bindings plus pre-resolved cross-module schema imports for one
+/// file. Import resolution is a single hop: the hop target is parsed with an
+/// empty import map, so a schema that itself references another module's import
+/// fails with a clear reason instead of chasing the graph.
+struct SchemaScope<'a> {
+    env: SchemaEnv<'a>,
+    imported: HashMap<String, ImportedSchemaResolution>,
+}
+
+/// Pre-resolves every relative named import of `program` as a potential schema
+/// binding. Non-schema imports simply record a `Failed` reason; those entries
+/// are only consulted when a schema expression actually references the name, so
+/// they cost nothing otherwise.
+fn resolve_imported_schema_bindings(
+    current_path: &Path,
+    program: &oxc_ast::ast::Program<'_>,
+) -> HashMap<String, ImportedSchemaResolution> {
+    let mut resolved: HashMap<String, ImportedSchemaResolution> = HashMap::new();
+    let Some(base_dir) = current_path.parent() else {
+        return resolved;
+    };
+
+    for statement in &program.body {
+        let Statement::ImportDeclaration(import_decl) = statement else {
+            continue;
+        };
+        let specifier = import_decl.source.value.as_str();
+        if !(specifier.starts_with("./") || specifier.starts_with("../")) {
+            continue;
+        }
+        let Some(specifiers) = &import_decl.specifiers else {
+            continue;
+        };
+
+        // (local name, exported name in the target module)
+        let mut requested: Vec<(String, String)> = Vec::new();
+        for entry in specifiers {
+            if let oxc_ast::ast::ImportDeclarationSpecifier::ImportSpecifier(named) = entry {
+                requested.push((
+                    named.local.name.as_str().to_string(),
+                    named.imported.name().to_string(),
+                ));
+            }
+        }
+        if requested.is_empty() {
+            continue;
+        }
+
+        let mut target: Option<(std::path::PathBuf, String)> = None;
+        for candidate in [
+            base_dir.join(format!("{specifier}.ts")),
+            base_dir.join(format!("{specifier}.tsx")),
+            base_dir.join(specifier).join("index.ts"),
+            base_dir.join(specifier).join("index.tsx"),
+        ] {
+            if let Ok(contents) = std::fs::read_to_string(&candidate) {
+                target = Some((candidate, contents));
+                break;
+            }
+        }
+        let Some((target_path, source_text)) = target else {
+            for (local, _) in requested {
+                resolved.insert(
+                    local,
+                    ImportedSchemaResolution::Failed(format!(
+                        "the imported module `{specifier}` could not be read"
+                    )),
+                );
+            }
+            continue;
+        };
+
+        let Ok(source_type) = source_type_for_path(&target_path) else {
+            continue;
+        };
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, &source_text, source_type).parse();
+        if parsed.panicked || !parsed.errors.is_empty() {
+            for (local, _) in requested {
+                resolved.insert(
+                    local,
+                    ImportedSchemaResolution::Failed(format!(
+                        "the imported module `{specifier}` failed to parse"
+                    )),
+                );
+            }
+            continue;
+        }
+
+        let target_scope = SchemaScope {
+            env: collect_schema_bindings(&parsed.program),
+            imported: HashMap::new(),
+        };
+        for (local, exported_name) in requested {
+            let Some(expression) = target_scope.env.get(exported_name.as_str()).copied() else {
+                resolved.insert(
+                    local,
+                    ImportedSchemaResolution::Failed(format!(
+                        "`{exported_name}` is not a module-level const in `{specifier}`"
+                    )),
+                );
+                continue;
+            };
+            // Scratch diagnostics: a failed hop parse reports one consolidated
+            // reason at the reference site instead of leaking target-file spans.
+            let mut scratch = Vec::new();
+            match parse_schema_expression(
+                "<import>",
+                "<import>",
+                &exported_name,
+                SchemaRole::Input,
+                expression,
+                &target_scope,
+                &mut scratch,
+            ) {
+                Some(metadata) => {
+                    resolved.insert(local, ImportedSchemaResolution::Resolved(metadata));
+                }
+                None => {
+                    resolved.insert(
+                        local,
+                        ImportedSchemaResolution::Failed(format!(
+                            "`{exported_name}` in `{specifier}` is not a statically analyzable schema (only module-level `schema.*` consts resolve across one import hop)"
+                        )),
+                    );
+                }
+            }
+        }
+    }
+
+    resolved
+}
+
 fn unwrap_schema_expression<'a>(expression: &'a Expression<'a>) -> &'a Expression<'a> {
     match expression {
         Expression::ParenthesizedExpression(parenthesized) => {
@@ -369,7 +541,7 @@ fn parse_schema_expression<'a>(
     export_name: &str,
     role: SchemaRole,
     expression: &'a Expression<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
     let mut current = unwrap_schema_expression(expression);
@@ -380,23 +552,45 @@ fn parse_schema_expression<'a>(
     loop {
         match current {
             Expression::CallExpression(call) => {
-                return parse_schema_call(file, action_id, export_name, role, call, env, diagnostics);
+                return parse_schema_call(file, action_id, export_name, role, call, scope, diagnostics);
             }
             Expression::Identifier(identifier) => {
                 let name = identifier.name.as_str();
 
-                let Some(resolved) = env.get(name).copied() else {
-                    diagnostics.push(schema_invalid_diagnostic(
-                        file,
-                        action_id,
-                        export_name,
-                        role,
-                        schema_span_from_expression(current),
-                        format!(
-                            "The schema variable `{name}` could not be resolved. Declare it as a module-level `const` schema in the same file."
-                        ),
-                    ));
-                    return None;
+                let Some(resolved) = scope.env.get(name).copied() else {
+                    // Not a local const — check the pre-resolved import map
+                    // (single hop into the module that exports the schema).
+                    match scope.imported.get(name) {
+                        Some(ImportedSchemaResolution::Resolved(metadata)) => {
+                            return Some(metadata.clone());
+                        }
+                        Some(ImportedSchemaResolution::Failed(reason)) => {
+                            diagnostics.push(schema_unresolved_diagnostic(
+                                file,
+                                action_id,
+                                export_name,
+                                role,
+                                schema_span_from_expression(current),
+                                format!(
+                                    "The imported schema `{name}` could not be resolved: {reason}."
+                                ),
+                            ));
+                            return None;
+                        }
+                        None => {
+                            diagnostics.push(schema_unresolved_diagnostic(
+                                file,
+                                action_id,
+                                export_name,
+                                role,
+                                schema_span_from_expression(current),
+                                format!(
+                                    "The schema variable `{name}` could not be resolved. Declare it as a module-level `const` schema in this file, or import it from the module that declares it."
+                                ),
+                            ));
+                            return None;
+                        }
+                    }
                 };
 
                 if seen.contains(&name) {
@@ -436,7 +630,7 @@ fn parse_schema_union_members<'a>(
     export_name: &str,
     role: SchemaRole,
     array: &'a ArrayExpression<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<Vec<ArunaSchemaMetadata>> {
     if array.elements.is_empty() {
@@ -477,7 +671,7 @@ fn parse_schema_union_members<'a>(
             export_name,
             role,
             expression,
-            env,
+            scope,
             diagnostics,
         ) else {
             return None;
@@ -494,7 +688,7 @@ fn parse_schema_argument<'a>(
     export_name: &str,
     role: SchemaRole,
     argument: &'a Argument<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
     if let Argument::SpreadElement(_) = argument {
@@ -527,7 +721,7 @@ fn parse_schema_argument<'a>(
         return None;
     };
 
-    parse_schema_expression(file, action_id, export_name, role, expression, env, diagnostics)
+    parse_schema_expression(file, action_id, export_name, role, expression, scope, diagnostics)
 }
 
 fn parse_schema_array_values(
@@ -587,7 +781,7 @@ fn parse_schema_object<'a>(
     export_name: &str,
     role: SchemaRole,
     object: &'a ObjectExpression<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
     let mut properties = BTreeMap::new();
@@ -633,7 +827,7 @@ fn parse_schema_object<'a>(
             export_name,
             role,
             &object_property.value,
-            env,
+            scope,
             diagnostics,
         ) else {
             return None;
@@ -655,7 +849,7 @@ fn parse_schema_call<'a>(
     export_name: &str,
     role: SchemaRole,
     call: &'a CallExpression<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSchemaMetadata> {
     let Expression::StaticMemberExpression(member) = unwrap_schema_expression(&call.callee) else {
@@ -844,7 +1038,7 @@ fn parse_schema_call<'a>(
                 export_name,
                 role,
                 argument,
-                env,
+                scope,
                 diagnostics,
             ) else {
                 return None;
@@ -902,7 +1096,7 @@ fn parse_schema_call<'a>(
                 return None;
             };
 
-            parse_schema_object(file, action_id, export_name, role, object, env, diagnostics)
+            parse_schema_object(file, action_id, export_name, role, object, scope, diagnostics)
         }
         "optional" => {
             let Some(argument) = call.arguments.first() else {
@@ -941,7 +1135,7 @@ fn parse_schema_call<'a>(
                 export_name,
                 role,
                 argument,
-                env,
+                scope,
                 diagnostics,
             ) else {
                 return None;
@@ -1069,7 +1263,7 @@ fn parse_schema_call<'a>(
                 export_name,
                 role,
                 array,
-                env,
+                scope,
                 diagnostics,
             ) else {
                 return None;
@@ -1121,7 +1315,7 @@ fn parse_schema_call<'a>(
                 export_name,
                 role,
                 argument,
-                env,
+                scope,
                 diagnostics,
             ) else {
                 return None;
@@ -1187,7 +1381,7 @@ fn parse_schema_call<'a>(
                 export_name,
                 role,
                 array,
-                env,
+                scope,
                 diagnostics,
             ) else {
                 return None;
@@ -1223,7 +1417,7 @@ fn extract_action_schema<'a>(
     role: SchemaRole,
     object: &'a ObjectExpression<'a>,
     property_name: &str,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> (bool, Option<ArunaSchemaMetadata>) {
     let Some(property) = find_object_property(object, property_name) else {
@@ -1238,7 +1432,7 @@ fn extract_action_schema<'a>(
             export_name,
             role,
             &property.value,
-            env,
+            scope,
             diagnostics,
         ),
     )
@@ -1321,13 +1515,14 @@ fn parse_rate_limit_object(
                             start: object_property.value.span().start as usize,
                             end: object_property.value.span().end as usize,
                         },
-                        "rateLimit.key must be the string literal \"player\". Only \"player\" is supported for now."
+                        "rateLimit.key must be the string literal \"player\" or \"global\"."
                             .to_string(),
                     ));
                     return None;
                 };
 
-                if string_literal.value.as_str() != "player" {
+                let key_value = string_literal.value.as_str();
+                if key_value != "player" && key_value != "global" {
                     diagnostics.push(rate_limit_invalid_diagnostic(
                         file,
                         action_id,
@@ -1336,13 +1531,13 @@ fn parse_rate_limit_object(
                             start: object_property.value.span().start as usize,
                             end: object_property.value.span().end as usize,
                         },
-                        "rateLimit.key must be the string literal \"player\". Only \"player\" is supported for now."
+                        "rateLimit.key must be the string literal \"player\" or \"global\"."
                             .to_string(),
                     ));
                     return None;
                 }
 
-                key = Some("player".to_string());
+                key = Some(key_value.to_string());
             }
             "windowMs" | "max" => {
                 let Expression::NumericLiteral(numeric_literal) = &object_property.value else {
@@ -1407,7 +1602,7 @@ fn parse_rate_limit_object(
             action_id,
             export_name,
             object_span(object),
-            "Missing rateLimit.key. Only \"player\" is supported for now.".to_string(),
+            "Missing rateLimit.key. Use \"player\" or \"global\".".to_string(),
         ));
         return None;
     };
@@ -1507,7 +1702,7 @@ fn analyze_define_action_call<'a>(
     file: &str,
     export_name: &str,
     call: &'a CallExpression<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaActionRecord> {
     let Some(first_argument) = call.arguments.first() else {
@@ -1571,7 +1766,7 @@ fn analyze_define_action_call<'a>(
         SchemaRole::Input,
         object,
         "input",
-        env,
+        scope,
         diagnostics,
     );
     let (has_output_schema, output_schema) = extract_action_schema(
@@ -1581,7 +1776,7 @@ fn analyze_define_action_call<'a>(
         SchemaRole::Output,
         object,
         "output",
-        env,
+        scope,
         diagnostics,
     );
     let rate_limit = extract_action_rate_limit(file, &id, export_name, object, diagnostics);
@@ -1644,12 +1839,16 @@ fn analyze_define_action_call<'a>(
 
 fn collect_action_candidates(
     file: &str,
+    path: &Path,
     program: &oxc_ast::ast::Program<'_>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> (Vec<ArunaActionRecord>, bool) {
     let mut actions = Vec::new();
     let mut saw_define_action = false;
-    let env = collect_schema_bindings(program);
+    let scope = SchemaScope {
+        env: collect_schema_bindings(program),
+        imported: resolve_imported_schema_bindings(path, program),
+    };
 
     for statement in &program.body {
         let Statement::ExportNamedDeclaration(export_decl) = statement else {
@@ -1687,7 +1886,7 @@ fn collect_action_candidates(
                 file,
                 binding.name.as_str(),
                 call,
-                &env,
+                &scope,
                 diagnostics,
             ) else {
                 continue;
@@ -1703,7 +1902,7 @@ fn analyze_define_signal_call<'a>(
     file: &str,
     export_name: &str,
     call: &'a CallExpression<'a>,
-    env: &SchemaEnv<'a>,
+    scope: &SchemaScope<'a>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> Option<ArunaSignalRecord> {
     let Some(Argument::ObjectExpression(object)) = call.arguments.first() else {
@@ -1755,7 +1954,7 @@ fn analyze_define_signal_call<'a>(
         SchemaRole::Payload,
         object,
         "payload",
-        env,
+        scope,
         diagnostics,
     );
 
@@ -1771,12 +1970,16 @@ fn analyze_define_signal_call<'a>(
 
 fn collect_signal_candidates(
     file: &str,
+    path: &Path,
     program: &oxc_ast::ast::Program<'_>,
     diagnostics: &mut Vec<ArunaDiagnostic>,
 ) -> (Vec<ArunaSignalRecord>, bool) {
     let mut signals = Vec::new();
     let mut saw_define_signal = false;
-    let env = collect_schema_bindings(program);
+    let scope = SchemaScope {
+        env: collect_schema_bindings(program),
+        imported: resolve_imported_schema_bindings(path, program),
+    };
 
     for statement in &program.body {
         let Statement::ExportNamedDeclaration(export_decl) = statement else {
@@ -1811,7 +2014,7 @@ fn collect_signal_candidates(
             saw_define_signal = true;
 
             let Some(candidate) =
-                analyze_define_signal_call(file, binding.name.as_str(), call, &env, diagnostics)
+                analyze_define_signal_call(file, binding.name.as_str(), call, &scope, diagnostics)
             else {
                 continue;
             };
@@ -1847,7 +2050,7 @@ pub fn collect_signal_definitions(
 
     let mut diagnostics = Vec::new();
     let (mut signals, saw_define_signal) =
-        collect_signal_candidates(&file, &parser_return.program, &mut diagnostics);
+        collect_signal_candidates(&file, path, &parser_return.program, &mut diagnostics);
     let mut signal_files = BTreeSet::new();
 
     if saw_define_signal {

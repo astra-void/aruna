@@ -29,6 +29,7 @@ export type DiagnosticCode =
   | "aruna::560"
   | "aruna::563"
   | "aruna::564"
+  | "aruna::565"
   | "aruna::566"
   | "aruna::568"
   | "aruna::555"
@@ -83,7 +84,7 @@ export type ActionRecord = {
   };
   rateLimit?:
     | {
-        key: "player";
+        key: "player" | "global";
         windowMs: number;
         max: number;
       }
@@ -169,7 +170,6 @@ export type CompilerConfig = {
 };
 
 export type ActionsConfig = {
-  readonly transport?: "remote-event" | "remote-function" | "memory" | undefined;
   readonly defaultRateLimit?: NonNullable<ActionRecord["rateLimit"]> | undefined;
 };
 
@@ -211,7 +211,6 @@ export type NormalizedConfig = {
     readonly preserveGeneratedComments: boolean;
   };
   readonly actions: {
-    readonly transport: "remote-event" | "remote-function" | "memory";
     readonly defaultRateLimit: NonNullable<ActionsConfig["defaultRateLimit"]>;
   };
   readonly conventions: {
@@ -267,7 +266,6 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
     preserveGeneratedComments: true,
   },
   actions: {
-    transport: "remote-event",
     defaultRateLimit: {
       key: "player",
       windowMs: 1000,

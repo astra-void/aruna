@@ -118,9 +118,9 @@ startClientApp();
 
 Argless `createClientApp()` builds the default Roblox transport
 (`createActionInvoker()` from `aruna/roblox`), which waits for the
-`ReplicatedStorage/Aruna/Actions` RemoteEvent that the server-side
+`ReplicatedStorage/ArunaActionRemoteEvent` that the server-side
 `robloxRemoteEvent()` transport creates. That is the whole wire — you never touch a
 raw RemoteEvent. Pass `createClientApp({ transport })` to customize it (request ids,
-timeouts, a RemoteFunction invoker, or an in-memory invoker in tests).
+timeouts).
 
 Next: [actions.md](./actions.md), [signals.md](./signals.md), [schema.md](./schema.md).

@@ -34,8 +34,8 @@ export function defineAction<
 	return definition;
 }
 
-const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
-const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
+export const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
+export const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
 
 interface ActionResponsePayload {
 	readonly ok: boolean;

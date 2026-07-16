@@ -29,7 +29,7 @@ Consumers import `defineConfig` from the root package for config only, and use t
 - The consumer passes TypeScript (`tsc --noEmit`).
 - The consumer compiles to Luau with `rbxtsc`, including the vendored runtime — the earlier "modules directly under node_modules" rejection no longer occurs.
 
-This is package-layout and `rbxtsc` compile validation. It is **not** production Studio validation, and the structural `RemoteEvent`/`RemoteFunction` adapters are not production-complete.
+This is package-layout and `rbxtsc` compile validation. It is **not** production Studio validation, and the structural `RemoteEvent` adapter is not production-complete.
 
 ## Remaining follow-ups
 

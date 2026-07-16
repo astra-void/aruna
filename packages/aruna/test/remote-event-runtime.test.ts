@@ -6,7 +6,6 @@ import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
 import {
   TimeoutError,
-  bindRemoteEventActions,
   createRemoteEventActionInvoker,
   type ActionTimeoutScheduler,
   type RemoteEventActionRequest,
@@ -15,6 +14,9 @@ import {
   type RemoteEventServerLike,
   type RemoteEventSignalLike,
 } from "../src/roblox.js";
+// The low-level binder is internal (the public server surface is `bindActions`
+// / `robloxRemoteEvent`); the wire tests exercise it directly.
+import { bindRemoteEventActions } from "../src/runtime/remote-event.js";
 import { type ActionRegistry } from "../src/server.js";
 
 type FakeSignal<TArgs extends readonly unknown[]> = {

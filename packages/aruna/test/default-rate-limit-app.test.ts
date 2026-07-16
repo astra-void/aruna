@@ -12,7 +12,6 @@ import {
   type ActionRegistry,
 } from "../src/server.js";
 import {
-  bindRemoteEventActions,
   createRemoteEventActionInvoker,
   robloxRemoteEvent,
   type RemoteEventActionRequest,
@@ -21,6 +20,7 @@ import {
   type RemoteEventServerLike,
   type RemoteEventSignalLike,
 } from "../src/roblox.js";
+import { bindRemoteEventActions } from "../src/runtime/remote-event.js";
 
 type FakeRemoteEvent = RemoteEventClientLike & RemoteEventServerLike<unknown>;
 

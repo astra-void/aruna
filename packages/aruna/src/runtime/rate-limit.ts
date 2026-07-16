@@ -1,7 +1,10 @@
 import type { ActionRunContext } from "./server.js";
 
 export type ActionRateLimitConfig = {
-  readonly key: "player";
+  // "player": one bucket per calling player (the default). "global": a single
+  // shared bucket for every caller — for actions guarding an expensive shared
+  // resource. Matches the native runtime's resolveRateLimitKey.
+  readonly key: "player" | "global";
   readonly windowMs: number;
   readonly max: number;
 };

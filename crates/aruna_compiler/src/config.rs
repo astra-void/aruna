@@ -20,20 +20,6 @@ impl Default for CompilerConfig {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum ActionTransport {
-    RemoteEvent,
-    RemoteFunction,
-    Memory,
-}
-
-impl Default for ActionTransport {
-    fn default() -> Self {
-        Self::RemoteEvent
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionRateLimitConfig {
     #[serde(default = "default_action_rate_limit_key")]
@@ -70,15 +56,12 @@ impl Default for ActionRateLimitConfig {
 #[serde(rename_all = "camelCase")]
 pub struct ActionsConfig {
     #[serde(default)]
-    pub transport: ActionTransport,
-    #[serde(default)]
     pub default_rate_limit: ActionRateLimitConfig,
 }
 
 impl Default for ActionsConfig {
     fn default() -> Self {
         Self {
-            transport: ActionTransport::default(),
             default_rate_limit: ActionRateLimitConfig::default(),
         }
     }

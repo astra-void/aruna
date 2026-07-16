@@ -610,7 +610,7 @@ export default defineConfig({
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain("rateLimit.limit is not supported in the pre-public final API");
-    expect(result.stdout).toContain('Only "player" is supported for now');
+    expect(result.stdout).toContain('rateLimit.key must be the string literal "player" or "global"');
     expect(result.stdout).toContain('Use rateLimit: { key: "player", windowMs: 1000, max: 5 }');
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
     expect(result.stderr).toBe("");

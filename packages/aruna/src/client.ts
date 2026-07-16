@@ -1,6 +1,6 @@
-// Everything a client author needs: the client app, the action invoker, and the
-// in-memory invoker used for tests. Consolidated from the former /client,
-// /client-runtime, and /runtime entry points.
+// Everything a client author needs: the client app and the action invoker.
+// Consolidated from the former /client, /client-runtime, and /runtime entry
+// points. (The in-memory invoker is internal — test actions through
+// `createServerApp(...).dispatch` instead.)
 export * from "./app/client.js";
 export * from "./runtime/client.js";
-export * from "./runtime/memory.js";

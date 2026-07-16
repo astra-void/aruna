@@ -11,7 +11,6 @@ import {
   type SignalRegistry,
 } from "../src/server.js";
 import {
-  bindRemoteEventActions,
   createRemoteSignalPublisher,
   createRemoteSignalSubscriber,
   createSignalPublisher,
@@ -25,6 +24,7 @@ import {
   type RemoteSignalMessage,
   type RemoteSignalServerLike,
 } from "../src/roblox.js";
+import { bindRemoteEventActions } from "../src/runtime/remote-event.js";
 import { schema } from "../src/schema.js";
 
 type FakeSignalRemote = RemoteSignalServerLike<unknown> & RemoteSignalClientLike;

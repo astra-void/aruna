@@ -296,6 +296,162 @@ function cframeSchema(): Schema<CFrame> {
 	};
 }
 
+function joinPath(path: string, segment: string): string {
+	return path === "" ? segment : `${path}.${segment}`;
+}
+
+function indexPath(path: string, index: number): string {
+	return `${path === "" ? "" : path}[${index}]`;
+}
+
+function withPath(path: string, message: string): string {
+	return path === "" ? message : `${path}: ${message}`;
+}
+
+// Walks the schema metadata and returns the first failing path + reason, or
+// undefined when the value conforms. This is the production error-detail
+// counterpart of `validate` (which stays a cheap boolean): dispatch calls it
+// only after `validate` already failed, so the happy path pays nothing.
+export function firstSchemaIssue(schema: Schema, value: unknown, path?: string): string | undefined {
+	const at = path ?? "";
+	const typeName = schema.typeName;
+
+	if (typeName === "string") {
+		return typeIs(value, "string") ? undefined : withPath(at, "expected string");
+	} else if (typeName === "number") {
+		if (!typeIs(value, "number")) {
+			return withPath(at, "expected number");
+		}
+		const format = schema.format;
+		const range = format !== undefined ? NUMBER_FORMAT_RANGES.get(format) : undefined;
+		if (range !== undefined) {
+			if (value !== math.floor(value)) {
+				return withPath(at, `expected a whole number (${format})`);
+			}
+			if (value < range.min || value > range.max) {
+				return withPath(at, `expected ${format} in [${range.min}, ${range.max}]`);
+			}
+		}
+		return undefined;
+	} else if (typeName === "boolean") {
+		return typeIs(value, "boolean") ? undefined : withPath(at, "expected boolean");
+	} else if (typeName === "literal") {
+		return value === schema.value
+			? undefined
+			: withPath(at, `expected literal ${tostring(schema.value)}`);
+	} else if (typeName === "optional") {
+		if (value === undefined) {
+			return undefined;
+		}
+		const inner = schema.inner;
+		return inner !== undefined ? firstSchemaIssue(inner, value, at) : undefined;
+	} else if (typeName === "object") {
+		if (!typeIs(value, "table")) {
+			return withPath(at, "expected object");
+		}
+		const fields = schema.fields;
+		if (fields === undefined) {
+			return undefined;
+		}
+		const record = value as { [key: string]: unknown };
+		for (const [key, fieldSchema] of pairs(fields as { [key: string]: Schema })) {
+			const issue = firstSchemaIssue(fieldSchema, record[key as string], joinPath(at, key as string));
+			if (issue !== undefined) {
+				return issue;
+			}
+		}
+		return undefined;
+	} else if (typeName === "array") {
+		if (!typeIs(value, "table")) {
+			return withPath(at, "expected array");
+		}
+		const item = schema.item;
+		if (item === undefined) {
+			return undefined;
+		}
+		const list = value as Array<unknown>;
+		for (let index = 0; index < list.size(); index += 1) {
+			const issue = firstSchemaIssue(item, list[index], indexPath(at, index));
+			if (issue !== undefined) {
+				return issue;
+			}
+		}
+		return undefined;
+	} else if (typeName === "record") {
+		if (!typeIs(value, "table")) {
+			return withPath(at, "expected record");
+		}
+		const item = schema.item;
+		for (const [key, entry] of pairs(value as { [key: string]: unknown })) {
+			if (!typeIs(key, "string")) {
+				return withPath(at, "record keys must be strings");
+			}
+			if (item !== undefined) {
+				const issue = firstSchemaIssue(item, entry, joinPath(at, key));
+				if (issue !== undefined) {
+					return issue;
+				}
+			}
+		}
+		return undefined;
+	} else if (typeName === "tuple") {
+		if (!typeIs(value, "table")) {
+			return withPath(at, "expected tuple");
+		}
+		const items = schema.items;
+		if (items === undefined) {
+			return undefined;
+		}
+		const list = value as Array<unknown>;
+		if (list.size() !== items.size()) {
+			return withPath(at, `expected a tuple of length ${items.size()}`);
+		}
+		for (let index = 0; index < items.size(); index += 1) {
+			const itemSchema = items[index];
+			if (itemSchema !== undefined) {
+				const issue = firstSchemaIssue(itemSchema, list[index], indexPath(at, index));
+				if (issue !== undefined) {
+					return issue;
+				}
+			}
+		}
+		return undefined;
+	} else if (typeName === "enum") {
+		const values = schema.values;
+		if (values !== undefined) {
+			for (const candidate of values) {
+				if (candidate === value) {
+					return undefined;
+				}
+			}
+			const parts: Array<string> = [];
+			for (const candidate of values) {
+				parts.push(tostring(candidate));
+			}
+			return withPath(at, `expected one of ${parts.join(" | ")}`);
+		}
+		return undefined;
+	} else if (typeName === "union") {
+		const members = schema.members;
+		if (members !== undefined) {
+			for (const member of members) {
+				if (member.validate(value)) {
+					return undefined;
+				}
+			}
+			return withPath(at, "expected a value matching one of the union members");
+		}
+		return undefined;
+	} else if (typeName === "vector3") {
+		return typeIs(value, "Vector3") ? undefined : withPath(at, "expected Vector3");
+	} else if (typeName === "color3") {
+		return typeIs(value, "Color3") ? undefined : withPath(at, "expected Color3");
+	} else if (typeName === "cframe") {
+		return typeIs(value, "CFrame") ? undefined : withPath(at, "expected CFrame");
+	}
+	return undefined;
+}
+
 export const schema = {
 	string: stringSchema,
 	number: numberSchema,

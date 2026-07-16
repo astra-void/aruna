@@ -35,7 +35,6 @@ type MutableCompilerConfig = {
 };
 
 type MutableActionsConfig = {
-  transport?: ActionsConfig["transport"];
   defaultRateLimit?: {
     key?: string;
     windowMs?: number;
@@ -128,10 +127,6 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
-function isTransport(value: unknown): value is NonNullable<ActionsConfig["transport"]> {
-  return value === "remote-event" || value === "remote-function" || value === "memory";
-}
-
 function isEntriesMode(value: unknown): value is EntriesMode {
   return value === "user" || value === "generated";
 }
@@ -154,7 +149,6 @@ function flatConfigSuggestion(): string {
     "    preserveGeneratedComments: true,",
     "  },",
     "  actions: {",
-    '    transport: "remote-event",',
     "    defaultRateLimit: {",
     '      key: "player",',
     "      windowMs: 1000,",
@@ -403,13 +397,9 @@ function normalizeConfigObject(value: unknown): {
       const actions: MutableActionsConfig = {};
 
       if (actionsValue["transport"] !== undefined) {
-        if (!isTransport(actionsValue["transport"])) {
-          diagnostics.push(
-            'actions.transport must be one of "remote-event", "remote-function", or "memory"',
-          );
-        } else {
-          actions.transport = actionsValue["transport"];
-        }
+        diagnostics.push(
+          "actions.transport has been removed; Aruna always uses the RemoteEvent transport. Delete the field.",
+        );
       }
 
       if (actionsValue["defaultRateLimit"] !== undefined) {
@@ -423,17 +413,18 @@ function normalizeConfigObject(value: unknown): {
             diagnostics,
             "actions.defaultRateLimit",
           );
-          const defaultRateLimit = {
+          const defaultRateLimit: { key: "player" | "global"; windowMs: number; max: number } = {
             key: "player",
             windowMs: 1000,
             max: 20,
           };
 
           if (defaultRateLimitValue["key"] !== undefined) {
-            if (defaultRateLimitValue["key"] !== "player") {
-              diagnostics.push('actions.defaultRateLimit.key must be "player"');
+            const keyValue = defaultRateLimitValue["key"];
+            if (keyValue !== "player" && keyValue !== "global") {
+              diagnostics.push('actions.defaultRateLimit.key must be "player" or "global"');
             } else {
-              defaultRateLimit.key = "player";
+              defaultRateLimit.key = keyValue;
             }
           }
 
@@ -554,7 +545,6 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       preserveGeneratedComments: config.compiler?.preserveGeneratedComments ?? true,
     },
     actions: {
-      transport: config.actions?.transport ?? "remote-event",
       defaultRateLimit: {
         key: defaultRateLimit.key,
         windowMs: defaultRateLimit.windowMs,

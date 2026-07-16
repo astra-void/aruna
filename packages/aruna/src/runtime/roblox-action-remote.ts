@@ -1,3 +1,7 @@
+// Default Aruna action RemoteEvent wiring. A single flat
+// `ReplicatedStorage/ArunaActionRemoteEvent` — the same instance the native
+// runtime uses — multiplexes every action request/response by request id.
+
 import {
   bindRemoteEventActions,
   createRemoteEventActionInvoker,
@@ -11,13 +15,7 @@ import type { ServerBinding } from "./binding.js";
 import type { ActionRegistry } from "./server.js";
 import type { ServerTransport } from "../app/server.js";
 
-export const ARUNA_FOLDER_NAME = "Aruna";
-export const ACTION_REMOTE_NAME = "Actions";
-
-export type ActionRemoteOptions = {
-  readonly folderName?: string;
-  readonly remoteName?: string;
-};
+export const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
 
 function getRobloxGame(): DataModel {
   if (typeof game === "undefined") {
@@ -31,33 +29,18 @@ function getReplicatedStorage(): ReplicatedStorage {
   return getRobloxGame().GetService("ReplicatedStorage");
 }
 
-function isFolder(instance: Instance): instance is Folder {
-  return instance.IsA("Folder");
-}
-
 function isRemoteEvent(instance: Instance): instance is RemoteEvent {
   return instance.IsA("RemoteEvent");
 }
 
-function getRemotePath(folderName: string, remoteName: string): string {
-  return `ReplicatedStorage/${folderName}/${remoteName}`;
-}
-
-function getFolderPath(folderName: string): string {
-  return `ReplicatedStorage/${folderName}`;
-}
-
-function getOptions(
-  options?: ActionRemoteOptions,
-): Required<ActionRemoteOptions> {
-  return {
-    folderName: options?.folderName ?? ARUNA_FOLDER_NAME,
-    remoteName: options?.remoteName ?? ACTION_REMOTE_NAME,
-  };
-}
-
 function describeClass(instance: Instance): string {
   return instance.ClassName;
+}
+
+function wrongClassError(instance: Instance): Error {
+  return new Error(
+    `Aruna Roblox action remote has wrong class: ReplicatedStorage/${ACTION_REMOTE_NAME} (${describeClass(instance)})`,
+  );
 }
 
 function toRemoteEventClientLike(remote: RemoteEvent): RemoteEventClientLike {
@@ -68,147 +51,60 @@ function toRemoteEventServerLike<TPlayer>(remote: RemoteEvent): RemoteEventServe
   return remote as unknown as RemoteEventServerLike<TPlayer>;
 }
 
-function ensureFolder(parent: Instance, folderName: string): Folder {
-  const existing = parent.FindFirstChild(folderName);
-
-  if (existing === undefined) {
-    const folder = new Instance("Folder");
-    folder.Name = folderName;
-    folder.Parent = parent;
-    return folder;
-  }
-
-  if (!isFolder(existing)) {
-    throw new Error(
-      `Aruna Roblox remote folder has wrong class: ${getFolderPath(folderName)} (${describeClass(existing)})`,
-    );
-  }
-
-  return existing;
-}
-
-function ensureRemoteEvent(parent: Folder, remoteName: string): RemoteEvent {
-  const existing = parent.FindFirstChild(remoteName);
-
-  if (existing === undefined) {
-    const remoteEvent = new Instance("RemoteEvent");
-    remoteEvent.Name = remoteName;
-    remoteEvent.Parent = parent;
-    return remoteEvent;
-  }
-
-  if (!isRemoteEvent(existing)) {
-    throw new Error(
-      `Aruna Roblox action remote has wrong class: ${getRemotePath(parent.Name, remoteName)} (${describeClass(existing)})`,
-    );
-  }
-
-  return existing;
-}
-
-function waitForFolder(parent: Instance, folderName: string): Folder {
-  const instance = parent.WaitForChild(folderName);
-
-  if (!isFolder(instance)) {
-    throw new Error(
-      `Aruna Roblox remote folder has wrong class: ${getFolderPath(folderName)} (${describeClass(instance)})`,
-    );
-  }
-
-  return instance;
-}
-
-function waitForRemoteEvent(parent: Folder, remoteName: string): RemoteEvent {
-  const instance = parent.WaitForChild(remoteName);
-
-  if (!isRemoteEvent(instance)) {
-    throw new Error(
-      `Aruna Roblox action remote has wrong class: ${getRemotePath(parent.Name, remoteName)} (${describeClass(instance)})`,
-    );
-  }
-
-  return instance;
-}
-
-function findFolder(parent: Instance, folderName: string): Folder {
-  const instance = parent.FindFirstChild(folderName);
-
-  if (instance === undefined) {
-    throw new Error(`Aruna Roblox remote folder not found: ${getFolderPath(folderName)}`);
-  }
-
-  if (!isFolder(instance)) {
-    throw new Error(
-      `Aruna Roblox remote folder has wrong class: ${getFolderPath(folderName)} (${describeClass(instance)})`,
-    );
-  }
-
-  return instance;
-}
-
-function findRemoteEvent(parent: Folder, remoteName: string): RemoteEvent {
-  const instance = parent.FindFirstChild(remoteName);
+export function getActionRemote(): RemoteEvent {
+  const instance = getReplicatedStorage().FindFirstChild(ACTION_REMOTE_NAME);
 
   if (instance === undefined) {
     throw new Error(
-      `Aruna Roblox action RemoteEvent not found: ${getRemotePath(parent.Name, remoteName)}`,
+      `Aruna Roblox action RemoteEvent not found: ReplicatedStorage/${ACTION_REMOTE_NAME}`,
     );
   }
 
   if (!isRemoteEvent(instance)) {
-    throw new Error(
-      `Aruna Roblox action remote has wrong class: ${getRemotePath(parent.Name, remoteName)} (${describeClass(instance)})`,
-    );
+    throw wrongClassError(instance);
   }
 
   return instance;
 }
 
-export function getActionRemote(
-  options?: ActionRemoteOptions,
-): RemoteEvent {
-  const { folderName, remoteName } = getOptions(options);
-  const replicatedStorage = getReplicatedStorage();
-  const folder = findFolder(replicatedStorage, folderName);
+export function ensureActionRemote(): RemoteEvent {
+  const storage = getReplicatedStorage();
+  const existing = storage.FindFirstChild(ACTION_REMOTE_NAME);
 
-  return findRemoteEvent(folder, remoteName);
+  if (existing !== undefined) {
+    if (!isRemoteEvent(existing)) {
+      throw wrongClassError(existing);
+    }
+
+    return existing;
+  }
+
+  const remote = new Instance("RemoteEvent");
+  remote.Name = ACTION_REMOTE_NAME;
+  remote.Parent = storage;
+  return remote;
 }
 
-export function ensureActionRemote(
-  options?: ActionRemoteOptions,
-): RemoteEvent {
-  const { folderName, remoteName } = getOptions(options);
-  const replicatedStorage = getReplicatedStorage();
-  const folder = ensureFolder(replicatedStorage, folderName);
+export function waitForActionRemote(): RemoteEvent {
+  const instance = getReplicatedStorage().WaitForChild(ACTION_REMOTE_NAME);
 
-  return ensureRemoteEvent(folder, remoteName);
+  if (!isRemoteEvent(instance)) {
+    throw wrongClassError(instance);
+  }
+
+  return instance;
 }
 
-export function waitForActionRemote(
-  options?: ActionRemoteOptions,
-): RemoteEvent {
-  const { folderName, remoteName } = getOptions(options);
-  const replicatedStorage = getReplicatedStorage();
-  const folder = waitForFolder(replicatedStorage, folderName);
-
-  return waitForRemoteEvent(folder, remoteName);
-}
-
-export function createActionInvoker(
-  options?: ActionRemoteOptions & ActionInvokerOptions,
-): DisposableActionInvoker {
-  return createRemoteEventActionInvoker(
-    toRemoteEventClientLike(waitForActionRemote(options)),
-    options,
-  );
+export function createActionInvoker(options?: ActionInvokerOptions): DisposableActionInvoker {
+  return createRemoteEventActionInvoker(toRemoteEventClientLike(waitForActionRemote()), options);
 }
 
 export function bindActions<TPlayer = Player>(
   registry: ActionRegistry<TPlayer>,
-  options?: ActionRemoteOptions & BindActionsOptions<TPlayer>,
+  options?: BindActionsOptions<TPlayer>,
 ): ServerBinding {
   return bindRemoteEventActions(
-    toRemoteEventServerLike<TPlayer>(ensureActionRemote(options)),
+    toRemoteEventServerLike<TPlayer>(ensureActionRemote()),
     registry,
     options,
   );
@@ -218,13 +114,12 @@ export function bindActions<TPlayer = Player>(
 // `createServerApp({ transport: robloxRemoteEvent() })`. The app injects its
 // resolved dispatch options (rate limiter, key resolver, `defaultRateLimit`,
 // clock) so the fallback rate limit reaches the wire without any per-binder
-// wiring. `createContext` and remote folder/name overrides may still be set
-// here; dispatch options always win.
+// wiring. `createContext` may still be set here; dispatch options always win.
 export function robloxRemoteEvent<TPlayer = Player>(
-  options?: ActionRemoteOptions & Pick<BindActionsOptions<TPlayer>, "createContext">,
+  options?: Pick<BindActionsOptions<TPlayer>, "createContext">,
 ): ServerTransport<TPlayer, ActionRegistry<TPlayer>> {
   return ({ registry, dispatch }) =>
-    bindRemoteEventActions(toRemoteEventServerLike<TPlayer>(ensureActionRemote(options)), registry, {
+    bindRemoteEventActions(toRemoteEventServerLike<TPlayer>(ensureActionRemote()), registry, {
       ...(options?.createContext !== undefined ? { createContext: options.createContext } : {}),
       ...dispatch,
     });

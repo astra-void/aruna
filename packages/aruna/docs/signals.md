@@ -45,7 +45,7 @@ import { signals } from "$aruna/signals";
 ## Server: publishing
 
 `createSignalPublisher(signals)` (from `aruna/roblox`) is the turnkey entry point: it
-ensures the default `ReplicatedStorage/Aruna/Signals` RemoteEvent **at call time** and
+ensures the default `ReplicatedStorage/ArunaSignalRemoteEvent` **at call time** and
 returns a typed publisher. Call it once at server boot — that single call creates the
 signal remote before any client subscribes, so you no longer need a hand-written
 lazy-singleton plumbing module. Payloads are validated before they go on the wire.
@@ -153,33 +153,27 @@ const clientApp = createClientApp({
 clientApp.subscriber?.on("combat.playerDamaged", (p) => updateHud(p)); // typed
 ```
 
-Standalone, `createSignalSubscriber(signals, options?)` (from `aruna/roblox`) is the
-turnkey subscriber: it waits for the default signal remote and returns a typed subscriber.
-Register handlers up front via `handlers`, or dynamically via `on`.
+Standalone, `createSignalSubscriber(signals)` (from `aruna/roblox`) is the turnkey
+subscriber: it waits for the default signal remote and returns a typed subscriber.
+`.on(id, handler)` is the subscribe API; it returns a disconnectable handle.
 
 ```ts
 import { createSignalSubscriber } from "aruna/roblox";
 import { signals } from "$aruna/signals";
 
-const subscriber = createSignalSubscriber(signals, {
-  handlers: {
-    "combat.playerDamaged": (payload) => {
-      // payload typed: { amount: number; source: string; position: { x,y,z } }
-      showDamage(payload.amount, payload.position);
-    },
-    "world.tick": () => tick(),
-  },
-});
+const subscriber = createSignalSubscriber(signals);
 
-// dynamic subscription
-const connection = subscriber.on("combat.playerDamaged", (p) => updateHud(p));
+const connection = subscriber.on("combat.playerDamaged", (payload) => {
+  // payload typed: { amount: number; source: string; position: { x,y,z } }
+  showDamage(payload.amount, payload.position);
+});
 connection.disconnect();
 
 // teardown all handlers
 subscriber.dispose();
 ```
 
-> **Advanced:** `createRemoteSignalSubscriber(remote, signals, options?)` is the lower-level
+> **Advanced:** `createRemoteSignalSubscriber(remote, signals)` is the lower-level
 > overload for a RemoteEvent you supply yourself.
 
 Payloads that fail validation on arrival are dropped rather than thrown — a malformed

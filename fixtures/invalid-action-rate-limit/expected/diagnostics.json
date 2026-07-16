@@ -1,7 +1,7 @@
 [
   {
     "code": "aruna::560",
-    "details": "export name: missingKey\nMissing rateLimit.key. Only \"player\" is supported for now.",
+    "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\" or \"global\".",
     "file": "src/domains/shop/actions.ts",
     "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
     "name": "invalid-action-rate-limit",
@@ -14,7 +14,7 @@
   },
   {
     "code": "aruna::560",
-    "details": "export name: invalidKey\nrateLimit.key must be the string literal \"player\". Only \"player\" is supported for now.",
+    "details": "export name: invalidKey\nrateLimit.key must be the string literal \"player\" or \"global\".",
     "file": "src/domains/shop/actions.ts",
     "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
     "name": "invalid-action-rate-limit",

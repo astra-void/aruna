@@ -2,8 +2,15 @@
 //
 // Encodes a value into a tightly packed byte buffer using its schema as the
 // layout, and decodes it back. Because both sides share the schema, no field
-// names, type tags, or framing travel on the wire — only the payload bytes.
-// This is the bandwidth-saving counterpart to the plain-data table transport.
+// names or type tags travel on the wire — only a 4-byte frame header plus the
+// payload bytes. This is the bandwidth-saving counterpart to the plain-data
+// table transport.
+//
+// Every frame starts with a u32 **schema fingerprint** (a portable hash of the
+// schema layout, identical across both runtimes). Decoding is positional, so a
+// client and server holding different schema versions — the normal state
+// mid-rollout — would otherwise silently mis-read each other's bytes; the
+// fingerprint check turns that into an immediate, explicit error.
 //
 // Layout per schema kind:
 //   string   u32 length prefix + UTF-8 bytes
@@ -481,14 +488,90 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
   }
 }
 
-// Encode a schema-conforming value into a packed byte buffer.
+function literalTag(value: SchemaLiteral): string {
+  if (value === undefined) {
+    return "undefined:undefined";
+  }
+
+  return `${typeof value}:${String(value)}`;
+}
+
+// Canonical layout string. MUST stay byte-identical with the roblox-ts native
+// runtime's schemaLayoutString — the fingerprint only works as a cross-version
+// guard if both runtimes derive the same string for the same schema.
+function schemaLayoutString(schema: Schema): string {
+  switch (schema.kind) {
+    case "string":
+      return "s";
+    case "number":
+      return `n:${schema.format}`;
+    case "boolean":
+      return "b";
+    case "literal":
+      return `l:${literalTag(schema.value)}`;
+    case "array":
+      return `a(${schemaLayoutString(schema.item)})`;
+    case "object":
+      return `o(${Object.keys(schema.shape)
+        .sort()
+        .map((key) => `${key}:${schemaLayoutString(schema.shape[key] as Schema)}`)
+        .join(",")})`;
+    case "optional":
+      return `?(${schemaLayoutString(schema.inner)})`;
+    case "record":
+      return `r(${schemaLayoutString(schema.value)})`;
+    case "tuple":
+      return `t(${schema.items.map(schemaLayoutString).join(",")})`;
+    case "enum":
+      return `e(${schema.values.join("|")})`;
+    case "union":
+      return `u(${schema.members.map(schemaLayoutString).join("|")})`;
+    case "vector3":
+      return "v3";
+    case "color3":
+      return "c3";
+    case "cframe":
+      return "cf";
+    default:
+      throw new Error("Aruna schema fingerprint: unsupported schema kind.");
+  }
+}
+
+// Deterministic 32-bit fingerprint of a schema's wire layout. djb2 over the
+// canonical layout string, using only plain arithmetic (exact in doubles) so
+// Node and Luau produce the identical value for the identical schema.
+export function schemaFingerprint(schema: Schema): number {
+  const layout = schemaLayoutString(schema);
+  let hash = 5381;
+  for (let index = 0; index < layout.length; index += 1) {
+    hash = (hash * 33 + layout.charCodeAt(index)) % 4294967296;
+  }
+
+  return hash;
+}
+
+// Encode a schema-conforming value into a packed byte buffer. The frame is
+// `u32 schema fingerprint + payload`.
 export function encodeBinary(schema: Schema, value: unknown): Uint8Array {
   const writer = new BinaryWriter();
+  writer.writeU32(schemaFingerprint(schema));
   encodeValue(schema, value, writer);
   return writer.toBytes();
 }
 
 // Decode a packed byte buffer produced by encodeBinary against the same schema.
+// A fingerprint mismatch (the peer encoded with a different schema version)
+// throws instead of positionally decoding garbage.
 export function decodeBinary(schema: Schema, bytes: Uint8Array): unknown {
-  return decodeValue(schema, new BinaryReader(bytes));
+  const reader = new BinaryReader(bytes);
+  const expected = schemaFingerprint(schema);
+  const actual = reader.readU32();
+
+  if (actual !== expected) {
+    throw new Error(
+      `Aruna binary decode schema mismatch: payload fingerprint ${actual} does not match this schema (${expected}); the peer encoded with a different schema version.`,
+    );
+  }
+
+  return decodeValue(schema, reader);
 }

@@ -4,7 +4,7 @@
 // against the serialization boundary and the declared schema before firing; the
 // client drops payloads that fail schema validation before invoking handlers.
 
-import type { Schema } from "./schema";
+import { firstSchemaIssue, type Schema } from "./schema";
 import type { InferSignalPayload, SignalDefinition } from "./signal";
 import { isWireSafe } from "./serialization";
 
@@ -80,12 +80,14 @@ export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
 	// every payload in one tick. Meant for bulk one-time sends (e.g. late-join
 	// replay of a stored broadcast log) where firing hundreds/thousands of
 	// messages synchronously would spike outbound bandwidth for that frame.
+	// Resolves after the last chunk is sent (rejects if a payload fails
+	// validation), matching the Node reference runtime's signature.
 	readonly toBatched: <TId extends SignalId<TSignals>>(
 		player: TPlayer,
 		signalId: TId,
 		payloads: ReadonlyArray<SignalPayloadOf<TSignals, TId>>,
 		options?: SignalBatchOptions,
-	) => void;
+	) => Promise<void>;
 }
 
 export interface SignalSubscriber<TSignals extends SignalMap> {
@@ -123,7 +125,10 @@ function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload
 	}
 	const payloadSchema = signal.payload;
 	if (payloadSchema !== undefined && !payloadSchema.validate(payload)) {
-		throw `invalid signal payload: ${signal.id}`;
+		const issue = firstSchemaIssue(payloadSchema, payload);
+		throw issue !== undefined
+			? `invalid signal payload: ${signal.id} (${issue})`
+			: `invalid signal payload: ${signal.id}`;
 	}
 }
 
@@ -165,16 +170,31 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 			const chunkSize = options?.chunkSize ?? DEFAULT_BATCH_CHUNK_SIZE;
 			const yieldBetweenChunks = options?.yield ?? defaultBatchYield;
 
-			for (let index = 0; index < payloads.size(); index += 1) {
-				const payload = payloads[index];
-				assertPublishable(signal, payload);
-				remote.FireClient(player, { signalId, payload });
+			// The chunk loop yields between chunks, so it runs on its own thread;
+			// the returned promise settles when the last chunk went out (or a
+			// payload failed validation). Promise.new executors must not yield,
+			// hence the task.spawn indirection.
+			return new Promise<void>((resolve, reject) => {
+				task.spawn(() => {
+					const [sent, failure] = pcall(() => {
+						for (let itemIndex = 0; itemIndex < payloads.size(); itemIndex += 1) {
+							const payload = payloads[itemIndex];
+							assertPublishable(signal, payload);
+							remote.FireClient(player, { signalId, payload });
 
-				const isChunkBoundary = (index + 1) % chunkSize === 0;
-				if (isChunkBoundary && index + 1 < payloads.size()) {
-					yieldBetweenChunks();
-				}
-			}
+							const isChunkBoundary = (itemIndex + 1) % chunkSize === 0;
+							if (isChunkBoundary && itemIndex + 1 < payloads.size()) {
+								yieldBetweenChunks();
+							}
+						}
+					});
+					if (sent) {
+						resolve();
+					} else {
+						reject(failure);
+					}
+				});
+			});
 		},
 	};
 

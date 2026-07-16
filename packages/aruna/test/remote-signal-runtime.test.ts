@@ -232,24 +232,6 @@ describe("createRemoteSignalSubscriber", () => {
     subscriber.dispose();
   });
 
-  it("connects static handlers immediately", () => {
-    const remote = createFakeRemote<string>();
-    const handler = vi.fn();
-    const subscriber = createRemoteSignalSubscriber(remote, signals, {
-      handlers: {
-        "combat.damaged": handler,
-      },
-    });
-
-    remote.clientSignal.emit({
-      signalId: "combat.damaged",
-      payload: { amount: 3, source: "lava" },
-    });
-
-    expect(handler).toHaveBeenCalledWith({ amount: 3, source: "lava" });
-    subscriber.dispose();
-  });
-
   it("drops payloads that violate the declared schema", () => {
     const remote = createFakeRemote<string>();
     const handler = vi.fn();

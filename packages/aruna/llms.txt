@@ -13,8 +13,8 @@ library. Consumer code imports from four runtime entry points and three generate
 virtual modules:
 
 - `aruna/server`  — `defineAction`, `defineSignal`, `createServerApp`, dispatch/validation
-- `aruna/client`  — `createClientApp` (argless default transport; can own the signal subscriber via `{ signals, createSubscriber }`), `invokeAction`, in-memory invoker (tests)
-- `aruna/roblox`  — server transports (`robloxRemoteEvent`/`robloxRemoteFunction` for `createServerApp({ transport })`), `createActionInvoker`, low-level `bindActions`, signal pub/sub
+- `aruna/client`  — `createClientApp` (argless default transport; can own the signal subscriber via `{ signals, createSubscriber }`), `invokeAction`
+- `aruna/roblox`  — the RemoteEvent server transport (`robloxRemoteEvent` for `createServerApp({ transport })`), `createActionInvoker`, low-level `bindActions`, signal pub/sub
 - `aruna/schema`  — `schema.*` builders + `Infer` (the single schema-inference type)
 - `$aruna/actions/server` — generated server action registry (`actions`, `defaultRateLimit`)
 - `$aruna/actions/client` — generated per-action client call functions
@@ -40,8 +40,10 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
   compiler reports a boundary violation. See architecture.md.
 - After adding or changing any `defineAction`/`defineSignal`, run `aruna build` — `aruna check`
   does NOT regenerate stubs or the manifest, so client stubs go stale.
-- `ctx.player` is optional at runtime (tests call actions with no player). Import
-  `defineAction` from `aruna/roblox` to get `ctx.player: Player` typing.
+- `ctx.player` is always present (wire dispatches carry the caller; in-process
+  `app.dispatch` requires a ctx with a player). Import `defineAction` from
+  `aruna/roblox` to get `ctx.player: Player` typing. Test actions through
+  `createServerApp(...).dispatch(actionId, { player }, input)`.
 - To publish a signal from inside an action, use `ctx.publisher` (injected when
   `createServerApp` owns a publisher). Bind `createActionDefiner<Signals, Player>()`
   in a shared module for a non-optional, registry-checked `ctx.publisher`.

@@ -5,8 +5,8 @@ describe("aruna/roblox import safety", () => {
     vi.resetModules();
 
     await expect(import("../roblox.js")).resolves.toMatchObject({
-      ARUNA_FOLDER_NAME: "Aruna",
-      ACTION_REMOTE_NAME: "Actions",
+      ACTION_REMOTE_NAME: "ArunaActionRemoteEvent",
+      SIGNAL_REMOTE_NAME: "ArunaSignalRemoteEvent",
     });
   });
 });

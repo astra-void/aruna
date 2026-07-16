@@ -70,6 +70,8 @@ const CONTRACT: Record<keyof typeof ENTRIES, readonly string[]> = {
     "robloxRemoteEvent",
     "createSignalPublisher",
     "createSignalSubscriber",
+    "ACTION_REMOTE_NAME",
+    "SIGNAL_REMOTE_NAME",
   ],
   "aruna/schema": ["schema", "Schema", "Infer", "NumberFormat", "SchemaLiteral"],
 };

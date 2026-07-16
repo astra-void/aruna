@@ -29,6 +29,18 @@ export type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = 
 ) => SignalPublisher<TSignals, TPlayer>;
 
 export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
+	// The action map the app was created with, for enumeration/tooling.
+	readonly actions: ActionMap<TPlayer>;
+	// In-process dispatch through the same validated, rate-limited,
+	// middleware-wrapped path the wire uses — no RemoteEvent required. Resolves
+	// with the action's output and rejects with the error string on failure.
+	// Mirrors the Node reference runtime's `app.dispatch(actionId, ctx, input)`;
+	// this is the supported way to exercise actions from tests (e.g. under Lune).
+	readonly dispatch: (
+		actionId: string,
+		ctx: { readonly player: TPlayer },
+		input: unknown,
+	) => Promise<unknown>;
 	// Present when a `transport` was supplied to `createServerApp`.
 	readonly binding?: ServerAppBinding;
 	// Present when both `signals` and `createPublisher` were supplied. Built
@@ -90,6 +102,14 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 	const binding = options.transport !== undefined ? options.transport(registry) : undefined;
 
 	return {
+		actions: options.actions,
+		dispatch: (actionId, ctx, input) =>
+			registry.dispatch(ctx.player, actionId, input).then((result) => {
+				if (result.ok) {
+					return result.output;
+				}
+				throw result.error !== undefined ? result.error : "action failed";
+			}),
 		...(binding !== undefined ? { binding } : {}),
 		...(publisher !== undefined ? { publisher } : {}),
 		dispose: () => {

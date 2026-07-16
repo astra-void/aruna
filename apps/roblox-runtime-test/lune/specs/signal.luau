@@ -130,10 +130,11 @@ return function(ctx)
 				count += 1
 			end)
 
-			local ok = pcall(function()
+			local ok, err = pcall(function()
 				publisher.to("Ada", "combat.damaged", { amount = "lots", source = "trap" })
 			end)
 			t.isFalse(ok, "invalid payload should throw on publish")
+			t.contains(tostring(err), "amount: expected number")
 			t.eq(count, 0, "no handler should run for a rejected payload")
 			subscriber.dispose()
 		end)
@@ -155,12 +156,13 @@ return function(ctx)
 			end
 
 			local yields = 0
-			publisher.toBatched("Ada", "combat.damaged", payloads, {
+			local settled, ok = t.await(publisher.toBatched("Ada", "combat.damaged", payloads, {
 				chunkSize = 2,
 				["yield"] = function()
 					yields += 1
 				end,
-			})
+			}))
+			t.isTrue(settled and ok, "toBatched should resolve after the last chunk")
 
 			t.eq(#received, 5)
 			-- 5 payloads / chunkSize 2 -> yields after index 2 and 4, not after

@@ -1,33 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearActionInvoker, invokeAction } from "../src/client.js";
 import { createClientApp } from "../src/client.js";
-import {
-  createRemoteFunctionActionInvoker,
-  bindRemoteFunctionActions,
-} from "../src/roblox.js";
 import { createServerApp } from "../src/server.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
-import { type ActionRegistry } from "../src/server.js";
-
-type FakeRemoteFunction = {
-  InvokeServer: (actionId: string, input: unknown) => unknown;
-  OnServerInvoke?: ((player: unknown, actionId: string, input: unknown) => unknown) | undefined;
-};
-
-function createFakeRemote(player: unknown): FakeRemoteFunction {
-  const remote: FakeRemoteFunction = {
-    InvokeServer(actionId, input) {
-      if (remote.OnServerInvoke === undefined) {
-        throw new Error("RemoteFunction server handler is not bound.");
-      }
-
-      return remote.OnServerInvoke(player, actionId, input);
-    },
-  };
-
-  return remote;
-}
 
 beforeEach(() => {
   clearActionInvoker();
@@ -218,44 +194,8 @@ describe("createServerApp", () => {
   });
 });
 
-describe("bindRemoteFunctionActions", () => {
-  it("returns a disposable binding and restores or clears OnServerInvoke", () => {
-    const actions: ActionRegistry = {
-      "shop.purchaseItem": defineAction({
-        id: "shop.purchaseItem",
-        run(_ctx, input) {
-          return { ok: true, input };
-        },
-      }),
-    };
-
-    const remoteWithPrevious = createFakeRemote({ name: "Ada" });
-    const previousHandler = vi.fn(() => {
-      return { ok: "previous" };
-    });
-    remoteWithPrevious.OnServerInvoke = previousHandler;
-
-    const binding = bindRemoteFunctionActions(remoteWithPrevious, actions);
-
-    expect(remoteWithPrevious.OnServerInvoke).not.toBe(previousHandler);
-
-    binding.dispose();
-    binding.dispose();
-
-    expect(remoteWithPrevious.OnServerInvoke).toBe(previousHandler);
-
-    const remoteWithoutPrevious = createFakeRemote({ name: "Ada" });
-    const secondBinding = bindRemoteFunctionActions(remoteWithoutPrevious, actions);
-
-    secondBinding.dispose();
-
-    expect(remoteWithoutPrevious.OnServerInvoke).toBeUndefined();
-  });
-});
-
-describe("fake RemoteFunction round-trip", () => {
+describe("in-process round-trip", () => {
   it("connects a generated-style stub, client app, server app, and schema validation", async () => {
-    const remote = createFakeRemote({ name: "Ada" });
     const actions = {
       "shop.purchaseItem": defineAction({
         id: "shop.purchaseItem",
@@ -271,12 +211,10 @@ describe("fake RemoteFunction round-trip", () => {
       }),
     };
 
-    const serverApp = createServerApp({
-      actions,
-      transport: ({ registry, dispatch }) => bindRemoteFunctionActions(remote, registry, dispatch),
-    });
+    const serverApp = createServerApp({ actions });
     const clientApp = createClientApp({
-      transport: createRemoteFunctionActionInvoker(remote),
+      transport: (actionId, input) =>
+        serverApp.dispatch(actionId, { player: { name: "Ada" } }, input),
     });
     const purchaseItem = (input: { itemId: string }): Promise<unknown> => {
       return invokeAction("shop.purchaseItem", input);

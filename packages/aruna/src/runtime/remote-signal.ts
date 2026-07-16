@@ -147,20 +147,10 @@ export type RemoteSignalConnection = {
   readonly disconnect: () => void;
 };
 
-export type StaticSignalHandlers<TSignals extends SignalRegistry> = {
-  readonly [TId in SignalId<TSignals>]?: SignalHandler<InferSignalPayload<TSignals[TId]>>;
-};
-
-export type SignalSubscriberOptions<TSignals extends SignalRegistry> = {
-  // Statically bound handlers, connected immediately. Equivalent to calling
-  // `.on(id, handler)` for each entry; useful for app-level wiring.
-  readonly handlers?: StaticSignalHandlers<TSignals>;
-};
-
 // Client-side subscriber bound to a signal registry. A single OnClientEvent
-// connection fans messages out to per-signal handler sets. Supports both static
-// handlers (app-style wiring) and dynamic `.on()` subscriptions that return a
-// disconnectable handle.
+// connection fans messages out to per-signal handler sets. `.on()` is the single
+// subscribe API (matching the native runtime); it returns a disconnectable
+// handle.
 export type RemoteSignalSubscriber<TSignals extends SignalRegistry> = {
   readonly on: <TId extends SignalId<TSignals>>(
     signalId: TId,
@@ -180,7 +170,6 @@ function isValidSignalMessage(value: unknown): value is RemoteSignalMessage {
 export function createRemoteSignalSubscriber<TSignals extends SignalRegistry>(
   remote: RemoteSignalClientLike,
   signals: TSignals,
-  options?: SignalSubscriberOptions<TSignals>,
 ): RemoteSignalSubscriber<TSignals> {
   const handlersBySignal = new Map<string, Set<SignalHandler<unknown>>>();
   let disposed = false;
@@ -206,14 +195,6 @@ export function createRemoteSignalSubscriber<TSignals extends SignalRegistry>(
         handlers.delete(handler);
       },
     };
-  }
-
-  if (options?.handlers !== undefined) {
-    for (const [signalId, handler] of Object.entries(options.handlers)) {
-      if (handler !== undefined) {
-        addHandler(signalId, handler as SignalHandler<unknown>);
-      }
-    }
   }
 
   const connection: RemoteEventSignalConnectionLike = remote.OnClientEvent.Connect((message) => {

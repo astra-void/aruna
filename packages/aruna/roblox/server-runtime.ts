@@ -1,7 +1,7 @@
 // Aruna roblox-ts native runtime — server action registry and dispatch.
 
 import type { ActionContext, ActionDefinition, ActionRateLimitOptions } from "./server";
-import type { Schema } from "./schema";
+import { firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
@@ -101,7 +101,14 @@ export function createActionRegistry<TPlayer>(
 
 				const inputSchema = definition.input;
 				if (inputSchema !== undefined && !inputSchema.validate(input)) {
-					resolve({ ok: false, error: "invalid action input" });
+					// The boolean validate stays the cheap gate; the metadata walk runs
+					// only on failure to attach the first failing path + reason.
+					const issue = firstSchemaIssue(inputSchema, input);
+					resolve({
+						ok: false,
+						error:
+							issue !== undefined ? `invalid action input: ${issue}` : "invalid action input",
+					});
 					return;
 				}
 

@@ -2,14 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createServerApp } from "../src/app/server.js";
 import { defineAction } from "../src/server.js";
 import {
-  bindRemoteEventActions,
-  bindRemoteFunctionActions,
   type RemoteEventActionRequest,
   type RemoteEventActionResponse,
   type RemoteEventClientLike,
   type RemoteEventServerLike,
   type RemoteEventSignalLike,
 } from "../src/roblox.js";
+import { bindRemoteEventActions } from "../src/runtime/remote-event.js";
 import {
   ActionRateLimitError,
   createActionRateLimiter,
@@ -33,11 +32,6 @@ type FakeRemoteEvent<TPlayer = unknown> = RemoteEventClientLike &
     }>;
   };
 
-type FakeRemoteFunction = {
-  InvokeServer: (actionId: string, input: unknown) => unknown;
-  OnServerInvoke?: ((player: unknown, actionId: string, input: unknown) => unknown) | undefined;
-};
-
 function createFakeSignal<TArgs extends readonly unknown[]>(): FakeSignal<TArgs> {
   const listeners = new Set<(...args: TArgs) => void>();
 
@@ -58,44 +52,6 @@ function createFakeSignal<TArgs extends readonly unknown[]>(): FakeSignal<TArgs>
       }
     },
   };
-}
-
-function createFakeRemoteEvent<TPlayer>(player: TPlayer): FakeRemoteEvent<TPlayer> {
-  const clientSignal = createFakeSignal<[RemoteEventActionResponse]>();
-  const serverSignal = createFakeSignal<[TPlayer, RemoteEventActionRequest]>();
-  const responses: Array<{
-    readonly player: TPlayer;
-    readonly response: RemoteEventActionResponse;
-  }> = [];
-
-  return {
-    clientSignal,
-    serverSignal,
-    responses,
-    OnClientEvent: clientSignal.signal,
-    OnServerEvent: serverSignal.signal,
-    FireServer(request) {
-      serverSignal.emit(player, request);
-    },
-    FireClient(nextPlayer, response) {
-      responses.push({ player: nextPlayer, response });
-      clientSignal.emit(response);
-    },
-  };
-}
-
-function createFakeRemoteFunction(player: unknown): FakeRemoteFunction {
-  const remote: FakeRemoteFunction = {
-    InvokeServer(actionId, input) {
-      if (remote.OnServerInvoke === undefined) {
-        throw new Error("RemoteFunction server handler is not bound.");
-      }
-
-      return remote.OnServerInvoke(player, actionId, input);
-    },
-  };
-
-  return remote;
 }
 
 async function flushMicrotasks(): Promise<void> {
@@ -609,44 +565,6 @@ describe("action rate limits", () => {
         name: "ActionRateLimitError",
         message: "Aruna action shop.purchaseItem is rate limited. Retry after 1000ms.",
       },
-    });
-  });
-
-  it("keeps the RemoteFunction adapter stable when rate limiting is enabled", async () => {
-    const remote = createFakeRemoteFunction({ bucket: "alpha" });
-    const rateLimiter = createActionRateLimiter();
-    const nowMs = vi.fn(() => Date.now());
-    const registry: ActionRegistry = {
-      "shop.purchaseItem": defineAction({
-        id: "shop.purchaseItem",
-        rateLimit: {
-          key: "player",
-          windowMs: 1000,
-          max: 1,
-        },
-        run(_ctx, input) {
-          return { ok: true, input };
-        },
-      }),
-    };
-
-    bindRemoteFunctionActions(remote, registry, {
-      rateLimiter,
-      nowMs,
-      rateLimitKey: (_actionId, ctx) =>
-        (ctx.player as { readonly bucket?: string } | undefined)?.bucket ?? "anonymous",
-    });
-
-    await expect(remote.InvokeServer("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({
-      ok: true,
-      input: { itemId: "sword" },
-    });
-
-    await expect(
-      remote.InvokeServer("shop.purchaseItem", { itemId: "shield" }),
-    ).rejects.toMatchObject({
-      name: "ActionRateLimitError",
-      message: "Aruna action shop.purchaseItem is rate limited. Retry after 1000ms.",
     });
   });
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearActionInvoker, invokeAction, setActionInvoker } from "../src/client.js";
-import { createInMemoryActionInvoker } from "../src/client.js";
+import { createInMemoryActionInvoker } from "../src/runtime/memory.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
 import { dispatchAction, type ActionRegistry } from "../src/server.js";
@@ -92,7 +92,7 @@ describe("server runtime", () => {
     const registry: ActionRegistry = {};
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }),
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: "sword" }),
     ).rejects.toThrowError("Aruna action not found: shop.purchaseItem");
   });
 
@@ -109,7 +109,7 @@ describe("server runtime", () => {
     };
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: 123 }),
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: 123 }),
     ).rejects.toThrowError(
       "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
     );
@@ -165,7 +165,7 @@ describe("server runtime", () => {
     };
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }),
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: "sword" }),
     ).rejects.toThrowError(
       "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
     );
@@ -191,7 +191,7 @@ describe("server runtime", () => {
     };
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "sword" }),
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: "sword" }),
     ).rejects.toMatchObject({
       name: "ActionSerializationError",
       actionId: "shop.purchaseItem",
@@ -217,7 +217,7 @@ describe("server runtime", () => {
     };
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: 123 }),
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: 123 }),
     ).rejects.toMatchObject({
       name: "SchemaValidationError",
       actionId: "shop.purchaseItem",
@@ -237,7 +237,7 @@ describe("in-memory transport", () => {
       }),
     };
 
-    setActionInvoker(createInMemoryActionInvoker(registry));
+    setActionInvoker(createInMemoryActionInvoker(registry, { player: "tester" }));
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({
       ok: true,
@@ -258,7 +258,7 @@ describe("in-memory transport", () => {
       }),
     };
 
-    setActionInvoker(createInMemoryActionInvoker(registry));
+    setActionInvoker(createInMemoryActionInvoker(registry, { player: "tester" }));
 
     await expect(invokeAction("shop.purchaseItem", { itemId: 123 })).rejects.toThrowError(
       "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
@@ -275,7 +275,7 @@ describe("in-memory transport", () => {
       }),
     };
 
-    setActionInvoker(createInMemoryActionInvoker(registry));
+    setActionInvoker(createInMemoryActionInvoker(registry, { player: "tester" }));
 
     await expect(
       invokeAction("shop.purchaseItem", {
@@ -309,7 +309,7 @@ describe("generated-style stubs", () => {
       }),
     };
 
-    setActionInvoker(createInMemoryActionInvoker(registry));
+    setActionInvoker(createInMemoryActionInvoker(registry, { player: "tester" }));
 
     await expect(purchaseItem({ itemId: "sword" })).resolves.toEqual({
       ok: true,

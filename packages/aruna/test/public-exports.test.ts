@@ -2,12 +2,7 @@
 // slim root (../dist/index.js) so this exercises the real public-export contract.
 import { afterEach, describe, expect, it } from "vitest";
 import { defineConfig } from "../dist/index.js";
-import {
-  clearActionInvoker,
-  createClientApp,
-  createInMemoryActionInvoker,
-  invokeAction,
-} from "../client.js";
+import { clearActionInvoker, createClientApp, invokeAction } from "../client.js";
 import {
   ActionRateLimitError,
   ActionSerializationError,
@@ -21,29 +16,20 @@ import {
 } from "../server.js";
 import {
   ACTION_REMOTE_NAME,
-  ARUNA_FOLDER_NAME,
+  SIGNAL_REMOTE_NAME,
   bindActions,
-  bindRemoteEventActions,
-  bindRemoteFunctionActions,
   createActionInvoker,
   createRemoteEventActionInvoker,
-  createRemoteFunctionActionInvoker,
   ensureActionRemote,
   getActionRemote,
   waitForActionRemote,
-  unbindRemoteFunctionActions,
-  type RemoteEventActionRequest,
   type RemoteEventActionResponse,
   type RemoteEventClientLike,
-  type RemoteEventServerLike,
   type RemoteEventSignalLike,
-  type RemoteFunctionClientLike,
-  type RemoteFunctionServerLike,
 } from "../roblox.js";
 import { schema, schema as schemaRoot } from "../schema.js";
 
-type FakeRemoteFunction = RemoteFunctionClientLike & RemoteFunctionServerLike;
-type FakeRemoteEvent = RemoteEventClientLike & RemoteEventServerLike<unknown>;
+type FakeRemoteEventClient = RemoteEventClientLike;
 
 function createFakeSignal<TArgs extends readonly unknown[]>() {
   const listeners = new Set<(...args: TArgs) => void>();
@@ -94,23 +80,10 @@ describe("public exports", () => {
       }),
     };
 
-    const remote: FakeRemoteFunction = {
-      InvokeServer(actionId, input) {
-        if (this.OnServerInvoke === undefined) {
-          throw new Error("RemoteFunction server handler is not bound.");
-        }
-
-        return this.OnServerInvoke({ name: "Ada" }, actionId, input);
-      },
-    };
-
-    const serverApp = createServerApp({
-      actions: registry,
-      transport: ({ registry: actions, dispatch }) =>
-        bindRemoteFunctionActions(remote, actions, dispatch),
-    });
+    const serverApp = createServerApp({ actions: registry });
     const clientApp = createClientApp({
-      transport: createRemoteFunctionActionInvoker(remote),
+      transport: (actionId, input) =>
+        serverApp.dispatch(actionId, { player: { name: "Ada" } }, input),
     });
 
     await expect(invokeAction("shop.purchaseItem", { itemId: "sword" })).resolves.toEqual({
@@ -119,16 +92,10 @@ describe("public exports", () => {
     });
 
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", {}, { itemId: "shield" }),
+      dispatchAction(registry, "shop.purchaseItem", { player: { name: "Ada" } }, { itemId: "shield" }),
     ).resolves.toEqual({
-      ctx: {},
+      ctx: { player: { name: "Ada" } },
       input: { itemId: "shield" },
-    });
-
-    const inMemoryInvoker = createInMemoryActionInvoker(registry);
-    await expect(inMemoryInvoker("shop.purchaseItem", { itemId: "potion" })).resolves.toEqual({
-      ctx: {},
-      input: { itemId: "potion" },
     });
 
     expect(schema.string().kind).toBe("string");
@@ -148,22 +115,10 @@ describe("public exports", () => {
 
     clientApp.dispose();
     serverApp.dispose();
-    unbindRemoteFunctionActions(remote);
   });
 
-  it("exposes the RemoteEvent transport entrypoints", async () => {
+  it("exposes the RemoteEvent client invoker", async () => {
     const remoteClientSignal = createFakeSignal<[RemoteEventActionResponse]>();
-    const remoteServerSignal = createFakeSignal<[unknown, RemoteEventActionRequest]>();
-    const remote: FakeRemoteEvent = {
-      OnClientEvent: remoteClientSignal.signal,
-      OnServerEvent: remoteServerSignal.signal,
-      FireServer(request) {
-        remoteServerSignal.emit({ name: "Ada" }, request);
-      },
-      FireClient(_player, response) {
-        remoteClientSignal.emit(response);
-      },
-    };
     const registry: ActionRegistry = {
       "shop.purchaseItem": defineActionServer({
         id: "shop.purchaseItem",
@@ -172,13 +127,23 @@ describe("public exports", () => {
         },
       }),
     };
+    const serverApp = createServerApp({ actions: registry });
+    const remote: FakeRemoteEventClient = {
+      OnClientEvent: remoteClientSignal.signal,
+      FireServer(request) {
+        void serverApp.dispatch(request.actionId, { player: { name: "Ada" } }, request.input).then(
+          (output) => remoteClientSignal.emit({ requestId: request.requestId, ok: true, output }),
+          (error: unknown) =>
+            remoteClientSignal.emit({
+              requestId: request.requestId,
+              ok: false,
+              error: { message: String(error) },
+            }),
+        );
+      },
+    };
 
     const invoker = createRemoteEventActionInvoker(remote);
-    const serverApp = createServerApp({
-      actions: registry,
-      transport: ({ registry: actions, dispatch }) =>
-        bindRemoteEventActions(remote, actions, dispatch),
-    });
     const clientApp = createClientApp({
       transport: invoker,
     });
@@ -194,8 +159,8 @@ describe("public exports", () => {
   });
 
   it("exposes the default Roblox action remote helpers", () => {
-    expect(ARUNA_FOLDER_NAME).toBe("Aruna");
-    expect(ACTION_REMOTE_NAME).toBe("Actions");
+    expect(ACTION_REMOTE_NAME).toBe("ArunaActionRemoteEvent");
+    expect(SIGNAL_REMOTE_NAME).toBe("ArunaSignalRemoteEvent");
     expect(getActionRemote).toBeTypeOf("function");
     expect(ensureActionRemote).toBeTypeOf("function");
     expect(waitForActionRemote).toBeTypeOf("function");

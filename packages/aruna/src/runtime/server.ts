@@ -28,7 +28,10 @@ export type ActionRunContext<
   TPlayer = unknown,
   TSignals extends SignalRegistry = SignalRegistry,
 > = {
-  readonly player?: TPlayer;
+  // Always present: every wire dispatch carries the calling player, and
+  // in-process dispatches (`app.dispatch`, tests) supply one in the context
+  // they pass. Matches the native runtime.
+  readonly player: TPlayer;
   // The app-owned signal publisher, injected by `createServerApp` when it owns a
   // publisher (`{ signals, createPublisher }`). Lets an action push server→client
   // signals from inside `run` without a hand-written plumbing module. Optional on
@@ -118,11 +121,12 @@ export type ActionMiddleware<TPlayer = unknown> = (
 // Observability hook for errors thrown from the action execution chain
 // (middleware, `run`, output validation). Called before the error propagates to
 // the transport; rate-limit and input-validation rejections are not routed here.
+// The info shape is `{ actionId, player }`, matching the native runtime.
 export type ActionErrorHandler<TPlayer = unknown> = (
   error: unknown,
   info: {
     readonly actionId: string;
-    readonly ctx: ActionRunContext<TPlayer>;
+    readonly player: TPlayer;
   },
 ) => void;
 
@@ -169,13 +173,16 @@ export async function dispatchAction<TPlayer = unknown>(
   const effectiveRateLimit = action.rateLimit ?? options?.defaultRateLimit;
   if (effectiveRateLimit !== undefined) {
     const rateLimiter = options?.rateLimiter ?? defaultActionRateLimiter;
-    const rateLimitKey = options?.rateLimitKey ?? defaultActionRateLimitKeyResolver<TPlayer>;
-    const result = rateLimiter.check(
-      actionId,
-      rateLimitKey(actionId, ctx),
-      effectiveRateLimit,
-      options?.nowMs?.(),
-    );
+    // An explicit rateLimitKey resolver always wins; otherwise a "global" limit
+    // collapses every caller into one shared bucket (matching the native
+    // runtime's resolveRateLimitKey) and "player" buckets per player.
+    const bucketKey =
+      options?.rateLimitKey !== undefined
+        ? options.rateLimitKey(actionId, ctx)
+        : effectiveRateLimit.key === "global"
+          ? "global"
+          : defaultActionRateLimitKeyResolver<TPlayer>(actionId, ctx);
+    const result = rateLimiter.check(actionId, bucketKey, effectiveRateLimit, options?.nowMs?.());
 
     if (!result.ok) {
       throw new ActionRateLimitError(
@@ -230,7 +237,7 @@ export async function dispatchAction<TPlayer = unknown>(
   try {
     return await invoke();
   } catch (error) {
-    options?.onError?.(error, { actionId, ctx: runCtx });
+    options?.onError?.(error, { actionId, player: runCtx.player });
     throw error;
   }
 }

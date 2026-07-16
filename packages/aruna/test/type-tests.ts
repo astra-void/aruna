@@ -56,7 +56,6 @@ const nestedConfig = defineConfig({
     manifest: "src/.aruna/manifest.json",
   },
   actions: {
-    transport: "remote-event",
     defaultRateLimit: {
       key: "player",
       windowMs: 1000,
@@ -155,12 +154,12 @@ const noSchemaAction = defineAction({
 });
 
 // The Roblox-flavored `defineAction` from `aruna/roblox` defaults `TPlayer` to
-// `Player`, so `ctx.player` is `Player | undefined` with no annotation.
+// `Player`, so `ctx.player` is `Player` with no annotation.
 const robloxAction = defineRobloxAction({
   id: "shop.robloxPlayer",
   input: schema.object({ amount: schema.number() }),
   run(ctx, input) {
-    type _RobloxCtxPlayer = Expect<Equal<typeof ctx.player, Player | undefined>>;
+    type _RobloxCtxPlayer = Expect<Equal<typeof ctx.player, Player>>;
     type _RobloxInput = Expect<Equal<typeof input, { amount: number }>>;
     void ctx;
     void input;

@@ -61,15 +61,15 @@ with `createActionDefiner<Signals, Player>()`. See
 
 With `defineAction` from `aruna/server`, `TPlayer` defaults to `unknown`, so `ctx.player`
 is `unknown`. Import `defineAction` from **`aruna/roblox`** instead and `TPlayer` defaults
-to `Player`, giving you `ctx.player?: Player` for free:
+to `Player`, giving you `ctx.player: Player` for free:
 
 ```ts
 import { defineAction } from "aruna/roblox";
-// ctx.player is Player | undefined here
+// ctx.player is Player here
 ```
 
-`ctx.player` is **optional at runtime** regardless of typing — tests dispatch actions
-with no player (see in-memory invoker below). Guard it: `ctx.player?.UserId`.
+`ctx.player` is **always present**: every wire dispatch carries the calling player, and
+in-process dispatches (`app.dispatch`, tests) supply one in the context they pass.
 
 ## Server registration
 
@@ -97,20 +97,18 @@ const serverApp = createServerApp<Player>({
 {
   actions: ActionRegistry;
   transport?: ServerTransport;                      // owns the remote binding (recommended)
-  defaultRateLimit?: { key: "player"; windowMs: number; max: number };
-  rateLimiter?: ActionRateLimiter;                  // custom limiter instance
-  rateLimitKey?: (actionId, ctx) => string;         // custom bucket key
-  nowMs?: () => number;                             // time source (tests)
+  defaultRateLimit?: { key: "player" | "global"; windowMs: number; max: number };
+  signals?: SignalRegistry;                         // + createPublisher: app-owned publisher
+  middleware?: ActionMiddleware[];
+  onError?: (err, info) => void;                    // see below
 }
 ```
 
-`robloxRemoteEvent(options?)` (from `aruna/roblox`) is the default transport: it ensures
-`ReplicatedStorage/Aruna/Actions` exists and routes incoming requests through the registry
-with validation + rate limiting. `robloxRemoteFunction(remote, options?)` does the same over
-a RemoteFunction. Lower-level binders (`bindActions`, `bindRemoteEventActions`,
-`bindRemoteFunctionActions`) remain exported if you wire your own remote — wrap one in an
-inline `transport: ({ registry, dispatch }) => bindActions(registry, dispatch)` so the app
-still owns the binding and `defaultRateLimit` reaches the wire.
+`robloxRemoteEvent()` (from `aruna/roblox`) is the default (and only) transport: it
+ensures the flat `ReplicatedStorage/ArunaActionRemoteEvent` exists and routes incoming
+requests through the registry with validation + rate limiting. `bindActions(registry)`
+remains exported if you bind outside an app, but prefer the app-owned transport so
+`defaultRateLimit` and the publisher reach the wire.
 
 ## Client calls
 
@@ -131,19 +129,21 @@ const result = await purchaseItem({ itemId: "sword", quantity: 1 });
 can find it; call its `.dispose()` to clear it. The default transport is
 `createActionInvoker()` (from `aruna/roblox`), the RemoteEvent invoker paired with the
 server's `robloxRemoteEvent()`. Pass `createClientApp({ transport })` to customize it —
-e.g. `createActionInvoker({ createRequestId, requestTimeoutMs })`, a RemoteFunction
-invoker, or an in-memory invoker in tests.
+e.g. `createActionInvoker({ createRequestId, requestTimeoutMs })`.
 
 You can also call the low-level `invokeAction(actionId, input, options?)` from
 `aruna/client` directly, but prefer the generated typed stubs.
 
 ## Rate limiting
 
-Limits are always keyed per player. Resolution order: the action's own `rateLimit`, then
-the app/config `defaultRateLimit`, then unlimited.
+Limits are keyed per player (`key: "player"`, the default) or server-wide
+(`key: "global"` — one shared bucket for every caller, useful for actions that hit an
+expensive shared resource). Resolution order: the action's own `rateLimit`, then the
+app/config `defaultRateLimit`, then unlimited.
 
 ```ts
 defineAction({ id: "shop.buy", rateLimit: { key: "player", windowMs: 1000, max: 5 } /* ... */ });
+defineAction({ id: "world.regen", rateLimit: { key: "global", windowMs: 60_000, max: 1 } /* ... */ });
 ```
 
 ```ts
@@ -174,13 +174,16 @@ createServerApp<Player>({
   actions,
   transport: robloxRemoteEvent(),
   middleware: [requireAdmin],
-  onError: (error, info) => log.warn(`${info.actionId} failed`, error),
+  onError: (err, info) => log.warn(`${info.actionId} failed for ${info.player}`, err),
 });
 ```
 
-> roblox-ts reserves the identifier `next` for compiler-internal use, so name the
-> second parameter something else (`proceed` above) in any middleware you write —
-> `next` will fail to compile.
+`onError` receives `(err, { actionId, player })` — the failing action's id and the
+calling player (when the dispatch had one).
+
+> roblox-ts reserves the identifiers `next` and `error` for compiler-internal use, so
+> name parameters something else (`proceed` and `err` above) in any middleware or error
+> handler you write — `next` and `error` will fail to compile.
 
 Middleware is applied **outermost-first** and runs **inside rate limiting and input
 validation** — a throttled or malformed request never reaches it, and `info.input` is
@@ -197,11 +200,17 @@ use it when you genuinely don't care whether/when the server finished.
 
 ## Testing without a transport
 
-`createInMemoryActionInvoker(registry, ctx?)` from `aruna/client` calls actions directly
-against a registry — no RemoteEvent — which is how unit tests exercise actions. This is
-why `ctx.player` is optional.
+`createServerApp` exposes `dispatch(actionId, ctx, input)` — the same validated,
+rate-limited, middleware-wrapped path the wire uses, callable in-process with no
+RemoteEvent. Supply the context (including a `player`) yourself:
 
 ```ts
-import { createInMemoryActionInvoker } from "aruna/client";
-const invoker = createInMemoryActionInvoker(actions);
+const app = createServerApp({ actions });
+const result = await app.dispatch("shop.purchaseItem", { player: fakePlayer }, { itemId: "sword" });
 ```
+
+To execute compiled roblox-ts action modules outside Studio, run them under **Lune**
+with the loader/fakes harness from `apps/roblox-runtime-test` — see its README for the
+consumer adoption pattern. roblox-ts action code does not load under Node (Luau globals,
+extensionless imports), so Node-side unit tests of real action modules are not the
+supported path.

@@ -24,7 +24,7 @@ pub use actions::{
     ArunaSchemaMetadata, ArunaSignalRecord, SignalDiscoveryResult,
 };
 pub use config::{
-    ActionRateLimitConfig, ActionTransport, ArunaConfig, CompilerConfig, ConventionConfig,
+    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig,
     StrictConfig, StrictSeverity,
 };
 pub use diagnostics::{

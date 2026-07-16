@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeBinary, encodeBinary } from "../src/runtime/binary.js";
+import { decodeBinary, encodeBinary, schemaFingerprint } from "../src/runtime/binary.js";
 import { schema, validateSchema } from "../src/schema.js";
 
 function roundTrip(s: Parameters<typeof encodeBinary>[0], value: unknown): unknown {
@@ -23,7 +23,7 @@ describe("binary codec round trips", () => {
   it("round trips literals without spending bytes", () => {
     const s = schema.literal("ready");
     const bytes = encodeBinary(s, "ready");
-    expect(bytes.length).toBe(0);
+    expect(bytes.length).toBe(4); // frame header only
     expect(decodeBinary(s, bytes)).toBe("ready");
   });
 
@@ -62,8 +62,8 @@ describe("binary codec round trips", () => {
     const s = schema.tuple([schema.string(), schema.u8(), schema.boolean()]);
     expect(roundTrip(s, ["sword", 3, true])).toEqual(["sword", 3, true]);
 
-    // string("ab") = u32 len + 2 bytes = 6, u8 = 1, bool = 1 — no extra bytes.
-    expect(encodeBinary(s, ["ab", 7, false]).byteLength).toBe(8);
+    // 4-byte frame header + string("ab") = u32 len + 2 bytes = 6, u8 = 1, bool = 1.
+    expect(encodeBinary(s, ["ab", 7, false]).byteLength).toBe(12);
   });
 
   it("round trips present and absent optionals", () => {
@@ -127,8 +127,8 @@ describe("binary codec round trips", () => {
     }));
     const binary = encodeBinary(s, value).length;
     const json = textByteLength(JSON.stringify(value));
-    // 4-byte count + 50 * (8-byte hp + 1-byte alive) = 454 bytes.
-    expect(binary).toBe(454);
+    // 4-byte frame header + 4-byte count + 50 * (8-byte hp + 1-byte alive) = 458 bytes.
+    expect(binary).toBe(458);
     expect(binary).toBeLessThan(json);
   });
 
@@ -140,6 +140,46 @@ describe("binary codec round trips", () => {
   it("throws when decoding past the end of the buffer", () => {
     const s = schema.number();
     expect(() => decodeBinary(s, new Uint8Array([1, 2]))).toThrowError(/past the end/);
+
+    // A valid header followed by a truncated payload also fails loudly.
+    const truncated = encodeBinary(schema.string(), "hello").subarray(0, 6);
+    expect(() => decodeBinary(schema.string(), truncated)).toThrowError(/past the end/);
+  });
+});
+
+describe("schema fingerprint framing", () => {
+  it("rejects a payload encoded with a different schema", () => {
+    const v1 = schema.object({ hp: schema.number() });
+    const v2 = schema.object({ armor: schema.number(), hp: schema.number() });
+    const bytes = encodeBinary(v1, { hp: 10 });
+
+    expect(() => decodeBinary(v2, bytes)).toThrowError(/schema mismatch/);
+  });
+
+  it("is stable for equal layouts and sensitive to layout changes", () => {
+    const a = schema.object({ hp: schema.u16(), name: schema.string() });
+    const b = schema.object({ name: schema.string(), hp: schema.u16() });
+    // Key order in source does not matter — the layout is sorted.
+    expect(schemaFingerprint(a)).toBe(schemaFingerprint(b));
+
+    const widened = schema.object({ hp: schema.u32(), name: schema.string() });
+    expect(schemaFingerprint(widened)).not.toBe(schemaFingerprint(a));
+
+    const renamed = schema.object({ health: schema.u16(), name: schema.string() });
+    expect(schemaFingerprint(renamed)).not.toBe(schemaFingerprint(a));
+  });
+
+  it("matches the pinned cross-runtime fingerprint", () => {
+    // The same schema is pinned in the Lune harness
+    // (apps/roblox-runtime-test/lune/specs/binary.luau). If either runtime's
+    // canonical layout string or hash drifts, this fails on that side.
+    const s = schema.object({
+      hp: schema.u16(),
+      name: schema.string(),
+      tags: schema.array(schema.string()),
+      pos: schema.vector3(),
+    });
+    expect(schemaFingerprint(s)).toBe(2935581200);
   });
 });
 
@@ -160,13 +200,13 @@ describe("numeric width hints", () => {
   });
 
   it("packs each width to its declared byte count", () => {
-    expect(encodeBinary(schema.u8(), 1).length).toBe(1);
-    expect(encodeBinary(schema.i8(), 1).length).toBe(1);
-    expect(encodeBinary(schema.u16(), 1).length).toBe(2);
-    expect(encodeBinary(schema.i16(), 1).length).toBe(2);
-    expect(encodeBinary(schema.u32(), 1).length).toBe(4);
-    expect(encodeBinary(schema.f32(), 1).length).toBe(4);
-    expect(encodeBinary(schema.number(), 1).length).toBe(8);
+    expect(encodeBinary(schema.u8(), 1).length).toBe(4 + 1);
+    expect(encodeBinary(schema.i8(), 1).length).toBe(4 + 1);
+    expect(encodeBinary(schema.u16(), 1).length).toBe(4 + 2);
+    expect(encodeBinary(schema.i16(), 1).length).toBe(4 + 2);
+    expect(encodeBinary(schema.u32(), 1).length).toBe(4 + 4);
+    expect(encodeBinary(schema.f32(), 1).length).toBe(4 + 4);
+    expect(encodeBinary(schema.number(), 1).length).toBe(4 + 8);
   });
 
   it("shrinks a struct array when widths are tightened", () => {
@@ -176,9 +216,9 @@ describe("numeric width hints", () => {
       hp: index,
       team: index % 4,
     }));
-    // wide: 4 + 50*(8+8) = 804; tight: 4 + 50*(2+1) = 154.
-    expect(encodeBinary(wide, value).length).toBe(804);
-    expect(encodeBinary(tight, value).length).toBe(154);
+    // header 4 + count 4 + 50*(8+8) = 808; header 4 + count 4 + 50*(2+1) = 158.
+    expect(encodeBinary(wide, value).length).toBe(808);
+    expect(encodeBinary(tight, value).length).toBe(158);
   });
 
   it("validates integer width ranges and integrality", () => {
@@ -215,13 +255,13 @@ describe("Roblox userdata kinds", () => {
   });
 
   it("packs each userdata kind to its declared byte count", () => {
-    expect(encodeBinary(schema.vector3(), { x: 0, y: 0, z: 0 }).length).toBe(12);
-    expect(encodeBinary(schema.color3(), { r: 0, g: 0, b: 0 }).length).toBe(12);
+    expect(encodeBinary(schema.vector3(), { x: 0, y: 0, z: 0 }).length).toBe(4 + 12);
+    expect(encodeBinary(schema.color3(), { r: 0, g: 0, b: 0 }).length).toBe(4 + 12);
     expect(
       encodeBinary(schema.cframe(), {
         components: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
       }).length,
-    ).toBe(48);
+    ).toBe(4 + 48);
   });
 
   it("validates userdata shapes", () => {

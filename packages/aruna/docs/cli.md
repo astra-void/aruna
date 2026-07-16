@@ -84,7 +84,6 @@ import { defineConfig } from "aruna";
 
 export default defineConfig({
   actions: {
-    transport: "remote-event",               // "remote-event" | "remote-function" | "memory"
     defaultRateLimit: { key: "player", windowMs: 1000, max: 20 },
   },
   conventions: {

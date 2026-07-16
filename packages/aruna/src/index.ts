@@ -26,4 +26,4 @@ export {
 export { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
 
 // The schema-driven binary codec is wire-level and shared by both runtimes.
-export { decodeBinary, encodeBinary } from "./runtime/binary.js";
+export { decodeBinary, encodeBinary, schemaFingerprint } from "./runtime/binary.js";

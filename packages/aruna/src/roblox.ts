@@ -1,9 +1,29 @@
 // Roblox transport: the default RemoteEvent wiring, the action invoker/binder,
 // and the remote-event / remote-signal primitives. Renamed from /roblox-runtime.
-export * from "./runtime/roblox.js";
 export * from "./runtime/roblox-action-remote.js";
 export * from "./runtime/roblox-signal-remote.js";
-export * from "./runtime/remote-event.js";
+// The wire-shape types and the raw invoker stay public for tooling/tests;
+// `bindRemoteEventActions` is internal — `bindActions` / `robloxRemoteEvent`
+// (matching the native runtime) are the public server binding surface.
+export {
+  DEFAULT_ACTION_REQUEST_TIMEOUT_MS,
+  TimeoutError,
+  createRemoteEventActionInvoker,
+  type ActionContextFactory,
+  type ActionInvokerOptions,
+  type ActionTimeoutCanceler,
+  type ActionTimeoutScheduler,
+  type BindActionsOptions,
+  type DisposableActionInvoker,
+  type RemoteEventActionErrorPayload,
+  type RemoteEventActionRequest,
+  type RemoteEventActionResponse,
+  type RemoteEventClientLike,
+  type RemoteEventRequestIdFactory,
+  type RemoteEventServerLike,
+  type RemoteEventSignalConnectionLike,
+  type RemoteEventSignalLike,
+} from "./runtime/remote-event.js";
 export * from "./runtime/remote-signal.js";
 
 import type { ActionDefinition, PublishingActionDefinition } from "./actions/define-action.js";

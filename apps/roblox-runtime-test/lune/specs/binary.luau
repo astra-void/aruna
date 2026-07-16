@@ -13,6 +13,8 @@ return function(ctx)
 		return decodeBinary(s, encodeBinary(s, value))
 	end
 
+	local schemaFingerprint = binary.schemaFingerprint
+
 	t.describe("binary codec", function()
 		t.it("round trips primitives", function()
 			t.eq(roundTrip(schema.string(), "hello"), "hello")
@@ -27,10 +29,10 @@ return function(ctx)
 			t.eq(roundTrip(schema.string(), ""), "")
 		end)
 
-		t.it("spends no bytes on literals", function()
+		t.it("spends no payload bytes on literals", function()
 			local s = schema.literal("ready")
 			local bytes = encodeBinary(s, "ready")
-			t.eq(buffer.len(bytes), 0)
+			t.eq(buffer.len(bytes), 4) -- frame header only
 			t.eq(decodeBinary(s, bytes), "ready")
 		end)
 
@@ -77,8 +79,8 @@ return function(ctx)
 			t.eq(decoded[1], "sword")
 			t.eq(decoded[2], 3)
 			t.eq(decoded[3], true)
-			-- string("ab") = u32 len + 2 bytes = 6, u8 = 1, bool = 1.
-			t.eq(buffer.len(encodeBinary(s, { "ab", 7, false })), 8)
+			-- 4-byte frame header + string("ab") = u32 len + 2 bytes = 6, u8 = 1, bool = 1.
+			t.eq(buffer.len(encodeBinary(s, { "ab", 7, false })), 12)
 		end)
 
 		t.it("round trips enums and unions", function()
@@ -100,13 +102,13 @@ return function(ctx)
 		end)
 
 		t.it("packs each width to its declared byte count", function()
-			t.eq(buffer.len(encodeBinary(schema.u8(), 1)), 1)
-			t.eq(buffer.len(encodeBinary(schema.i8(), 1)), 1)
-			t.eq(buffer.len(encodeBinary(schema.u16(), 1)), 2)
-			t.eq(buffer.len(encodeBinary(schema.i16(), 1)), 2)
-			t.eq(buffer.len(encodeBinary(schema.u32(), 1)), 4)
-			t.eq(buffer.len(encodeBinary(schema.f32(), 1)), 4)
-			t.eq(buffer.len(encodeBinary(schema.number(), 1)), 8)
+			t.eq(buffer.len(encodeBinary(schema.u8(), 1)), 4 + 1)
+			t.eq(buffer.len(encodeBinary(schema.i8(), 1)), 4 + 1)
+			t.eq(buffer.len(encodeBinary(schema.u16(), 1)), 4 + 2)
+			t.eq(buffer.len(encodeBinary(schema.i16(), 1)), 4 + 2)
+			t.eq(buffer.len(encodeBinary(schema.u32(), 1)), 4 + 4)
+			t.eq(buffer.len(encodeBinary(schema.f32(), 1)), 4 + 4)
+			t.eq(buffer.len(encodeBinary(schema.number(), 1)), 4 + 8)
 		end)
 
 		t.it("validates integer width ranges", function()
@@ -158,9 +160,44 @@ return function(ctx)
 		end)
 
 		t.it("packs each userdata kind to its declared byte count", function()
-			t.eq(buffer.len(encodeBinary(schema.vector3(), Vector3.new(0, 0, 0))), 12)
-			t.eq(buffer.len(encodeBinary(schema.color3(), Color3.new(0, 0, 0))), 12)
-			t.eq(buffer.len(encodeBinary(schema.cframe(), CFrame.new(0, 0, 0))), 48)
+			t.eq(buffer.len(encodeBinary(schema.vector3(), Vector3.new(0, 0, 0))), 4 + 12)
+			t.eq(buffer.len(encodeBinary(schema.color3(), Color3.new(0, 0, 0))), 4 + 12)
+			t.eq(buffer.len(encodeBinary(schema.cframe(), CFrame.new(0, 0, 0))), 4 + 48)
+		end)
+
+		t.it("errors on a truncated buffer instead of raw buffer access", function()
+			local full = encodeBinary(schema.string(), "hello")
+			local truncated = buffer.create(6)
+			buffer.copy(truncated, 0, full, 0, 6)
+			local ok, err = pcall(function()
+				decodeBinary(schema.string(), truncated)
+			end)
+			t.isFalse(ok, "truncated decode should throw")
+			t.contains(tostring(err), "past the end")
+		end)
+
+		t.it("rejects a payload encoded with a different schema", function()
+			local v1 = schema.object({ hp = schema.number() })
+			local v2 = schema.object({ armor = schema.number(), hp = schema.number() })
+			local bytes = encodeBinary(v1, { hp = 10 })
+			local ok, err = pcall(function()
+				decodeBinary(v2, bytes)
+			end)
+			t.isFalse(ok, "cross-schema decode should throw")
+			t.contains(tostring(err), "schema mismatch")
+		end)
+
+		t.it("computes the same fingerprint as the Node reference runtime", function()
+			-- Pinned expected value computed by the Node runtime for this exact
+			-- schema (see the matching case in packages/aruna/test/binary.test.ts).
+			-- If this changes on either side, the wire guard is broken.
+			local s = schema.object({
+				hp = schema.u16(),
+				name = schema.string(),
+				tags = schema.array(schema.string()),
+				pos = schema.vector3(),
+			})
+			t.eq(schemaFingerprint(s), 2935581200)
 		end)
 	end)
 end

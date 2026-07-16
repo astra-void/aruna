@@ -38,7 +38,7 @@ export type ActionContractRecord = {
     readonly policy: "plain-data-v1";
   };
   readonly rateLimit: {
-    readonly key: "player";
+    readonly key: "player" | "global";
     readonly windowMs: number;
     readonly max: number;
   } | null;

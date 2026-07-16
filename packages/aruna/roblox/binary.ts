@@ -2,7 +2,13 @@
 //
 // Mirror of the Node reference codec (src/runtime/binary.ts) over the Luau
 // `buffer` library. Encodes a schema-conforming value into a packed buffer that
-// RemoteEvents replicate natively, spending no bytes on field names or framing.
+// RemoteEvents replicate natively, spending no bytes on field names.
+//
+// Every frame starts with a u32 **schema fingerprint** (a portable hash of the
+// schema layout, identical across both runtimes). Decoding is positional, so a
+// client and server holding different schema versions — the normal state
+// mid-rollout — would otherwise silently mis-read each other's bytes; the
+// fingerprint check turns that into an immediate, explicit error.
 //
 // Layout per schema typeName matches the reference codec exactly so a value
 // encoded on one runtime decodes on the other:
@@ -122,28 +128,45 @@ class BinaryWriter {
 
 class BinaryReader {
 	private offset = 0;
+	private readonly length: number;
 
-	constructor(private readonly buf: buffer) {}
+	constructor(private readonly buf: buffer) {
+		this.length = buffer.len(buf);
+	}
+
+	// Bounds guard before every read. The buffer on a client->server action is
+	// untrusted input, so a truncated or corrupt frame must fail with a clear
+	// error instead of an unguarded Luau buffer-access error (or worse, reading
+	// adjacent bytes). Mirrors the Node reference reader.
+	private require(extra: number): void {
+		if (this.offset + extra > this.length) {
+			throw "Aruna binary decode ran past the end of the buffer.";
+		}
+	}
 
 	readU8(): number {
+		this.require(1);
 		const value = buffer.readu8(this.buf, this.offset);
 		this.offset += 1;
 		return value;
 	}
 
 	readU32(): number {
+		this.require(4);
 		const value = buffer.readu32(this.buf, this.offset);
 		this.offset += 4;
 		return value;
 	}
 
 	readF64(): number {
+		this.require(8);
 		const value = buffer.readf64(this.buf, this.offset);
 		this.offset += 8;
 		return value;
 	}
 
 	readF32(): number {
+		this.require(4);
 		const value = buffer.readf32(this.buf, this.offset);
 		this.offset += 4;
 		return value;
@@ -157,20 +180,24 @@ class BinaryReader {
 		} else if (format === "u8") {
 			return this.readU8();
 		} else if (format === "u16") {
+			this.require(2);
 			const value = buffer.readu16(this.buf, this.offset);
 			this.offset += 2;
 			return value;
 		} else if (format === "u32") {
 			return this.readU32();
 		} else if (format === "i8") {
+			this.require(1);
 			const value = buffer.readi8(this.buf, this.offset);
 			this.offset += 1;
 			return value;
 		} else if (format === "i16") {
+			this.require(2);
 			const value = buffer.readi16(this.buf, this.offset);
 			this.offset += 2;
 			return value;
 		} else if (format === "i32") {
+			this.require(4);
 			const value = buffer.readi32(this.buf, this.offset);
 			this.offset += 4;
 			return value;
@@ -184,6 +211,7 @@ class BinaryReader {
 
 	readString(): string {
 		const length = this.readU32();
+		this.require(length);
 		const value = buffer.readstring(this.buf, this.offset, length);
 		this.offset += length;
 		return value;
@@ -459,12 +487,125 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
 	throw "Aruna binary decode: unsupported schema kind.";
 }
 
+function literalTag(value: unknown): string {
+	if (value === undefined) {
+		return "undefined:undefined";
+	}
+	if (typeIs(value, "string")) {
+		return `string:${value}`;
+	}
+	if (typeIs(value, "number")) {
+		return `number:${tostring(value)}`;
+	}
+	if (typeIs(value, "boolean")) {
+		return `boolean:${tostring(value)}`;
+	}
+	throw "Aruna schema fingerprint: unsupported literal value.";
+}
+
+// Canonical layout string. MUST stay byte-identical with the Node reference
+// runtime's schemaLayoutString — the fingerprint only works as a cross-version
+// guard if both runtimes derive the same string for the same schema.
+function schemaLayoutString(schema: Schema): string {
+	const typeName = schema.typeName;
+	if (typeName === "string") {
+		return "s";
+	} else if (typeName === "number") {
+		return `n:${schema.format ?? "f64"}`;
+	} else if (typeName === "boolean") {
+		return "b";
+	} else if (typeName === "literal") {
+		return `l:${literalTag(schema.value)}`;
+	} else if (typeName === "array") {
+		if (schema.item === undefined) {
+			throw "Aruna schema fingerprint: array schema is missing its item.";
+		}
+		return `a(${schemaLayoutString(schema.item)})`;
+	} else if (typeName === "object") {
+		const fields = schema.fields;
+		if (fields === undefined) {
+			throw "Aruna schema fingerprint: object schema is missing its fields.";
+		}
+		const parts: Array<string> = [];
+		for (const key of sortedKeys(fields)) {
+			const fieldSchema = fields[key];
+			if (fieldSchema !== undefined) {
+				parts.push(`${key}:${schemaLayoutString(fieldSchema)}`);
+			}
+		}
+		return `o(${parts.join(",")})`;
+	} else if (typeName === "optional") {
+		if (schema.inner === undefined) {
+			throw "Aruna schema fingerprint: optional schema is missing its inner.";
+		}
+		return `?(${schemaLayoutString(schema.inner)})`;
+	} else if (typeName === "record") {
+		if (schema.item === undefined) {
+			throw "Aruna schema fingerprint: record schema is missing its value schema.";
+		}
+		return `r(${schemaLayoutString(schema.item)})`;
+	} else if (typeName === "tuple") {
+		const items = schema.items;
+		if (items === undefined) {
+			throw "Aruna schema fingerprint: tuple schema is missing its items.";
+		}
+		const parts: Array<string> = [];
+		for (const item of items) {
+			parts.push(schemaLayoutString(item));
+		}
+		return `t(${parts.join(",")})`;
+	} else if (typeName === "enum") {
+		const values = schema.values;
+		if (values === undefined) {
+			throw "Aruna schema fingerprint: enum schema is missing its values.";
+		}
+		return `e(${values.join("|")})`;
+	} else if (typeName === "union") {
+		const members = schema.members;
+		if (members === undefined) {
+			throw "Aruna schema fingerprint: union schema is missing its members.";
+		}
+		const parts: Array<string> = [];
+		for (const member of members) {
+			parts.push(schemaLayoutString(member));
+		}
+		return `u(${parts.join("|")})`;
+	} else if (typeName === "vector3") {
+		return "v3";
+	} else if (typeName === "color3") {
+		return "c3";
+	} else if (typeName === "cframe") {
+		return "cf";
+	}
+	throw "Aruna schema fingerprint: unsupported schema kind.";
+}
+
+// Deterministic 32-bit fingerprint of a schema's wire layout. djb2 over the
+// canonical layout string, using only plain arithmetic (exact in doubles) so
+// Node and Luau produce the identical value for the identical schema.
+export function schemaFingerprint(schema: Schema): number {
+	const layout = schemaLayoutString(schema);
+	let hash = 5381;
+	for (let index = 1; index <= layout.size(); index += 1) {
+		const [code] = layout.byte(index);
+		hash = (hash * 33 + (code ?? 0)) % 4294967296;
+	}
+	return hash;
+}
+
 export function encodeBinary(schema: Schema, value: unknown): buffer {
 	const writer = new BinaryWriter(64);
+	writer.writeU32(schemaFingerprint(schema));
 	encodeValue(schema, value, writer);
 	return writer.finish();
 }
 
 export function decodeBinary(schema: Schema, buf: buffer): unknown {
-	return decodeValue(schema, new BinaryReader(buf));
+	const reader = new BinaryReader(buf);
+	const expected = schemaFingerprint(schema);
+	const actual = reader.readU32();
+	if (actual !== expected) {
+		throw `Aruna binary decode schema mismatch: payload fingerprint ${actual} does not match this schema (${expected}); the peer encoded with a different schema version.`;
+	}
+	return decodeValue(schema, reader);
 }

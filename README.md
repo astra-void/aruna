@@ -81,7 +81,6 @@ export default defineConfig({
     preserveGeneratedComments: true,
   },
   actions: {
-    transport: "remote-event",
     defaultRateLimit: {
       key: "player",
       windowMs: 1000,
@@ -103,7 +102,6 @@ export default defineConfig({
 
 - `compiler.generatedDir` controls where generated files are written.
 - `compiler.manifest` accepts a manifest path string or `{ output }`.
-- `actions.transport` currently supports `remote-event`, `remote-function`, and `memory`.
 - `actions.defaultRateLimit` uses `key`, `windowMs`, and `max`.
 - `conventions.client`, `conventions.server`, and `conventions.shared` are arrays of glob strings.
 - `strict` is accepted and normalized; the current implementation does not fully enforce every strict behavior yet.
@@ -123,7 +121,6 @@ export default defineConfig({
        manifest: "src/.aruna/manifest.json",
      },
      actions: {
-       transport: "remote-event",
        defaultRateLimit: {
          key: "player",
          windowMs: 1000,
@@ -279,12 +276,11 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
-- an in-memory action invoker exists for non-Roblox tests
+- `createServerApp(...).dispatch` is the in-process action path for non-Roblox tests (both runtimes; the old in-memory invoker is internal)
 - thin client/server app bootstrap helpers at `aruna/client` and `aruna/server` wire the runtime invoker and server action registry
 - the bootstrap helpers are functional, disposable, and intentionally do not scan modules or register services
-- a structural Roblox `RemoteFunction` action transport adapter exists for tests and future Studio integration
 - a structural Roblox `RemoteEvent` request/response transport adapter exists for tests and future Studio integration
-- Roblox-facing default action remote helpers now bind to `ReplicatedStorage/Aruna/Actions`
+- Roblox-facing default action remote helpers bind to the flat `ReplicatedStorage/ArunaActionRemoteEvent` (matching the native runtime; the RemoteFunction transport was removed — the RemoteEvent request/response transport is the transport)
 - `packages/aruna` is organized internally into `cli/`, `runtime/`, `actions/`, and `schema/` implementations
 - the public subpath exports remain stable through top-level compatibility shims
 - `@rbxts/types` and `@rbxts/compiler-types` are used at typecheck time for Roblox-facing runtime types
@@ -314,32 +310,29 @@ export const damaged = defineSignal({
 });
 ```
 
-Server — publish to one player, several players, or everyone:
+Server — publish to one player, several players, or everyone via the turnkey publisher
+(it ensures the default `ReplicatedStorage/ArunaSignalRemoteEvent` at call time):
 
 ```ts
-import { createRemoteSignalPublisher } from "aruna";
+import { createSignalPublisher } from "aruna/roblox";
 
 const signals = { "combat.damaged": damaged };
-const publisher = createRemoteSignalPublisher(remote, signals);
+const publisher = createSignalPublisher(signals);
 
 publisher.to(player, "combat.damaged", { amount: 12, source: "trap" });
 publisher.toMany(players, "combat.damaged", { amount: 5, source: "fall" });
 publisher.toAll("combat.damaged", { amount: 3, source: "lava" });
 ```
 
-Client — subscribe statically at app wiring, dynamically with `.on()`, or both:
+Client — subscribe with `.on()`; it returns a disconnectable handle:
 
 ```ts
-import { createRemoteSignalSubscriber } from "aruna";
+import { createSignalSubscriber } from "aruna/roblox";
 
-const subscriber = createRemoteSignalSubscriber(remote, signals, {
-  handlers: {
-    "combat.damaged": (payload) => updateHud(payload),
-  },
-});
+const subscriber = createSignalSubscriber(signals);
 
 const connection = subscriber.on("combat.damaged", (payload) => {
-  /* ... */
+  updateHud(payload);
 });
 connection.disconnect();
 ```
@@ -351,7 +344,7 @@ connection.disconnect();
 
 ## Binary serialization
 
-`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed byte buffer, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only the payload bytes.
+`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed byte buffer, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint** (`schemaFingerprint(schema)`, identical across both runtimes): decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
 
 ```ts
 import { encodeBinary, decodeBinary } from "aruna";
@@ -364,12 +357,12 @@ const value = decodeBinary(hit, bytes); // { amount: 12, source: "trap" }
 ```
 
 - The wire format is byte-identical across the Node reference runtime (`Uint8Array` + `DataView`) and the roblox-ts native runtime (Luau `buffer`), so a value encoded on one decodes on the other.
-- Layout: string = u32 length + UTF-8; number = the declared numeric width; boolean = u8; literal = 0 bytes; array = u32 count + items; object = fields in sorted key order; optional = u8 present flag + inner; enum = u32 index; union = u32 member index + member.
-- **Numeric width hints** pick a packed encoding per number. `schema.number()` is a full-width `f64`; `schema.f32()`, `schema.u8()`, `schema.u16()`, `schema.u32()`, `schema.i8()`, `schema.i16()`, and `schema.i32()` pack to their declared byte width and (for integer formats) validate the value is a whole number in range. A `{ hp: u16, team: u8 }` element costs 3 bytes instead of 16. Widths flow through the compiler into action/signal schema metadata (`numericFormat`) and the contract summary.
+- Layout: frame = u32 schema fingerprint + payload; string = u32 length + UTF-8; number = the declared numeric width; boolean = u8; literal = 0 bytes; array = u32 count + items; object = fields in sorted key order; optional = u8 present flag + inner; enum = u32 index; union = u32 member index + member.
+- **Numeric width hints** pick a packed encoding per number. `schema.number()` is a full-width `f64`; `schema.f32()`, `schema.u8()`, `schema.u16()`, `schema.u32()`, `schema.i8()`, `schema.i16()`, and `schema.i32()` pack to their declared byte width and (for integer formats) validate the value is a whole number in range. A `{ hp: u16, team: u8 }` element costs 3 payload bytes instead of 16. Widths flow through the compiler into action/signal schema metadata (`numericFormat`) and the contract summary.
 
   ```ts
   const hit = schema.object({ amount: schema.u16(), crit: schema.boolean() });
-  encodeBinary(hit, { amount: 1200, crit: true }).length; // 3 bytes
+  encodeBinary(hit, { amount: 1200, crit: true }).length; // 7 bytes (4-byte frame header + 3 payload bytes)
   ```
 
 - Encoding assumes the value already matches the schema (the action and signal boundaries validate first); a mismatch throws rather than emitting a corrupt buffer.

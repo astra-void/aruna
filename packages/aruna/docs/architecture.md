@@ -62,21 +62,22 @@ The two are kept behaviorally identical. The binary codec in particular is desig
 (vector3/color3/cframe encoded as f32 components). Userdata that travels as plain records
 in Node is reconstructed as native `Vector3`/`Color3`/`CFrame` in Roblox.
 
-## Transports
+## Transport
 
-Actions default to a multiplexed RemoteEvent transport (`remote-event`): a single
-`ReplicatedStorage/Aruna/Actions` RemoteEvent carries request/response pairs keyed by
-request id. `createActionInvoker()` (client) and `bindActions()` (server) wire this up for
-you. A RemoteFunction transport (`remote-function`) and an in-memory transport (`memory`,
-for tests) are also available; select via `actions.transport` in the config. Signals use
-their own RemoteEvent via `createRemoteSignalPublisher` / `createRemoteSignalSubscriber`.
+Actions use a single multiplexed RemoteEvent: `ReplicatedStorage/ArunaActionRemoteEvent`
+carries request/response pairs keyed by request id. `createActionInvoker()` (client) and
+`bindActions()` (server) wire this up for you — in the normal flow `createClientApp()` /
+`createServerApp()` own that wiring. Signals travel over their own dedicated
+`ReplicatedStorage/ArunaSignalRemoteEvent` via the turnkey `createSignalPublisher` /
+`createSignalSubscriber` helpers. There is no transport to select: the RemoteEvent
+transport is the transport.
 
 ## Common traps
 
 - **Only `build` regenerates.** `check` validates but won't refresh stubs — stale client
   contracts come from running only `check` after a change.
-- **`ctx.player` is optional.** Tests dispatch with no player; guard `ctx.player?.…`.
-  Import `defineAction` from `aruna/roblox` for `Player` typing.
+- **`ctx.player` is always present** on a real dispatch. Import `defineAction` from
+  `aruna/roblox` so it is typed `Player` instead of `unknown`.
 - **Don't put server logic in shared/client files.** It's a boundary violation and would
   replicate server code.
 - **Aliases unresolved?** Run `aruna doctor --fix` to repair the tsconfig path aliases.
