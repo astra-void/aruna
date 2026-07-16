@@ -194,6 +194,33 @@ function summarizeSchema(schema: SchemaMetadata | undefined): ActionSchemaSummar
         warnings: [],
       };
     }
+    case "union": {
+      // Member schemas ride the `members` metadata slot, mirroring tuple.
+      if (!schema.members) {
+        return {
+          summary: "unknown (metadata unavailable)",
+          warnings: ["union member metadata missing"],
+        };
+      }
+
+      if (schema.members.length === 0) {
+        return { summary: "never", warnings: [] };
+      }
+
+      const members = schema.members.map((member) => summarizeSchema(member));
+      return {
+        summary: members.map((member) => member.summary).join(" | "),
+        warnings: members.flatMap((member) => member.warnings),
+      };
+    }
+    // Roblox userdata kinds render to the native type names, matching how the
+    // Rust codegen types the generated client/signal stubs.
+    case "vector3":
+      return { summary: "Vector3", warnings: [] };
+    case "color3":
+      return { summary: "Color3", warnings: [] };
+    case "cframe":
+      return { summary: "CFrame", warnings: [] };
     default:
       return {
         summary: "unknown (metadata unavailable)",

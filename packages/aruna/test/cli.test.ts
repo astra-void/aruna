@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { inspectProject } from "@arunajs/compiler";
 import { formatGraphInspection, formatModuleInspection, formatSummary } from "../src/format.js";
 import { buildActionInspectionReport, formatActionInspection } from "../src/cli/inspect-actions.js";
+import { formatActionSchemaSummary } from "../src/cli/format-action-schema.js";
 import {
   relativeImportsOf,
   resolveColorMode,
@@ -701,6 +702,33 @@ describe("human formatting", () => {
     expect(report.actions[0]?.moduleKind).toBe("serverAction");
     expect(report.actions[0]?.authority).toEqual({ owner: "server", clientCallable: true });
     expect(report.actions[0]?.input.summary).toBe("unknown (metadata unavailable)");
+  });
+
+  it("renders Roblox userdata and union schema kinds without metadata warnings", () => {
+    const painted = formatActionSchemaSummary({
+      kind: "object",
+      properties: {
+        cfs: { kind: "array", items: { kind: "cframe" } },
+        color: { kind: "color3" },
+        at: { kind: "vector3" },
+      },
+    });
+
+    expect(painted.summary).toBe("object { at: Vector3, cfs: CFrame[], color: Color3 }");
+    expect(painted.warnings).toEqual([]);
+
+    const union = formatActionSchemaSummary({
+      kind: "union",
+      members: [{ kind: "string" }, { kind: "vector3" }],
+    });
+
+    expect(union.summary).toBe("string | Vector3");
+    expect(union.warnings).toEqual([]);
+
+    expect(formatActionSchemaSummary({ kind: "union", members: [] }).summary).toBe("never");
+    expect(formatActionSchemaSummary({ kind: "union" }).warnings).toEqual([
+      "union member metadata missing",
+    ]);
   });
 });
 
