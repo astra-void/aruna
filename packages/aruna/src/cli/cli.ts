@@ -1,11 +1,17 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { CompilerOutput, Diagnostic } from "@arunajs/core";
-import { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
+import {
+  buildProject,
+  checkProject,
+  inspectProject,
+  loadProjectConfig,
+} from "@arunajs/compiler";
 import {
   formatDiagnostics,
   formatDurationLine,
@@ -34,7 +40,12 @@ import {
   reconcileOwnedArtifacts,
 } from "./owned-artifacts.js";
 import { createRebuildScheduler, shouldRebuildOnChange } from "./watch.js";
-import { formatError, formatMuted, formatSuccess } from "./theme.js";
+import {
+  createLinePrefixer,
+  resolveRojoServePlan,
+  rojoProjectFileExists,
+} from "./dev.js";
+import { formatError, formatMuted, formatSuccess, formatWarning } from "./theme.js";
 
 type CliOptions = {
   project?: string;
@@ -456,6 +467,168 @@ function renderRbxtscResult(result: RbxtscResult, options: BuildCliOptions): voi
   }
 }
 
+type DevCliOptions = CliOptions & {
+  emitRuntime?: boolean;
+  emitLuau?: boolean;
+  // Commander's --no-rojo negation: undefined means "not overridden on the CLI".
+  rojo?: boolean;
+  rojoPort?: string;
+};
+
+// One full build pass: stub generation + runtime vendoring + rbxtsc, with the
+// same rendering as a one-shot `aruna build`. Returns what watch mode needs.
+async function executeBuildPass(
+  options: BuildCliOptions,
+): Promise<{ ok: boolean; generatedDir: string }> {
+  const startedAt = Date.now();
+  const { output, pruned } = await runBuild(options);
+  const projectRoot = compilerInput(options).root;
+  let rbxtsc: RbxtscResult | undefined;
+  if (output.ok && options.emitLuau !== false) {
+    // Partition the project into client/server/shared so the emitted out/ maps
+    // onto the Roblox DataModel (server code stays in ServerScriptService).
+    const bin = findRbxtscBin(projectRoot);
+    rbxtsc =
+      bin === undefined
+        ? runRbxtsc({ projectRoot })
+        : runPartitionedRbxtsc({
+            projectRoot,
+            generatedDir: generatedDirFromOutput(output),
+            manifest: output.manifest,
+            rbxtscBin: bin,
+          });
+  }
+
+  if (options.json) {
+    writeJson({ ...output, ...(pruned.length > 0 ? { pruned } : {}), ...(rbxtsc ? { rbxtsc } : {}) });
+  } else {
+    renderCompilerOutput(output, options, Date.now() - startedAt, "build");
+    if (pruned.length > 0 && !options.quiet) {
+      const colors = resolveColorMode(options);
+      writeText("");
+      writeText(
+        formatMuted(
+          `pruned ${pruned.length} stale generated artifact${pruned.length === 1 ? "" : "s"}: ${pruned.join(", ")}`,
+          colors,
+        ),
+      );
+    }
+    if (rbxtsc) {
+      renderRbxtscResult(rbxtsc, options);
+    }
+  }
+
+  const luauOk = rbxtsc === undefined || rbxtscOk(rbxtsc);
+  return { ok: output.ok && luauOk, generatedDir: generatedDirFromOutput(output) };
+}
+
+// The watch loop shared by `aruna build --watch` and `aruna dev`: one full
+// build pass, then a filtered fs watcher drives debounced rebuilds until
+// SIGINT/SIGTERM. `afterFirstBuild` runs once the first pass has rendered (so
+// e.g. a rojo child starts against an existing out/ tree) and may return a
+// cleanup invoked on shutdown.
+async function runWatchSession(
+  options: BuildCliOptions,
+  afterFirstBuild?: () => (() => void) | undefined,
+): Promise<void> {
+  const projectRoot = compilerInput(options).root;
+  const colors = resolveColorMode(options);
+  const first = await executeBuildPass(options);
+  // The generatedDir is stable across rebuilds (it comes from config), so the
+  // first pass's answer is enough to filter the build's own writes.
+  const generatedDir = first.generatedDir;
+  const cleanup = afterFirstBuild?.();
+
+  const scheduler = createRebuildScheduler(async () => {
+    if (!options.quiet) {
+      writeText("");
+      writeText(formatMuted("change detected — rebuilding…", colors));
+    }
+    await executeBuildPass(options);
+    if (!options.quiet) {
+      writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
+    }
+  }, WATCH_DEBOUNCE_MS);
+
+  const watcher = fsSync.watch(projectRoot, { recursive: true }, (_event, fileName) => {
+    if (fileName === null || fileName === undefined) {
+      return;
+    }
+    if (shouldRebuildOnChange(fileName, { generatedDir })) {
+      scheduler.notify();
+    }
+  });
+
+  if (!options.quiet) {
+    writeText("");
+    writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
+  }
+
+  // Keep the process alive until the user interrupts; the watcher handle owns
+  // the event-loop reference.
+  await new Promise<void>((resolve) => {
+    const stop = (): void => {
+      watcher.close();
+      cleanup?.();
+      resolve();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
+}
+
+// Spawns the `rojo serve` child for `aruna dev` and forwards its output with a
+// line prefix so it stays distinguishable from build output. Rojo failing to
+// launch or exiting is reported but never tears down the watch loop — the
+// build side of the dev loop stays useful without it. Returns the shutdown
+// cleanup for the session.
+function spawnRojoServe(
+  projectRoot: string,
+  args: readonly string[],
+  options: Pick<CliOptions, "quiet">,
+  colors: ReturnType<typeof resolveColorMode>,
+): () => void {
+  const child = spawn("rojo", [...args], {
+    cwd: projectRoot,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const prefix = formatMuted("rojo │ ", colors);
+  const stdoutLines = createLinePrefixer(prefix, (line) => writeText(line));
+  const stderrLines = createLinePrefixer(prefix, (line) => process.stderr.write(`${line}\n`));
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => stdoutLines.push(chunk));
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => stderrLines.push(chunk));
+
+  let stopping = false;
+  child.on("error", (error: NodeJS.ErrnoException) => {
+    const detail =
+      error.code === "ENOENT"
+        ? "rojo not found on PATH — install it (e.g. `rokit add rojo-rbx/rojo`) or pass --no-rojo"
+        : error.message;
+    process.stderr.write(`${formatWarning(`failed to launch rojo serve: ${detail}`, colors)}\n`);
+  });
+  child.on("exit", (code, signal) => {
+    stdoutLines.flush();
+    stderrLines.flush();
+    if (!stopping && !options.quiet) {
+      const reason = signal !== null ? `signal ${signal}` : `status ${code ?? "unknown"}`;
+      writeText(formatWarning(`rojo serve exited (${reason}) — watch build keeps running`, colors));
+    }
+  });
+
+  if (!options.quiet) {
+    writeText("");
+    writeText(formatMuted(`rojo ${args.join(" ")} started`, colors));
+  }
+
+  return () => {
+    stopping = true;
+    child.kill("SIGTERM");
+  };
+}
+
 async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
   try {
     const compilerOptions = compilerInput(options);
@@ -656,53 +829,6 @@ export async function main(): Promise<number> {
       "stay running and rebuild on source changes (generated/emitted trees are ignored)",
     );
 
-  // One full build pass: stub generation + runtime vendoring + rbxtsc, with the
-  // same rendering as a one-shot `aruna build`. Returns what watch mode needs.
-  async function executeBuildPass(
-    options: BuildCliOptions,
-  ): Promise<{ ok: boolean; generatedDir: string }> {
-    const startedAt = Date.now();
-    const { output, pruned } = await runBuild(options);
-    const projectRoot = compilerInput(options).root;
-    let rbxtsc: RbxtscResult | undefined;
-    if (output.ok && options.emitLuau !== false) {
-      // Partition the project into client/server/shared so the emitted out/ maps
-      // onto the Roblox DataModel (server code stays in ServerScriptService).
-      const bin = findRbxtscBin(projectRoot);
-      rbxtsc =
-        bin === undefined
-          ? runRbxtsc({ projectRoot })
-          : runPartitionedRbxtsc({
-              projectRoot,
-              generatedDir: generatedDirFromOutput(output),
-              manifest: output.manifest,
-              rbxtscBin: bin,
-            });
-    }
-
-    if (options.json) {
-      writeJson({ ...output, ...(pruned.length > 0 ? { pruned } : {}), ...(rbxtsc ? { rbxtsc } : {}) });
-    } else {
-      renderCompilerOutput(output, options, Date.now() - startedAt, "build");
-      if (pruned.length > 0 && !options.quiet) {
-        const colors = resolveColorMode(options);
-        writeText("");
-        writeText(
-          formatMuted(
-            `pruned ${pruned.length} stale generated artifact${pruned.length === 1 ? "" : "s"}: ${pruned.join(", ")}`,
-            colors,
-          ),
-        );
-      }
-      if (rbxtsc) {
-        renderRbxtscResult(rbxtsc, options);
-      }
-    }
-
-    const luauOk = rbxtsc === undefined || rbxtscOk(rbxtsc);
-    return { ok: output.ok && luauOk, generatedDir: generatedDirFromOutput(output) };
-  }
-
   build.action(async () => {
     const options = build.optsWithGlobals<BuildCliOptions>();
 
@@ -718,47 +844,67 @@ export async function main(): Promise<number> {
       return;
     }
 
-    const projectRoot = compilerInput(options).root;
-    const colors = resolveColorMode(options);
-    const first = await executeBuildPass(options);
-    // The generatedDir is stable across rebuilds (it comes from config), so the
-    // first pass's answer is enough to filter the build's own writes.
-    const generatedDir = first.generatedDir;
+    await runWatchSession(options);
+  });
 
-    const scheduler = createRebuildScheduler(async () => {
-      if (!options.quiet) {
-        writeText("");
-        writeText(formatMuted("change detected — rebuilding…", colors));
-      }
-      await executeBuildPass(options);
-      if (!options.quiet) {
-        writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
-      }
-    }, WATCH_DEBOUNCE_MS);
+  const dev = program
+    .command("dev")
+    .description(
+      "one-command dev loop: watch build (codegen + rbxtsc per change) plus a rojo serve child",
+    )
+    .option(
+      "--no-emit-runtime",
+      "skip vendoring the Roblox-targeted runtime into the generated dir",
+    )
+    .option("--no-emit-luau", "skip the rbxtsc Luau compile step on each rebuild")
+    .option("--no-rojo", "do not spawn rojo serve")
+    .option("--rojo-port <port>", "port for the rojo serve child");
 
-    const watcher = fsSync.watch(projectRoot, { recursive: true }, (_event, fileName) => {
-      if (fileName === null || fileName === undefined) {
-        return;
-      }
-      if (shouldRebuildOnChange(fileName, { generatedDir })) {
-        scheduler.notify();
-      }
-    });
+  dev.action(async () => {
+    const options = dev.optsWithGlobals<DevCliOptions>();
 
-    if (!options.quiet) {
-      writeText("");
-      writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
+    if (options.json) {
+      process.stderr.write("aruna dev does not support --json output.\n");
+      process.exitCode = 1;
+      return;
     }
 
-    // Keep the process alive until the user interrupts; the watcher handle owns
-    // the event-loop reference.
-    await new Promise<void>((resolve) => {
-      const stop = (): void => {
-        watcher.close();
-        resolve();
-      };
-      process.once("SIGINT", stop);
-      process.once("SIGTERM", stop);
+    const input = compilerInput(options);
+    const colors = resolveColorMode(options);
+
+    let cliPort: number | undefined;
+    if (options.rojoPort !== undefined) {
+      const parsed = Number(options.rojoPort);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        process.stderr.write(
+          `${formatError(`--rojo-port must be a positive integer, got "${options.rojoPort}"`, colors)}\n`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+      cliPort = parsed;
+    }
+
+    // The `dev` config section is a CLI concern the compiler output does not
+    // carry, so it is read through the config loader directly.
+    const devConfig = loadProjectConfig(input.root, input.configPath).dev;
+
+    await runWatchSession(options, () => {
+      const plan = resolveRojoServePlan({
+        rojoEnabled: options.rojo !== false && devConfig.rojo,
+        port: cliPort ?? devConfig.rojoPort,
+        projectFileExists: rojoProjectFileExists(input.root),
+      });
+
+      if (plan.mode === "skip") {
+        if (!options.quiet) {
+          writeText("");
+          writeText(formatMuted(`rojo serve skipped — ${plan.reason}`, colors));
+        }
+        return undefined;
+      }
+
+      return spawnRojoServe(input.root, plan.args, options, colors);
     });
   });
 

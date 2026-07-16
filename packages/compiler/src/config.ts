@@ -8,16 +8,26 @@ import type {
   CompilerConfig,
   Config,
   ConventionConfig,
+  DevConfig,
   Diagnostic,
   EntriesMode,
   StrictConfig,
   NormalizedConfig,
 } from "@arunajs/core";
 
+// The resolved `dev` section. Not part of NormalizedConfig — that type is the
+// compiler contract (it crosses into the native compiler), and `dev` only
+// drives the CLI's `aruna dev` process orchestration.
+export type NormalizedDevConfig = {
+  readonly rojo: boolean;
+  readonly rojoPort: number | undefined;
+};
+
 export type LoadedConfig = {
   projectRoot: string;
   configPath?: string | undefined;
   config: NormalizedConfig;
+  dev: NormalizedDevConfig;
   tsconfigPath: string;
   tsconfigOptions: ts.CompilerOptions;
   diagnostics: Diagnostic[];
@@ -54,6 +64,10 @@ type MutableStrictConfig = {
   unresolvedImports?: StrictConfig["unresolvedImports"];
 };
 
+type MutableDevConfig = {
+  rojo?: boolean | { port?: number };
+};
+
 type MutableConfig = {
   root?: string;
   entries?: EntriesMode;
@@ -61,6 +75,7 @@ type MutableConfig = {
   actions?: MutableActionsConfig;
   conventions?: MutableConventionConfig;
   strict?: MutableStrictConfig;
+  dev?: MutableDevConfig;
 };
 
 const DIAGNOSTIC_META: Record<
@@ -244,6 +259,20 @@ function mergeStrictConfig(
   };
 }
 
+function mergeDevConfig(
+  base: DevConfig | undefined,
+  override: DevConfig | undefined,
+): DevConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+  };
+}
+
 function mergePublicConfig(base: Config, override: Config): Config {
   return {
     root: override.root ?? base.root,
@@ -252,6 +281,7 @@ function mergePublicConfig(base: Config, override: Config): Config {
     actions: mergeActionsConfig(base.actions, override.actions),
     conventions: mergeConventionConfig(base.conventions, override.conventions),
     strict: mergeStrictConfig(base.strict, override.strict),
+    dev: mergeDevConfig(base.dev, override.dev),
   };
 }
 
@@ -311,6 +341,7 @@ function normalizeConfigObject(value: unknown): {
     "actions",
     "conventions",
     "strict",
+    "dev",
   ] as const;
   validateUnsupportedKeys(candidateRecord, allowedTopLevel, diagnostics, "top-level config");
 
@@ -519,11 +550,53 @@ function normalizeConfigObject(value: unknown): {
     }
   }
 
+  if (candidateRecord["dev"] !== undefined) {
+    const devValue = candidateRecord["dev"];
+    if (!isRecord(devValue)) {
+      diagnostics.push("dev must be an object");
+    } else {
+      validateUnsupportedKeys(devValue, ["rojo"], diagnostics, "dev");
+      const dev: MutableDevConfig = {};
+
+      if (devValue["rojo"] !== undefined) {
+        const rojoValue = devValue["rojo"];
+        if (typeof rojoValue === "boolean") {
+          dev.rojo = rojoValue;
+        } else if (isRecord(rojoValue)) {
+          validateUnsupportedKeys(rojoValue, ["port"], diagnostics, "dev.rojo");
+          if (rojoValue["port"] !== undefined && !isPositiveInteger(rojoValue["port"])) {
+            diagnostics.push("dev.rojo.port must be a positive integer");
+          } else {
+            dev.rojo = {
+              ...(rojoValue["port"] !== undefined ? { port: rojoValue["port"] as number } : {}),
+            };
+          }
+        } else {
+          diagnostics.push("dev.rojo must be a boolean or an object with a port");
+        }
+      }
+
+      config.dev = dev;
+    }
+  }
+
   if (diagnostics.length > 0) {
     return { error: diagnostics.join("; ") };
   }
 
   return { config: config as Config };
+}
+
+// `{ port }` implies the child is wanted, so only an explicit `false` disables it.
+export function normalizeDevConfig(dev: DevConfig | undefined): NormalizedDevConfig {
+  const rojo = dev?.rojo;
+  if (rojo === false) {
+    return { rojo: false, rojoPort: undefined };
+  }
+  return {
+    rojo: true,
+    rojoPort: typeof rojo === "object" && rojo !== null ? rojo.port : undefined,
+  };
 }
 
 function normalizeResolvedConfig(config: Config): NormalizedConfig {
@@ -763,6 +836,7 @@ export function loadProjectConfig(
     projectRoot,
     configPath: discoveredConfigPath,
     config: finalConfig,
+    dev: normalizeDevConfig(mergedConfig.dev),
     tsconfigPath: resolvedTsconfig,
     tsconfigOptions: tsconfig.options,
     diagnostics,

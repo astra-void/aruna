@@ -29,7 +29,6 @@ export type DiagnosticCode =
   | "aruna::560"
   | "aruna::563"
   | "aruna::564"
-  | "aruna::565"
   | "aruna::566"
   | "aruna::568"
   | "aruna::555"
@@ -185,6 +184,14 @@ export type StrictConfig = {
   readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
 };
 
+// `aruna dev` process options. `rojo: true` (the default) spawns `rojo serve`
+// alongside the watch build when a default.project.json exists; `false`
+// disables the child; `{ port }` picks the serve port. Purely a CLI concern —
+// the compiler never reads this section.
+export type DevConfig = {
+  readonly rojo?: boolean | { readonly port?: number | undefined } | undefined;
+};
+
 // Who owns the runtime entry scripts. "user": the project's src/server.ts /
 // src/client.tsx are the Script/LocalScript entries (classic model).
 // "generated": Aruna emits <generatedDir>/server/main.server.ts and
@@ -200,6 +207,7 @@ export type Config = {
   readonly actions?: ActionsConfig | undefined;
   readonly conventions?: ConventionConfig | undefined;
   readonly strict?: StrictConfig | undefined;
+  readonly dev?: DevConfig | undefined;
 };
 
 export type NormalizedConfig = {

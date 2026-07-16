@@ -87,4 +87,9 @@ export async function inspectProject(input: CompilerInput): Promise<CompilerOutp
 }
 
 export { loadNativeCompiler } from "./native.js";
-export { loadProjectConfig, type LoadedConfig } from "./config.js";
+export {
+  loadProjectConfig,
+  normalizeDevConfig,
+  type LoadedConfig,
+  type NormalizedDevConfig,
+} from "./config.js";

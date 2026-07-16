@@ -10,6 +10,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna init` | Scaffold `aruna.config.ts`, `tsconfig.json`, and `default.project.json`. |
 | `aruna check` | Type-check the project and validate module boundaries. Does **not** generate. |
 | `aruna build` | Generate action stubs + manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc. |
+| `aruna dev` | One-terminal dev loop: `build --watch` plus a `rojo serve` child. |
 | `aruna doctor [--fix]` | Inspect (and with `--fix`, write) the `aruna/*` and `$aruna/*` tsconfig path aliases. |
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |
@@ -69,6 +70,33 @@ work — this replaces re-running `aruna build` by hand after every action/signa
 Save bursts are debounced into one rebuild, a change landing mid-build queues exactly one
 follow-up, and the build's own output trees (the generated dir, `out/`, `include/`,
 `node_modules/`) never re-trigger it. Not combinable with `--json`.
+
+## `aruna dev`
+
+The daily loop in one terminal: the watch build (identical to `aruna build --watch`)
+plus a `rojo serve` child, so saving a file gives you codegen + Luau + Studio sync
+without juggling processes.
+
+```
+--no-emit-runtime   skip vendoring the Roblox-targeted runtime into the generated dir
+--no-emit-luau      skip the rbxtsc Luau compile step on each rebuild
+--no-rojo           do not spawn rojo serve
+--rojo-port <port>  port for the rojo serve child
+```
+
+`rojo serve` is spawned after the first build pass (so `out/` exists) when a
+`default.project.json` is present and `dev.rojo` is not `false`. Rojo's output is
+prefixed with `rojo │` so it stays distinguishable from build output. Rojo failing to
+launch (not installed) or exiting never tears down the watch build — you get a warning
+and the loop keeps running. Configure via `aruna.config.ts`:
+
+```ts
+export default defineConfig({
+  dev: {
+    rojo: true,                // true (default) | false | { port: 34873 }
+  },
+});
+```
 
 ## `aruna doctor`
 
