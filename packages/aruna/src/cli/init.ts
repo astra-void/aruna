@@ -44,6 +44,10 @@ function tsconfigTemplate(projectRoot: string): string {
       moduleDetection: "force",
       strict: true,
       noLib: true,
+      // @rbxts/types ships ambient declarations that only typecheck under the
+      // exact compiler-types they were generated against; skipLibCheck keeps a
+      // point release of the types package from breaking consumer typechecks.
+      skipLibCheck: true,
       baseUrl: ".",
       rootDir: "src",
       outDir: "out",
