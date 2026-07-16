@@ -41,3 +41,6 @@ digest.txt
 
 # Turborepo
 .turbo
+
+# Serena MCP state
+.serena/
