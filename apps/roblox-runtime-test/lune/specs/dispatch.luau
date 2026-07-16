@@ -154,6 +154,8 @@ return function(ctx)
 			local _, _, value = t.await(r.dispatch(player, "typed", { n = "not a number" }))
 			t.isFalse(value.ok)
 			t.contains(value.error, "invalid action input")
+			-- The failure carries the first failing path + reason.
+			t.contains(value.error, "n: expected number")
 		end)
 
 		t.it("enforces the rate limit", function()
