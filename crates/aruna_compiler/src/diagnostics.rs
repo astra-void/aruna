@@ -71,6 +71,11 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::559" => Some(("invalid-action-fire-and-forget", DiagnosticSeverity::Error)),
         "aruna::560" => Some(("invalid-action-rate-limit", DiagnosticSeverity::Error)),
         "aruna::564" => Some(("signal-payload-schema-invalid", DiagnosticSeverity::Warning)),
+        // An identifier used as a schema that resolves to nothing — locally or
+        // through one import hop. An Error (unlike the shape warnings above):
+        // the author clearly meant a named schema, and letting it degrade would
+        // silently produce `unknown`-typed clients and an empty contract.
+        "aruna::565" => Some(("unresolved-schema-reference", DiagnosticSeverity::Error)),
         "aruna::566" => Some((
             "generated-signal-payload-type-collision",
             DiagnosticSeverity::Error,

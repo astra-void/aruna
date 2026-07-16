@@ -2096,7 +2096,7 @@ pub fn collect_action_definitions(
 
     let mut diagnostics = Vec::new();
     let (mut actions, saw_define_action) =
-        collect_action_candidates(&file, &parser_return.program, &mut diagnostics);
+        collect_action_candidates(&file, path, &parser_return.program, &mut diagnostics);
     let mut action_files = BTreeSet::new();
 
     if saw_define_action {
@@ -2715,11 +2715,154 @@ export const purchaseItem = defineAction({
 
         assert!(action.input_schema.is_none());
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].code, "aruna::553");
+        // Unresolved references are a hard error (aruna::565), not the shape
+        // warning: they would silently drop typed clients and contract data.
+        assert_eq!(diagnostics[0].code, "aruna::565");
+        assert_eq!(diagnostics[0].severity, crate::diagnostics::DiagnosticSeverity::Error);
         assert!(diagnostics[0]
             .details
             .as_ref()
             .is_some_and(|details| details.contains("could not be resolved")));
+    }
+
+    #[test]
+    fn resolves_schema_imported_from_sibling_module() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        write_file(
+            root,
+            "src/domains/shop/schema.ts",
+            r#"
+import { schema } from "aruna/schema";
+
+export const purchaseInput = schema.object({
+  itemId: schema.string(),
+  quantity: schema.u8(),
+});
+"#,
+        );
+        let path = write_file(
+            root,
+            "src/domains/shop/actions.ts",
+            r#"
+import { defineAction } from "aruna/server";
+import { purchaseInput } from "./schema";
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: purchaseInput,
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        let result =
+            collect_action_definitions(root, &path, &std::fs::read_to_string(&path).unwrap())
+                .unwrap();
+
+        assert_eq!(result.diagnostics.len(), 0);
+        let action = &result.actions[0];
+        assert!(action.has_input_schema);
+        let input_schema = action.input_schema.as_ref().expect("imported schema resolves");
+        assert_eq!(input_schema.kind, "object");
+    }
+
+    #[test]
+    fn reports_import_that_is_not_a_schema() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        write_file(
+            root,
+            "src/domains/shop/helpers.ts",
+            r#"
+export function makeSchema() {
+  return undefined;
+}
+"#,
+        );
+        let path = write_file(
+            root,
+            "src/domains/shop/actions.ts",
+            r#"
+import { defineAction } from "aruna/server";
+import { makeSchema } from "./helpers";
+
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: makeSchema,
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        let result =
+            collect_action_definitions(root, &path, &std::fs::read_to_string(&path).unwrap())
+                .unwrap();
+
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "aruna::565");
+        assert!(result.diagnostics[0]
+            .details
+            .as_ref()
+            .is_some_and(|details| details.contains("not a module-level const")));
+        assert!(result.actions[0].input_schema.is_none());
+    }
+
+    #[test]
+    fn imported_schema_resolution_is_single_hop() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        write_file(
+            root,
+            "src/base.ts",
+            r#"
+import { schema } from "aruna/schema";
+
+export const baseSchema = schema.string();
+"#,
+        );
+        write_file(
+            root,
+            "src/middle.ts",
+            r#"
+import { baseSchema } from "./base";
+
+export const reexported = baseSchema;
+"#,
+        );
+        let path = write_file(
+            root,
+            "src/actions.ts",
+            r#"
+import { defineAction } from "aruna/server";
+import { reexported } from "./middle";
+
+export const act = defineAction({
+  id: "shop.act",
+  input: reexported,
+  run(ctx, input) {
+    return input;
+  },
+});
+"#,
+        );
+
+        let result =
+            collect_action_definitions(root, &path, &std::fs::read_to_string(&path).unwrap())
+                .unwrap();
+
+        // Two hops deep: the middle module's binding is itself an import, which
+        // the single-hop resolver rejects with a clear reason.
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "aruna::565");
+        assert!(result.diagnostics[0]
+            .details
+            .as_ref()
+            .is_some_and(|details| details.contains("not a statically analyzable schema")));
     }
 
     #[test]

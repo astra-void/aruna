@@ -29,6 +29,7 @@ export type DiagnosticCode =
   | "aruna::560"
   | "aruna::563"
   | "aruna::564"
+  | "aruna::565"
   | "aruna::566"
   | "aruna::568"
   | "aruna::555"

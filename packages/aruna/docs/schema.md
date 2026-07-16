@@ -105,6 +105,23 @@ There are matching helpers for definitions: `InferInput`/`InferOutput` (from
 ## Schema resolution in the compiler
 
 The compiler reads `input`/`output`/`payload` whether the schema is written inline
-(`input: schema.object({...})`) or extracted to a module-level `const` and referenced
-(`input: purchaseInputSchema`). Keeping schemas in a shared `schema.ts` and importing them
-into the action file is a supported, common pattern.
+(`input: schema.object({...})`), extracted to a module-level `const` and referenced
+(`input: purchaseInputSchema`), or **imported from another module** — keeping schemas in
+a shared `schema.ts` and importing them into the action file is the supported, common
+pattern (`import { purchaseInput } from "./schema"`).
+
+The rules, precisely:
+
+- Locally, `const a = b; const b = schema.object({...})` chains resolve (cycles are
+  reported).
+- Across modules, resolution follows **one import hop**: the imported name must be a
+  module-level `const schema.*(...)` expression (or a local const chain to one) in the
+  target file. A re-export chain through a second module does not resolve.
+- A schema reference that resolves to nothing — a typo, a non-schema import, or a
+  two-hop chain — is a **hard error** (`aruna::565`), not a warning: letting it degrade
+  would silently produce `unknown`-typed client stubs and an empty contract entry.
+- Schemas built by helper functions, generics, or object spread
+  (`schema.object({ ...base.shape })`) are not statically analyzable; they still
+  validate correctly at runtime, but the compiler records no metadata for them
+  (warning `aruna::553`/`554`/`564`) — the generated client types fall back to
+  `unknown` and the contract snapshot omits the shape.
