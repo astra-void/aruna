@@ -1,0 +1,153 @@
+{
+  "actions": [
+    {
+      "exportName": "purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "id": "shop.purchaseItem",
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "kind": "object",
+        "properties": {
+          "ok": {
+            "kind": "boolean"
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/shared/combat/signals.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/shared/combat/signals.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/.aruna/client/main.client.ts",
+      "kind": "client",
+      "path": "src/.aruna/client/main.client.ts",
+      "reason": "directive",
+      "reasonDetail": "generated client entry (entries: generated)"
+    },
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/server/main.server.ts",
+      "kind": "server",
+      "path": "src/.aruna/server/main.server.ts",
+      "reason": "directive",
+      "reasonDetail": "generated server entry (entries: generated)"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/signals.generated.ts",
+      "kind": "shared",
+      "path": "src/.aruna/shared/signals.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/signals module"
+    },
+    {
+      "id": "src/client.tsx",
+      "kind": "client",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "client hook module (entries: generated)"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "server",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "server hook module (entries: generated)"
+    },
+    {
+      "id": "src/shared/combat/signals.ts",
+      "kind": "shared",
+      "path": "src/shared/combat/signals.ts",
+      "reason": "path"
+    }
+  ],
+  "projectRoot": ".",
+  "signals": [
+    {
+      "exportName": "damaged",
+      "file": "src/shared/combat/signals.ts",
+      "hasPayloadSchema": true,
+      "id": "combat.damaged",
+      "payloadSchema": {
+        "kind": "object",
+        "properties": {
+          "amount": {
+            "kind": "number"
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    }
+  ],
+  "version": 1
+}

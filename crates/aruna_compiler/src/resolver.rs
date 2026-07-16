@@ -35,6 +35,13 @@ pub const GENERATED_CLIENT_ACTIONS_FILE: &str = "shared/actions.client.generated
 pub const GENERATED_SERVER_ACTIONS_FILE: &str = "server/actions.server.generated.ts";
 pub const GENERATED_SIGNALS_FILE: &str = "shared/signals.generated.ts";
 
+// Generated runtime entries (entries: "generated"). The `.server`/`.client`
+// suffixes make roblox-ts emit a real Script / LocalScript; the `server/` and
+// `client/` subtrees map onto the matching Rojo partitions. Nothing imports
+// these modules — they are the roots of the runtime graph.
+pub const GENERATED_SERVER_ENTRY_FILE: &str = "server/main.server.ts";
+pub const GENERATED_CLIENT_ENTRY_FILE: &str = "client/main.client.ts";
+
 impl VirtualGeneratedActionModule {
     pub fn specifier(self) -> &'static str {
         match self {

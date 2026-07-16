@@ -123,6 +123,20 @@ impl Default for StrictConfig {
     }
 }
 
+// Who owns the runtime entry scripts. `User` is the classic model: the project
+// provides `src/server.ts` / `src/client.tsx` and they become the Script /
+// LocalScript. `Generated` moves entry ownership to codegen: Aruna emits
+// `<generatedDir>/server/main.server.ts` + `<generatedDir>/client/main.client.ts`
+// from the manifest, and the user entry files (when present) become plain hook
+// modules imported by the generated mains.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EntriesMode {
+    #[default]
+    User,
+    Generated,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ConventionConfig {
@@ -143,6 +157,8 @@ pub struct ArunaConfig {
     pub generated_dir: String,
     #[serde(default = "default_manifest_output")]
     pub manifest_output: String,
+    #[serde(default)]
+    pub entries: EntriesMode,
     #[serde(default)]
     pub compiler: CompilerConfig,
     #[serde(default)]
@@ -171,6 +187,7 @@ impl Default for ArunaConfig {
             root: default_root(),
             generated_dir: default_generated_dir(),
             manifest_output: default_manifest_output(),
+            entries: EntriesMode::default(),
             compiler: CompilerConfig::default(),
             actions: ActionsConfig::default(),
             conventions: ConventionConfig::default(),

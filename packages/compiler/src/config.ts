@@ -9,6 +9,7 @@ import type {
   Config,
   ConventionConfig,
   Diagnostic,
+  EntriesMode,
   StrictConfig,
   NormalizedConfig,
 } from "@arunajs/core";
@@ -56,6 +57,7 @@ type MutableStrictConfig = {
 
 type MutableConfig = {
   root?: string;
+  entries?: EntriesMode;
   compiler?: MutableCompilerConfig;
   actions?: MutableActionsConfig;
   conventions?: MutableConventionConfig;
@@ -71,13 +73,18 @@ const DIAGNOSTIC_META: Record<
   "aruna::103": { name: "invalid-tsconfig", severity: "error" },
 };
 
-const DEFAULT_CONVENTIONS: Required<
-  Pick<NormalizedConfig["conventions"], "client" | "server" | "shared">
-> = {
-  client: ["**/client/**"],
-  server: ["**/server/**"],
-  shared: ["**/shared/**"],
-};
+// Recommended Layout v0 defaults; must stay in sync with
+// `ConventionSet::for_root` in crates/aruna_compiler/src/module_kind.rs.
+// Directory conventions beat file-name conventions when they disagree.
+function defaultConventionsForRoot(
+  root: string,
+): Required<Pick<NormalizedConfig["conventions"], "client" | "server" | "shared">> {
+  return {
+    client: ["**/client/**", "**/ui.tsx"],
+    server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
+    shared: ["**/shared/**", `${root}/app/**`, "**/schema.ts", "**/model.ts"],
+  };
+}
 
 const DEFAULT_ROOT = "src";
 const DEFAULT_GENERATED_DIR = `${DEFAULT_ROOT}/.aruna`;
@@ -123,6 +130,10 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isTransport(value: unknown): value is NonNullable<ActionsConfig["transport"]> {
   return value === "remote-event" || value === "remote-function" || value === "memory";
+}
+
+function isEntriesMode(value: unknown): value is EntriesMode {
+  return value === "user" || value === "generated";
 }
 
 function isStrictSeverity(
@@ -242,6 +253,7 @@ function mergeStrictConfig(
 function mergePublicConfig(base: Config, override: Config): Config {
   return {
     root: override.root ?? base.root,
+    entries: override.entries ?? base.entries,
     compiler: mergeCompilerConfig(base.compiler, override.compiler),
     actions: mergeActionsConfig(base.actions, override.actions),
     conventions: mergeConventionConfig(base.conventions, override.conventions),
@@ -298,7 +310,14 @@ function normalizeConfigObject(value: unknown): {
 
   const diagnostics: string[] = [];
   const config: MutableConfig = {};
-  const allowedTopLevel = ["root", "compiler", "actions", "conventions", "strict"] as const;
+  const allowedTopLevel = [
+    "root",
+    "entries",
+    "compiler",
+    "actions",
+    "conventions",
+    "strict",
+  ] as const;
   validateUnsupportedKeys(candidateRecord, allowedTopLevel, diagnostics, "top-level config");
 
   if (candidateRecord["root"] !== undefined) {
@@ -306,6 +325,14 @@ function normalizeConfigObject(value: unknown): {
       diagnostics.push("root must be a string");
     } else {
       config.root = candidateRecord["root"];
+    }
+  }
+
+  if (candidateRecord["entries"] !== undefined) {
+    if (!isEntriesMode(candidateRecord["entries"])) {
+      diagnostics.push('entries must be "user" or "generated"');
+    } else {
+      config.entries = candidateRecord["entries"];
     }
   }
 
@@ -510,6 +537,7 @@ function normalizeConfigObject(value: unknown): {
 
 function normalizeResolvedConfig(config: Config): NormalizedConfig {
   const root = config.root ?? DEFAULT_ROOT;
+  const defaultConventions = defaultConventionsForRoot(root);
   const generatedDir = config.compiler?.generatedDir ?? `${root}/.aruna`;
   const manifestOutput =
     typeof config.compiler?.manifest === "string"
@@ -521,6 +549,7 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
     root,
     generatedDir,
     manifestOutput,
+    entries: config.entries ?? "user",
     compiler: {
       preserveGeneratedComments: config.compiler?.preserveGeneratedComments ?? true,
     },
@@ -533,14 +562,14 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       },
     },
     conventions: {
-      client: mergeStringArray(DEFAULT_CONVENTIONS.client, config.conventions?.client) ?? [
-        ...DEFAULT_CONVENTIONS.client,
+      client: mergeStringArray(defaultConventions.client, config.conventions?.client) ?? [
+        ...defaultConventions.client,
       ],
-      server: mergeStringArray(DEFAULT_CONVENTIONS.server, config.conventions?.server) ?? [
-        ...DEFAULT_CONVENTIONS.server,
+      server: mergeStringArray(defaultConventions.server, config.conventions?.server) ?? [
+        ...defaultConventions.server,
       ],
-      shared: mergeStringArray(DEFAULT_CONVENTIONS.shared, config.conventions?.shared) ?? [
-        ...DEFAULT_CONVENTIONS.shared,
+      shared: mergeStringArray(defaultConventions.shared, config.conventions?.shared) ?? [
+        ...defaultConventions.shared,
       ],
     },
     strict: {
@@ -678,7 +707,17 @@ function loadTsConfig(
   }
 
   const parsed = ts.parseJsonConfigFileContent(result.config, ts.sys, path.dirname(tsconfigPath));
-  if (parsed.errors.length > 0) {
+  // A missing generated Aruna fragment (`extends: ./<generatedDir>/tsconfig.aruna.json`)
+  // is a self-healing state, not a broken tsconfig: `aruna build` / `aruna doctor
+  // --fix` write the fragment. Failing here would deadlock a fresh clone whose
+  // generated dir is not committed. Name kept in sync with
+  // ARUNA_TSCONFIG_FRAGMENT_FILE in packages/aruna/src/cli/tsconfig-paths.ts.
+  // TS 5083 "Cannot read file" / 6053 "File not found" for the extends target.
+  const fatalErrors = parsed.errors.filter((error) => {
+    const text = ts.flattenDiagnosticMessageText(error.messageText, " ");
+    return !((error.code === 5083 || error.code === 6053) && text.includes("tsconfig.aruna.json"));
+  });
+  if (fatalErrors.length > 0) {
     return {
       options: {},
       diagnostic: invalidTsconfigDiagnostic(

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "src/app/providers.ts",
+    "kind": "shared",
+    "path": "src/app/providers.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/combat/runtime.ts",
+    "kind": "server",
+    "path": "src/domains/combat/runtime.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/model.ts",
+    "kind": "shared",
+    "path": "src/domains/shop/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/schema.ts",
+    "kind": "shared",
+    "path": "src/domains/shop/schema.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/ui.tsx",
+    "kind": "client",
+    "path": "src/domains/shop/ui.tsx",
+    "reason": "path"
+  },
+  {
+    "id": "src/server/model.ts",
+    "kind": "server",
+    "path": "src/server/model.ts",
+    "reason": "path",
+    "reasonDetail": "directory convention overrode file-name convention: shared"
+  }
+]

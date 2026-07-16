@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/.aruna/client/main.client.ts",
+      "path": "src/.aruna/client/main.client.ts",
+      "kind": "client",
+      "reason": "directive",
+      "reasonDetail": "generated client entry (entries: generated)"
+    },
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/server/main.server.ts",
+      "path": "src/.aruna/server/main.server.ts",
+      "kind": "server",
+      "reason": "directive",
+      "reasonDetail": "generated server entry (entries: generated)"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/signals.generated.ts",
+      "path": "src/.aruna/shared/signals.generated.ts",
+      "kind": "shared",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/signals module"
+    },
+    {
+      "id": "src/client.tsx",
+      "path": "src/client.tsx",
+      "kind": "client",
+      "reason": "path",
+      "reasonDetail": "client hook module (entries: generated)"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "path": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "path": "src/server.ts",
+      "kind": "server",
+      "reason": "path",
+      "reasonDetail": "server hook module (entries: generated)"
+    },
+    {
+      "id": "src/shared/combat/signals.ts",
+      "path": "src/shared/combat/signals.ts",
+      "kind": "shared",
+      "reason": "path"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/schema",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/shared/combat/signals.ts",
+      "specifier": "aruna/schema",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/shared/combat/signals.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    }
+  ],
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "exportName": "purchaseItem",
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "kind": "object",
+        "properties": {
+          "ok": {
+            "kind": "boolean"
+          }
+        }
+      }
+    }
+  ],
+  "signals": [
+    {
+      "id": "combat.damaged",
+      "file": "src/shared/combat/signals.ts",
+      "exportName": "damaged",
+      "hasPayloadSchema": true,
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "payloadSchema": {
+        "kind": "object",
+        "properties": {
+          "amount": {
+            "kind": "number"
+          }
+        }
+      }
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "file": "src/server.ts",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ]
+}

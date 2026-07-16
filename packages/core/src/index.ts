@@ -15,6 +15,7 @@ export type DiagnosticCode =
   | "aruna::103"
   | "aruna::110"
   | "aruna::111"
+  | "aruna::112"
   | "aruna::106"
   | "aruna::105"
   | "aruna::200"
@@ -24,10 +25,16 @@ export type DiagnosticCode =
   | "aruna::552"
   | "aruna::553"
   | "aruna::554"
+  | "aruna::559"
   | "aruna::560"
+  | "aruna::563"
+  | "aruna::564"
+  | "aruna::566"
+  | "aruna::568"
   | "aruna::555"
   | "aruna::556"
   | "aruna::557"
+  | "aruna::558"
   | "aruna::300"
   | "aruna::301"
   | "aruna::302"
@@ -178,8 +185,17 @@ export type StrictConfig = {
   readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
 };
 
+// Who owns the runtime entry scripts. "user": the project's src/server.ts /
+// src/client.tsx are the Script/LocalScript entries (classic model).
+// "generated": Aruna emits <generatedDir>/server/main.server.ts and
+// <generatedDir>/client/main.client.ts from the manifest, and the user entry
+// files (when present) become plain hook modules imported by the generated
+// mains.
+export type EntriesMode = "user" | "generated";
+
 export type Config = {
   readonly root?: string | undefined;
+  readonly entries?: EntriesMode | undefined;
   readonly compiler?: CompilerConfig | undefined;
   readonly actions?: ActionsConfig | undefined;
   readonly conventions?: ConventionConfig | undefined;
@@ -190,6 +206,7 @@ export type NormalizedConfig = {
   readonly root: string;
   readonly generatedDir: string;
   readonly manifestOutput: string;
+  readonly entries: EntriesMode;
   readonly compiler: {
     readonly preserveGeneratedComments: boolean;
   };
@@ -245,6 +262,7 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
   root: "src",
   generatedDir: "src/.aruna",
   manifestOutput: "src/.aruna/manifest.json",
+  entries: "user",
   compiler: {
     preserveGeneratedComments: true,
   },
@@ -256,10 +274,12 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
       max: 20,
     },
   },
+  // Recommended Layout v0 defaults; must stay in sync with
+  // `ConventionSet::for_root` in crates/aruna_compiler/src/module_kind.rs.
   conventions: {
-    client: ["**/client/**"],
-    server: ["**/server/**"],
-    shared: ["**/shared/**"],
+    client: ["**/client/**", "**/ui.tsx"],
+    server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
+    shared: ["**/shared/**", "src/app/**", "**/schema.ts", "**/model.ts"],
   },
   strict: {
     sharedSafety: true,

@@ -1,0 +1,30 @@
+[
+  {
+    "from": "src/app/providers.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../domains/shop/schema",
+    "to": "src/domains/shop/schema.ts"
+  },
+  {
+    "from": "src/domains/combat/runtime.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../shop/model",
+    "to": "src/domains/shop/model.ts"
+  },
+  {
+    "from": "src/domains/shop/ui.tsx",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./model",
+    "to": "src/domains/shop/model.ts"
+  },
+  {
+    "from": "src/domains/shop/ui.tsx",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./schema",
+    "to": "src/domains/shop/schema.ts"
+  }
+]

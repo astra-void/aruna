@@ -1,0 +1,64 @@
+[
+  {
+    "id": "src/.aruna/client/main.client.ts",
+    "kind": "client",
+    "path": "src/.aruna/client/main.client.ts",
+    "reason": "directive",
+    "reasonDetail": "generated client entry (entries: generated)"
+  },
+  {
+    "id": "src/.aruna/server/actions.server.generated.ts",
+    "kind": "serverAction",
+    "path": "src/.aruna/server/actions.server.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/actions module"
+  },
+  {
+    "id": "src/.aruna/server/main.server.ts",
+    "kind": "server",
+    "path": "src/.aruna/server/main.server.ts",
+    "reason": "directive",
+    "reasonDetail": "generated server entry (entries: generated)"
+  },
+  {
+    "id": "src/.aruna/shared/actions.client.generated.ts",
+    "kind": "client",
+    "path": "src/.aruna/shared/actions.client.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/actions module"
+  },
+  {
+    "id": "src/.aruna/shared/signals.generated.ts",
+    "kind": "shared",
+    "path": "src/.aruna/shared/signals.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/signals module"
+  },
+  {
+    "id": "src/client.tsx",
+    "kind": "client",
+    "path": "src/client.tsx",
+    "reason": "path",
+    "reasonDetail": "client hook module (entries: generated)"
+  },
+  {
+    "id": "src/domains/shop/actions.ts",
+    "kind": "serverAction",
+    "path": "src/domains/shop/actions.ts",
+    "reason": "directive",
+    "reasonDetail": "defineAction(...) export detected"
+  },
+  {
+    "id": "src/server.ts",
+    "kind": "server",
+    "path": "src/server.ts",
+    "reason": "path",
+    "reasonDetail": "server hook module (entries: generated)"
+  },
+  {
+    "id": "src/shared/combat/signals.ts",
+    "kind": "shared",
+    "path": "src/shared/combat/signals.ts",
+    "reason": "path"
+  }
+]

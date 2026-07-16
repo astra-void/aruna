@@ -5,6 +5,7 @@ export const fixtureCases = [
   { name: "invalid-shared-imports-client", mode: "inspect" },
   { name: "invalid-shared-imports-server", mode: "inspect" },
   { name: "feature-local-layout", mode: "inspect" },
+  { name: "recommended-layout", mode: "inspect" },
   { name: "unknown-module-kind", mode: "inspect" },
   { name: "unresolved-import", mode: "inspect" },
   { name: "missing-tsconfig", mode: "inspect" },
@@ -24,6 +25,7 @@ export const fixtureCases = [
   { name: "invalid-virtual-generated-action-imports", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },
   { name: "action-generated-export-collision", mode: "build" },
+  { name: "generated-entries", mode: "build" },
 ] as const;
 
 export type FixtureCase = (typeof fixtureCases)[number];

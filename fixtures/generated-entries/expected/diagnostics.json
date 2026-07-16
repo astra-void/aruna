@@ -1,0 +1,11 @@
+[
+  {
+    "code": "aruna::568",
+    "details": "Recognized server hooks: configure, middleware, onError.",
+    "file": "src/server.ts",
+    "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+    "name": "unknown-hook-export",
+    "severity": "warning",
+    "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+  }
+]

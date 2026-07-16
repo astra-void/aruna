@@ -1,4 +1,4 @@
-use crate::config::ArunaConfig;
+use crate::config::{ArunaConfig, EntriesMode};
 use crate::files::normalize_path;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
@@ -30,13 +30,32 @@ pub struct ConventionSet {
     pub shared: Vec<String>,
 }
 
+impl ConventionSet {
+    // Recommended Layout v0 defaults: directory conventions plus file-name
+    // conventions (`ui.tsx`, `actions.ts`, `schema.ts`, ...) so a plain
+    // `domains/<feature>/` layout classifies with no aruna.config.ts at all.
+    pub fn for_root(root: &str) -> Self {
+        let root = if root.is_empty() { "src" } else { root };
+        Self {
+            client: vec!["**/client/**".to_string(), "**/ui.tsx".to_string()],
+            server: vec![
+                "**/server/**".to_string(),
+                "**/actions.ts".to_string(),
+                "**/runtime.ts".to_string(),
+            ],
+            shared: vec![
+                "**/shared/**".to_string(),
+                format!("{root}/app/**"),
+                "**/schema.ts".to_string(),
+                "**/model.ts".to_string(),
+            ],
+        }
+    }
+}
+
 impl Default for ConventionSet {
     fn default() -> Self {
-        Self {
-            client: vec!["**/client/**".to_string()],
-            server: vec!["**/server/**".to_string()],
-            shared: vec!["**/shared/**".to_string()],
-        }
+        Self::for_root("src")
     }
 }
 
@@ -64,7 +83,7 @@ fn matches_any(patterns: &[String], path: &str) -> bool {
 }
 
 fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
-    let defaults = ConventionSet::default();
+    let defaults = ConventionSet::for_root(&config.root);
     let convention = match kind {
         ModuleKind::Client | ModuleKind::ClientEntry => config.conventions.client.clone(),
         ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
@@ -88,26 +107,69 @@ fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
     }
 }
 
+// A pattern whose final segment is a concrete file name (no wildcard) is a
+// file-name convention; anything else (trailing `**`, `*`, ...) is a directory
+// convention. Directory conventions are the stronger signal: an explicit
+// client/ / server/ / shared/ folder in the path wins over a file-name rule,
+// so `src/server/model.ts` stays Server even though `**/model.ts` is a shared
+// file-name default. Only same-tier cross-kind matches are ambiguous.
+fn is_file_name_pattern(pattern: &str) -> bool {
+    let last_segment = pattern.rsplit('/').next().unwrap_or(pattern);
+    !last_segment.contains(['*', '?', '['])
+}
+
 pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> ModuleClassification {
     let relative_path = normalize_path(path);
-    let mut matched = Vec::new();
+    let mut directory_matches = Vec::new();
+    let mut file_name_matches = Vec::new();
 
-    if matches_any(&conventions.client, &relative_path) {
-        matched.push(ModuleKind::Client);
+    for (kind, patterns) in [
+        (ModuleKind::Client, &conventions.client),
+        (ModuleKind::Server, &conventions.server),
+        (ModuleKind::Shared, &conventions.shared),
+    ] {
+        let (file_patterns, directory_patterns): (Vec<String>, Vec<String>) = patterns
+            .iter()
+            .cloned()
+            .partition(|pattern| is_file_name_pattern(pattern));
+
+        if matches_any(&directory_patterns, &relative_path) {
+            directory_matches.push(kind);
+        } else if matches_any(&file_patterns, &relative_path) {
+            file_name_matches.push(kind);
+        }
     }
-    if matches_any(&conventions.server, &relative_path) {
-        matched.push(ModuleKind::Server);
-    }
-    if matches_any(&conventions.shared, &relative_path) {
-        matched.push(ModuleKind::Shared);
-    }
+
+    let matched = if directory_matches.is_empty() {
+        file_name_matches.clone()
+    } else {
+        directory_matches.clone()
+    };
 
     match matched.as_slice() {
-        [kind] => ModuleClassification {
-            kind: *kind,
-            matched_kinds: matched,
-            reason_detail: None,
-        },
+        [kind] => {
+            let overridden: Vec<&str> = if directory_matches.len() == 1 {
+                file_name_matches
+                    .iter()
+                    .filter(|other| **other != *kind)
+                    .map(kind_label)
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            ModuleClassification {
+                kind: *kind,
+                matched_kinds: matched,
+                reason_detail: if overridden.is_empty() {
+                    None
+                } else {
+                    Some(format!(
+                        "directory convention overrode file-name convention: {}",
+                        overridden.join(", ")
+                    ))
+                },
+            }
+        }
         [] => ModuleClassification {
             kind: ModuleKind::Unknown,
             matched_kinds: matched,
@@ -120,15 +182,7 @@ pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> Module
                 "matched multiple conventions: {}",
                 matched
                     .iter()
-                    .map(|kind| match kind {
-                        ModuleKind::Client => "client",
-                        ModuleKind::Server => "server",
-                        ModuleKind::Shared => "shared",
-                        ModuleKind::ClientEntry => "client entry",
-                        ModuleKind::ServerEntry => "server entry",
-                        ModuleKind::ServerAction => "server action",
-                        ModuleKind::Unknown => "unknown",
-                    })
+                    .map(kind_label)
                     .collect::<Vec<_>>()
                     .join(", ")
             )),
@@ -136,7 +190,27 @@ pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> Module
     }
 }
 
-fn classify_entry_path(root: &str, relative_path: &str) -> Option<ModuleKind> {
+fn kind_label(kind: &ModuleKind) -> &'static str {
+    match kind {
+        ModuleKind::Client => "client",
+        ModuleKind::Server => "server",
+        ModuleKind::Shared => "shared",
+        ModuleKind::ClientEntry => "client entry",
+        ModuleKind::ServerEntry => "server entry",
+        ModuleKind::ServerAction => "server action",
+        ModuleKind::Unknown => "unknown",
+    }
+}
+
+// Which side a recommended entry-path file belongs to, before the entries mode
+// decides whether it is a script entry or a plain hook module.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntrySide {
+    Client,
+    Server,
+}
+
+pub fn entry_side_for_path(root: &str, relative_path: &str) -> Option<EntrySide> {
     let root = if root.is_empty() { "src" } else { root };
     let client_entry = format!("{root}/client.ts");
     let client_entry_tsx = format!("{root}/client.tsx");
@@ -145,13 +219,43 @@ fn classify_entry_path(root: &str, relative_path: &str) -> Option<ModuleKind> {
 
     match relative_path {
         _ if relative_path == client_entry || relative_path == client_entry_tsx => {
-            Some(ModuleKind::ClientEntry)
+            Some(EntrySide::Client)
         }
         _ if relative_path == server_entry || relative_path == server_entry_tsx => {
-            Some(ModuleKind::ServerEntry)
+            Some(EntrySide::Server)
         }
         _ => None,
     }
+}
+
+// Under `entries: "user"` the recommended entry files are the runtime entry
+// scripts. Under `entries: "generated"` Aruna owns the entry scripts, and the
+// same files become plain hook modules on their respective side.
+fn classify_entry_path(
+    root: &str,
+    relative_path: &str,
+    entries: EntriesMode,
+) -> Option<ModuleClassification> {
+    let side = entry_side_for_path(root, relative_path)?;
+    let (kind, detail) = match (entries, side) {
+        (EntriesMode::User, EntrySide::Client) => {
+            (ModuleKind::ClientEntry, "matched recommended entry file")
+        }
+        (EntriesMode::User, EntrySide::Server) => {
+            (ModuleKind::ServerEntry, "matched recommended entry file")
+        }
+        (EntriesMode::Generated, EntrySide::Client) => {
+            (ModuleKind::Client, "client hook module (entries: generated)")
+        }
+        (EntriesMode::Generated, EntrySide::Server) => {
+            (ModuleKind::Server, "server hook module (entries: generated)")
+        }
+    };
+    Some(ModuleClassification {
+        kind,
+        matched_kinds: Vec::new(),
+        reason_detail: Some(detail.to_string()),
+    })
 }
 
 pub fn classify_module(
@@ -164,12 +268,8 @@ pub fn classify_module(
         .map(|value| normalize_path(&value.to_string_lossy()))
         .unwrap_or_else(|_| normalize_path(&absolute_path.to_string_lossy()));
 
-    if let Some(kind) = classify_entry_path(&config.root, &relative) {
-        return ModuleClassification {
-            kind,
-            matched_kinds: Vec::new(),
-            reason_detail: Some("matched recommended entry file".to_string()),
-        };
+    if let Some(classification) = classify_entry_path(&config.root, &relative, config.entries) {
+        return classification;
     }
 
     let convention_set = ConventionSet {
@@ -251,6 +351,34 @@ mod tests {
     }
 
     #[test]
+    fn classifies_entry_files_as_hook_modules_under_generated_entries() {
+        let mut config = ArunaConfig::default();
+        config.entries = crate::config::EntriesMode::Generated;
+
+        let client = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/client.tsx"),
+            &config,
+        );
+        assert_eq!(client.kind, ModuleKind::Client);
+        assert_eq!(
+            client.reason_detail.as_deref(),
+            Some("client hook module (entries: generated)")
+        );
+
+        let server = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/server.ts"),
+            &config,
+        );
+        assert_eq!(server.kind, ModuleKind::Server);
+        assert_eq!(
+            server.reason_detail.as_deref(),
+            Some("server hook module (entries: generated)")
+        );
+    }
+
+    #[test]
     fn classifies_generated_files_relative_to_generated_dir() {
         // generatedDir nested inside a `shared/` convention path. The generated
         // server registry must classify as Server (not ambiguous Unknown) because
@@ -281,6 +409,62 @@ mod tests {
             &config,
         );
         assert_eq!(regular.kind, ModuleKind::Shared);
+    }
+
+    #[test]
+    fn classifies_recommended_layout_file_name_conventions() {
+        let conventions = ConventionSet::default();
+        assert_eq!(
+            classify_relative_path("src/domains/shop/ui.tsx", &conventions).kind,
+            ModuleKind::Client
+        );
+        assert_eq!(
+            classify_relative_path("src/domains/shop/actions.ts", &conventions).kind,
+            ModuleKind::Server
+        );
+        assert_eq!(
+            classify_relative_path("src/domains/combat/runtime.ts", &conventions).kind,
+            ModuleKind::Server
+        );
+        assert_eq!(
+            classify_relative_path("src/domains/shop/schema.ts", &conventions).kind,
+            ModuleKind::Shared
+        );
+        assert_eq!(
+            classify_relative_path("src/domains/shop/model.ts", &conventions).kind,
+            ModuleKind::Shared
+        );
+        assert_eq!(
+            classify_relative_path("src/app/providers.ts", &conventions).kind,
+            ModuleKind::Shared
+        );
+        assert_eq!(
+            classify_relative_path("src/utils/debug.ts", &conventions).kind,
+            ModuleKind::Unknown
+        );
+    }
+
+    #[test]
+    fn directory_convention_wins_over_file_name_convention() {
+        let conventions = ConventionSet::default();
+
+        // `**/server/**` (directory tier) beats `**/model.ts` (file-name tier).
+        let server_model = classify_relative_path("src/server/model.ts", &conventions);
+        assert_eq!(server_model.kind, ModuleKind::Server);
+        assert_eq!(server_model.matched_kinds, vec![ModuleKind::Server]);
+        assert_eq!(
+            server_model.reason_detail.as_deref(),
+            Some("directory convention overrode file-name convention: shared")
+        );
+
+        // `src/app/**` (directory tier) beats `**/ui.tsx` (file-name tier).
+        let app_ui = classify_relative_path("src/app/ui.tsx", &conventions);
+        assert_eq!(app_ui.kind, ModuleKind::Shared);
+
+        // Same kind on both tiers is not a conflict and carries no override note.
+        let shared_schema = classify_relative_path("src/shared/schema.ts", &conventions);
+        assert_eq!(shared_schema.kind, ModuleKind::Shared);
+        assert_eq!(shared_schema.reason_detail, None);
     }
 
     #[test]

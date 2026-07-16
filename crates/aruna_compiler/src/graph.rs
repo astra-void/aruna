@@ -1,15 +1,18 @@
-use crate::config::ArunaConfig;
+use crate::config::{ArunaConfig, EntriesMode};
 use crate::actions::{
     collect_action_definitions, collect_signal_definitions, ArunaActionRecord, ArunaSignalRecord,
+};
+use crate::codegen::{
+    EntryHooks, HookModuleRecord, RECOGNIZED_CLIENT_HOOKS, RECOGNIZED_SERVER_HOOKS,
 };
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
 use crate::files::{normalize_path, project_absolute, project_relative};
 use crate::manifest::ArunaModuleRecord;
-use crate::module_kind::{classify_module, ModuleKind, ModuleReason};
-use crate::parser::collect_static_imports;
+use crate::module_kind::{classify_module, entry_side_for_path, EntrySide, ModuleKind, ModuleReason};
+use crate::parser::{collect_module_exports, collect_static_imports};
 use crate::resolver::{
     resolve_import_specifier, TsconfigResolverOptions, VirtualGeneratedActionModule,
-    VirtualGeneratedSignalModule,
+    VirtualGeneratedSignalModule, GENERATED_CLIENT_ENTRY_FILE, GENERATED_SERVER_ENTRY_FILE,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -61,6 +64,10 @@ pub struct BuildGraphResult {
     pub signals: Vec<ArunaSignalRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub module_map: BTreeMap<String, ArunaModuleRecord>,
+    // Hook modules discovered at the recommended entry paths under
+    // `entries: "generated"`; feeds the generated main.server/main.client files.
+    #[serde(default)]
+    pub hooks: EntryHooks,
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
@@ -103,6 +110,68 @@ fn virtual_generated_action_module_record(
         reason: ModuleReason::Directive,
         reason_detail: Some("virtual $aruna/actions module".to_string()),
     }
+}
+
+// Manifest records for the generated runtime entries (entries: "generated").
+// Like the virtual action/signal records, these exist so downstream consumers
+// (the Rojo partition layout in particular) see the generated files even though
+// source discovery excludes the generated dir.
+fn generated_entry_module_records(
+    project_root: &Path,
+    generated_dir: &str,
+) -> Vec<ArunaModuleRecord> {
+    [
+        (
+            GENERATED_SERVER_ENTRY_FILE,
+            ModuleKind::Server,
+            "generated server entry (entries: generated)",
+        ),
+        (
+            GENERATED_CLIENT_ENTRY_FILE,
+            ModuleKind::Client,
+            "generated client entry (entries: generated)",
+        ),
+    ]
+    .into_iter()
+    .map(|(filename, kind, detail)| {
+        let absolute_path = project_absolute(project_root, generated_dir).join(filename);
+        let relative_path = project_relative(project_root, &absolute_path);
+        ArunaModuleRecord {
+            id: relative_path.clone(),
+            path: relative_path,
+            kind,
+            reason: ModuleReason::Directive,
+            reason_detail: Some(detail.to_string()),
+        }
+    })
+    .collect()
+}
+
+fn unknown_hook_export_diagnostic(
+    hook_file: &str,
+    export_name: &str,
+    side: EntrySide,
+) -> ArunaDiagnostic {
+    let (side_label, recognized): (&str, &[&str]) = match side {
+        EntrySide::Server => ("server", &RECOGNIZED_SERVER_HOOKS),
+        EntrySide::Client => ("client", &RECOGNIZED_CLIENT_HOOKS),
+    };
+    create_diagnostic(
+        "aruna::568",
+        format!(
+            "{hook_file} exports {export_name}, which is not a recognized {side_label} hook."
+        ),
+        Some(hook_file.to_string()),
+        None,
+        Some(format!(
+            "Recognized {side_label} hooks: {}.",
+            recognized.join(", ")
+        )),
+        Some(
+            "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+                .to_string(),
+        ),
+    )
 }
 
 fn virtual_generated_signal_module_record(
@@ -177,9 +246,53 @@ pub fn build_project_graph(
     let mut action_records = Vec::new();
     let mut action_files = BTreeSet::new();
     let mut signal_records = Vec::new();
+    let mut entry_hooks = EntryHooks::default();
 
     for absolute_path in files {
         let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
+
+        // Hook-module discovery (entries: "generated"): the recommended entry
+        // files become plain hook modules whose value-level exports drive the
+        // generated main.server/main.client wiring.
+        if config.entries == EntriesMode::Generated {
+            let relative_path = project_relative(project_root, absolute_path);
+            if let Some(side) = entry_side_for_path(&config.root, &relative_path) {
+                match collect_module_exports(absolute_path, &source_text) {
+                    Ok(exports) => {
+                        let recognized: &[&str] = match side {
+                            EntrySide::Server => &RECOGNIZED_SERVER_HOOKS,
+                            EntrySide::Client => &RECOGNIZED_CLIENT_HOOKS,
+                        };
+                        for export in &exports {
+                            if !recognized.contains(&export.as_str()) {
+                                diagnostics.push(unknown_hook_export_diagnostic(
+                                    &relative_path,
+                                    export,
+                                    side,
+                                ));
+                            }
+                        }
+                        let record = HookModuleRecord {
+                            file: relative_path.clone(),
+                            exports,
+                        };
+                        match side {
+                            EntrySide::Server => entry_hooks.server = Some(record),
+                            EntrySide::Client => entry_hooks.client = Some(record),
+                        }
+                    }
+                    Err(error) => {
+                        push_parse_failed_diagnostic(
+                            &mut diagnostics,
+                            &mut parse_failed_files,
+                            &relative_path,
+                            error,
+                        );
+                    }
+                }
+            }
+        }
+
         match collect_action_definitions(project_root, absolute_path, &source_text) {
             Ok(result) => {
                 action_records.extend(result.actions);
@@ -244,7 +357,9 @@ pub fn build_project_graph(
         }
     }
 
-    if !action_records.is_empty() {
+    // Generated mode always emits (and imports) the action registry, even when
+    // the project declares no actions yet — the generated server entry wires it.
+    if !action_records.is_empty() || config.entries == EntriesMode::Generated {
         for virtual_module in [
             VirtualGeneratedActionModule::Client,
             VirtualGeneratedActionModule::Server,
@@ -254,6 +369,13 @@ pub fn build_project_graph(
                 &config.generated_dir,
                 virtual_module,
             );
+            module_map.insert(record.path.clone(), record.clone());
+            module_records.push(record);
+        }
+    }
+
+    if config.entries == EntriesMode::Generated {
+        for record in generated_entry_module_records(project_root, &config.generated_dir) {
             module_map.insert(record.path.clone(), record.clone());
             module_records.push(record);
         }
@@ -407,6 +529,7 @@ pub fn build_project_graph(
         actions: action_records,
         signals: signal_records,
         module_map,
+        hooks: entry_hooks,
         diagnostics,
     })
 }

@@ -75,6 +75,7 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
             "generated-signal-payload-type-collision",
             DiagnosticSeverity::Error,
         )),
+        "aruna::568" => Some(("unknown-hook-export", DiagnosticSeverity::Warning)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

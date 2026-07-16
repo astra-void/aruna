@@ -1,5 +1,7 @@
-use crate::config::ArunaConfig;
-use crate::codegen::{generate_action_files, generate_signal_files, GeneratedFile};
+use crate::config::{ArunaConfig, EntriesMode};
+use crate::codegen::{
+    generate_action_files, generate_entry_files, generate_signal_files, GeneratedFile,
+};
 use crate::diagnostics::{
     create_diagnostic, strip_ignored_diagnostics, summarize_diagnostics, ArunaDiagnostic,
 };
@@ -395,6 +397,18 @@ fn run_project_inner(
                 &ignore,
             ));
             files.extend(generated_signals.files);
+        }
+
+        // Generated entries (entries: "generated"): the manifest-derived
+        // main.server/main.client scripts that replace hand-written bootstrap.
+        if input.config.entries == EntriesMode::Generated {
+            let generated_entries = generate_entry_files(
+                &input.config.generated_dir,
+                !graph.signals.is_empty(),
+                &graph.hooks,
+                input.config.compiler.preserve_generated_comments,
+            );
+            files.extend(generated_entries.files);
         }
 
         Some(files)
