@@ -25,6 +25,18 @@ export type DoctorOptions = {
   emitRuntime?: boolean | undefined;
 };
 
+// roblox-ts pins the exact TypeScript version it can drive (it taps compiler
+// internals), so an installed typescript that drifts from the pin fails at
+// rbxtsc time with confusing errors — the classic rbxts setup trap. Doctor
+// surfaces the mismatch directly.
+export type ToolchainReport = {
+  robloxTsVersion?: string | undefined;
+  typescriptVersion?: string | undefined;
+  // roblox-ts's own typescript dependency declaration (the pin).
+  expectedTypescript?: string | undefined;
+  status: "ok" | "skew" | "unknown";
+};
+
 export type DoctorReport = {
   projectRoot: string;
   configPath?: string | undefined;
@@ -64,12 +76,78 @@ export type DoctorReport = {
     baseUrlRequired: boolean;
     baseUrlRecommended: boolean;
   };
+  toolchain: ToolchainReport;
   fixable: boolean;
   fixApplied: boolean;
   fixChanges: string[];
 };
 
 type TsconfigJsonObject = Record<string, unknown>;
+
+type PackageJsonShape = {
+  version?: unknown;
+  dependencies?: Record<string, unknown> | undefined;
+  peerDependencies?: Record<string, unknown> | undefined;
+};
+
+// Reads the package.json of `packageName` from the nearest node_modules,
+// walking up from the project root (mirrors how Node resolves the install the
+// consumer actually gets in a workspace).
+function readInstalledPackageJson(
+  startDir: string,
+  packageName: string,
+): PackageJsonShape | undefined {
+  let current = path.resolve(startDir);
+  for (;;) {
+    const candidate = path.join(current, "node_modules", packageName, "package.json");
+    if (fs.existsSync(candidate)) {
+      try {
+        return JSON.parse(fs.readFileSync(candidate, "utf8")) as PackageJsonShape;
+      } catch {
+        return undefined;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
+
+export function inspectToolchain(projectRoot: string): ToolchainReport {
+  const robloxTs = readInstalledPackageJson(projectRoot, "roblox-ts");
+  const typescript = readInstalledPackageJson(projectRoot, "typescript");
+  const robloxTsVersion =
+    typeof robloxTs?.version === "string" ? robloxTs.version : undefined;
+  const typescriptVersion =
+    typeof typescript?.version === "string" ? typescript.version : undefined;
+  const declared =
+    robloxTs?.dependencies?.["typescript"] ?? robloxTs?.peerDependencies?.["typescript"];
+  const expectedTypescript = typeof declared === "string" ? declared : undefined;
+
+  if (
+    robloxTsVersion === undefined ||
+    typescriptVersion === undefined ||
+    expectedTypescript === undefined
+  ) {
+    return { robloxTsVersion, typescriptVersion, expectedTypescript, status: "unknown" };
+  }
+
+  // Only an exact pin (e.g. "5.5.3" / "=5.5.3") is enforced; a range is the
+  // package manager's job to satisfy.
+  const exact = expectedTypescript.replace(/^=/, "");
+  if (!/^\d+\.\d+\.\d+$/.test(exact)) {
+    return { robloxTsVersion, typescriptVersion, expectedTypescript, status: "ok" };
+  }
+
+  return {
+    robloxTsVersion,
+    typescriptVersion,
+    expectedTypescript,
+    status: exact === typescriptVersion ? "ok" : "skew",
+  };
+}
 
 function readTsconfig(tsconfigPath: string): { value?: TsconfigJsonObject; error?: string } {
   if (!fs.existsSync(tsconfigPath)) {
@@ -205,6 +283,26 @@ export function formatDoctorReport(report: DoctorReport): string {
     }
   }
 
+  if (report.toolchain.robloxTsVersion !== undefined) {
+    lines.push("");
+    lines.push("toolchain");
+    lines.push(`  roblox-ts: ${report.toolchain.robloxTsVersion}`);
+    lines.push(
+      `  typescript: ${report.toolchain.typescriptVersion ?? "not installed"}` +
+        (report.toolchain.expectedTypescript !== undefined
+          ? ` (roblox-ts expects ${report.toolchain.expectedTypescript})`
+          : ""),
+    );
+    if (report.toolchain.status === "skew") {
+      lines.push(
+        `  warning: typescript ${report.toolchain.typescriptVersion} does not match the ` +
+          `${report.toolchain.expectedTypescript} roblox-ts ${report.toolchain.robloxTsVersion} pins — ` +
+          `rbxtsc can fail with confusing errors. Pin "typescript": "${report.toolchain.expectedTypescript}" ` +
+          `in devDependencies.`,
+      );
+    }
+  }
+
   if (report.fixApplied) {
     lines.push("");
     if (report.fixChanges.length > 0) {
@@ -273,6 +371,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       ? tsconfigDiagnostics
       : [createTsconfigDiagnostic(tsconfigPath, tsconfigResult.error)];
   const fragment = inspectFragment(options.projectRoot, generatedDir);
+  const toolchain = inspectToolchain(options.projectRoot);
 
   if (!tsconfigResult.value) {
     return {
@@ -297,6 +396,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
         baseUrlRequired: true,
         baseUrlRecommended: false,
       },
+      toolchain,
       fixable: false,
       fixApplied: false,
       fixChanges: [],
@@ -334,6 +434,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       baseUrlRequired: !extendsClean,
       baseUrlRecommended: false,
     },
+    toolchain,
     fixable: configDiagnostics.length === 0 && effectiveTsconfigDiagnostics.length === 0,
     fixApplied: false,
     fixChanges: [],

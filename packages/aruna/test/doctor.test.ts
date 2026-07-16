@@ -9,6 +9,7 @@ import {
   formatDoctorReport,
   fixDoctorProject,
   inspectDoctorProject,
+  inspectToolchain,
 } from "../src/cli/doctor.js";
 import {
   resolveArunaActionPaths,
@@ -359,5 +360,56 @@ describe("doctor", () => {
     expect(fragment.compilerOptions.paths["aruna/client"]).toEqual([
       "src/.aruna/shared/runtime/client.ts",
     ]);
+  });
+});
+
+describe("inspectToolchain", () => {
+  function writeInstalled(root: string, name: string, pkg: Record<string, unknown>): void {
+    const dir = path.join(root, "node_modules", name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(pkg));
+  }
+
+  it("reports ok when the installed typescript matches the roblox-ts pin", () => {
+    const root = makeTempRoot();
+    writeInstalled(root, "roblox-ts", {
+      name: "roblox-ts",
+      version: "3.0.0",
+      dependencies: { typescript: "5.5.3" },
+    });
+    writeInstalled(root, "typescript", { name: "typescript", version: "5.5.3" });
+
+    expect(inspectToolchain(root)).toEqual({
+      robloxTsVersion: "3.0.0",
+      typescriptVersion: "5.5.3",
+      expectedTypescript: "5.5.3",
+      status: "ok",
+    });
+  });
+
+  it("reports skew when the installed typescript drifts from an exact pin", () => {
+    const root = makeTempRoot();
+    writeInstalled(root, "roblox-ts", {
+      name: "roblox-ts",
+      version: "3.0.0",
+      dependencies: { typescript: "5.5.3" },
+    });
+    writeInstalled(root, "typescript", { name: "typescript", version: "5.9.3" });
+
+    expect(inspectToolchain(root).status).toBe("skew");
+  });
+
+  it("does not enforce a range pin and tolerates missing installs", () => {
+    const root = makeTempRoot();
+    writeInstalled(root, "roblox-ts", {
+      name: "roblox-ts",
+      version: "3.0.0",
+      dependencies: { typescript: "^5.5.0" },
+    });
+    writeInstalled(root, "typescript", { name: "typescript", version: "5.9.3" });
+    expect(inspectToolchain(root).status).toBe("ok");
+
+    const bare = makeTempRoot();
+    expect(inspectToolchain(bare).status).toBe("unknown");
   });
 });
