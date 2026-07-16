@@ -6,6 +6,11 @@ import {
   ARUNA_ACTION_PATHS,
   ARUNA_RUNTIME_MODULES,
   ARUNA_SIGNALS_ALIAS,
+  ARUNA_TSCONFIG_FRAGMENT_FILE,
+  arunaTsconfigExtendsRef,
+  arunaTsconfigFragmentContents,
+  extendsIncludesFragment,
+  resolveAllArunaAliasPaths,
   resolveArunaActionPaths,
   resolveArunaRuntimePaths,
   resolveArunaSignalPaths,
@@ -206,19 +211,29 @@ export async function reconcileOwnedArtifacts(options: {
   return { pruned: pruned.sort(), manifest };
 }
 
-async function readTsconfigPaths(
+async function readTsconfigObject(
   tsconfigPath: string,
 ): Promise<Record<string, unknown> | undefined> {
   try {
     const raw = await fs.readFile(tsconfigPath, "utf8");
-    const parsed = JSON.parse(raw) as { compilerOptions?: { paths?: unknown } };
-    const paths = parsed.compilerOptions?.paths;
-    return typeof paths === "object" && paths !== null && !Array.isArray(paths)
-      ? (paths as Record<string, unknown>)
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
       : undefined;
   } catch {
     return undefined;
   }
+}
+
+function tsconfigPathsOf(tsconfig: Record<string, unknown>): Record<string, unknown> | undefined {
+  const compilerOptions = tsconfig["compilerOptions"];
+  if (typeof compilerOptions !== "object" || compilerOptions === null || Array.isArray(compilerOptions)) {
+    return undefined;
+  }
+  const paths = (compilerOptions as Record<string, unknown>)["paths"];
+  return typeof paths === "object" && paths !== null && !Array.isArray(paths)
+    ? (paths as Record<string, unknown>)
+    : undefined;
 }
 
 function aliasTarget(paths: Record<string, unknown>, alias: string): string | undefined {
@@ -265,7 +280,71 @@ export async function collectLayoutDesyncDiagnostics(options: {
     });
   }
 
-  const tsconfigPaths = await readTsconfigPaths(tsconfigPath);
+  const tsconfig = await readTsconfigObject(tsconfigPath);
+  const tsconfigPaths = tsconfig !== undefined ? tsconfigPathsOf(tsconfig) : undefined;
+  const fragmentRef = arunaTsconfigExtendsRef(tsconfigPath, generatedDir);
+  const fragmentReferenced = tsconfig !== undefined && extendsIncludesFragment(tsconfig, fragmentRef);
+  const fragmentRel = toPosix(path.join(generatedDir, ARUNA_TSCONFIG_FRAGMENT_FILE));
+
+  if (fragmentReferenced) {
+    // Extends-managed project: the generated fragment supplies the aliases.
+    const fragmentAbs = path.resolve(generatedDirAbs, ARUNA_TSCONFIG_FRAGMENT_FILE);
+    let fragmentContents: string | undefined;
+    try {
+      fragmentContents = await fs.readFile(fragmentAbs, "utf8");
+    } catch {
+      fragmentContents = undefined;
+    }
+    const expectedContents = arunaTsconfigFragmentContents(options.projectRoot, generatedDir);
+    if (fragmentContents !== expectedContents) {
+      diagnostics.push({
+        code: "aruna::111",
+        name: "tsconfig-alias-desync",
+        severity: "warning",
+        message:
+          fragmentContents === undefined
+            ? `Generated tsconfig fragment ${fragmentRel} is missing.`
+            : `Generated tsconfig fragment ${fragmentRel} is stale.`,
+        file: fragmentRel,
+        details:
+          "The project tsconfig extends this fragment for its Aruna path aliases, " +
+          "so a missing or stale fragment breaks alias resolution.",
+        suggestion: "Run `aruna build` (or `aruna doctor --fix`) to regenerate the fragment.",
+      });
+    }
+
+    // Inline paths shadow the extended fragment wholesale (TS extends
+    // semantics). Only a shadow that actually breaks an aruna alias is flagged.
+    if (tsconfigPaths !== undefined) {
+      const expectedAll = resolveAllArunaAliasPaths(tsconfigPath, generatedDir);
+      const broken: string[] = [];
+      for (const [alias, targets] of Object.entries(expectedAll)) {
+        const actual = aliasTarget(tsconfigPaths, alias);
+        if (actual === undefined) {
+          broken.push(`${alias} (missing inline)`);
+        } else if (actual !== toPosix(targets[0]!)) {
+          broken.push(`${alias} -> ${actual} (expected ${toPosix(targets[0]!)})`);
+        }
+      }
+      if (broken.length > 0) {
+        diagnostics.push({
+          code: "aruna::112",
+          name: "tsconfig-paths-shadow-generated",
+          severity: "warning",
+          message:
+            "compilerOptions.paths shadows the generated Aruna tsconfig fragment and breaks alias(es).",
+          file: toPosix(path.relative(options.projectRoot, tsconfigPath)),
+          details:
+            `TypeScript replaces inherited paths wholesale, so the fragment's aliases are inert. Broken: ${broken.join("; ")}`,
+          suggestion:
+            "Run `aruna doctor --fix --project .` to realign the inline aliases, or remove compilerOptions.paths to use the fragment.",
+        });
+      }
+    }
+
+    return diagnostics;
+  }
+
   if (tsconfigPaths !== undefined) {
     const expectedAction = resolveArunaActionPaths(tsconfigPath, generatedDir);
     const expectedSignal = resolveArunaSignalPaths(tsconfigPath, generatedDir);

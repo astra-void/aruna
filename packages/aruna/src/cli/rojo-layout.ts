@@ -37,17 +37,26 @@ function isEntry(kind: ModuleKind): boolean {
   return kind === "clientEntry" || kind === "serverEntry";
 }
 
-// Where a module lands. `.aruna` generated files are special-cased: the server
-// action registry (which imports server implementations) must stay server-side,
-// everything else generated is shared (client stubs, the signal registry, and
-// the vendored runtime).
+// Where a module lands. `.aruna` generated files are special-cased: the split
+// tree already encodes the partition in the path — `server/` holds the action
+// registry and the generated server entry, `client/` holds the generated client
+// entry, and everything else (client stubs, the signal registry, the vendored
+// runtime) is replication-safe shared.
 export function layoutTargetFor(
   modulePath: string,
   kind: ModuleKind,
   generatedDirRel: string,
 ): LayoutTarget {
   const normalized = toPosix(modulePath);
-  if (normalized.startsWith(`src/${generatedDirRel}/`)) {
+  const generatedPrefix = `src/${generatedDirRel}/`;
+  if (normalized.startsWith(generatedPrefix)) {
+    const generatedRel = normalized.slice(generatedPrefix.length);
+    if (generatedRel.startsWith("server/")) {
+      return "server";
+    }
+    if (generatedRel.startsWith("client/")) {
+      return "client";
+    }
     return kind === "serverAction" ? "server" : "shared";
   }
   switch (kind) {

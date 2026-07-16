@@ -24,7 +24,11 @@ import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
 import { runPartitionedRbxtsc } from "./rojo-layout.js";
-import { GENERATED_RUNTIME_DIR } from "./tsconfig-paths.js";
+import {
+  ARUNA_TSCONFIG_FRAGMENT_FILE,
+  arunaTsconfigFragmentContents,
+  GENERATED_RUNTIME_DIR,
+} from "./tsconfig-paths.js";
 import {
   collectLayoutDesyncDiagnostics,
   reconcileOwnedArtifacts,
@@ -404,6 +408,16 @@ async function runBuild(options: BuildCliOptions): Promise<BuildRunResult> {
       generatedRel.push(relative);
     }
   }
+
+  // The generated tsconfig fragment: alias wiring is codegen-owned, so a
+  // layout change can never desync a project whose tsconfig `extends` it.
+  await fs.mkdir(generatedDirAbs, { recursive: true });
+  await fs.writeFile(
+    path.join(generatedDirAbs, ARUNA_TSCONFIG_FRAGMENT_FILE),
+    arunaTsconfigFragmentContents(input.root, generatedDir),
+    "utf8",
+  );
+  generatedRel.push(ARUNA_TSCONFIG_FRAGMENT_FILE);
 
   const { pruned } = await reconcileOwnedArtifacts({
     generatedDirAbs,

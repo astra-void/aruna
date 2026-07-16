@@ -26,6 +26,20 @@ describe("layoutTargetFor", () => {
     );
     expect(layoutTargetFor("src/.aruna/signals.generated.ts", "shared", ".aruna")).toBe("shared");
   });
+
+  it("routes split-tree generated files by their partition subtree", () => {
+    expect(
+      layoutTargetFor("src/.aruna/server/actions.server.generated.ts", "serverAction", ".aruna"),
+    ).toBe("server");
+    expect(layoutTargetFor("src/.aruna/server/main.server.ts", "server", ".aruna")).toBe("server");
+    expect(layoutTargetFor("src/.aruna/client/main.client.ts", "client", ".aruna")).toBe("client");
+    expect(
+      layoutTargetFor("src/.aruna/shared/actions.client.generated.ts", "client", ".aruna"),
+    ).toBe("shared");
+    expect(layoutTargetFor("src/.aruna/shared/signals.generated.ts", "shared", ".aruna")).toBe(
+      "shared",
+    );
+  });
 });
 
 describe("stagePathFor", () => {

@@ -3,22 +3,38 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { runInit } from "../src/cli/init.ts";
+import { stripJsonComments } from "./support/jsonc.ts";
 
 describe("aruna init", () => {
-  it("scaffolds config files with action and runtime aliases", async () => {
+  it("scaffolds an extends-managed tsconfig plus the generated alias fragment", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-init-"));
     try {
       const result = runInit({ projectRoot: root });
       expect(result.created.sort()).toEqual([
         "aruna.config.ts",
         "default.project.json",
+        "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
       ]);
 
+      // The scaffolded tsconfig holds no inline aruna aliases — it extends the
+      // generated fragment, so codegen-layout changes can never desync it.
       const tsconfig = JSON.parse(await fs.readFile(path.join(root, "tsconfig.json"), "utf8")) as {
-        compilerOptions: { paths: Record<string, string[]> };
+        extends: string;
+        compilerOptions: { paths?: Record<string, string[]> };
       };
-      const paths = tsconfig.compilerOptions.paths;
+      expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
+      expect(tsconfig.compilerOptions.paths).toBeUndefined();
+
+      const fragment = JSON.parse(
+        stripJsonComments(
+          await fs.readFile(path.join(root, "src/.aruna/tsconfig.aruna.json"), "utf8"),
+        ),
+      ) as {
+        compilerOptions: { baseUrl: string; paths: Record<string, string[]> };
+      };
+      expect(fragment.compilerOptions.baseUrl).toBe("../..");
+      const paths = fragment.compilerOptions.paths;
       expect(paths["aruna/server"]).toEqual(["src/.aruna/shared/runtime/server.ts"]);
       expect(paths["aruna/schema"]).toEqual(["src/.aruna/shared/runtime/schema.ts"]);
       expect(paths["$aruna/actions/server"]).toEqual([
@@ -54,6 +70,7 @@ describe("aruna init", () => {
       expect(second.skipped.sort()).toEqual([
         "aruna.config.ts",
         "default.project.json",
+        "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
       ]);
     } finally {

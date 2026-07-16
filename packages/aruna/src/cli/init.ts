@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  ARUNA_ACTION_PATHS,
-  resolveArunaActionPaths,
-  resolveArunaRuntimePaths,
-  resolveArunaSignalPaths,
+  ARUNA_TSCONFIG_FRAGMENT_FILE,
+  arunaTsconfigExtendsRef,
+  arunaTsconfigFragmentContents,
 } from "./tsconfig-paths.js";
 import { partitionedRojoProject } from "./rojo-layout.js";
 
@@ -33,15 +32,11 @@ export default defineConfig({
 
 function tsconfigTemplate(projectRoot: string): string {
   const tsconfigPath = path.join(projectRoot, "tsconfig.json");
-  const actionPaths = resolveArunaActionPaths(tsconfigPath, GENERATED_DIR);
-  const paths: Record<string, string[]> = {
-    [ARUNA_ACTION_PATHS.client]: actionPaths.client,
-    [ARUNA_ACTION_PATHS.server]: actionPaths.server,
-    ...resolveArunaSignalPaths(tsconfigPath, GENERATED_DIR),
-    ...resolveArunaRuntimePaths(tsconfigPath, GENERATED_DIR),
-  };
 
   const tsconfig = {
+    // All aruna-owned path aliases live in the generated fragment; the project
+    // tsconfig references it once and can never drift from the codegen layout.
+    extends: arunaTsconfigExtendsRef(tsconfigPath, GENERATED_DIR),
     compilerOptions: {
       target: "ESNext",
       module: "CommonJS",
@@ -63,7 +58,6 @@ function tsconfigTemplate(projectRoot: string): string {
       verbatimModuleSyntax: false,
       typeRoots: ["./node_modules", "./node_modules/@rbxts"],
       types: ["@rbxts/types", "@rbxts/compiler-types"],
-      paths,
     },
     include: ["src/**/*.ts", "src/**/*.tsx"],
     exclude: ["aruna.config.ts", "out", "node_modules"],
@@ -81,9 +75,16 @@ function defaultProjectTemplate(): string {
 }
 
 export function runInit(options: InitOptions): InitResult {
+  const fragmentName = path.posix.join(GENERATED_DIR, ARUNA_TSCONFIG_FRAGMENT_FILE);
   const files: Array<{ name: string; contents: string }> = [
     { name: "aruna.config.ts", contents: arunaConfigTemplate() },
     { name: "tsconfig.json", contents: tsconfigTemplate(options.projectRoot) },
+    // The scaffolded tsconfig `extends` the fragment, so an initial copy must
+    // exist before the first `aruna build` regenerates it.
+    {
+      name: fragmentName,
+      contents: arunaTsconfigFragmentContents(options.projectRoot, GENERATED_DIR),
+    },
     { name: "default.project.json", contents: defaultProjectTemplate() },
   ];
 
@@ -96,6 +97,7 @@ export function runInit(options: InitOptions): InitResult {
       skipped.push(file.name);
       continue;
     }
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, file.contents, "utf8");
     created.push(file.name);
   }

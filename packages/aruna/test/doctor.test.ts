@@ -15,6 +15,14 @@ import {
   resolveArunaRuntimePaths,
   resolveArunaSignalPaths,
 } from "../src/cli/tsconfig-paths.js";
+import { stripJsonComments } from "./support/jsonc.ts";
+
+function readFragment(root: string, generatedDir = "src/.aruna"): {
+  compilerOptions: { baseUrl: string; paths: Record<string, string[]> };
+} {
+  const raw = fs.readFileSync(path.join(root, generatedDir, "tsconfig.aruna.json"), "utf8");
+  return JSON.parse(stripJsonComments(raw));
+}
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const builtCliPath = path.resolve(packageRoot, "dist/cli.js");
@@ -87,7 +95,7 @@ describe("doctor", () => {
     expect(doctorExitCode(report)).toBe(1);
   });
 
-  it("adds missing aliases with fix", () => {
+  it("migrates a tsconfig without aliases to the generated fragment with fix", () => {
     const root = makeTempRoot();
     writeProject(root, {
       "tsconfig.json": `{\n  "compilerOptions": {\n    "module": "ESNext"\n  }\n}\n`,
@@ -98,21 +106,28 @@ describe("doctor", () => {
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
     expect(report.fixApplied).toBe(true);
-    expect(report.fixChanges).toContain('added compilerOptions.baseUrl = "."');
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
+    expect(report.aliasMode).toBe("extends");
+    expect(report.fragment.status).toBe("correct");
+    expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
+    expect(tsconfig.compilerOptions.paths).toBeUndefined();
+
+    // Every aruna alias lives in the generated fragment now — including the
+    // signal registry virtual module, so `import { signals } from
+    // "$aruna/signals"` resolves under tsc/rbxtsc.
+    const fragment = readFragment(root);
+    expect(fragment.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/.aruna/shared/actions.client.generated.ts",
     ]);
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
+    expect(fragment.compilerOptions.paths["$aruna/actions/server"]).toEqual([
       "src/.aruna/server/actions.server.generated.ts",
     ]);
-    // The signal registry virtual module is installed alongside the actions so
-    // `import { signals } from "$aruna/signals"` resolves under tsc/rbxtsc.
-    expect(tsconfig.compilerOptions.paths["$aruna/signals"]).toEqual([
+    expect(fragment.compilerOptions.paths["$aruna/signals"]).toEqual([
       "src/.aruna/shared/signals.generated.ts",
     ]);
+    expect(doctorExitCode(report)).toBe(0);
   });
 
-  it("preserves existing paths", () => {
+  it("preserves existing paths and stays inline-managed alongside them", () => {
     const root = makeTempRoot();
     writeProject(root, {
       "tsconfig.json": `{\n  "compilerOptions": {\n    "module": "ESNext",\n    "paths": {\n      "@shared/*": ["src/shared/*"]\n    }\n  }\n}\n`,
@@ -123,9 +138,15 @@ describe("doctor", () => {
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
     expect(tsconfig.compilerOptions.paths["@shared/*"]).toEqual(["src/shared/*"]);
+    // User-owned aliases would shadow the fragment under `extends`, so the fix
+    // keeps the aruna aliases inline next to them instead of migrating.
+    expect(tsconfig.extends).toBeUndefined();
+    expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
+      "src/.aruna/shared/actions.client.generated.ts",
+    ]);
   });
 
-  it("updates incorrect Aruna aliases", () => {
+  it("migrates a tsconfig whose paths block only holds stale Aruna aliases", () => {
     const root = makeTempRoot();
     writeProject(root, {
       "tsconfig.json": `{\n  "compilerOptions": {\n    "paths": {\n      "$aruna/actions/client": ["wrong.ts"],\n      "$aruna/actions/server": ["also-wrong.ts"]\n    }\n  }\n}\n`,
@@ -135,10 +156,13 @@ describe("doctor", () => {
     fixDoctorProject({ projectRoot: root, fix: true });
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
+    expect(tsconfig.compilerOptions.paths).toBeUndefined();
+    expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
+    const fragment = readFragment(root);
+    expect(fragment.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/.aruna/shared/actions.client.generated.ts",
     ]);
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
+    expect(fragment.compilerOptions.paths["$aruna/actions/server"]).toEqual([
       "src/.aruna/server/actions.server.generated.ts",
     ]);
   });
@@ -196,15 +220,17 @@ describe("doctor", () => {
 
     expect(report.generatedDir).toBe("src/generated");
     expect(report.manifestOutput).toBe("src/generated/manifest.json");
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
+    expect(tsconfig.extends).toBe("./src/generated/tsconfig.aruna.json");
+    const fragment = readFragment(root, "src/generated");
+    expect(fragment.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/generated/shared/actions.client.generated.ts",
     ]);
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/server"]).toEqual([
+    expect(fragment.compilerOptions.paths["$aruna/actions/server"]).toEqual([
       "src/generated/server/actions.server.generated.ts",
     ]);
   });
 
-  it("adds baseUrl when required", () => {
+  it("does not inject baseUrl when migrating to the fragment", () => {
     const root = makeTempRoot();
     writeProject(root, {
       "tsconfig.json": `{\n  "compilerOptions": {\n    "module": "ESNext"\n  }\n}\n`,
@@ -214,7 +240,10 @@ describe("doctor", () => {
     fixDoctorProject({ projectRoot: root, fix: true });
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
 
-    expect(tsconfig.compilerOptions.baseUrl).toBe(".");
+    // The fragment carries its own baseUrl; the project tsconfig stays clean.
+    expect(tsconfig.compilerOptions.baseUrl).toBeUndefined();
+    expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
+    expect(readFragment(root).compilerOptions.baseUrl).toBe("../..");
   });
 
   it("works through the built CLI", () => {
@@ -240,8 +269,9 @@ describe("doctor", () => {
     expect(result.stderr).toBe("");
   });
 
-  // After `doctor --fix --emit-runtime`, every Aruna alias must equal the path the
-  // current split-tree layout actually emits — verified 1:1 against the resolvers
+  // After `doctor --fix`, every Aruna alias must equal the path the current
+  // split-tree layout actually emits — the stale flat-layout tsconfig migrates
+  // to the generated fragment, which is verified 1:1 against the resolvers
   // that codegen/vendoring share, so the two can never silently drift apart.
   it("realigns every alias 1:1 with the current emit layout, dropping stale flat paths", () => {
     const root = makeTempRoot();
@@ -254,8 +284,12 @@ describe("doctor", () => {
 
     fixDoctorProject({ projectRoot: root, fix: true, emitRuntime: true });
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
-    const aliases = tsconfig.compilerOptions.paths as Record<string, string[]>;
 
+    // The stale inline aliases are gone entirely — replaced by the fragment.
+    expect(tsconfig.compilerOptions.paths).toBeUndefined();
+    expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
+
+    const aliases = readFragment(root).compilerOptions.paths;
     const tsconfigPath = path.join(root, "tsconfig.json");
     const expectedAction = resolveArunaActionPaths(tsconfigPath, "src/.aruna");
     const expectedSignal = resolveArunaSignalPaths(tsconfigPath, "src/.aruna");
@@ -272,6 +306,27 @@ describe("doctor", () => {
       // And none still point at the flat layout.
       expect(aliases[alias]?.[0]).not.toContain("/.aruna/runtime/");
     }
+  });
+
+  it("keeps a fragment-shadowing paths block aligned inline with fix", () => {
+    const root = makeTempRoot();
+    writeProject(root, {
+      // extends already references the fragment, but a user paths block
+      // shadows it wholesale (TS extends semantics) — aruna::112 territory.
+      "tsconfig.json": `{\n  "extends": "./src/.aruna/tsconfig.aruna.json",\n  "compilerOptions": {\n    "paths": {\n      "@shared/*": ["src/shared/*"]\n    }\n  }\n}\n`,
+      "aruna.config.ts": minimalConfig(),
+    });
+
+    const report = fixDoctorProject({ projectRoot: root, fix: true, emitRuntime: true });
+    const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
+
+    expect(report.pathsShadowFragment).toBe(true);
+    // The shadowing block keeps the user alias and gains the aruna aliases so
+    // resolution still works despite the shadow.
+    expect(tsconfig.compilerOptions.paths["@shared/*"]).toEqual(["src/shared/*"]);
+    expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
+      "src/.aruna/shared/actions.client.generated.ts",
+    ]);
   });
 
   it("realigns aliases cross-repo via --project (built CLI, INIT_CWD anchored)", () => {
@@ -295,10 +350,13 @@ describe("doctor", () => {
 
     expect(result.status).toBe(0);
     const tsconfig = JSON.parse(fs.readFileSync(path.join(root, "tsconfig.json"), "utf8"));
-    expect(tsconfig.compilerOptions.paths["$aruna/actions/client"]).toEqual([
+    expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
+    expect(tsconfig.compilerOptions.paths).toBeUndefined();
+    const fragment = readFragment(root);
+    expect(fragment.compilerOptions.paths["$aruna/actions/client"]).toEqual([
       "src/.aruna/shared/actions.client.generated.ts",
     ]);
-    expect(tsconfig.compilerOptions.paths["aruna/client"]).toEqual([
+    expect(fragment.compilerOptions.paths["aruna/client"]).toEqual([
       "src/.aruna/shared/runtime/client.ts",
     ]);
   });
