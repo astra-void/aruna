@@ -10,7 +10,11 @@ fn normalize_boundary_kind(kind: ModuleKind) -> ModuleKind {
         ModuleKind::Client | ModuleKind::ClientEntry => ModuleKind::Client,
         ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => ModuleKind::Server,
         ModuleKind::Shared => ModuleKind::Shared,
-        ModuleKind::Unknown => ModuleKind::Unknown,
+        // Unclassified modules are evaluated as shared, the most restrictive
+        // kind: an unknown file importing server or client code is a violation.
+        // Before this, Unknown bypassed every boundary rule — a file placed one
+        // directory outside the conventions silently escaped enforcement.
+        ModuleKind::Unknown => ModuleKind::Shared,
     }
 }
 
@@ -64,5 +68,26 @@ mod tests {
             boundary_code(ModuleKind::Client, ModuleKind::ServerAction),
             Some("aruna::556")
         );
+    }
+
+    #[test]
+    fn unknown_modules_are_evaluated_as_shared() {
+        // An unclassified file must not escape boundary enforcement.
+        assert_eq!(
+            boundary_code(ModuleKind::Unknown, ModuleKind::Server),
+            Some("aruna::303")
+        );
+        assert_eq!(
+            boundary_code(ModuleKind::Unknown, ModuleKind::ServerAction),
+            Some("aruna::303")
+        );
+        assert_eq!(
+            boundary_code(ModuleKind::Unknown, ModuleKind::Client),
+            Some("aruna::302")
+        );
+        // Unknown as an importee stays importable, like shared.
+        assert_eq!(boundary_code(ModuleKind::Server, ModuleKind::Unknown), None);
+        assert_eq!(boundary_code(ModuleKind::Client, ModuleKind::Unknown), None);
+        assert_eq!(boundary_code(ModuleKind::Unknown, ModuleKind::Unknown), None);
     }
 }

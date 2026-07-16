@@ -158,6 +158,14 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
     } else {
         edge.edge.to.as_deref().unwrap_or("")
     };
+    // An unclassified importer is evaluated as shared (see rules.rs); point the
+    // suggestion at the real fix — classifying the file — instead of the
+    // generic shared-module wording.
+    let suggestion = if edge.importer_kind == ModuleKind::Unknown {
+        "This file matches no client/server/shared convention, so it is treated as shared. Move it under a classified path (or add a conventions glob) so it may import this module.".to_string()
+    } else {
+        boundary_suggestion(code).to_string()
+    };
     Some(create_diagnostic(
         code,
         format_boundary_message(
@@ -175,7 +183,7 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
             imported_display_path,
             module_kind_label(imported_kind)
         )),
-        Some(boundary_suggestion(code).to_string()),
+        Some(suggestion),
     ))
 }
 
