@@ -5,11 +5,75 @@ All notable changes to the `aruna` package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-07-16
 
-These changes close gaps found by dogfooding Aruna from a downstream consumer.
-This is a pre-1.0 release: the renamed/removed symbols below are a hard break,
-not a deprecation cycle — migrate call sites to the canonical names.
+The setup-DX release: the daily loop and project scaffolding become one-command
+(`aruna dev`, `aruna add domain`, `npm create aruna`), the transport abstraction
+collapses onto the single RemoteEvent wiring, and the wire gets safety rails
+(schema fingerprints, path-aware validation errors, typed wire errors, default
+request timeouts). This is a pre-1.0 release: the removed symbols and config
+fields below are a hard break, not a deprecation cycle.
+
+### Added
+
+- **`aruna dev` — the one-command daily loop.** Runs the watch build (codegen +
+  vendoring + rbxtsc per save) and spawns a `rojo serve` child once the first
+  pass has produced `out/`. Configure with `dev: { rojo: true | false | { port } }`
+  (plus `--no-rojo` / `--rojo-port`); rojo output is line-prefixed with `rojo │`,
+  and rojo failing to launch or exiting warns without tearing down the watch loop.
+- **`aruna add domain <name> [--with ui,runtime]` — convention-true scaffolding.**
+  Generates `<root>/domains/<name>/{schema,model,actions}.ts` (plus `ui.tsx` /
+  `runtime.ts`) whose file names are the classifier's own Recommended Layout
+  conventions, so scaffolded files are correctly classified by construction.
+  The actions template imports its schemas from `./schema` (see below).
+- **`create-aruna` — `npm create aruna@latest my-game`.** Scaffolds the pinned
+  rbxts toolchain matrix, `entries: "generated"` config, rokit/VS Code/git
+  plumbing, then installs and runs `aruna init` → `aruna add domain shop --with
+  ui` → `aruna build`, so a fresh project builds green in one command.
+- **`aruna doctor` toolchain check.** Reads the installed roblox-ts's own
+  TypeScript pin and warns when the installed `typescript` drifts from it — the
+  classic rbxts setup trap, surfaced before rbxtsc fails confusingly.
+- **Schemas resolve through one import hop.** `input: purchaseInput` with
+  `import { purchaseInput } from "./schema"` now extracts contract metadata; an
+  identifier that resolves to nothing is the new `aruna::565` error instead of a
+  silent `unknown` contract.
+- **`rateLimit.key: "global"`** — a single shared bucket across all callers,
+  alongside the per-player default, end to end (parser, both runtimes, contract).
+- **Wire safety rails.** Binary frames carry a u32 schema fingerprint (identical
+  layout hash in both runtimes) so mid-rollout schema drift fails loudly;
+  validation failures report the failing path (`firstSchemaIssue`); wire errors
+  are typed; client requests time out by default instead of hanging forever.
+- **Unreliable signals.** `defineSignal({ unreliable: true })` routes over a
+  dedicated UnreliableRemoteEvent for high-frequency latest-value-wins channels.
+- **Native `ServerApp.actions` + `ServerApp.dispatch`** — the in-process,
+  validated dispatch path (the supported way to exercise actions under Lune),
+  plus a player lifecycle hook on the server app.
+
+### Changed
+
+- Default remote instances are the flat `ArunaActionRemoteEvent` /
+  `ArunaSignalRemoteEvent`, identical across both runtimes.
+- `publisher.toBatched` returns a `Promise` that settles after the last chunk.
+- The roblox-flavored `defineAction`'s `ctx.player` is `Player` (non-optional).
+- `defineSignal` preserves the id literal type (`definition.id` no longer widens
+  to `string`), so call sites key publishes/subscribes off the definition.
+- `aruna init` scaffolds `skipLibCheck: true` — an @rbxts/types point release
+  can no longer break a consumer's `tsc --noEmit`.
+- Boundary rules now also apply to unclassified modules.
+
+### Removed (breaking)
+
+- **`actions.transport` config field** — Aruna always uses the RemoteEvent
+  transport; the config loader rejects the field with a migration message, and
+  the remote-function/memory public transport surface is gone.
+- The remote-signal static `handlers` option — use `subscriber.on(id, handler)`.
+- `bindRemoteEventActions` is internal — bind through `createServerApp({
+  transport: robloxRemoteEvent() })` / `bindActions`.
+
+The earlier dogfooding round below (versioned 0.1.3 locally, never published to
+npm) also ships for the first time in 0.2.0. Those changes close gaps found by
+dogfooding Aruna from a downstream consumer; the renamed/removed symbols are
+likewise a hard break.
 
 ### Added
 
