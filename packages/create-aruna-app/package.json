@@ -1,5 +1,5 @@
 {
-  "name": "create-aruna",
+  "name": "create-aruna-app",
   "version": "0.2.0",
   "private": false,
   "repository": {
@@ -7,7 +7,7 @@
     "url": "git+https://github.com/astra-void/aruna.git"
   },
   "bin": {
-    "create-aruna": "./dist/cli.js"
+    "create-aruna-app": "./dist/cli.js"
   },
   "files": [
     "dist"

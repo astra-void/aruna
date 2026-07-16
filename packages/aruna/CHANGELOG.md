@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.0] - 2026-07-16
 
 The setup-DX release: the daily loop and project scaffolding become one-command
-(`aruna dev`, `aruna add domain`, `npm create aruna`), the transport abstraction
+(`aruna dev`, `aruna add domain`, `npm create aruna-app`), the transport abstraction
 collapses onto the single RemoteEvent wiring, and the wire gets safety rails
 (schema fingerprints, path-aware validation errors, typed wire errors, default
 request timeouts). This is a pre-1.0 release: the removed symbols and config
@@ -26,7 +26,7 @@ fields below are a hard break, not a deprecation cycle.
   `runtime.ts`) whose file names are the classifier's own Recommended Layout
   conventions, so scaffolded files are correctly classified by construction.
   The actions template imports its schemas from `./schema` (see below).
-- **`create-aruna` — `npm create aruna@latest my-game`.** Scaffolds the pinned
+- **`create-aruna-app` — `npm create aruna-app@latest my-game`.** Scaffolds the pinned
   rbxts toolchain matrix, `entries: "generated"` config, rokit/VS Code/git
   plumbing, then installs and runs `aruna init` → `aruna add domain shop --with
   ui` → `aruna build`, so a fresh project builds green in one command.

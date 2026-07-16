@@ -1,7 +1,7 @@
 # Create App Plan
 
 This note was the planning target after package-consumption validation; the scaffolder
-now exists as the `create-aruna` package (`npm create aruna@latest my-game`). It writes
+now exists as the `create-aruna-app` package (`npm create aruna-app@latest my-game`). It writes
 only the framework-owned base files (package.json with the pinned rbxts toolchain
 matrix, aruna.config.ts with `entries: "generated"`, .gitignore, rokit.toml, VS Code
 settings, README) and delegates everything the aruna CLI can generate to post-install

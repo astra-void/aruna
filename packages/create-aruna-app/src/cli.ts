@@ -15,16 +15,16 @@ import {
   type PackageManager,
 } from "./scaffold.js";
 
-// create-aruna is versioned in lockstep with @arunajs/aruna, so its own version
+// create-aruna-app is versioned in lockstep with @arunajs/aruna, so its own version
 // is the one the scaffolded dependency should track.
-function createArunaVersion(): string {
+function createArunaAppVersion(): string {
   const packageJsonPath = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../package.json",
   );
   const manifest = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: string };
   if (typeof manifest.version !== "string") {
-    throw new Error("create-aruna package.json is missing a version");
+    throw new Error("create-aruna-app package.json is missing a version");
   }
   return manifest.version;
 }
@@ -49,7 +49,7 @@ function printNextSteps(appName: string, pm: PackageManager, fromStep: number): 
 export async function main(): Promise<number> {
   const program = new Command();
   program
-    .name("create-aruna")
+    .name("create-aruna-app")
     .description("scaffold a new Aruna + roblox-ts project")
     .argument("<directory>", "directory to create the project in")
     .option("--no-install", "skip dependency install and the post-install aruna steps")
@@ -80,13 +80,13 @@ export async function main(): Promise<number> {
 
   let result;
   try {
-    result = scaffoldProject({ appDirectory, appName, arunaVersion: createArunaVersion() });
+    result = scaffoldProject({ appDirectory, appName, arunaVersion: createArunaAppVersion() });
   } catch (error) {
     process.stderr.write(`${pc.red(error instanceof Error ? error.message : String(error))}\n`);
     return 1;
   }
 
-  process.stdout.write(`create-aruna ${appName}\n\ncreated\n`);
+  process.stdout.write(`create-aruna-app ${appName}\n\ncreated\n`);
   for (const file of result.created) {
     process.stdout.write(`  + ${file}\n`);
   }

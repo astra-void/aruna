@@ -4,7 +4,7 @@ Status: Implemented (all phases). Companion to [create-app-plan.md](create-app-p
 doc defines the setup/everyday-DX contract the scaffolding targets. Phases A/B landed with
 the recommended-layout conventions + generated entries rounds; Phase C is `aruna dev`
 (watch build + rojo serve child, `dev.rojo` config); Phase D is `aruna add domain` and the
-`create-aruna` package (scaffold → install → `aruna init` → `aruna add domain shop --with ui`
+`create-aruna-app` package (scaffold → install → `aruna init` → `aruna add domain shop --with ui`
 → `aruna build`, so a new project builds green in one command). `aruna doctor` also gained
 the roblox-ts ↔ typescript version-skew check.
 
@@ -152,7 +152,7 @@ Consequences:
 
 ## Pillar 4 — `create aruna` (one-command initial setup)
 
-`npm create aruna@latest my-game` (package: `create-aruna`) scaffolds the full project
+`npm create aruna-app@latest my-game` (package: `create-aruna-app`) scaffolds the full project
 per [create-app-plan.md](create-app-plan.md):
 
 - `package.json` with the *framework-owned pinned matrix* (`roblox-ts`, `typescript`,
@@ -197,7 +197,7 @@ typed `defineAction` skeleton to an existing domain.
 New project:
 
 ```
-npm create aruna@latest my-game
+npm create aruna-app@latest my-game
 cd my-game
 aruna dev          # rojo serving, watch building — open Studio and play
 ```
@@ -216,7 +216,7 @@ not routine maintenance.
 - **Phase B — generated entries.** Pillar 3: generated mains, hook discovery, `client/`
   partition, `entries` config switch.
 - **Phase C — dev loop.** Pillar 5 process orchestration on top of the existing watch.
-- **Phase D — scaffolding.** Pillar 4 `create-aruna` + Pillar 6 generators. Cheap by
+- **Phase D — scaffolding.** Pillar 4 `create-aruna-app` + Pillar 6 generators. Cheap by
   now: after A–C the scaffold is little more than package.json + one example domain.
 
 Dependency note: D intentionally last — every earlier phase shrinks what create-app

@@ -1,7 +1,7 @@
 name: publish
 
 # Publishes the full Aruna package graph (8 native targets + @arunajs/core +
-# @arunajs/compiler + @arunajs/aruna + create-aruna) to npm when a v* tag is pushed.
+# @arunajs/compiler + @arunajs/aruna + create-aruna-app) to npm when a v* tag is pushed.
 #
 # The 8 native targets are built in parallel, one job per target, each on the
 # cheapest runner that can build it:
@@ -10,7 +10,7 @@ name: publish
 #   - win32-*  → ubuntu-latest via cargo-xwin (MSVC ABI)
 # Each build job stages `.npm/compiler-<target>` and uploads it as an artifact.
 # The publish job downloads every native artifact, builds the TypeScript
-# packages, stages the compiler/core/aruna/create-aruna manifests around the pre-built
+# packages, stages the compiler/core/aruna/create-aruna-app manifests around the pre-built
 # natives (--assemble), and publishes the whole graph in dependency order.
 #
 # Auth uses npm trusted publishing (OIDC) — no NPM_TOKEN secret. Configure a

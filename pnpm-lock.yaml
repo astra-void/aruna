@@ -131,7 +131,7 @@ importers:
 
   packages/core: {}
 
-  packages/create-aruna:
+  packages/create-aruna-app:
     dependencies:
       commander:
         specifier: ^15.0.0

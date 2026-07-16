@@ -73,10 +73,10 @@ const compilerPackageRoot = path.join(workspaceRoot, "packages", "compiler");
 const compilerPackageJsonPath = path.join(compilerPackageRoot, "package.json");
 const corePackageRoot = path.join(workspaceRoot, "packages", "core");
 const arunaPackageRoot = path.join(workspaceRoot, "packages", "aruna");
-const createArunaPackageRoot = path.join(workspaceRoot, "packages", "create-aruna");
+const createArunaPackageRoot = path.join(workspaceRoot, "packages", "create-aruna-app");
 const stagedCoreDirectory = path.join(workspaceRoot, ".npm", "core");
 const stagedArunaDirectory = path.join(workspaceRoot, ".npm", "aruna");
-const stagedCreateArunaDirectory = path.join(workspaceRoot, ".npm", "create-aruna");
+const stagedCreateArunaDirectory = path.join(workspaceRoot, ".npm", "create-aruna-app");
 const releaseProfile: NativeBuildProfile = "release";
 
 export function parseTargetList(value: string | undefined): NativeTarget[] {
@@ -378,7 +378,7 @@ async function validateStagedRelease(
     "compiler",
     "core",
     "aruna",
-    "create-aruna",
+    "create-aruna-app",
   ];
 
   if (
@@ -417,7 +417,7 @@ function buildPublishableTypeScriptPackages(spawn: typeof spawnSync): void {
       "--filter=@arunajs/core",
       "--filter=@arunajs/compiler",
       "--filter=@arunajs/aruna",
-      "--filter=create-aruna",
+      "--filter=create-aruna-app",
     ],
     workspaceRoot,
     "Failed to build TypeScript packages",
@@ -764,7 +764,7 @@ async function publishRelease(
   }
   const pnpmInvocation = await resolvePnpmInvocation();
 
-  // Dependency order: native binaries → core → compiler → aruna → create-aruna
+  // Dependency order: native binaries → core → compiler → aruna → create-aruna-app
   // (the scaffolder installs @arunajs/aruna, so it publishes last).
   const orderedDirectories = [
     ...prepared.nativePackageDirectories,

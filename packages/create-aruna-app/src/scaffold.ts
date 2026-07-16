@@ -16,7 +16,7 @@ export const ROKIT_ROJO_SPEC = "rojo-rbx/rojo@7.7.0";
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
-// `npm create aruna` (and the pnpm/yarn/bun equivalents) sets
+// `npm create aruna-app` (and the pnpm/yarn/bun equivalents) sets
 // npm_config_user_agent to "<pm>/<version> ...", which is the only reliable
 // signal for which package manager the user invoked.
 export function detectPackageManager(userAgent: string | undefined): PackageManager {
@@ -152,7 +152,7 @@ export type ScaffoldFile = {
   readonly contents: string;
 };
 
-// The files create-aruna writes itself. Everything the aruna CLI can generate
+// The files create-aruna-app writes itself. Everything the aruna CLI can generate
 // (tsconfig, rojo project, generated dir, the example domain) is delegated to
 // `aruna init` / `aruna add` / `aruna build` post-install so there is a single
 // source of truth for those shapes.
