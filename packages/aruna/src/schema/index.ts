@@ -1,7 +1,18 @@
 export type SchemaLiteral = string | number | boolean | undefined;
 
+// A runtime-only validation refinement: a predicate plus the message reported
+// when it fails. Constraints like `.min(0)` / `.maxLength(20)` are built-in
+// refinements. Refinements run after the structural check passes and never
+// change the rendered TypeScript type or the wire format, so the compiler
+// ignores them — they are pure runtime validation.
+export type Refinement = {
+  readonly check: (value: unknown) => boolean;
+  readonly message: string;
+};
+
 export type StringSchema = {
   readonly kind: "string";
+  readonly refinements?: readonly Refinement[];
 };
 
 // Numeric width hints. The codec uses these to pick a packed wire encoding;
@@ -12,6 +23,7 @@ export type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" |
 export type NumberSchema = {
   readonly kind: "number";
   readonly format: NumberFormat;
+  readonly refinements?: readonly Refinement[];
 };
 
 // Inclusive [min, max] ranges for the integer formats. Float formats (f32/f64)
@@ -41,6 +53,7 @@ export interface SchemaShape {
 export type ArraySchema = {
   readonly kind: "array";
   readonly item: Schema;
+  readonly refinements?: readonly Refinement[];
 };
 
 export type ObjectSchema<TShape extends SchemaShape = SchemaShape> = {
@@ -76,6 +89,11 @@ export type EnumSchema<TValues extends readonly SchemaLiteral[] = readonly Schem
 export type UnionSchema = {
   readonly kind: "union";
   readonly members: readonly Schema[];
+  // Present for a discriminated union: the shared field whose literal value
+  // selects the member. Enables O(1) member dispatch and a precise error, and is
+  // wire/type-transparent (a discriminated union has the same TS type and wire
+  // encoding as a plain union of the same members).
+  readonly discriminant?: string;
 };
 
 // Roblox userdata schema kinds. The roblox-ts runtime maps these to the native
@@ -277,6 +295,26 @@ function createIssue(path: readonly string[], message: string): SchemaValidation
   return { path, message };
 }
 
+// Runs each refinement (built-in constraint or user `.refine`) against a value
+// that already passed its structural check, collecting an issue per failure.
+function runRefinements(
+  refinements: readonly Refinement[] | undefined,
+  value: unknown,
+  path: readonly string[],
+): readonly SchemaValidationIssue[] {
+  if (refinements === undefined) {
+    return [];
+  }
+
+  const issues: SchemaValidationIssue[] = [];
+  for (const refinement of refinements) {
+    if (!refinement.check(value)) {
+      issues.push(createIssue(path, refinement.message));
+    }
+  }
+  return issues;
+}
+
 function appendPathSegment(path: readonly string[], segment: string): readonly string[] {
   return [...path, segment];
 }
@@ -287,6 +325,26 @@ function appendIndexSegment(path: readonly string[], index: number): readonly st
 
 function isRecordLike(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// The literal values a discriminated union's members carry in their discriminant
+// field, for error messages.
+function discriminantValues(schema: UnionSchema): readonly SchemaLiteral[] {
+  const discriminant = schema.discriminant;
+  if (discriminant === undefined) {
+    return [];
+  }
+
+  const values: SchemaLiteral[] = [];
+  for (const member of schema.members) {
+    if (member.kind === "object") {
+      const tagSchema = member.shape[discriminant];
+      if (tagSchema?.kind === "literal") {
+        values.push(tagSchema.value);
+      }
+    }
+  }
+  return values;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -327,7 +385,10 @@ function validateSchemaAtPath(
 ): readonly SchemaValidationIssue[] {
   switch (schema.kind) {
     case "string":
-      return typeof value === "string" ? [] : [createIssue(path, "expected string")];
+      if (typeof value !== "string") {
+        return [createIssue(path, "expected string")];
+      }
+      return runRefinements(schema.refinements, value, path);
     case "number": {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         return [createIssue(path, "expected finite number")];
@@ -345,7 +406,7 @@ function validateSchemaAtPath(
         }
       }
 
-      return [];
+      return runRefinements(schema.refinements, value, path);
     }
     case "boolean":
       return typeof value === "boolean" ? [] : [createIssue(path, "expected boolean")];
@@ -364,6 +425,12 @@ function validateSchemaAtPath(
         issues.push(
           ...validateSchemaAtPath(schema.item, value[index], appendIndexSegment(path, index)),
         );
+      }
+
+      // Length/refinement constraints apply to the whole array once its elements
+      // conform.
+      if (issues.length === 0) {
+        issues.push(...runRefinements(schema.refinements, value, path));
       }
 
       return issues;
@@ -448,6 +515,28 @@ function validateSchemaAtPath(
           ];
     }
     case "union": {
+      // Discriminated union: dispatch on the discriminant field so the error
+      // points at the actual member instead of "none matched".
+      const discriminant = schema.discriminant;
+      if (discriminant !== undefined && isRecordLike(value)) {
+        const tag = value[discriminant];
+        for (const member of schema.members) {
+          if (member.kind !== "object") {
+            continue;
+          }
+          const tagSchema = member.shape[discriminant];
+          if (tagSchema?.kind === "literal" && Object.is(tagSchema.value, tag)) {
+            return validateSchemaAtPath(member, value, path);
+          }
+        }
+        return [
+          createIssue(
+            appendPathSegment(path, discriminant),
+            `expected one of ${discriminantValues(schema).map(formatLiteralValue).join(", ")}`,
+          ),
+        ];
+      }
+
       for (const member of schema.members) {
         if (validateSchemaAtPath(member, value, path).length === 0) {
           return [];
@@ -530,41 +619,174 @@ export function assertSchema(
   );
 }
 
+// A string schema with chainable length/refine constraints.
+export interface StringSchemaChain extends StringSchema {
+  minLength(value: number): StringSchemaChain;
+  maxLength(value: number): StringSchemaChain;
+  length(value: number): StringSchemaChain;
+  refine(check: (value: unknown) => boolean, message: string): StringSchemaChain;
+}
+
+// A number schema with chainable range/int/refine constraints.
+export interface NumberSchemaChain extends NumberSchema {
+  min(value: number): NumberSchemaChain;
+  max(value: number): NumberSchemaChain;
+  int(): NumberSchemaChain;
+  refine(check: (value: unknown) => boolean, message: string): NumberSchemaChain;
+}
+
+// An array schema with chainable length/refine constraints.
+export interface ArraySchemaChain<TItem extends Schema = Schema> extends ArraySchema {
+  readonly item: TItem;
+  minItems(value: number): ArraySchemaChain<TItem>;
+  maxItems(value: number): ArraySchemaChain<TItem>;
+  length(value: number): ArraySchemaChain<TItem>;
+  refine(check: (value: unknown) => boolean, message: string): ArraySchemaChain<TItem>;
+}
+
+function appendRefinement<TSchema extends { readonly refinements?: readonly Refinement[] }>(
+  base: TSchema,
+  refinement: Refinement,
+): TSchema {
+  return { ...base, refinements: [...(base.refinements ?? []), refinement] };
+}
+
+function stringSchemaChain(base: StringSchema): StringSchemaChain {
+  return {
+    ...base,
+    minLength(value) {
+      return stringSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => typeof candidate === "string" && candidate.length >= value,
+          message: `expected length >= ${value}`,
+        }),
+      );
+    },
+    maxLength(value) {
+      return stringSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => typeof candidate === "string" && candidate.length <= value,
+          message: `expected length <= ${value}`,
+        }),
+      );
+    },
+    length(value) {
+      return stringSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => typeof candidate === "string" && candidate.length === value,
+          message: `expected length ${value}`,
+        }),
+      );
+    },
+    refine(check, message) {
+      return stringSchemaChain(appendRefinement(base, { check, message }));
+    },
+  };
+}
+
+function numberSchemaChain(base: NumberSchema): NumberSchemaChain {
+  return {
+    ...base,
+    min(value) {
+      return numberSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => typeof candidate === "number" && candidate >= value,
+          message: `expected a number >= ${value}`,
+        }),
+      );
+    },
+    max(value) {
+      return numberSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => typeof candidate === "number" && candidate <= value,
+          message: `expected a number <= ${value}`,
+        }),
+      );
+    },
+    int() {
+      return numberSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => typeof candidate === "number" && Number.isInteger(candidate),
+          message: "expected an integer",
+        }),
+      );
+    },
+    refine(check, message) {
+      return numberSchemaChain(appendRefinement(base, { check, message }));
+    },
+  };
+}
+
+function arraySchemaChain<TItem extends Schema>(
+  base: ArraySchema & { readonly item: TItem },
+): ArraySchemaChain<TItem> {
+  return {
+    ...base,
+    minItems(value) {
+      return arraySchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => Array.isArray(candidate) && candidate.length >= value,
+          message: `expected at least ${value} items`,
+        }),
+      );
+    },
+    maxItems(value) {
+      return arraySchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => Array.isArray(candidate) && candidate.length <= value,
+          message: `expected at most ${value} items`,
+        }),
+      );
+    },
+    length(value) {
+      return arraySchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => Array.isArray(candidate) && candidate.length === value,
+          message: `expected exactly ${value} items`,
+        }),
+      );
+    },
+    refine(check, message) {
+      return arraySchemaChain(appendRefinement(base, { check, message }));
+    },
+  };
+}
+
 export const schema = {
-  string(): StringSchema {
-    return { kind: "string" };
+  string(): StringSchemaChain {
+    return stringSchemaChain({ kind: "string" });
   },
 
-  number(): NumberSchema {
-    return { kind: "number", format: "f64" };
+  number(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "f64" });
   },
 
-  f32(): NumberSchema {
-    return { kind: "number", format: "f32" };
+  f32(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "f32" });
   },
 
-  u8(): NumberSchema {
-    return { kind: "number", format: "u8" };
+  u8(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "u8" });
   },
 
-  u16(): NumberSchema {
-    return { kind: "number", format: "u16" };
+  u16(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "u16" });
   },
 
-  u32(): NumberSchema {
-    return { kind: "number", format: "u32" };
+  u32(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "u32" });
   },
 
-  i8(): NumberSchema {
-    return { kind: "number", format: "i8" };
+  i8(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "i8" });
   },
 
-  i16(): NumberSchema {
-    return { kind: "number", format: "i16" };
+  i16(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "i16" });
   },
 
-  i32(): NumberSchema {
-    return { kind: "number", format: "i32" };
+  i32(): NumberSchemaChain {
+    return numberSchemaChain({ kind: "number", format: "i32" });
   },
 
   boolean(): BooleanSchema {
@@ -575,8 +797,8 @@ export const schema = {
     return { kind: "literal", value };
   },
 
-  array<const TItem extends Schema>(item: TItem): ArraySchema & { readonly item: TItem } {
-    return { kind: "array", item };
+  array<const TItem extends Schema>(item: TItem): ArraySchemaChain<TItem> {
+    return arraySchemaChain({ kind: "array", item });
   },
 
   object<const TShape extends SchemaShape>(shape: TShape): ObjectSchema<TShape> {
@@ -614,6 +836,19 @@ export const schema = {
     members: TMembers,
   ): UnionSchema & { readonly members: TMembers } {
     return { kind: "union", members };
+  },
+
+  // A tagged union: members share a `discriminant` field carrying a distinct
+  // literal, so validation dispatches on it (O(1), precise errors) rather than
+  // trying each member. Same inferred type and wire encoding as `union`.
+  discriminatedUnion<
+    const TDiscriminant extends string,
+    const TMembers extends readonly ObjectSchema[],
+  >(
+    discriminant: TDiscriminant,
+    members: TMembers,
+  ): UnionSchema & { readonly members: TMembers; readonly discriminant: TDiscriminant } {
+    return { kind: "union", members, discriminant };
   },
 
   vector3(): Vector3Schema {

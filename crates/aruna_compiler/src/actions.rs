@@ -215,7 +215,7 @@ fn schema_invalid_diagnostic(
         Some(span),
         Some(format!("export name: {export_name}\n{details}")),
         Some(
-            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), or a Roblox userdata schema (vector3/color3/cframe)."
+            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), schema.discriminatedUnion(key, [...]), or a Roblox userdata schema (vector3/color3/cframe)."
                 .to_string(),
         ),
     )
@@ -847,6 +847,23 @@ fn parse_schema_object<'a>(
     })
 }
 
+// Chainable constraint/refine method names. These attach runtime validation to
+// a schema without changing its rendered TypeScript type or wire format, so the
+// parser transparently unwraps them to the underlying schema.
+fn is_chain_constraint_method(name: &str) -> bool {
+    matches!(
+        name,
+        "min" | "max"
+            | "int"
+            | "length"
+            | "minLength"
+            | "maxLength"
+            | "minItems"
+            | "maxItems"
+            | "refine"
+    )
+}
+
 fn parse_schema_call<'a>(
     file: &str,
     action_id: &str,
@@ -870,6 +887,18 @@ fn parse_schema_call<'a>(
         ));
         return None;
     };
+
+    // Chained constraint/refine methods (schema.number().min(0), .refine(fn, msg),
+    // .maxLength(20), ...) are runtime-only: they do not change the rendered type
+    // or the wire format. Parse the receiver as the real schema and drop the
+    // constraint, so the metadata reflects only the underlying kind.
+    if is_chain_constraint_method(member.property.name.as_str()) {
+        if let Expression::CallExpression(inner_call) = unwrap_schema_expression(&member.object) {
+            return parse_schema_call(
+                file, action_id, export_name, role, inner_call, scope, diagnostics,
+            );
+        }
+    }
 
     let Expression::Identifier(object) = &member.object else {
         diagnostics.push(schema_invalid_diagnostic(
@@ -1275,6 +1304,74 @@ fn parse_schema_call<'a>(
 
             Some(ArunaSchemaMetadata {
                 kind: kind.to_string(),
+                members: Some(members),
+                ..Default::default()
+            })
+        }
+        // A tagged union: `discriminant` key + an array of object schemas. It has
+        // the same TS type and wire form as a plain union, so it is emitted as
+        // `kind: "union"` and the discriminant (a runtime-only dispatch hint) is
+        // dropped from the metadata.
+        "discriminatedUnion" => {
+            if call.arguments.len() != 2 {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.span.start as usize,
+                        end: call.span.end as usize,
+                    },
+                    "discriminatedUnion schemas require a discriminant string literal and an array literal of object schemas.".to_string(),
+                ));
+                return None;
+            }
+
+            let Argument::StringLiteral(_) = &call.arguments[0] else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.arguments[0].span().start as usize,
+                        end: call.arguments[0].span().end as usize,
+                    },
+                    "discriminatedUnion's first argument must be a string literal discriminant key.".to_string(),
+                ));
+                return None;
+            };
+
+            let Argument::ArrayExpression(array) = &call.arguments[1] else {
+                diagnostics.push(schema_invalid_diagnostic(
+                    file,
+                    action_id,
+                    export_name,
+                    role,
+                    DiagnosticSpan {
+                        start: call.arguments[1].span().start as usize,
+                        end: call.arguments[1].span().end as usize,
+                    },
+                    "discriminatedUnion's second argument must be an array literal of object schemas.".to_string(),
+                ));
+                return None;
+            };
+
+            let Some(members) = parse_schema_union_members(
+                file,
+                action_id,
+                export_name,
+                role,
+                array,
+                scope,
+                diagnostics,
+            ) else {
+                return None;
+            };
+
+            Some(ArunaSchemaMetadata {
+                kind: "union".to_string(),
                 members: Some(members),
                 ..Default::default()
             })

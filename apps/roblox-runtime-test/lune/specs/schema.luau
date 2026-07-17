@@ -71,5 +71,72 @@ return function(ctx)
 			t.isTrue(s.validate(42))
 			t.isFalse(s.validate(true))
 		end)
+
+		t.it("enforces number constraints via chaining", function()
+			local level = schema.number().min(1).max(100).int()
+			t.isTrue(level.validate(50))
+			t.isFalse(level.validate(0))
+			t.isFalse(level.validate(101))
+			t.isFalse(level.validate(3.5))
+		end)
+
+		t.it("enforces string length constraints", function()
+			local username = schema.string().minLength(3).maxLength(16)
+			t.isTrue(username.validate("ada"))
+			t.isFalse(username.validate("ab"))
+			t.isFalse(username.validate("this-name-is-far-too-long"))
+		end)
+
+		t.it("enforces array length constraints", function()
+			local hand = schema.array(schema.string()).minItems(1).maxItems(3)
+			t.isTrue(hand.validate({ "a", "b" }))
+			t.isFalse(hand.validate({}))
+			t.isFalse(hand.validate({ "a", "b", "c", "d" }))
+		end)
+
+		t.it("runs a custom refine predicate after the structural check", function()
+			local even = schema.number().refine(function(value)
+				return value % 2 == 0
+			end, "expected an even number")
+			t.isTrue(even.validate(4))
+			t.isFalse(even.validate(3))
+			-- A non-number is rejected before the predicate ever runs.
+			t.isFalse(even.validate("x"))
+		end)
+
+		t.it("reports the constraint message via firstSchemaIssue", function()
+			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			t.eq(firstSchemaIssue(schema.number().min(10), 5), "expected a number >= 10")
+			t.eq(firstSchemaIssue(schema.string().minLength(3), "ab"), "expected length >= 3")
+		end)
+
+		t.it("keeps chained refinements immutable across branches", function()
+			local base = schema.number().min(0)
+			local capped = base.max(10)
+			t.isTrue(base.validate(50))
+			t.isFalse(capped.validate(50))
+		end)
+
+		t.it("dispatches a discriminated union on its discriminant", function()
+			local event = schema.discriminatedUnion("type", {
+				schema.object({ type = schema.literal("move"), dx = schema.number() }),
+				schema.object({ type = schema.literal("chat"), text = schema.string() }),
+			})
+			t.isTrue(event.validate({ type = "move", dx = 5 }))
+			t.isTrue(event.validate({ type = "chat", text = "hi" }))
+			-- Selected member's own field must still validate.
+			t.isFalse(event.validate({ type = "move", dx = "nope" }))
+			-- Unknown discriminant fails.
+			t.isFalse(event.validate({ type = "delete" }))
+			t.isFalse(event.validate("not a table"))
+		end)
+
+		t.it("reports the discriminated member's field via firstSchemaIssue", function()
+			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local event = schema.discriminatedUnion("type", {
+				schema.object({ type = schema.literal("move"), dx = schema.number() }),
+			})
+			t.eq(firstSchemaIssue(event, { type = "move", dx = "nope" }), "dx: expected number")
+		end)
 	end)
 end

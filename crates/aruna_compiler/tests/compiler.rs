@@ -321,6 +321,111 @@ export const demo = defineAction({
 }
 
 #[test]
+fn chained_constraints_parse_to_the_underlying_schema() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const demo = defineAction({
+  id: "demo.constrained",
+  input: schema.object({
+    level: schema.number().min(1).max(100).int(),
+    name: schema.string().minLength(3).refine((value) => value !== "", "non-empty"),
+    tags: schema.array(schema.string()).maxItems(5),
+  }),
+  run() {
+    return undefined;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    // The strict parser accepts chained constraint/refine methods instead of
+    // rejecting the argument, and drops them (runtime-only) from the metadata.
+    assert!(output.ok, "chained constraints should compile: {:?}", output.diagnostics);
+    let action = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.constrained")
+        .expect("expected action metadata");
+
+    let properties = action
+        .input_schema
+        .as_ref()
+        .expect("expected input schema")
+        .properties
+        .as_ref()
+        .expect("expected object properties");
+
+    // Constraints are transparent: level stays plain `number`, name plain
+    // `string`, tags plain `string[]`.
+    assert_eq!(properties["level"].kind, "number");
+    assert_eq!(properties["level"].numeric_format, None);
+    assert_eq!(properties["name"].kind, "string");
+    assert_eq!(properties["tags"].kind, "array");
+    assert_eq!(
+        properties["tags"].items.as_ref().expect("expected array item").kind,
+        "string"
+    );
+}
+
+#[test]
+fn discriminated_union_parses_as_a_plain_union() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const demo = defineAction({
+  id: "demo.event",
+  input: schema.discriminatedUnion("type", [
+    schema.object({ type: schema.literal("move"), dx: schema.number() }),
+    schema.object({ type: schema.literal("chat"), text: schema.string() }),
+  ]),
+  run() {
+    return undefined;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok, "discriminatedUnion should compile: {:?}", output.diagnostics);
+    let input_schema = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.event")
+        .expect("expected action metadata")
+        .input_schema
+        .as_ref()
+        .expect("expected input schema");
+
+    // Emitted as a plain union of its two object members — the discriminant is a
+    // runtime-only dispatch hint, dropped from the metadata.
+    assert_eq!(input_schema.kind, "union");
+    let members = input_schema.members.as_ref().expect("expected union members");
+    assert_eq!(members.len(), 2);
+    assert_eq!(members[0].kind, "object");
+    assert_eq!(members[1].kind, "object");
+}
+
+#[test]
 fn rejects_null_literal_schema_values() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();
