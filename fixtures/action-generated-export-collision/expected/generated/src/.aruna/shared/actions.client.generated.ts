@@ -10,3 +10,5 @@ export type PurchaseItemOutput = void;
 export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
   return invokeAction("inventory.purchaseItem", input) as Promise<PurchaseItemOutput>;
 };
+
+export const contractHash = "1cbee5b9c1c78955";

@@ -385,6 +385,7 @@ fn run_project_inner(
         let generated = generate_action_files(
             &input.config.generated_dir,
             &graph.actions,
+            &graph.signals,
             &input.config.actions.default_rate_limit,
             input.config.compiler.preserve_generated_comments,
         );

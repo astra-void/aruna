@@ -10,3 +10,5 @@ export const actions = {
 } as const;
 
 export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "b96ebe65e96edabe";

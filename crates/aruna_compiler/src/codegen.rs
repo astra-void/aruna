@@ -413,6 +413,7 @@ fn client_stub_lines(action: &ArunaActionRecord, input_type: &str, output_type: 
 fn render_client_file(
     generated_dir: &str,
     actions: &[ArunaActionRecord],
+    contract_hash: &str,
     diagnostics: &mut Vec<ArunaDiagnostic>,
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
@@ -473,6 +474,11 @@ fn render_client_file(
         lines.pop();
     }
 
+    // The client's compiled-in contract hash, compared against the server's
+    // advertised hash on boot to detect a deploy skew.
+    lines.push(String::new());
+    lines.push(format!("export const contractHash = \"{contract_hash}\";"));
+
     GeneratedFile {
         path,
         contents: format!("{}\n", lines.join("\n")),
@@ -489,6 +495,7 @@ fn render_default_rate_limit(rate_limit: &ActionRateLimitConfig) -> String {
 fn render_server_file(
     generated_dir: &str,
     actions: &[ArunaActionRecord],
+    contract_hash: &str,
     default_rate_limit: &ActionRateLimitConfig,
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
@@ -536,6 +543,11 @@ fn render_server_file(
     lines.push(String::new());
     lines.push(render_default_rate_limit(default_rate_limit));
 
+    // The server's contract hash, advertised on the action remote (via
+    // `robloxRemoteEvent({ contractHash })`) so clients can detect a deploy skew.
+    lines.push(String::new());
+    lines.push(format!("export const contractHash = \"{contract_hash}\";"));
+
     GeneratedFile {
         path,
         contents: format!("{}\n", lines.join("\n")),
@@ -565,9 +577,62 @@ fn duplicate_export_diagnostic(
     )
 }
 
+// A stable hash of the wire-relevant contract — action ids, ack behavior,
+// serialization, and input/output schema layout, plus signal ids, reliability,
+// serialization, and payload layout. Emitted as `contractHash` into both the
+// server and client modules so a client can detect a deploy skew against the
+// server. Rate limits are deliberately excluded (server-enforced, not on the
+// wire). FNV-1a over a canonical string; the manifest already orders records
+// deterministically, so the same contract always hashes the same.
+pub fn compute_contract_hash(
+    actions: &[ArunaActionRecord],
+    signals: &[ArunaSignalRecord],
+) -> String {
+    fn schema_part(schema: &Option<ArunaSchemaMetadata>) -> String {
+        schema
+            .as_ref()
+            .map(|value| serde_json::to_string(value).unwrap_or_default())
+            .unwrap_or_default()
+    }
+
+    let mut canonical = String::new();
+    for action in actions {
+        canonical.push_str("A|");
+        canonical.push_str(&action.id);
+        canonical.push('|');
+        canonical.push_str(if action.fire_and_forget { "faf" } else { "req" });
+        canonical.push('|');
+        canonical.push_str(&serde_json::to_string(&action.serialization).unwrap_or_default());
+        canonical.push('|');
+        canonical.push_str(&schema_part(&action.input_schema));
+        canonical.push('|');
+        canonical.push_str(&schema_part(&action.output_schema));
+        canonical.push('\n');
+    }
+    for signal in signals {
+        canonical.push_str("S|");
+        canonical.push_str(&signal.id);
+        canonical.push('|');
+        canonical.push_str(if signal.unreliable { "unrel" } else { "rel" });
+        canonical.push('|');
+        canonical.push_str(&serde_json::to_string(&signal.serialization).unwrap_or_default());
+        canonical.push('|');
+        canonical.push_str(&schema_part(&signal.payload_schema));
+        canonical.push('\n');
+    }
+
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in canonical.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
 pub fn generate_action_files(
     generated_dir: &str,
     actions: &[ArunaActionRecord],
+    signals: &[ArunaSignalRecord],
     default_rate_limit: &ActionRateLimitConfig,
     preserve_generated_comments: bool,
 ) -> GeneratedActionOutput {
@@ -589,9 +654,12 @@ pub fn generate_action_files(
         }
     }
 
+    let contract_hash = compute_contract_hash(actions, signals);
+
     let client_file = render_client_file(
         generated_dir,
         &unique_client_actions,
+        &contract_hash,
         &mut diagnostics,
         preserve_generated_comments,
     );
@@ -602,6 +670,7 @@ pub fn generate_action_files(
             render_server_file(
                 generated_dir,
                 actions,
+                &contract_hash,
                 default_rate_limit,
                 preserve_generated_comments,
             ),
@@ -1003,13 +1072,49 @@ mod tests {
     }
 
     #[test]
+    fn contract_hash_is_stable_and_wire_sensitive() {
+        let base = vec![
+            action("shop.buy", "src/shop.ts", "buy"),
+            action("shop.sell", "src/shop.ts", "sell"),
+        ];
+        let signals = vec![signal("shop.changed", "src/shop.ts", "changed", None)];
+
+        // Deterministic: the same contract hashes to the same 16-char value.
+        let hash = compute_contract_hash(&base, &signals);
+        assert_eq!(hash, compute_contract_hash(&base, &signals));
+        assert_eq!(hash.len(), 16);
+
+        // A wire-relevant change (adding an output schema) changes the hash.
+        let mut with_output = base.clone();
+        with_output[0].output_schema = Some(ArunaSchemaMetadata {
+            kind: "string".to_string(),
+            ..Default::default()
+        });
+        assert_ne!(compute_contract_hash(&with_output, &signals), hash);
+
+        // A rate-limit change is NOT wire-relevant, so the hash is unchanged.
+        let mut with_rate_limit = base.clone();
+        with_rate_limit[0].rate_limit = Some(crate::actions::ArunaActionRateLimitMetadata {
+            key: "player".to_string(),
+            window_ms: 1000,
+            max: 5,
+        });
+        assert_eq!(compute_contract_hash(&with_rate_limit, &signals), hash);
+
+        // A signal reliability change is wire-relevant (routing), so it changes.
+        let mut unreliable_signals = signals.clone();
+        unreliable_signals[0].unreliable = true;
+        assert_ne!(compute_contract_hash(&base, &unreliable_signals), hash);
+    }
+
+    #[test]
     fn renders_deterministic_generated_files() {
         let actions = vec![
             action("inventory.restockItem", "src/domains/inventory/actions.ts", "restockItem"),
             action("shop.purchaseItem", "src/domains/shop/actions.ts", "purchaseItem"),
         ];
 
-        let output = generate_action_files("src/.aruna", &actions, &test_rate_limit(), true);
+        let output = generate_action_files("src/.aruna", &actions, &[], &test_rate_limit(), true);
 
         assert!(output.diagnostics.is_empty());
         assert_eq!(output.files.len(), 2);
@@ -1061,7 +1166,7 @@ mod tests {
         paint.fire_and_forget = true;
         let actions = vec![paint];
 
-        let output = generate_action_files("src/.aruna", &actions, &test_rate_limit(), true);
+        let output = generate_action_files("src/.aruna", &actions, &[], &test_rate_limit(), true);
 
         assert!(output.diagnostics.is_empty());
         let client = &output.files[0].contents;
@@ -1140,7 +1245,7 @@ mod tests {
             action("shop.purchaseItem", "src/domains/shop/actions.ts", "purchaseItem"),
         ];
 
-        let output = generate_action_files("src/.aruna", &actions, &test_rate_limit(), true);
+        let output = generate_action_files("src/.aruna", &actions, &[], &test_rate_limit(), true);
 
         assert_eq!(output.diagnostics.len(), 1);
         assert_eq!(output.diagnostics[0].code, "aruna::557");
@@ -1338,7 +1443,7 @@ mod tests {
             }),
         };
 
-        let output = generate_action_files("src/.aruna", &[action], &test_rate_limit(), true);
+        let output = generate_action_files("src/.aruna", &[action], &[], &test_rate_limit(), true);
 
         assert!(output.diagnostics.is_empty());
         let client = &output.files[0].contents;
