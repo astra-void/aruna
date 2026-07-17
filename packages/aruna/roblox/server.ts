@@ -9,7 +9,11 @@ import type { SignalMap, SignalPublisher } from "./signal-runtime";
 export { defineSignal } from "./signal";
 export type { InferSignalPayload, SignalDefinition } from "./signal";
 
-export interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMap> {
+export interface ActionContext<
+	TPlayer = unknown,
+	TSignals extends SignalMap = SignalMap,
+	TSession = unknown,
+> {
 	readonly player: TPlayer;
 	// The app-owned signal publisher, injected by `createServerApp` when it owns a
 	// publisher (`{ signals, createPublisher }`). Lets an action push server→client
@@ -22,20 +26,44 @@ export interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = S
 	// assignable into a `createServerApp<Player>` registry. The precise, player-typed
 	// publisher lives on `PublishingActionContext` via the definer.
 	readonly publisher?: SignalPublisher<TSignals, unknown>;
+	// Per-player session state, created by `createServerApp({ createSession })` on
+	// player-add and injected into every action ctx for that player. Absent when no
+	// session factory is configured. Optional on the base context; use
+	// `createActionDefiner<TSignals, TPlayer, TSession>` for a non-optional, typed one.
+	readonly session?: TSession;
 }
 
-// Like ActionContext but with `publisher` guaranteed present and typed against a
-// concrete signal registry and player. Produced by `createActionDefiner<TSignals,
-// TPlayer>()`, whose authored action's `TPlayer` matches the app. Defined as an
-// intersection so it stays a structural subtype of ActionContext.
-export type PublishingActionContext<TPlayer, TSignals extends SignalMap> = ActionContext<
+// Like ActionContext but with `publisher` and `session` guaranteed present and
+// typed against a concrete signal registry, player, and session. Produced by
+// `createActionDefiner<TSignals, TPlayer, TSession>()`, whose authored action's
+// `TPlayer` matches the app. Defined as an intersection so it stays a structural
+// subtype of ActionContext.
+export type PublishingActionContext<
 	TPlayer,
-	TSignals
-> & {
+	TSignals extends SignalMap,
+	TSession = unknown,
+> = ActionContext<TPlayer, TSignals, TSession> & {
 	readonly publisher: SignalPublisher<TSignals, TPlayer>;
+	readonly session: TSession;
 };
 
-export type ActionRateLimitKey = "player" | "global";
+// What a custom rate-limit key function receives about the throttled call. The
+// player is carried erased (`unknown`); narrow it in the function if needed.
+export interface ActionRateLimitKeyInfo {
+	readonly actionId: string;
+	readonly player: unknown;
+	readonly input: unknown;
+}
+
+// A per-action custom bucket-key function: returns the bucket a call belongs to.
+// Same throttle applies to all calls sharing a returned key — e.g. key by an
+// input field to throttle per target. Applied at runtime; recorded as the
+// "custom" key in tooling.
+export type ActionRateLimitKeyFn = (info: ActionRateLimitKeyInfo) => string;
+
+// The per-action bucketing strategy: "player" / "global" literals or a custom
+// key function.
+export type ActionRateLimitKey = "player" | "global" | ActionRateLimitKeyFn;
 
 export interface ActionRateLimitOptions {
 	readonly key: ActionRateLimitKey;
@@ -67,15 +95,16 @@ export interface ActionDefinition<
 }
 
 // An action definition whose `run` ctx carries a non-optional, registry-typed
-// `publisher`. Produced by a `createActionDefiner` binding.
+// `publisher` and `session`. Produced by a `createActionDefiner` binding.
 export type PublishingActionDefinition<
 	TInput extends Schema | undefined,
 	TOutput extends Schema | undefined,
 	TPlayer,
 	TSignals extends SignalMap,
+	TSession = unknown,
 > = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals>, "run"> & {
 	run(
-		context: PublishingActionContext<TPlayer, TSignals>,
+		context: PublishingActionContext<TPlayer, TSignals, TSession>,
 		input: InferInput<TInput>,
 	): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
@@ -96,11 +125,11 @@ export function defineAction<
 // payloads — and present without a `?`. The publisher is still injected by
 // `createServerApp`; this is pure typing sugar, no runtime state. Mirrors the
 // Node reference runtime's `createActionDefiner`.
-export function createActionDefiner<TSignals extends SignalMap, TPlayer = Player>() {
+export function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown>() {
 	// Anonymous arrow (not a named function expression): roblox-ts rejects named
 	// function expressions, and this runtime is compiled to Luau by rbxtsc.
 	return <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined>(
-		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals>,
+		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession>,
 	): ActionDefinition<TInput, TOutput, TPlayer, TSignals> => definition;
 }
 

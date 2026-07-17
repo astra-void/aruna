@@ -50,7 +50,11 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	readonly dispose: () => void;
 }
 
-export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap> {
+export interface CreateServerAppOptions<
+	TPlayer,
+	TSignals extends SignalMap = SignalMap,
+	TSession = unknown,
+> {
 	readonly actions: ActionMap<TPlayer>;
 	// Binds the registry to a concrete remote and is owned by the app. When given,
 	// the app binds the transport eagerly at creation.
@@ -73,21 +77,40 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
 	// Observability hook for errors raised from the action execution chain,
 	// called before dispatch converts the error into the wire result.
 	readonly onError?: ActionErrorHandler<TPlayer>;
-	// Called when a player leaves the server. The app owns the
-	// Players.PlayerRemoving connection (disconnected on dispose) — the home for
-	// per-player cleanup: session state, caches, anything keyed by the player.
-	readonly onPlayerRemoving?: (player: TPlayer) => void;
+	// Builds the per-player session injected into every action ctx as
+	// `ctx.session`. Runs once per player on join (and, at boot, for players
+	// already present) before `onPlayerAdded`, and the session is dropped after
+	// `onPlayerRemoving`. Pair with `createActionDefiner<TSignals, TPlayer,
+	// TSession>` for a typed, non-optional `ctx.session`.
+	readonly createSession?: (player: TPlayer) => TSession;
+	// Called when a player joins (Players.PlayerAdded), and once at boot for every
+	// player already present. Receives the freshly-created session (undefined when
+	// no `createSession` is configured). The app owns the connection (disconnected
+	// on dispose).
+	readonly onPlayerAdded?: (player: TPlayer, session: TSession) => void;
+	// Called when a player leaves the server (Players.PlayerRemoving), before the
+	// session is dropped. The app owns the connection (disconnected on dispose) —
+	// the home for per-player cleanup: persisting session state, caches, anything
+	// keyed by the player. Receives the player's session (undefined when none).
+	readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
 }
 
-export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = SignalMap>(
-	options: CreateServerAppOptions<TPlayer, TSignals>,
-): ServerApp<TPlayer, TSignals> {
+export function createServerApp<
+	TPlayer = unknown,
+	TSignals extends SignalMap = SignalMap,
+	TSession = unknown,
+>(options: CreateServerAppOptions<TPlayer, TSignals, TSession>): ServerApp<TPlayer, TSignals> {
 	// Build the publisher first so it can be injected into every action ctx via
 	// the registry (and so the signal remote exists at boot).
 	const publisher =
 		options.signals !== undefined && options.createPublisher !== undefined
 			? options.createPublisher(options.signals)
 			: undefined;
+
+	// Per-player session store, keyed by the Player instance. Populated on join
+	// (and boot backfill) and drained on leave; read by dispatch via `getSession`.
+	const sessions = new Map<TPlayer, TSession>();
+	const createSession = options.createSession;
 
 	const registryOptions: ActionRegistryOptions<TPlayer> = {
 		...(options.defaultRateLimit !== undefined
@@ -98,6 +121,7 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 		...(publisher !== undefined
 			? { publisher: publisher as unknown as SignalPublisher<SignalMap, unknown> }
 			: {}),
+		...(createSession !== undefined ? { getSession: (player: TPlayer) => sessions.get(player) } : {}),
 		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
 		...(options.onError !== undefined ? { onError: options.onError } : {}),
 	};
@@ -105,13 +129,52 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 
 	const binding = options.transport !== undefined ? options.transport(registry) : undefined;
 
+	const onPlayerAdded = options.onPlayerAdded;
 	const onPlayerRemoving = options.onPlayerRemoving;
-	const playerRemovingConnection =
-		onPlayerRemoving !== undefined
-			? game.GetService("Players").PlayerRemoving.Connect((player) => {
-					onPlayerRemoving(player as unknown as TPlayer);
-				})
-			: undefined;
+	// The join handler runs when either a session must be created or `onPlayerAdded`
+	// wants to observe the join. Session creation precedes the hook.
+	const needsAddedHandling = createSession !== undefined || onPlayerAdded !== undefined;
+	// The leave handler runs when either the hook wants it or a session must be
+	// dropped to avoid leaking a store entry for a departed player.
+	const needsRemovingHandling = onPlayerRemoving !== undefined || createSession !== undefined;
+
+	const handlePlayerAdded = (player: TPlayer): void => {
+		let session: TSession | undefined;
+		if (createSession !== undefined) {
+			session = createSession(player);
+			sessions.set(player, session);
+		}
+		if (onPlayerAdded !== undefined) {
+			onPlayerAdded(player, session as TSession);
+		}
+	};
+
+	const handlePlayerRemoving = (player: TPlayer): void => {
+		if (onPlayerRemoving !== undefined) {
+			onPlayerRemoving(player, sessions.get(player));
+		}
+		sessions.delete(player);
+	};
+
+	const players = game.GetService("Players");
+	const playerAddedConnection = needsAddedHandling
+		? players.PlayerAdded.Connect((player) => {
+				handlePlayerAdded(player as unknown as TPlayer);
+			})
+		: undefined;
+	const playerRemovingConnection = needsRemovingHandling
+		? players.PlayerRemoving.Connect((player) => {
+				handlePlayerRemoving(player as unknown as TPlayer);
+			})
+		: undefined;
+
+	// Boot backfill: fire the join handler for players already in the server when
+	// the app is created, so a mid-session boot does not miss anyone.
+	if (needsAddedHandling) {
+		for (const player of players.GetPlayers()) {
+			handlePlayerAdded(player as unknown as TPlayer);
+		}
+	}
 
 	return {
 		actions: options.actions,
@@ -135,9 +198,13 @@ export function createServerApp<TPlayer = unknown, TSignals extends SignalMap = 
 			if (binding !== undefined) {
 				binding.disconnect();
 			}
+			if (playerAddedConnection !== undefined) {
+				playerAddedConnection.Disconnect();
+			}
 			if (playerRemovingConnection !== undefined) {
 				playerRemovingConnection.Disconnect();
 			}
+			sessions.clear();
 		},
 	};
 }

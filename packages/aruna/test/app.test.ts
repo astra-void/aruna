@@ -228,6 +228,169 @@ describe("createServerApp", () => {
   });
 });
 
+describe("player sessions and lifecycle", () => {
+  type FakePlayer = { readonly UserId: number };
+
+  function createFakePlayers() {
+    const addedListeners = new Set<(player: FakePlayer) => void>();
+    const removingListeners = new Set<(player: FakePlayer) => void>();
+    let present: readonly FakePlayer[] = [];
+
+    return {
+      source: {
+        PlayerAdded: {
+          Connect(callback: (player: FakePlayer) => void) {
+            addedListeners.add(callback);
+            return {
+              Disconnect() {
+                addedListeners.delete(callback);
+              },
+            };
+          },
+        },
+        PlayerRemoving: {
+          Connect(callback: (player: FakePlayer) => void) {
+            removingListeners.add(callback);
+            return {
+              Disconnect() {
+                removingListeners.delete(callback);
+              },
+            };
+          },
+        },
+        GetPlayers: () => present,
+      },
+      setPresent(players: readonly FakePlayer[]) {
+        present = players;
+      },
+      emitAdded(player: FakePlayer) {
+        for (const listener of addedListeners) {
+          listener(player);
+        }
+      },
+      emitRemoving(player: FakePlayer) {
+        for (const listener of removingListeners) {
+          listener(player);
+        }
+      },
+      addedCount: () => addedListeners.size,
+      removingCount: () => removingListeners.size,
+    };
+  }
+
+  it("injects the per-player session into ctx.session", async () => {
+    const players = createFakePlayers();
+    const seen: Array<{ readonly userId: number; readonly hp: number }> = [];
+    const app = createServerApp<FakePlayer>({
+      actions: {
+        "combat.hit": defineAction({
+          id: "combat.hit",
+          run(ctx) {
+            const session = ctx.session as { readonly hp: number };
+            seen.push({ userId: ctx.player.UserId, hp: session.hp });
+            return { ok: true };
+          },
+        }),
+      },
+      players: players.source,
+      createSession: (player) => ({ hp: 100, owner: player.UserId }),
+    });
+
+    const player = { UserId: 7 };
+    players.emitAdded(player);
+    await app.dispatch("combat.hit", { player }, {});
+    expect(seen).toEqual([{ userId: 7, hp: 100 }]);
+
+    app.dispose();
+  });
+
+  it("fires onPlayerAdded with the freshly-created session", () => {
+    const players = createFakePlayers();
+    const joins: Array<{ readonly userId: number; readonly session: unknown }> = [];
+    const app = createServerApp<FakePlayer>({
+      actions: {},
+      players: players.source,
+      createSession: () => ({ hp: 100 }),
+      onPlayerAdded: (player, session) => {
+        joins.push({ userId: player.UserId, session });
+      },
+    });
+
+    players.emitAdded({ UserId: 3 });
+    expect(joins).toEqual([{ userId: 3, session: { hp: 100 } }]);
+
+    app.dispose();
+    expect(players.addedCount()).toBe(0);
+  });
+
+  it("boot-backfills onPlayerAdded for players already present", () => {
+    const players = createFakePlayers();
+    players.setPresent([{ UserId: 1 }, { UserId: 2 }]);
+    const joined: number[] = [];
+
+    const app = createServerApp<FakePlayer>({
+      actions: {},
+      players: players.source,
+      onPlayerAdded: (player) => joined.push(player.UserId),
+    });
+
+    expect(joined).toEqual([1, 2]);
+    app.dispose();
+  });
+
+  it("passes the session to onPlayerRemoving, then drops it", async () => {
+    const players = createFakePlayers();
+    const removed: Array<{ readonly userId: number; readonly session: unknown }> = [];
+    const sessionsSeen: unknown[] = [];
+    const app = createServerApp<FakePlayer>({
+      actions: {
+        peek: defineAction({
+          id: "peek",
+          run(ctx) {
+            sessionsSeen.push(ctx.session);
+            return {};
+          },
+        }),
+      },
+      players: players.source,
+      createSession: () => ({ hp: 100 }),
+      onPlayerRemoving: (player, session) => {
+        removed.push({ userId: player.UserId, session });
+      },
+    });
+
+    const player = { UserId: 9 };
+    players.emitAdded(player);
+    await app.dispatch("peek", { player }, {});
+    players.emitRemoving(player);
+    expect(removed).toEqual([{ userId: 9, session: { hp: 100 } }]);
+
+    // The store entry was dropped: a later dispatch sees no session.
+    await app.dispatch("peek", { player }, {});
+    expect(sessionsSeen).toEqual([{ hp: 100 }, undefined]);
+
+    app.dispose();
+  });
+
+  it("dispose disconnects both lifecycle connections and clears sessions", () => {
+    const players = createFakePlayers();
+    const app = createServerApp<FakePlayer>({
+      actions: {},
+      players: players.source,
+      createSession: () => ({}),
+      onPlayerAdded: () => {},
+      onPlayerRemoving: () => {},
+    });
+
+    expect(players.addedCount()).toBe(1);
+    expect(players.removingCount()).toBe(1);
+
+    app.dispose();
+    expect(players.addedCount()).toBe(0);
+    expect(players.removingCount()).toBe(0);
+  });
+});
+
 describe("in-process round-trip", () => {
   it("connects a generated-style stub, client app, server app, and schema validation", async () => {
     const actions = {

@@ -3,13 +3,39 @@ import type { ActionRunContext } from "./server.js";
 export type ActionRateLimitConfig = {
   // "player": one bucket per calling player (the default). "global": a single
   // shared bucket for every caller — for actions guarding an expensive shared
-  // resource. Matches the native runtime's resolveRateLimitKey.
+  // resource. Matches the native runtime's resolveRateLimitKey. This config-level
+  // form is JSON-serializable (comes from aruna.config), so it never carries a
+  // function; a per-action `rateLimit` (ActionRateLimitOptions) may.
   readonly key: "player" | "global";
   readonly windowMs: number;
   readonly max: number;
 };
 
-export type ActionRateLimitOptions = ActionRateLimitConfig;
+// What a custom rate-limit key function receives about the throttled call. The
+// player is carried erased (`unknown`); narrow it in the function if needed.
+export type ActionRateLimitKeyInfo = {
+  readonly actionId: string;
+  readonly player: unknown;
+  readonly input: unknown;
+};
+
+// A per-action custom bucket-key function: returns the bucket a call belongs to.
+// Same throttle applies to all calls sharing a returned key — e.g. key by an
+// input field to throttle per target, or a constant to make several actions
+// share a budget. Applied at runtime; recorded as the "custom" key in tooling.
+export type ActionRateLimitKeyFn = (info: ActionRateLimitKeyInfo) => string;
+
+// The per-action bucketing strategy: "player" / "global" literals or a custom
+// key function.
+export type ActionRateLimitKey = "player" | "global" | ActionRateLimitKeyFn;
+
+// A per-action rate limit. Unlike the config-level ActionRateLimitConfig, its
+// `key` may be a custom function.
+export type ActionRateLimitOptions = {
+  readonly key: ActionRateLimitKey;
+  readonly windowMs: number;
+  readonly max: number;
+};
 
 export type ActionRateLimitResult =
   | {
@@ -41,7 +67,10 @@ export type ActionRateLimiter = {
   readonly check: (
     actionId: string,
     key: string,
-    config: ActionRateLimitConfig,
+    // Only the window/limit are read here; the bucket key is resolved by the
+    // caller, so both config- and per-action rate limits (whatever their `key`)
+    // are accepted.
+    config: { readonly windowMs: number; readonly max: number },
     nowMs?: number,
   ) => ActionRateLimitResult;
   readonly reset: () => void;

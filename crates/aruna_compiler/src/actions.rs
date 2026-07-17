@@ -1509,24 +1509,33 @@ fn parse_rate_limit_object(
         };
 
         match property_name.as_str() {
-            "key" => {
-                let Expression::StringLiteral(string_literal) = &object_property.value else {
-                    diagnostics.push(rate_limit_invalid_diagnostic(
-                        file,
-                        action_id,
-                        export_name,
-                        DiagnosticSpan {
-                            start: object_property.value.span().start as usize,
-                            end: object_property.value.span().end as usize,
-                        },
-                        "rateLimit.key must be the string literal \"player\" or \"global\"."
-                            .to_string(),
-                    ));
-                    return None;
-                };
+            "key" => match &object_property.value {
+                Expression::StringLiteral(string_literal) => {
+                    let key_value = string_literal.value.as_str();
+                    if key_value != "player" && key_value != "global" {
+                        diagnostics.push(rate_limit_invalid_diagnostic(
+                            file,
+                            action_id,
+                            export_name,
+                            DiagnosticSpan {
+                                start: object_property.value.span().start as usize,
+                                end: object_property.value.span().end as usize,
+                            },
+                            "rateLimit.key must be \"player\", \"global\", or a key function."
+                                .to_string(),
+                        ));
+                        return None;
+                    }
 
-                let key_value = string_literal.value.as_str();
-                if key_value != "player" && key_value != "global" {
+                    key = Some(key_value.to_string());
+                }
+                // A per-action custom key function `(info) => string`: recorded as
+                // the "custom" sentinel for tooling (contract diff / inspect). The
+                // function itself is applied at runtime and never serialized.
+                Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
+                    key = Some("custom".to_string());
+                }
+                _ => {
                     diagnostics.push(rate_limit_invalid_diagnostic(
                         file,
                         action_id,
@@ -1535,14 +1544,12 @@ fn parse_rate_limit_object(
                             start: object_property.value.span().start as usize,
                             end: object_property.value.span().end as usize,
                         },
-                        "rateLimit.key must be the string literal \"player\" or \"global\"."
+                        "rateLimit.key must be \"player\", \"global\", or a key function."
                             .to_string(),
                     ));
                     return None;
                 }
-
-                key = Some(key_value.to_string());
-            }
+            },
             "windowMs" | "max" => {
                 let Expression::NumericLiteral(numeric_literal) = &object_property.value else {
                     diagnostics.push(rate_limit_invalid_diagnostic(
@@ -1606,7 +1613,7 @@ fn parse_rate_limit_object(
             action_id,
             export_name,
             object_span(object),
-            "Missing rateLimit.key. Use \"player\" or \"global\".".to_string(),
+            "Missing rateLimit.key. Use \"player\", \"global\", or a key function.".to_string(),
         ));
         return None;
     };

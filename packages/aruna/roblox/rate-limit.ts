@@ -1,6 +1,6 @@
 // Aruna roblox-ts native runtime — per-action fixed-window rate limiter.
 
-import type { ActionRateLimitOptions } from "./server";
+import type { ActionRateLimitKeyFn, ActionRateLimitKeyInfo, ActionRateLimitOptions } from "./server";
 
 interface RateLimitBucket {
 	windowStart: number;
@@ -83,13 +83,21 @@ export function createActionRateLimiter(): ActionRateLimiter {
 	};
 }
 
-export function resolveRateLimitKey(options: ActionRateLimitOptions, player: unknown): string {
-	if (options.key === "global") {
+export function resolveRateLimitKey(
+	options: ActionRateLimitOptions,
+	info: ActionRateLimitKeyInfo,
+): string {
+	const key = options.key;
+	// A per-action custom key function is most specific and wins.
+	if (typeIs(key, "function")) {
+		return (key as ActionRateLimitKeyFn)(info);
+	}
+	if (key === "global") {
 		return "global";
 	}
-	const candidate = player as { UserId?: number } | undefined;
+	const candidate = info.player as { UserId?: number } | undefined;
 	if (candidate !== undefined && candidate.UserId !== undefined) {
 		return `player:${candidate.UserId}`;
 	}
-	return `player:${tostring(player)}`;
+	return `player:${tostring(info.player)}`;
 }

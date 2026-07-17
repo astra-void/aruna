@@ -99,4 +99,79 @@ return function(ctx)
 			app.dispose()
 		end)
 	end)
+
+	t.describe("player sessions and lifecycle", function()
+		t.it("injects the per-player session into ctx.session", function()
+			local seen = {}
+			local app = serverApp.createServerApp({
+				actions = {
+					hit = {
+						id = "hit",
+						run = function(_self, context, _input)
+							table.insert(seen, { userId = context.player.UserId, hp = context.session.hp })
+							return { ok = true }
+						end,
+					},
+				},
+				createSession = function(joining)
+					return { hp = 100, owner = joining.UserId }
+				end,
+			})
+
+			local sessionPlayer = { UserId = 7, Name = "Ada" }
+			fakes.playerAdded:Fire(sessionPlayer)
+			local settled, ok = t.await(app.dispatch("hit", { player = sessionPlayer }, nil))
+			t.isTrue(settled, "dispatch settled")
+			t.isTrue(ok, "dispatch resolved")
+			t.eq(#seen, 1)
+			t.eq(seen[1].hp, 100)
+			app.dispose()
+		end)
+
+		t.it("fires onPlayerAdded with the session and drops it on leave", function()
+			local joins = {}
+			local leaves = {}
+			local app = serverApp.createServerApp({
+				actions = {},
+				createSession = function(_joining)
+					return { hp = 50 }
+				end,
+				onPlayerAdded = function(joining, session)
+					table.insert(joins, { userId = joining.UserId, hp = session.hp })
+				end,
+				onPlayerRemoving = function(leaving, session)
+					table.insert(leaves, { userId = leaving.UserId, hp = session ~= nil and session.hp or -1 })
+				end,
+			})
+
+			local lifecyclePlayer = { UserId = 3, Name = "Bee" }
+			fakes.playerAdded:Fire(lifecyclePlayer)
+			fakes.playerRemoving:Fire(lifecyclePlayer)
+			t.eq(#joins, 1)
+			t.eq(joins[1].hp, 50)
+			t.eq(#leaves, 1)
+			t.eq(leaves[1].hp, 50)
+			app.dispose()
+		end)
+
+		t.it("boot-backfills onPlayerAdded for players already present", function()
+			table.clear(fakes.playerList)
+			table.insert(fakes.playerList, { UserId = 11, Name = "Pre1" })
+			table.insert(fakes.playerList, { UserId = 12, Name = "Pre2" })
+
+			local joined = {}
+			local app = serverApp.createServerApp({
+				actions = {},
+				onPlayerAdded = function(joining, _session)
+					table.insert(joined, joining.UserId)
+				end,
+			})
+
+			t.eq(#joined, 2)
+			t.eq(joined[1], 11)
+			t.eq(joined[2], 12)
+			app.dispose()
+			table.clear(fakes.playerList)
+		end)
+	end)
 end

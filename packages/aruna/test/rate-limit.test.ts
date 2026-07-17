@@ -186,6 +186,48 @@ describe("action rate limits", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("buckets by a per-action custom key function", async () => {
+    const rateLimiter = createActionRateLimiter();
+    const seen: Array<{ readonly actionId: string; readonly targetId: string }> = [];
+    const registry: ActionRegistry = {
+      "trade.offer": defineAction({
+        id: "trade.offer",
+        rateLimit: {
+          key: (info) => {
+            const targetId = (info.input as { readonly targetId: string }).targetId;
+            seen.push({ actionId: info.actionId, targetId });
+            return `target:${targetId}`;
+          },
+          windowMs: 1000,
+          max: 1,
+        },
+        run() {
+          return { ok: true };
+        },
+      }),
+    };
+
+    // Different targets fall in different buckets, so both are allowed even at
+    // max 1.
+    await expect(
+      dispatchAction(registry, "trade.offer", {}, { targetId: "a" }, { rateLimiter }),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      dispatchAction(registry, "trade.offer", {}, { targetId: "b" }, { rateLimiter }),
+    ).resolves.toEqual({ ok: true });
+    // A second call to target "a" shares its bucket and is throttled.
+    await expect(
+      dispatchAction(registry, "trade.offer", {}, { targetId: "a" }, { rateLimiter }),
+    ).rejects.toBeInstanceOf(ActionRateLimitError);
+
+    // The key function saw the action id and each input.
+    expect(seen).toEqual([
+      { actionId: "trade.offer", targetId: "a" },
+      { actionId: "trade.offer", targetId: "b" },
+      { actionId: "trade.offer", targetId: "a" },
+    ]);
+  });
+
   it("enforces a fixed window and resets after the window expires", async () => {
     const { registry, run } = makeActionRegistry();
     const rateLimiter = createActionRateLimiter();

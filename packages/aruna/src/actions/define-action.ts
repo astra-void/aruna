@@ -24,16 +24,17 @@ export function defineAction<
 }
 
 // An action definition whose `run` ctx carries a non-optional, registry-typed
-// `publisher`. Same shape as ActionDefinition otherwise. Produced when you author
-// an action through a `createActionDefiner` binding.
+// `publisher` and `session`. Same shape as ActionDefinition otherwise. Produced
+// when you author an action through a `createActionDefiner` binding.
 export type PublishingActionDefinition<
   TInputSchema extends Schema | undefined,
   TOutputSchema extends Schema | undefined,
   TPlayer,
   TSignals extends SignalRegistry,
+  TSession = unknown,
 > = Omit<ActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals>, "run"> & {
   run(
-    ctx: PublishingActionRunContext<TPlayer, TSignals>,
+    ctx: PublishingActionRunContext<TPlayer, TSignals, TSession>,
     input: ActionSchemaInput<TInputSchema>,
   ): ActionSchemaOutput<TOutputSchema> | Promise<ActionSchemaOutput<TOutputSchema>>;
 };
@@ -58,12 +59,16 @@ export type PublishingActionDefinition<
 //       return undefined;
 //     },
 //   });
-export function createActionDefiner<TSignals extends SignalRegistry, TPlayer = unknown>() {
+export function createActionDefiner<
+  TSignals extends SignalRegistry,
+  TPlayer = unknown,
+  TSession = unknown,
+>() {
   return function definePublishingAction<
     TInputSchema extends Schema | undefined = undefined,
     TOutputSchema extends Schema | undefined = undefined,
   >(
-    definition: PublishingActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals>,
+    definition: PublishingActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals, TSession>,
   ): ActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals> {
     return definition;
   };

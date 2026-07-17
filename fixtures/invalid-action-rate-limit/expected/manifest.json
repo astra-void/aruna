@@ -103,7 +103,7 @@
   "diagnostics": [
     {
       "code": "aruna::560",
-      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\" or \"global\".",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
       "file": "src/domains/shop/actions.ts",
       "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
       "name": "invalid-action-rate-limit",
@@ -116,7 +116,7 @@
     },
     {
       "code": "aruna::560",
-      "details": "export name: invalidKey\nrateLimit.key must be the string literal \"player\" or \"global\".",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
       "file": "src/domains/shop/actions.ts",
       "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
       "name": "invalid-action-rate-limit",

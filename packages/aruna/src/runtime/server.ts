@@ -19,6 +19,9 @@ export {
 export type {
   ActionRateLimitConfig,
   ActionRateLimitOptions,
+  ActionRateLimitKey,
+  ActionRateLimitKeyFn,
+  ActionRateLimitKeyInfo,
   ActionRateLimitResult,
   ActionRateLimiter,
   RateLimitKeyResolver,
@@ -27,6 +30,7 @@ export type {
 export type ActionRunContext<
   TPlayer = unknown,
   TSignals extends SignalRegistry = SignalRegistry,
+  TSession = unknown,
 > = {
   // Always present: every wire dispatch carries the calling player, and
   // in-process dispatches (`app.dispatch`, tests) supply one in the context
@@ -44,18 +48,27 @@ export type ActionRunContext<
   // no longer assignable into a `createServerApp<Player>` registry. The precise,
   // player-typed publisher lives on `PublishingActionRunContext` via the definer.
   readonly publisher?: RemoteSignalPublisher<TSignals, unknown>;
+  // Per-player session state, created by `createServerApp({ createSession })` on
+  // player-add and injected into every action ctx for that player. Absent when no
+  // session factory is configured. Optional on the base context; use the typed
+  // definer from `createActionDefiner<TSignals, TPlayer, TSession>` for a
+  // non-optional, typed one.
+  readonly session?: TSession;
 };
 
-// Like ActionRunContext but with `publisher` guaranteed present and typed against
-// a concrete signal registry and player. Produced by `createActionDefiner<TSignals,
-// TPlayer>()`, whose authored action's `TPlayer` matches the app, so the precise
-// player typing introduces no variance hazard. Defined as an intersection so it
-// stays a structural subtype of ActionRunContext (the definer returns it as one).
+// Like ActionRunContext but with `publisher` and `session` guaranteed present and
+// typed against a concrete signal registry, player, and session. Produced by
+// `createActionDefiner<TSignals, TPlayer, TSession>()`, whose authored action's
+// `TPlayer` matches the app, so the precise player typing introduces no variance
+// hazard. Defined as an intersection so it stays a structural subtype of
+// ActionRunContext (the definer returns it as one).
 export type PublishingActionRunContext<
   TPlayer,
   TSignals extends SignalRegistry,
-> = ActionRunContext<TPlayer, TSignals> & {
+  TSession = unknown,
+> = ActionRunContext<TPlayer, TSignals, TSession> & {
   readonly publisher: RemoteSignalPublisher<TSignals, TPlayer>;
+  readonly session: TSession;
 };
 
 export type ActionSchemaInput<TSchema extends Schema | undefined> = [TSchema] extends [Schema]
@@ -141,6 +154,10 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   // typing lives on the action ctx via `createActionDefiner`; dispatch only
   // forwards the object, it never invokes it.
   readonly publisher?: RemoteSignalPublisher<SignalRegistry, unknown>;
+  // Resolves the calling player's session, injected into the action ctx as
+  // `ctx.session`. Supplied by `createServerApp` from its per-player session
+  // store; dispatch only reads it. Returns undefined when the player has none.
+  readonly getSession?: (player: TPlayer) => unknown;
   // Applied outermost-first around every action's execution.
   readonly middleware?: readonly ActionMiddleware<TPlayer>[];
   readonly onError?: ActionErrorHandler<TPlayer>;
@@ -173,15 +190,21 @@ export async function dispatchAction<TPlayer = unknown>(
   const effectiveRateLimit = action.rateLimit ?? options?.defaultRateLimit;
   if (effectiveRateLimit !== undefined) {
     const rateLimiter = options?.rateLimiter ?? defaultActionRateLimiter;
-    // An explicit rateLimitKey resolver always wins; otherwise a "global" limit
-    // collapses every caller into one shared bucket (matching the native
-    // runtime's resolveRateLimitKey) and "player" buckets per player.
-    const bucketKey =
-      options?.rateLimitKey !== undefined
-        ? options.rateLimitKey(actionId, ctx)
-        : effectiveRateLimit.key === "global"
-          ? "global"
-          : defaultActionRateLimitKeyResolver<TPlayer>(actionId, ctx);
+    // Precedence: a per-action custom key function is most specific and wins;
+    // then a "global" bucket collapses every caller into one; then an app-level
+    // rateLimitKey resolver; then the default per-player bucket. Matches the
+    // native runtime's resolveRateLimitKey.
+    const perActionKey = effectiveRateLimit.key;
+    let bucketKey: string;
+    if (typeof perActionKey === "function") {
+      bucketKey = perActionKey({ actionId, player: ctx.player, input });
+    } else if (perActionKey === "global") {
+      bucketKey = "global";
+    } else if (options?.rateLimitKey !== undefined) {
+      bucketKey = options.rateLimitKey(actionId, ctx);
+    } else {
+      bucketKey = defaultActionRateLimitKeyResolver<TPlayer>(actionId, ctx);
+    }
     const result = rateLimiter.check(actionId, bucketKey, effectiveRateLimit, options?.nowMs?.());
 
     if (!result.ok) {
@@ -198,12 +221,23 @@ export async function dispatchAction<TPlayer = unknown>(
     }
   }
 
-  // Inject the app-owned publisher into the ctx so `run` can publish signals.
-  // Only fills it in when the caller did not already supply one — a custom
-  // `createContext` always wins.
+  // Inject the app-owned publisher and the per-player session into the ctx so
+  // `run` sees `ctx.publisher` / `ctx.session`. Each is filled only when the
+  // caller did not already supply one — a custom `createContext` always wins —
+  // and both are merged in a single spread to avoid cloning the ctx twice.
+  const injectedPublisher =
+    options?.publisher !== undefined && ctx.publisher === undefined ? options.publisher : undefined;
+  const injectedSession =
+    options?.getSession !== undefined && ctx.session === undefined
+      ? options.getSession(ctx.player)
+      : undefined;
   const runCtx =
-    options?.publisher !== undefined && ctx.publisher === undefined
-      ? { ...ctx, publisher: options.publisher }
+    injectedPublisher !== undefined || injectedSession !== undefined
+      ? {
+          ...ctx,
+          ...(injectedPublisher !== undefined ? { publisher: injectedPublisher } : {}),
+          ...(injectedSession !== undefined ? { session: injectedSession } : {}),
+        }
       : ctx;
 
   const runAction = async (): Promise<unknown> => {

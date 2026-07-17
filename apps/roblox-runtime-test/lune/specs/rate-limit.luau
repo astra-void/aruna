@@ -46,8 +46,23 @@ return function(ctx)
 		end)
 
 		t.it("resolves rate-limit keys", function()
-			t.eq(resolveRateLimitKey({ key = "global" }, { UserId = 9 }), "global")
-			t.eq(resolveRateLimitKey({ key = "player" }, { UserId = 9 }), "player:9")
+			local info = { actionId = "buy", player = { UserId = 9 } }
+			t.eq(resolveRateLimitKey({ key = "global" }, info), "global")
+			t.eq(resolveRateLimitKey({ key = "player" }, info), "player:9")
+		end)
+
+		t.it("resolves a per-action custom key function", function()
+			local options = {
+				key = function(callInfo)
+					return "target:" .. callInfo.input.targetId
+				end,
+			}
+			local resolved = resolveRateLimitKey(options, {
+				actionId = "trade.offer",
+				player = { UserId = 9 },
+				input = { targetId = "x" },
+			})
+			t.eq(resolved, "target:x")
 		end)
 	end)
 end

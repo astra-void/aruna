@@ -397,6 +397,53 @@ export const demo = defineAction({
 }
 
 #[test]
+fn records_custom_rate_limit_key_function_as_custom() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const demo = defineAction({
+  id: "demo.customKey",
+  rateLimit: {
+    key: (info) => `target:${info.actionId}`,
+    windowMs: 1000,
+    max: 5,
+  },
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok, "a key function should compile, not error");
+    let action = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.customKey")
+        .expect("expected action metadata");
+
+    // The function is applied at runtime; the manifest records the "custom"
+    // sentinel so contract diff / inspect can surface a key change.
+    assert_eq!(
+        action.rate_limit.as_ref(),
+        Some(&aruna_compiler::ArunaActionRateLimitMetadata {
+            key: "custom".to_string(),
+            window_ms: 1000,
+            max: 5,
+        })
+    );
+}
+
+#[test]
 fn captures_fire_and_forget_metadata() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

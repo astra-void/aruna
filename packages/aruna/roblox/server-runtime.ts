@@ -68,6 +68,11 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// typing lives on the action ctx via `createActionDefiner`; dispatch only
 	// forwards it.
 	readonly publisher?: SignalPublisher<SignalMap, unknown>;
+	// Resolves the calling player's session, injected into every action ctx as
+	// `ctx.session`. Supplied by `createServerApp` from its per-player session
+	// store; dispatch only reads it. Returns undefined when the player has no
+	// session (no `createSession` configured, or not yet added).
+	readonly getSession?: (player: TPlayer) => unknown;
 	// Around-run middleware, applied outermost-first to every action.
 	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
 	readonly onError?: ActionErrorHandler<TPlayer>;
@@ -86,6 +91,7 @@ export function createActionRegistry<TPlayer>(
 
 	const defaultRateLimit = options?.defaultRateLimit;
 	const publisher = options?.publisher;
+	const getSession = options?.getSession;
 	const middleware = options?.middleware;
 	const onError = options?.onError;
 	const rateLimiter = createActionRateLimiter();
@@ -129,7 +135,7 @@ export function createActionRegistry<TPlayer>(
 				// left unthrottled.
 				const rateLimit = definition.rateLimit ?? defaultRateLimit;
 				if (rateLimit !== undefined) {
-					const limitKey = resolveRateLimitKey(rateLimit, player);
+					const limitKey = resolveRateLimitKey(rateLimit, { actionId, player, input });
 					const limitResult = rateLimiter.check(actionId, limitKey, rateLimit);
 					if (!limitResult.ok) {
 						resolve({
@@ -143,8 +149,16 @@ export function createActionRegistry<TPlayer>(
 					}
 				}
 
-				const context: ActionContext<TPlayer> =
-					publisher !== undefined ? { player, publisher } : { player };
+				const context: ActionContext<TPlayer> = { player };
+				if (publisher !== undefined) {
+					(context as { publisher?: SignalPublisher<SignalMap, unknown> }).publisher = publisher;
+				}
+				if (getSession !== undefined) {
+					const session = getSession(player);
+					if (session !== undefined) {
+						(context as { session?: unknown }).session = session;
+					}
+				}
 
 				// Invoke the handler inside a pcall so a *synchronous* throw becomes
 				// a result payload rather than rejecting the dispatch promise. A
