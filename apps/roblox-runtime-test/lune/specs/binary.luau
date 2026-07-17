@@ -3,6 +3,7 @@
 local roblox = require("@lune/roblox")
 local Vector3, Color3, CFrame = roblox.Vector3, roblox.Color3, roblox.CFrame
 local Vector2, UDim, UDim2 = roblox.Vector2, roblox.UDim, roblox.UDim2
+local BrickColor = roblox.BrickColor
 
 return function(ctx)
 	local t = ctx.t
@@ -189,6 +190,20 @@ return function(ctx)
 			t.eq(buffer.len(encodeBinary(schema.vector2(), Vector2.new(0, 0))), 4 + 8)
 			t.eq(buffer.len(encodeBinary(schema.udim(), UDim.new(0, 0))), 4 + 8)
 			t.eq(buffer.len(encodeBinary(schema.udim2(), UDim2.new(0, 0, 0, 0))), 4 + 16)
+		end)
+
+		t.it("round trips BrickColor and refuses to encode an Instance", function()
+			-- DateTime is not constructible under Lune; its codec is covered by the
+			-- Node reference tests. BrickColor and Instance are.
+			local bc = roundTrip(schema.brickColor(), BrickColor.new(194))
+			t.eq(typeof(bc), "BrickColor")
+			t.eq(bc.Number, 194)
+			t.eq(buffer.len(encodeBinary(schema.brickColor(), BrickColor.new(1))), 4 + 2)
+
+			local ok = pcall(function()
+				encodeBinary(schema.instance(), roblox.Instance.new("Part"))
+			end)
+			t.isFalse(ok, "encoding an Instance schema throws")
 		end)
 
 		t.it("errors on a truncated buffer instead of raw buffer access", function()

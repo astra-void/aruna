@@ -1,7 +1,7 @@
 // Aruna roblox-ts native runtime — server action registry and dispatch.
 
 import type { ActionContext, ActionDefinition, ActionRateLimitOptions } from "./server";
-import { firstSchemaIssue, type Schema } from "./schema";
+import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
@@ -104,6 +104,12 @@ export function createActionRegistry<TPlayer>(
 				if (definition === undefined) {
 					resolve({ ok: false, error: `unknown action: ${actionId}` });
 					return;
+				}
+
+				// Fill `.default(...)` values before validation and user code, so an
+				// omitted defaulted field arrives populated.
+				if (definition.input !== undefined) {
+					input = applyDefaults(definition.input, input);
 				}
 
 				// Reject non-wire-safe input before validation or user code runs.

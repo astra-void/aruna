@@ -312,4 +312,33 @@ describe("Roblox userdata kinds", () => {
     ).toBe(true);
     expect(validateSchema(schema.udim2(), { x: { scale: 0, offset: 0 } }).ok).toBe(false);
   });
+
+  it("round trips DateTime and BrickColor", () => {
+    expect(roundTrip(schema.dateTime(), { unixTimestampMillis: 1_700_000_000_000 })).toEqual({
+      unixTimestampMillis: 1_700_000_000_000,
+    });
+    expect(roundTrip(schema.brickColor(), { number: 194 })).toEqual({ number: 194 });
+  });
+
+  it("packs DateTime (f64) and BrickColor (u16) to their byte counts", () => {
+    expect(encodeBinary(schema.dateTime(), { unixTimestampMillis: 0 }).length).toBe(4 + 8);
+    expect(encodeBinary(schema.brickColor(), { number: 1 }).length).toBe(4 + 2);
+  });
+
+  it("validates DateTime/BrickColor/Instance shapes", () => {
+    expect(validateSchema(schema.dateTime(), { unixTimestampMillis: 1 }).ok).toBe(true);
+    expect(validateSchema(schema.dateTime(), {}).ok).toBe(false);
+    expect(validateSchema(schema.brickColor(), { number: 1 }).ok).toBe(true);
+    // The reference runtime accepts an Instance-like shape.
+    const fakeInstance = { IsA: () => true, ClassName: "Part" };
+    expect(validateSchema(schema.instance(), fakeInstance).ok).toBe(true);
+    expect(validateSchema(schema.instance(), {}).ok).toBe(false);
+  });
+
+  it("refuses to binary-encode an Instance schema", () => {
+    const fakeInstance = { IsA: () => true, ClassName: "Part" };
+    expect(() => encodeBinary(schema.instance(), fakeInstance)).toThrowError(
+      /Instance schemas cannot be binary-encoded/,
+    );
+  });
 });

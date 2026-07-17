@@ -1,4 +1,4 @@
-import { assertSchema, type Infer, type Schema } from "../schema/index.js";
+import { applyDefaults, assertSchema, type Infer, type Schema } from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
 import type { RemoteSignalPublisher } from "./remote-signal.js";
 import type { SignalRegistry } from "./signal.js";
@@ -177,6 +177,13 @@ export async function dispatchAction<TPlayer = unknown>(
 
   if (action === undefined) {
     throw new Error(`Aruna action not found: ${actionId}`);
+  }
+
+  // Fill `.default(...)` values before validation and before the handler runs,
+  // so an omitted defaulted field arrives populated. No-op when the schema has
+  // no defaults.
+  if (action.input !== undefined) {
+    input = applyDefaults(action.input, input);
   }
 
   assertSerializableActionValue(input, "input", actionId);

@@ -48,6 +48,7 @@ local function makeLoader(runtimeDirs, promisePath, fakes)
 			CFrame = roblox.CFrame,
 			UDim = roblox.UDim,
 			UDim2 = roblox.UDim2,
+			BrickColor = roblox.BrickColor,
 			-- The Promise library warns on unhandled rejections; the dispatch
 			-- path intentionally swallows rejections into result payloads, so
 			-- keep the test output clean.

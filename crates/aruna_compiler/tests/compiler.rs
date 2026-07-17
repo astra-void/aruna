@@ -487,6 +487,73 @@ export const demo = defineAction({
 }
 
 #[test]
+fn parses_datetime_brickcolor_instance_and_default() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const demo = defineAction({
+  id: "demo.rest",
+  input: schema.object({
+    when: schema.dateTime(),
+    color: schema.brickColor(),
+    part: schema.instance(),
+    count: schema.number().default(1),
+  }),
+  run() {
+    return undefined;
+  },
+});
+"#,
+    );
+
+    let output = check_project(CompilerInput {
+        write_generated: true,
+        ..compiler_input(root)
+    });
+
+    assert!(output.ok, "should compile: {:?}", output.diagnostics);
+    let properties = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "demo.rest")
+        .expect("expected action metadata")
+        .input_schema
+        .as_ref()
+        .expect("expected input schema")
+        .properties
+        .as_ref()
+        .expect("expected object properties");
+
+    assert_eq!(properties["when"].kind, "dateTime");
+    assert_eq!(properties["color"].kind, "brickColor");
+    assert_eq!(properties["part"].kind, "instance");
+    // `.default(1)` emits an `optional` wrapper so the client field is omittable;
+    // the default value is runtime-only and dropped from the metadata.
+    assert_eq!(properties["count"].kind, "optional");
+    assert_eq!(
+        properties["count"].inner.as_ref().expect("expected optional inner").kind,
+        "number"
+    );
+
+    let generated_files = output.generated_files.expect("expected generated files");
+    let client = generated_files
+        .iter()
+        .find(|file| file.path.contains("actions.client.generated.ts"))
+        .expect("expected generated client file");
+    assert!(client.contents.contains("DateTime"));
+    assert!(client.contents.contains("BrickColor"));
+    assert!(client.contents.contains("Instance"));
+}
+
+#[test]
 fn rejects_null_literal_schema_values() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

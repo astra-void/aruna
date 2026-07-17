@@ -5,6 +5,7 @@
 return function(ctx)
 	local t = ctx.t
 	local serverApp = ctx.load("server-app")
+	local schema = ctx.load("schema").schema
 	local fakes = ctx.fakes
 
 	local player = { UserId = 1, Name = "Tester" }
@@ -172,6 +173,40 @@ return function(ctx)
 			t.eq(joined[2], 12)
 			app.dispose()
 			table.clear(fakes.playerList)
+		end)
+	end)
+
+	t.describe("input defaults", function()
+		t.it("fills a defaulted input field before the handler runs", function()
+			local seen = {}
+			local app = serverApp.createServerApp({
+				actions = {
+					buy = {
+						id = "buy",
+						input = schema.object({
+							item = schema.string(),
+							count = schema.number().default(1),
+						}),
+						run = function(_self, _context, input)
+							seen.item = input.item
+							seen.count = input.count
+							return { ok = true }
+						end,
+					},
+				},
+			})
+
+			-- The caller omits `count`; the server fills the default.
+			local settled, ok = t.await(app.dispatch("buy", { player = player }, { item = "sword" }))
+			t.isTrue(settled, "settled")
+			t.isTrue(ok, "resolved")
+			t.eq(seen.item, "sword")
+			t.eq(seen.count, 1)
+
+			-- A provided value is kept.
+			t.await(app.dispatch("buy", { player = player }, { item = "shield", count = 3 }))
+			t.eq(seen.count, 3)
+			app.dispose()
 		end)
 	end)
 end

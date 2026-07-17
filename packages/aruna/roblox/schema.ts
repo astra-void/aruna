@@ -20,12 +20,16 @@ export type SchemaTypeName =
 	| "literal"
 	| "enum"
 	| "union"
+	| "default"
 	| "vector3"
 	| "vector2"
 	| "color3"
 	| "cframe"
 	| "udim"
-	| "udim2";
+	| "udim2"
+	| "dateTime"
+	| "brickColor"
+	| "instance";
 
 export type SchemaLiteral = string | number | boolean;
 
@@ -61,6 +65,9 @@ export interface Schema<T = unknown> {
 	// Present on a discriminated union: the shared field whose literal value
 	// selects the member. Wire/type-transparent (same as a plain union).
 	readonly discriminant?: string;
+	// The fallback value for a `default` schema, filled by `applyDefaults` when the
+	// value is absent.
+	readonly defaultValue?: unknown;
 }
 
 // Numeric width hints, mirroring the Node reference schema. The binary codec
@@ -181,6 +188,18 @@ function arraySchemaCore<S extends Schema>(
 	};
 }
 
+// Wraps a schema with a fallback used when the value is absent. `applyDefaults`
+// fills it before the handler runs, so the inferred (handler-facing) type stays
+// the inner type; the generated client stub renders the field optional.
+function defaultSchema<T>(inner: Schema<T>, value: unknown): Schema<T> {
+	return {
+		typeName: "default",
+		inner,
+		defaultValue: value,
+		validate: (candidate) => candidate === undefined || inner.validate(candidate),
+	};
+}
+
 // Chainable schema variants. Methods are arrow-function fields (not methods) so
 // roblox-ts treats them as plain properties. Each returns a fresh schema whose
 // validate closure re-runs the full refinement list.
@@ -189,6 +208,7 @@ export interface StringSchemaChain extends Schema<string> {
 	readonly maxLength: (value: number) => StringSchemaChain;
 	readonly length: (value: number) => StringSchemaChain;
 	readonly refine: (check: (value: unknown) => boolean, message: string) => StringSchemaChain;
+	readonly default: (value: string) => Schema<string>;
 }
 
 export interface NumberSchemaChain extends Schema<number> {
@@ -196,6 +216,7 @@ export interface NumberSchemaChain extends Schema<number> {
 	readonly max: (value: number) => NumberSchemaChain;
 	readonly int: () => NumberSchemaChain;
 	readonly refine: (check: (value: unknown) => boolean, message: string) => NumberSchemaChain;
+	readonly default: (value: number) => Schema<number>;
 }
 
 export interface ArraySchemaChain<T = unknown> extends Schema<Array<T>> {
@@ -203,6 +224,7 @@ export interface ArraySchemaChain<T = unknown> extends Schema<Array<T>> {
 	readonly maxItems: (value: number) => ArraySchemaChain<T>;
 	readonly length: (value: number) => ArraySchemaChain<T>;
 	readonly refine: (check: (value: unknown) => boolean, message: string) => ArraySchemaChain<T>;
+	readonly default: (value: ReadonlyArray<T>) => Schema<Array<T>>;
 }
 
 function stringSchemaChain(refinements: readonly Refinement[]): StringSchemaChain {
@@ -234,6 +256,7 @@ function stringSchemaChain(refinements: readonly Refinement[]): StringSchemaChai
 				},
 			]),
 		refine: (check, message) => stringSchemaChain([...refinements, { check, message }]),
+		default: (value) => defaultSchema(core, value),
 	};
 }
 
@@ -270,6 +293,7 @@ function numberSchemaChain(
 				},
 			]),
 		refine: (check, message) => numberSchemaChain(format, [...refinements, { check, message }]),
+		default: (value) => defaultSchema(core, value),
 	};
 }
 
@@ -308,6 +332,7 @@ function arraySchemaChain<S extends Schema>(
 				},
 			]),
 		refine: (check, message) => arraySchemaChain(item, [...refinements, { check, message }]),
+		default: (value) => defaultSchema(core, value),
 	};
 }
 
@@ -518,6 +543,27 @@ function udim2Schema(): Schema<UDim2> {
 	};
 }
 
+function dateTimeSchema(): Schema<DateTime> {
+	return {
+		typeName: "dateTime",
+		validate: (value) => typeIs(value, "DateTime"),
+	};
+}
+
+function brickColorSchema(): Schema<BrickColor> {
+	return {
+		typeName: "brickColor",
+		validate: (value) => typeIs(value, "BrickColor"),
+	};
+}
+
+function instanceSchema(): Schema<Instance> {
+	return {
+		typeName: "instance",
+		validate: (value) => typeIs(value, "Instance"),
+	};
+}
+
 function joinPath(path: string, segment: string): string {
 	return path === "" ? segment : `${path}.${segment}`;
 }
@@ -528,6 +574,75 @@ function indexPath(path: string, index: number): string {
 
 function withPath(path: string, message: string): string {
 	return path === "" ? message : `${path}: ${message}`;
+}
+
+// Fills `.default(...)` values into a value tree, returning a value where every
+// absent defaulted field is populated. Returns the input unchanged when nothing
+// is filled. Recurses through default/optional/object/array; other containers
+// pass through.
+export function applyDefaults(schema: Schema, value: unknown): unknown {
+	const typeName = schema.typeName;
+	if (typeName === "default") {
+		if (value === undefined) {
+			return schema.defaultValue;
+		}
+		const inner = schema.inner;
+		return inner !== undefined ? applyDefaults(inner, value) : value;
+	} else if (typeName === "optional") {
+		if (value === undefined) {
+			return undefined;
+		}
+		const inner = schema.inner;
+		return inner !== undefined ? applyDefaults(inner, value) : value;
+	} else if (typeName === "object") {
+		if (!typeIs(value, "table")) {
+			return value;
+		}
+		const fields = schema.fields;
+		if (fields === undefined) {
+			return value;
+		}
+		const record = value as { [key: string]: unknown };
+		let result: { [key: string]: unknown } | undefined;
+		for (const [key, fieldSchema] of pairs(fields as { [key: string]: Schema })) {
+			const original = record[key as string];
+			const filled = applyDefaults(fieldSchema, original);
+			if (filled !== original) {
+				if (result === undefined) {
+					result = {};
+					for (const [existingKey, existingValue] of pairs(record)) {
+						result[existingKey as string] = existingValue;
+					}
+				}
+				result[key as string] = filled;
+			}
+		}
+		return result !== undefined ? result : value;
+	} else if (typeName === "array") {
+		if (!typeIs(value, "table")) {
+			return value;
+		}
+		const item = schema.item;
+		if (item === undefined) {
+			return value;
+		}
+		const list = value as Array<unknown>;
+		let result: Array<unknown> | undefined;
+		for (let index = 0; index < list.size(); index += 1) {
+			const filled = applyDefaults(item, list[index]);
+			if (filled !== list[index]) {
+				if (result === undefined) {
+					result = [];
+					for (let copyIndex = 0; copyIndex < list.size(); copyIndex += 1) {
+						result[copyIndex] = list[copyIndex];
+					}
+				}
+				result[index] = filled;
+			}
+		}
+		return result !== undefined ? result : value;
+	}
+	return value;
 }
 
 // Returns the first refinement whose check fails as a path-qualified message.
@@ -581,7 +696,7 @@ export function firstSchemaIssue(schema: Schema, value: unknown, path?: string):
 		return value === schema.value
 			? undefined
 			: withPath(at, `expected literal ${tostring(schema.value)}`);
-	} else if (typeName === "optional") {
+	} else if (typeName === "optional" || typeName === "default") {
 		if (value === undefined) {
 			return undefined;
 		}
@@ -714,6 +829,12 @@ export function firstSchemaIssue(schema: Schema, value: unknown, path?: string):
 		return typeIs(value, "UDim") ? undefined : withPath(at, "expected UDim");
 	} else if (typeName === "udim2") {
 		return typeIs(value, "UDim2") ? undefined : withPath(at, "expected UDim2");
+	} else if (typeName === "dateTime") {
+		return typeIs(value, "DateTime") ? undefined : withPath(at, "expected DateTime");
+	} else if (typeName === "brickColor") {
+		return typeIs(value, "BrickColor") ? undefined : withPath(at, "expected BrickColor");
+	} else if (typeName === "instance") {
+		return typeIs(value, "Instance") ? undefined : withPath(at, "expected a Roblox Instance");
 	}
 	return undefined;
 }
@@ -744,4 +865,7 @@ export const schema = {
 	cframe: cframeSchema,
 	udim: udimSchema,
 	udim2: udim2Schema,
+	dateTime: dateTimeSchema,
+	brickColor: brickColorSchema,
+	instance: instanceSchema,
 };

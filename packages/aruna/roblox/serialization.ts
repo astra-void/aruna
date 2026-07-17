@@ -26,7 +26,10 @@ function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolea
 		typeIs(value, "Color3") ||
 		typeIs(value, "CFrame") ||
 		typeIs(value, "UDim") ||
-		typeIs(value, "UDim2")
+		typeIs(value, "UDim2") ||
+		typeIs(value, "DateTime") ||
+		typeIs(value, "BrickColor") ||
+		typeIs(value, "Instance")
 	) {
 		return true;
 	}

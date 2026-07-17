@@ -66,6 +66,16 @@ export type OptionalSchema = {
   readonly inner: Schema;
 };
 
+// Wraps an inner schema with a fallback used when the value is absent. On the
+// server, `applyDefaults` fills the value before the handler runs, so the
+// handler's inferred type is the inner type (present). The generated client stub
+// renders the field optional, so callers may omit it. Set via `.default(v)`.
+export type DefaultSchema = {
+  readonly kind: "default";
+  readonly inner: Schema;
+  readonly value: unknown;
+};
+
 // A homogeneous string-keyed map (`{ [key: string]: V }`). Keys are always
 // strings — the wire format is a Luau table, and non-string keys don't survive
 // the plain-data boundary.
@@ -124,6 +134,22 @@ export type UDim2Schema = {
   readonly kind: "udim2";
 };
 
+export type DateTimeSchema = {
+  readonly kind: "dateTime";
+};
+
+export type BrickColorSchema = {
+  readonly kind: "brickColor";
+};
+
+// A Roblox Instance reference. Instances cross the RemoteEvent transport
+// natively; they cannot be packed into the standalone binary codec (which throws
+// for this kind). The Node reference runtime types it as `Instance` (via
+// @rbxts/types) and validates the Instance-like shape.
+export type InstanceSchema = {
+  readonly kind: "instance";
+};
+
 export type Vector3Value = {
   readonly x: number;
   readonly y: number;
@@ -146,6 +172,16 @@ export type UDim2Value = {
   readonly y: UDimValue;
 };
 
+// A Roblox DateTime, modelled off-Roblox as its Unix millisecond timestamp.
+export type DateTimeValue = {
+  readonly unixTimestampMillis: number;
+};
+
+// A Roblox BrickColor, modelled off-Roblox as its palette number.
+export type BrickColorValue = {
+  readonly number: number;
+};
+
 export type Color3Value = {
   readonly r: number;
   readonly g: number;
@@ -166,6 +202,7 @@ export type Schema =
   | ArraySchema
   | ObjectSchema
   | OptionalSchema
+  | DefaultSchema
   | RecordSchema
   | TupleSchema
   | EnumSchema
@@ -175,7 +212,10 @@ export type Schema =
   | Color3Schema
   | CFrameSchema
   | UDimSchema
-  | UDim2Schema;
+  | UDim2Schema
+  | DateTimeSchema
+  | BrickColorSchema
+  | InstanceSchema;
 
 type OptionalKeys<TShape extends SchemaShape> = {
   [TKey in keyof TShape]-?: TShape[TKey] extends OptionalSchema ? TKey : never;
@@ -220,6 +260,10 @@ export type Infer<TSchema extends Schema> = TSchema extends StringSchema
               ? TSchema["inner"] extends Schema
                 ? Infer<TSchema["inner"]> | undefined
                 : unknown
+              : TSchema extends DefaultSchema
+                ? TSchema["inner"] extends Schema
+                  ? Infer<TSchema["inner"]>
+                  : unknown
               : TSchema extends TupleSchema
                 ? InferTupleSchema<TSchema["items"]>
                 : TSchema extends RecordSchema
@@ -244,7 +288,13 @@ export type Infer<TSchema extends Schema> = TSchema extends StringSchema
                                 ? UDimValue
                                 : TSchema extends UDim2Schema
                                   ? UDim2Value
-                                  : never;
+                                  : TSchema extends DateTimeSchema
+                                    ? DateTimeValue
+                                    : TSchema extends BrickColorSchema
+                                      ? BrickColorValue
+                                      : TSchema extends InstanceSchema
+                                        ? Instance
+                                        : never;
 
 type InferTupleSchema<TItems extends readonly Schema[]> = {
   -readonly [TIndex in keyof TItems]: Infer<TItems[TIndex]>;
@@ -411,6 +461,22 @@ function isUDim2Value(value: unknown): value is UDim2Value {
   return isRecordLike(value) && isUDimValue(value["x"]) && isUDimValue(value["y"]);
 }
 
+function isDateTimeValue(value: unknown): value is DateTimeValue {
+  return isRecordLike(value) && isFiniteNumber(value["unixTimestampMillis"]);
+}
+
+function isBrickColorValue(value: unknown): value is BrickColorValue {
+  return isRecordLike(value) && isFiniteNumber(value["number"]);
+}
+
+function isInstanceLike(value: unknown): value is Instance {
+  if (!isRecordLike(value)) {
+    return false;
+  }
+  const candidate = value as { readonly IsA?: unknown; readonly ClassName?: unknown };
+  return typeof candidate.IsA === "function" && typeof candidate.ClassName === "string";
+}
+
 function isColor3Value(value: unknown): value is Color3Value {
   return (
     isRecordLike(value) &&
@@ -508,6 +574,9 @@ function validateSchemaAtPath(
       return issues;
     }
     case "optional":
+      return value === undefined ? [] : validateSchemaAtPath(schema.inner, value, path);
+    case "default":
+      // Absence is valid (the default fills it); otherwise validate the inner.
       return value === undefined ? [] : validateSchemaAtPath(schema.inner, value, path);
     case "record": {
       if (!isRecordLike(value)) {
@@ -612,6 +681,16 @@ function validateSchemaAtPath(
       return isUDim2Value(value)
         ? []
         : [createIssue(path, "expected UDim2 { x: UDim, y: UDim }")];
+    case "dateTime":
+      return isDateTimeValue(value)
+        ? []
+        : [createIssue(path, "expected DateTime { unixTimestampMillis }")];
+    case "brickColor":
+      return isBrickColorValue(value)
+        ? []
+        : [createIssue(path, "expected BrickColor { number }")];
+    case "instance":
+      return isInstanceLike(value) ? [] : [createIssue(path, "expected a Roblox Instance")];
     default:
       throw new Error("Unsupported schema kind.");
   }
@@ -634,6 +713,58 @@ function buildValidationMessage(
         : `Aruna action ${actionId} ${role} validation failed`;
 
   return `${prefix}: ${issues.map(formatIssue).join("; ")}`;
+}
+
+// Fills `.default(...)` values into a value tree, returning a value where every
+// absent defaulted field is populated. Returns the input unchanged when nothing
+// is filled (no clone), so the dispatch path pays nothing when no defaults exist.
+// Recurses through default/optional/object/array; other containers pass through.
+export function applyDefaults(schema: Schema, value: unknown): unknown {
+  switch (schema.kind) {
+    case "default":
+      return value === undefined ? schema.value : applyDefaults(schema.inner, value);
+    case "optional":
+      return value === undefined ? undefined : applyDefaults(schema.inner, value);
+    case "object": {
+      if (!isRecordLike(value)) {
+        return value;
+      }
+      let result: Record<string, unknown> | undefined;
+      for (const key of Object.keys(schema.shape)) {
+        const fieldSchema = schema.shape[key];
+        if (fieldSchema === undefined) {
+          continue;
+        }
+        const original = value[key];
+        const filled = applyDefaults(fieldSchema, original);
+        if (filled !== original) {
+          if (result === undefined) {
+            result = { ...value };
+          }
+          result[key] = filled;
+        }
+      }
+      return result ?? value;
+    }
+    case "array": {
+      if (!Array.isArray(value)) {
+        return value;
+      }
+      let result: unknown[] | undefined;
+      for (let index = 0; index < value.length; index += 1) {
+        const filled = applyDefaults(schema.item, value[index]);
+        if (filled !== value[index]) {
+          if (result === undefined) {
+            result = [...value];
+          }
+          result[index] = filled;
+        }
+      }
+      return result ?? value;
+    }
+    default:
+      return value;
+  }
 }
 
 export function validateSchema(schema: Schema, value: unknown): SchemaValidationResult {
@@ -684,6 +815,7 @@ export interface StringSchemaChain extends StringSchema {
   maxLength(value: number): StringSchemaChain;
   length(value: number): StringSchemaChain;
   refine(check: (value: unknown) => boolean, message: string): StringSchemaChain;
+  default(value: string): DefaultSchema & { readonly inner: StringSchema; readonly value: string };
 }
 
 // A number schema with chainable range/int/refine constraints.
@@ -692,6 +824,7 @@ export interface NumberSchemaChain extends NumberSchema {
   max(value: number): NumberSchemaChain;
   int(): NumberSchemaChain;
   refine(check: (value: unknown) => boolean, message: string): NumberSchemaChain;
+  default(value: number): DefaultSchema & { readonly inner: NumberSchema; readonly value: number };
 }
 
 // An array schema with chainable length/refine constraints.
@@ -701,6 +834,9 @@ export interface ArraySchemaChain<TItem extends Schema = Schema> extends ArraySc
   maxItems(value: number): ArraySchemaChain<TItem>;
   length(value: number): ArraySchemaChain<TItem>;
   refine(check: (value: unknown) => boolean, message: string): ArraySchemaChain<TItem>;
+  default(
+    value: readonly Infer<TItem>[],
+  ): DefaultSchema & { readonly inner: ArraySchema & { readonly item: TItem }; readonly value: readonly Infer<TItem>[] };
 }
 
 function appendRefinement<TSchema extends { readonly refinements?: readonly Refinement[] }>(
@@ -740,6 +876,9 @@ function stringSchemaChain(base: StringSchema): StringSchemaChain {
     refine(check, message) {
       return stringSchemaChain(appendRefinement(base, { check, message }));
     },
+    default(value) {
+      return { kind: "default", inner: base, value };
+    },
   };
 }
 
@@ -772,6 +911,9 @@ function numberSchemaChain(base: NumberSchema): NumberSchemaChain {
     },
     refine(check, message) {
       return numberSchemaChain(appendRefinement(base, { check, message }));
+    },
+    default(value) {
+      return { kind: "default", inner: base, value };
     },
   };
 }
@@ -807,6 +949,9 @@ function arraySchemaChain<TItem extends Schema>(
     },
     refine(check, message) {
       return arraySchemaChain(appendRefinement(base, { check, message }));
+    },
+    default(value) {
+      return { kind: "default", inner: base, value };
     },
   };
 }
@@ -932,5 +1077,17 @@ export const schema = {
 
   udim2(): UDim2Schema {
     return { kind: "udim2" };
+  },
+
+  dateTime(): DateTimeSchema {
+    return { kind: "dateTime" };
+  },
+
+  brickColor(): BrickColorSchema {
+    return { kind: "brickColor" };
+  },
+
+  instance(): InstanceSchema {
+    return { kind: "instance" };
   },
 };

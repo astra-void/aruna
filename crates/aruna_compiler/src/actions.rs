@@ -215,7 +215,7 @@ fn schema_invalid_diagnostic(
         Some(span),
         Some(format!("export name: {export_name}\n{details}")),
         Some(
-            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), schema.discriminatedUnion(key, [...]), or a Roblox userdata schema (vector3/vector2/color3/cframe/udim/udim2)."
+            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), schema.discriminatedUnion(key, [...]), or a Roblox userdata schema (vector3/vector2/color3/cframe/udim/udim2/dateTime/brickColor/instance)."
                 .to_string(),
         ),
     )
@@ -900,6 +900,22 @@ fn parse_schema_call<'a>(
         }
     }
 
+    // `.default(v)`: the client may omit the field (server fills it), so the
+    // generated type is optional. Emitted as an `optional` wrapper around the
+    // inner schema; the default value itself is runtime-only and dropped.
+    if member.property.name.as_str() == "default" {
+        if let Expression::CallExpression(inner_call) = unwrap_schema_expression(&member.object) {
+            let inner = parse_schema_call(
+                file, action_id, export_name, role, inner_call, scope, diagnostics,
+            )?;
+            return Some(ArunaSchemaMetadata {
+                kind: "optional".to_string(),
+                inner: Some(Box::new(inner)),
+                ..Default::default()
+            });
+        }
+    }
+
     let Expression::Identifier(object) = &member.object else {
         diagnostics.push(schema_invalid_diagnostic(
             file,
@@ -936,7 +952,7 @@ fn parse_schema_call<'a>(
         // cframe) map to native Vector3/Color3/CFrame and travel over the wire
         // natively or as packed f32 components via the binary codec.
         "string" | "number" | "boolean" | "vector3" | "vector2" | "color3" | "cframe" | "udim"
-        | "udim2" => {
+        | "udim2" | "dateTime" | "brickColor" | "instance" => {
             if !call.arguments.is_empty() {
                 diagnostics.push(schema_invalid_diagnostic(
                     file,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { SchemaValidationError, assertSchema, schema, validateSchema } from "../src/schema.js";
+import {
+  SchemaValidationError,
+  applyDefaults,
+  assertSchema,
+  schema,
+  validateSchema,
+} from "../src/schema.js";
 import type { Infer } from "../src/schema.js";
 
 describe("schema runtime", () => {
@@ -261,5 +267,42 @@ describe("discriminated union", () => {
     // Infer. (Compile-time check; runtime asserts the validation above.)
     const move: Infer<typeof event> = { type: "move", dx: 1 };
     expect(validateSchema(event, move)).toEqual({ ok: true });
+  });
+});
+
+describe("default values", () => {
+  it("fills an absent defaulted field, keeping present ones", () => {
+    const form = schema.object({ count: schema.number().default(10), name: schema.string() });
+    expect(applyDefaults(form, { name: "a" })).toEqual({ name: "a", count: 10 });
+    expect(applyDefaults(form, { name: "a", count: 3 })).toEqual({ name: "a", count: 3 });
+  });
+
+  it("returns the input unchanged when nothing is filled (no clone)", () => {
+    const form = schema.object({ name: schema.string() });
+    const input = { name: "a" };
+    expect(applyDefaults(form, input)).toBe(input);
+  });
+
+  it("treats an absent defaulted field as valid (the default supplies it)", () => {
+    const form = schema.object({ count: schema.number().default(0) });
+    expect(validateSchema(form, {})).toEqual({ ok: true });
+    // A present-but-wrong value still fails.
+    expect(validateSchema(form, { count: "x" }).ok).toBe(false);
+  });
+
+  it("fills nested defaults inside arrays of objects", () => {
+    const form = schema.object({
+      items: schema.array(schema.object({ qty: schema.number().default(1) })),
+    });
+    expect(applyDefaults(form, { items: [{}, { qty: 5 }] })).toEqual({
+      items: [{ qty: 1 }, { qty: 5 }],
+    });
+  });
+
+  it("infers a defaulted field as present for the handler", () => {
+    const form = schema.object({ count: schema.number().default(0) });
+    // count is a required (present) key in the handler-facing inferred type.
+    const value: Infer<typeof form> = { count: 5 };
+    expect(value.count).toBe(5);
   });
 });

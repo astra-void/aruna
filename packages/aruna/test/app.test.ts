@@ -391,6 +391,34 @@ describe("player sessions and lifecycle", () => {
   });
 });
 
+describe("input defaults", () => {
+  it("fills a defaulted input field before the handler runs", async () => {
+    let seen: { readonly item: string; readonly count: number } | undefined;
+    const app = createServerApp({
+      actions: {
+        "shop.buy": defineAction({
+          id: "shop.buy",
+          input: schema.object({ item: schema.string(), count: schema.number().default(1) }),
+          run(_ctx, input) {
+            seen = input;
+            return { ok: true };
+          },
+        }),
+      },
+    });
+
+    // The caller omits `count`; the server fills the default before the handler.
+    await app.dispatch("shop.buy", { player: "p1" }, { item: "sword" });
+    expect(seen).toEqual({ item: "sword", count: 1 });
+
+    // A provided value is kept.
+    await app.dispatch("shop.buy", { player: "p1" }, { item: "shield", count: 3 });
+    expect(seen).toEqual({ item: "shield", count: 3 });
+
+    app.dispose();
+  });
+});
+
 describe("in-process round-trip", () => {
   it("connects a generated-style stub, client app, server app, and schema validation", async () => {
     const actions = {

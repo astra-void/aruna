@@ -377,6 +377,12 @@ function encodeValue(schema: Schema, value: unknown, writer: BinaryWriter): void
 		writer.writeNumber(udim2.X.Offset, "i32");
 		writer.writeF32(udim2.Y.Scale);
 		writer.writeNumber(udim2.Y.Offset, "i32");
+	} else if (typeName === "dateTime") {
+		writer.writeF64((value as DateTime).UnixTimestampMillis);
+	} else if (typeName === "brickColor") {
+		writer.writeNumber((value as BrickColor).Number, "u16");
+	} else if (typeName === "instance") {
+		throw "Aruna binary encode: Instance schemas cannot be binary-encoded; use the RemoteEvent transport.";
 	} else {
 		throw "Aruna binary encode: unsupported schema kind.";
 	}
@@ -511,6 +517,12 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
 		const yScale = reader.readF32();
 		const yOffset = reader.readNumber("i32");
 		return new UDim2(xScale, xOffset, yScale, yOffset);
+	} else if (typeName === "dateTime") {
+		return DateTime.fromUnixTimestampMillis(reader.readF64());
+	} else if (typeName === "brickColor") {
+		return new BrickColor(reader.readNumber("u16"));
+	} else if (typeName === "instance") {
+		throw "Aruna binary decode: Instance schemas cannot be binary-decoded; use the RemoteEvent transport.";
 	}
 	throw "Aruna binary decode: unsupported schema kind.";
 }
@@ -610,6 +622,12 @@ function schemaLayoutString(schema: Schema): string {
 		return "ud";
 	} else if (typeName === "udim2") {
 		return "ud2";
+	} else if (typeName === "dateTime") {
+		return "dt";
+	} else if (typeName === "brickColor") {
+		return "bc";
+	} else if (typeName === "instance") {
+		return "in";
 	}
 	throw "Aruna schema fingerprint: unsupported schema kind.";
 }

@@ -1,4 +1,6 @@
 --!nocheck
+local roblox = require("@lune/roblox")
+
 return function(ctx)
 	local t = ctx.t
 	local schema = ctx.load("schema").schema
@@ -137,6 +139,28 @@ return function(ctx)
 				schema.object({ type = schema.literal("move"), dx = schema.number() }),
 			})
 			t.eq(firstSchemaIssue(event, { type = "move", dx = "nope" }), "dx: expected number")
+		end)
+
+		t.it("validates BrickColor and Instance userdata", function()
+			-- BrickColor and Instance are constructible under Lune; DateTime is not,
+			-- so its validation is covered by the Node reference tests + typecheck.
+			t.isTrue(schema.brickColor().validate(roblox.BrickColor.new(194)))
+			t.isFalse(schema.brickColor().validate({ number = 194 }))
+			t.isTrue(schema.instance().validate(roblox.Instance.new("Part")))
+			t.isFalse(schema.instance().validate({}))
+		end)
+
+		t.it("fills defaults via applyDefaults and validates absent defaulted fields", function()
+			local applyDefaults = ctx.load("schema").applyDefaults
+			local s = schema.object({ count = schema.number().default(10), name = schema.string() })
+			local filled = applyDefaults(s, { name = "a" })
+			t.eq(filled.count, 10)
+			t.eq(filled.name, "a")
+			-- A provided value is kept.
+			t.eq(applyDefaults(s, { name = "a", count = 3 }).count, 3)
+			-- An absent defaulted field validates as ok (the default supplies it).
+			t.isTrue(s.validate({ name = "a" }))
+			t.isFalse(s.validate({ name = "a", count = "x" }))
 		end)
 	end)
 end

@@ -32,8 +32,10 @@
 
 import {
   validateSchema,
+  type BrickColorValue,
   type CFrameValue,
   type Color3Value,
+  type DateTimeValue,
   type NumberFormat,
   type Schema,
   type SchemaLiteral,
@@ -410,6 +412,18 @@ function encodeValue(schema: Schema, value: unknown, writer: BinaryWriter): void
       writer.writeNumber(udim2.y.offset, "i32");
       return;
     }
+    case "dateTime": {
+      writer.writeF64((value as DateTimeValue).unixTimestampMillis);
+      return;
+    }
+    case "brickColor": {
+      writer.writeNumber((value as BrickColorValue).number, "u16");
+      return;
+    }
+    case "instance":
+      throw new Error(
+        "Aruna binary encode: Instance schemas cannot be binary-encoded; use the RemoteEvent transport.",
+      );
     default:
       throw new Error("Aruna binary encode: unsupported schema kind.");
   }
@@ -526,6 +540,14 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
         y: { scale: yScale, offset: yOffset },
       } satisfies UDim2Value;
     }
+    case "dateTime":
+      return { unixTimestampMillis: reader.readF64() } satisfies DateTimeValue;
+    case "brickColor":
+      return { number: reader.readNumber("u16") } satisfies BrickColorValue;
+    case "instance":
+      throw new Error(
+        "Aruna binary decode: Instance schemas cannot be binary-decoded; use the RemoteEvent transport.",
+      );
     default:
       throw new Error("Aruna binary decode: unsupported schema kind.");
   }
@@ -581,6 +603,12 @@ function schemaLayoutString(schema: Schema): string {
       return "ud";
     case "udim2":
       return "ud2";
+    case "dateTime":
+      return "dt";
+    case "brickColor":
+      return "bc";
+    case "instance":
+      return "in";
     default:
       throw new Error("Aruna schema fingerprint: unsupported schema kind.");
   }

@@ -211,6 +211,9 @@ fn render_schema_metadata(schema: &ArunaSchemaMetadata) -> String {
         "cframe" => "CFrame".to_string(),
         "udim" => "UDim".to_string(),
         "udim2" => "UDim2".to_string(),
+        "dateTime" => "DateTime".to_string(),
+        "brickColor" => "BrickColor".to_string(),
+        "instance" => "Instance".to_string(),
         _ => "unknown".to_string(),
     }
 }
