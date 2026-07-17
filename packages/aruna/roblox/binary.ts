@@ -363,6 +363,20 @@ function encodeValue(schema: Schema, value: unknown, writer: BinaryWriter): void
 		writer.writeF32(r20);
 		writer.writeF32(r21);
 		writer.writeF32(r22);
+	} else if (typeName === "vector2") {
+		const vector = value as Vector2;
+		writer.writeF32(vector.X);
+		writer.writeF32(vector.Y);
+	} else if (typeName === "udim") {
+		const udim = value as UDim;
+		writer.writeF32(udim.Scale);
+		writer.writeNumber(udim.Offset, "i32");
+	} else if (typeName === "udim2") {
+		const udim2 = value as UDim2;
+		writer.writeF32(udim2.X.Scale);
+		writer.writeNumber(udim2.X.Offset, "i32");
+		writer.writeF32(udim2.Y.Scale);
+		writer.writeNumber(udim2.Y.Offset, "i32");
 	} else {
 		throw "Aruna binary encode: unsupported schema kind.";
 	}
@@ -483,6 +497,20 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
 		const r21 = reader.readF32();
 		const r22 = reader.readF32();
 		return new CFrame(x, y, z, r00, r01, r02, r10, r11, r12, r20, r21, r22);
+	} else if (typeName === "vector2") {
+		const x = reader.readF32();
+		const y = reader.readF32();
+		return new Vector2(x, y);
+	} else if (typeName === "udim") {
+		const scale = reader.readF32();
+		const offset = reader.readNumber("i32");
+		return new UDim(scale, offset);
+	} else if (typeName === "udim2") {
+		const xScale = reader.readF32();
+		const xOffset = reader.readNumber("i32");
+		const yScale = reader.readF32();
+		const yOffset = reader.readNumber("i32");
+		return new UDim2(xScale, xOffset, yScale, yOffset);
 	}
 	throw "Aruna binary decode: unsupported schema kind.";
 }
@@ -572,10 +600,16 @@ function schemaLayoutString(schema: Schema): string {
 		return `u(${parts.join("|")})`;
 	} else if (typeName === "vector3") {
 		return "v3";
+	} else if (typeName === "vector2") {
+		return "v2";
 	} else if (typeName === "color3") {
 		return "c3";
 	} else if (typeName === "cframe") {
 		return "cf";
+	} else if (typeName === "udim") {
+		return "ud";
+	} else if (typeName === "udim2") {
+		return "ud2";
 	}
 	throw "Aruna schema fingerprint: unsupported schema kind.";
 }

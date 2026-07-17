@@ -215,7 +215,7 @@ fn schema_invalid_diagnostic(
         Some(span),
         Some(format!("export name: {export_name}\n{details}")),
         Some(
-            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), schema.discriminatedUnion(key, [...]), or a Roblox userdata schema (vector3/color3/cframe)."
+            "Use schema.string(), schema.number(), schema.boolean(), schema.literal(...), schema.array(...), schema.object({...}), schema.optional(...), schema.record(...), schema.tuple([...]), schema.enum([...]), schema.union([...]), schema.discriminatedUnion(key, [...]), or a Roblox userdata schema (vector3/vector2/color3/cframe/udim/udim2)."
                 .to_string(),
         ),
     )
@@ -935,7 +935,8 @@ fn parse_schema_call<'a>(
         // Argument-less leaf schemas. The Roblox userdata kinds (vector3/color3/
         // cframe) map to native Vector3/Color3/CFrame and travel over the wire
         // natively or as packed f32 components via the binary codec.
-        "string" | "number" | "boolean" | "vector3" | "color3" | "cframe" => {
+        "string" | "number" | "boolean" | "vector3" | "vector2" | "color3" | "cframe" | "udim"
+        | "udim2" => {
             if !call.arguments.is_empty() {
                 diagnostics.push(schema_invalid_diagnostic(
                     file,

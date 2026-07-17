@@ -2,6 +2,7 @@
 -- Execution coverage for the schema-driven binary codec (roblox/binary.ts).
 local roblox = require("@lune/roblox")
 local Vector3, Color3, CFrame = roblox.Vector3, roblox.Color3, roblox.CFrame
+local Vector2, UDim, UDim2 = roblox.Vector2, roblox.UDim, roblox.UDim2
 
 return function(ctx)
 	local t = ctx.t
@@ -163,6 +164,31 @@ return function(ctx)
 			t.eq(buffer.len(encodeBinary(schema.vector3(), Vector3.new(0, 0, 0))), 4 + 12)
 			t.eq(buffer.len(encodeBinary(schema.color3(), Color3.new(0, 0, 0))), 4 + 12)
 			t.eq(buffer.len(encodeBinary(schema.cframe(), CFrame.new(0, 0, 0))), 4 + 48)
+		end)
+
+		t.it("round trips 2D userdata as native value types", function()
+			local v = roundTrip(schema.vector2(), Vector2.new(1.5, -2.25))
+			t.eq(typeof(v), "Vector2")
+			t.eq(v.X, 1.5)
+			t.eq(v.Y, -2.25)
+
+			local u = roundTrip(schema.udim(), UDim.new(0.5, -40))
+			t.eq(typeof(u), "UDim")
+			t.eq(u.Scale, 0.5)
+			t.eq(u.Offset, -40)
+
+			local u2 = roundTrip(schema.udim2(), UDim2.new(0.25, 12, 1, -8))
+			t.eq(typeof(u2), "UDim2")
+			t.eq(u2.X.Scale, 0.25)
+			t.eq(u2.X.Offset, 12)
+			t.eq(u2.Y.Scale, 1)
+			t.eq(u2.Y.Offset, -8)
+		end)
+
+		t.it("packs each 2D userdata kind to its declared byte count", function()
+			t.eq(buffer.len(encodeBinary(schema.vector2(), Vector2.new(0, 0))), 4 + 8)
+			t.eq(buffer.len(encodeBinary(schema.udim(), UDim.new(0, 0))), 4 + 8)
+			t.eq(buffer.len(encodeBinary(schema.udim2(), UDim2.new(0, 0, 0, 0))), 4 + 16)
 		end)
 
 		t.it("errors on a truncated buffer instead of raw buffer access", function()

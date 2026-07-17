@@ -426,6 +426,67 @@ export const demo = defineAction({
 }
 
 #[test]
+fn parses_2d_userdata_schemas_and_renders_their_types() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const demo = defineAction({
+  id: "ui.place",
+  input: schema.object({
+    at: schema.vector2(),
+    size: schema.udim2(),
+    pad: schema.udim(),
+  }),
+  run() {
+    return undefined;
+  },
+});
+"#,
+    );
+
+    let output = check_project(CompilerInput {
+        write_generated: true,
+        ..compiler_input(root)
+    });
+
+    assert!(output.ok, "2D userdata should compile: {:?}", output.diagnostics);
+    let properties = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "ui.place")
+        .expect("expected action metadata")
+        .input_schema
+        .as_ref()
+        .expect("expected input schema")
+        .properties
+        .as_ref()
+        .expect("expected object properties");
+
+    assert_eq!(properties["at"].kind, "vector2");
+    assert_eq!(properties["size"].kind, "udim2");
+    assert_eq!(properties["pad"].kind, "udim");
+
+    // The generated client stub renders them to the @rbxts/types globals (not the
+    // silent `unknown` fallback).
+    let generated_files = output.generated_files.expect("expected generated files");
+    let client = generated_files
+        .iter()
+        .find(|file| file.path.contains("actions.client.generated.ts"))
+        .expect("expected generated client file");
+    assert!(client.contents.contains("Vector2"));
+    assert!(client.contents.contains("UDim2"));
+    assert!(client.contents.contains("UDim"));
+}
+
+#[test]
 fn rejects_null_literal_schema_values() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

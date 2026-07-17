@@ -21,8 +21,11 @@ export type SchemaTypeName =
 	| "enum"
 	| "union"
 	| "vector3"
+	| "vector2"
 	| "color3"
-	| "cframe";
+	| "cframe"
+	| "udim"
+	| "udim2";
 
 export type SchemaLiteral = string | number | boolean;
 
@@ -480,6 +483,13 @@ function vector3Schema(): Schema<Vector3> {
 	};
 }
 
+function vector2Schema(): Schema<Vector2> {
+	return {
+		typeName: "vector2",
+		validate: (value) => typeIs(value, "Vector2"),
+	};
+}
+
 function color3Schema(): Schema<Color3> {
 	return {
 		typeName: "color3",
@@ -491,6 +501,20 @@ function cframeSchema(): Schema<CFrame> {
 	return {
 		typeName: "cframe",
 		validate: (value) => typeIs(value, "CFrame"),
+	};
+}
+
+function udimSchema(): Schema<UDim> {
+	return {
+		typeName: "udim",
+		validate: (value) => typeIs(value, "UDim"),
+	};
+}
+
+function udim2Schema(): Schema<UDim2> {
+	return {
+		typeName: "udim2",
+		validate: (value) => typeIs(value, "UDim2"),
 	};
 }
 
@@ -680,10 +704,16 @@ export function firstSchemaIssue(schema: Schema, value: unknown, path?: string):
 		return undefined;
 	} else if (typeName === "vector3") {
 		return typeIs(value, "Vector3") ? undefined : withPath(at, "expected Vector3");
+	} else if (typeName === "vector2") {
+		return typeIs(value, "Vector2") ? undefined : withPath(at, "expected Vector2");
 	} else if (typeName === "color3") {
 		return typeIs(value, "Color3") ? undefined : withPath(at, "expected Color3");
 	} else if (typeName === "cframe") {
 		return typeIs(value, "CFrame") ? undefined : withPath(at, "expected CFrame");
+	} else if (typeName === "udim") {
+		return typeIs(value, "UDim") ? undefined : withPath(at, "expected UDim");
+	} else if (typeName === "udim2") {
+		return typeIs(value, "UDim2") ? undefined : withPath(at, "expected UDim2");
 	}
 	return undefined;
 }
@@ -709,6 +739,9 @@ export const schema = {
 	union: unionSchema,
 	discriminatedUnion: discriminatedUnionSchema,
 	vector3: vector3Schema,
+	vector2: vector2Schema,
 	color3: color3Schema,
 	cframe: cframeSchema,
+	udim: udimSchema,
+	udim2: udim2Schema,
 };

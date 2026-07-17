@@ -104,6 +104,10 @@ export type Vector3Schema = {
   readonly kind: "vector3";
 };
 
+export type Vector2Schema = {
+  readonly kind: "vector2";
+};
+
 export type Color3Schema = {
   readonly kind: "color3";
 };
@@ -112,10 +116,34 @@ export type CFrameSchema = {
   readonly kind: "cframe";
 };
 
+export type UDimSchema = {
+  readonly kind: "udim";
+};
+
+export type UDim2Schema = {
+  readonly kind: "udim2";
+};
+
 export type Vector3Value = {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+};
+
+export type Vector2Value = {
+  readonly x: number;
+  readonly y: number;
+};
+
+// A Roblox UDim: a fractional `scale` plus an integer pixel `offset`.
+export type UDimValue = {
+  readonly scale: number;
+  readonly offset: number;
+};
+
+export type UDim2Value = {
+  readonly x: UDimValue;
+  readonly y: UDimValue;
 };
 
 export type Color3Value = {
@@ -143,8 +171,11 @@ export type Schema =
   | EnumSchema
   | UnionSchema
   | Vector3Schema
+  | Vector2Schema
   | Color3Schema
-  | CFrameSchema;
+  | CFrameSchema
+  | UDimSchema
+  | UDim2Schema;
 
 type OptionalKeys<TShape extends SchemaShape> = {
   [TKey in keyof TShape]-?: TShape[TKey] extends OptionalSchema ? TKey : never;
@@ -203,11 +234,17 @@ export type Infer<TSchema extends Schema> = TSchema extends StringSchema
                         : never
                       : TSchema extends Vector3Schema
                         ? Vector3Value
-                        : TSchema extends Color3Schema
-                          ? Color3Value
-                          : TSchema extends CFrameSchema
-                            ? CFrameValue
-                            : never;
+                        : TSchema extends Vector2Schema
+                          ? Vector2Value
+                          : TSchema extends Color3Schema
+                            ? Color3Value
+                            : TSchema extends CFrameSchema
+                              ? CFrameValue
+                              : TSchema extends UDimSchema
+                                ? UDimValue
+                                : TSchema extends UDim2Schema
+                                  ? UDim2Value
+                                  : never;
 
 type InferTupleSchema<TItems extends readonly Schema[]> = {
   -readonly [TIndex in keyof TItems]: Infer<TItems[TIndex]>;
@@ -358,6 +395,20 @@ function isVector3Value(value: unknown): value is Vector3Value {
     isFiniteNumber(value["y"]) &&
     isFiniteNumber(value["z"])
   );
+}
+
+function isVector2Value(value: unknown): value is Vector2Value {
+  return isRecordLike(value) && isFiniteNumber(value["x"]) && isFiniteNumber(value["y"]);
+}
+
+function isUDimValue(value: unknown): value is UDimValue {
+  return (
+    isRecordLike(value) && isFiniteNumber(value["scale"]) && isFiniteNumber(value["offset"])
+  );
+}
+
+function isUDim2Value(value: unknown): value is UDim2Value {
+  return isRecordLike(value) && isUDimValue(value["x"]) && isUDimValue(value["y"]);
 }
 
 function isColor3Value(value: unknown): value is Color3Value {
@@ -547,12 +598,20 @@ function validateSchemaAtPath(
     }
     case "vector3":
       return isVector3Value(value) ? [] : [createIssue(path, "expected Vector3 { x, y, z }")];
+    case "vector2":
+      return isVector2Value(value) ? [] : [createIssue(path, "expected Vector2 { x, y }")];
     case "color3":
       return isColor3Value(value) ? [] : [createIssue(path, "expected Color3 { r, g, b }")];
     case "cframe":
       return isCFrameValue(value)
         ? []
         : [createIssue(path, "expected CFrame { components: number[12] }")];
+    case "udim":
+      return isUDimValue(value) ? [] : [createIssue(path, "expected UDim { scale, offset }")];
+    case "udim2":
+      return isUDim2Value(value)
+        ? []
+        : [createIssue(path, "expected UDim2 { x: UDim, y: UDim }")];
     default:
       throw new Error("Unsupported schema kind.");
   }
@@ -855,11 +914,23 @@ export const schema = {
     return { kind: "vector3" };
   },
 
+  vector2(): Vector2Schema {
+    return { kind: "vector2" };
+  },
+
   color3(): Color3Schema {
     return { kind: "color3" };
   },
 
   cframe(): CFrameSchema {
     return { kind: "cframe" };
+  },
+
+  udim(): UDimSchema {
+    return { kind: "udim" };
+  },
+
+  udim2(): UDim2Schema {
+    return { kind: "udim2" };
   },
 };

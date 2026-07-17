@@ -43,8 +43,11 @@ local function makeLoader(runtimeDirs, promisePath, fakes)
 				return typeof(value) == typeName
 			end,
 			Vector3 = roblox.Vector3,
+			Vector2 = roblox.Vector2,
 			Color3 = roblox.Color3,
 			CFrame = roblox.CFrame,
+			UDim = roblox.UDim,
+			UDim2 = roblox.UDim2,
 			-- The Promise library warns on unhandled rejections; the dispatch
 			-- path intentionally swallows rejections into result payloads, so
 			-- keep the test output clean.

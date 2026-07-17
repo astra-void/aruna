@@ -3,7 +3,7 @@
 // Action input/output must be wire-safe plain data. Functions, threads, cyclic
 // tables, and most userdata (Instance, ...) are rejected; strings, numbers,
 // booleans, nil, plain tables, and the Roblox value types that RemoteEvents
-// serialize natively (Vector3, Color3, CFrame) are allowed.
+// serialize natively (Vector3, Vector2, Color3, CFrame, UDim, UDim2) are allowed.
 
 const MAX_DEPTH = 32;
 
@@ -18,9 +18,16 @@ function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolea
 		return true;
 	}
 	// Roblox value types carried natively by RemoteEvents. These back the
-	// schema.vector3()/color3()/cframe() kinds, which the wire codec rejected
-	// before they were first-class schema types.
-	if (typeIs(value, "Vector3") || typeIs(value, "Color3") || typeIs(value, "CFrame")) {
+	// schema.vector3()/vector2()/color3()/cframe()/udim()/udim2() kinds, which the
+	// wire codec rejected before they were first-class schema types.
+	if (
+		typeIs(value, "Vector3") ||
+		typeIs(value, "Vector2") ||
+		typeIs(value, "Color3") ||
+		typeIs(value, "CFrame") ||
+		typeIs(value, "UDim") ||
+		typeIs(value, "UDim2")
+	) {
 		return true;
 	}
 	if (!typeIs(value, "table")) {

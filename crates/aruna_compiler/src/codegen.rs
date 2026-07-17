@@ -206,8 +206,11 @@ fn render_schema_metadata(schema: &ArunaSchemaMetadata) -> String {
         // Roblox userdata kinds render to the native @rbxts/types globals so the
         // generated client/signal stubs are typed against the real value types.
         "vector3" => "Vector3".to_string(),
+        "vector2" => "Vector2".to_string(),
         "color3" => "Color3".to_string(),
         "cframe" => "CFrame".to_string(),
+        "udim" => "UDim".to_string(),
+        "udim2" => "UDim2".to_string(),
         _ => "unknown".to_string(),
     }
 }

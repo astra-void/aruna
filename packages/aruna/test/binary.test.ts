@@ -274,4 +274,42 @@ describe("Roblox userdata kinds", () => {
     // Wrong component count is rejected.
     expect(validateSchema(schema.cframe(), { components: [0, 0, 0] }).ok).toBe(false);
   });
+
+  it("round trips vector2/udim/udim2", () => {
+    expect(roundTrip(schema.vector2(), { x: 1.5, y: -2.25 })).toEqual({ x: 1.5, y: -2.25 });
+    // scale is f32, offset is i32 — both exact for these values.
+    expect(roundTrip(schema.udim(), { scale: 0.5, offset: -40 })).toEqual({
+      scale: 0.5,
+      offset: -40,
+    });
+    expect(
+      roundTrip(schema.udim2(), {
+        x: { scale: 0.25, offset: 12 },
+        y: { scale: 1, offset: -8 },
+      }),
+    ).toEqual({ x: { scale: 0.25, offset: 12 }, y: { scale: 1, offset: -8 } });
+  });
+
+  it("packs each 2D userdata kind to its declared byte count", () => {
+    // vector2 = 2 x f32; udim = f32 + i32; udim2 = 2 x udim.
+    expect(encodeBinary(schema.vector2(), { x: 0, y: 0 }).length).toBe(4 + 8);
+    expect(encodeBinary(schema.udim(), { scale: 0, offset: 0 }).length).toBe(4 + 8);
+    expect(
+      encodeBinary(schema.udim2(), {
+        x: { scale: 0, offset: 0 },
+        y: { scale: 0, offset: 0 },
+      }).length,
+    ).toBe(4 + 16);
+  });
+
+  it("validates 2D userdata shapes", () => {
+    expect(validateSchema(schema.vector2(), { x: 1, y: 2 }).ok).toBe(true);
+    expect(validateSchema(schema.vector2(), { x: 1 }).ok).toBe(false);
+    expect(validateSchema(schema.udim(), { scale: 0.5, offset: 10 }).ok).toBe(true);
+    expect(validateSchema(schema.udim(), { scale: 0.5 }).ok).toBe(false);
+    expect(
+      validateSchema(schema.udim2(), { x: { scale: 0, offset: 0 }, y: { scale: 1, offset: 4 } }).ok,
+    ).toBe(true);
+    expect(validateSchema(schema.udim2(), { x: { scale: 0, offset: 0 } }).ok).toBe(false);
+  });
 });

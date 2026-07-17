@@ -37,6 +37,9 @@ import {
   type NumberFormat,
   type Schema,
   type SchemaLiteral,
+  type UDim2Value,
+  type UDimValue,
+  type Vector2Value,
   type Vector3Value,
 } from "../schema/index.js";
 
@@ -387,6 +390,26 @@ function encodeValue(schema: Schema, value: unknown, writer: BinaryWriter): void
       }
       return;
     }
+    case "vector2": {
+      const vector = value as Vector2Value;
+      writer.writeF32(vector.x);
+      writer.writeF32(vector.y);
+      return;
+    }
+    case "udim": {
+      const udim = value as UDimValue;
+      writer.writeF32(udim.scale);
+      writer.writeNumber(udim.offset, "i32");
+      return;
+    }
+    case "udim2": {
+      const udim2 = value as UDim2Value;
+      writer.writeF32(udim2.x.scale);
+      writer.writeNumber(udim2.x.offset, "i32");
+      writer.writeF32(udim2.y.scale);
+      writer.writeNumber(udim2.y.offset, "i32");
+      return;
+    }
     default:
       throw new Error("Aruna binary encode: unsupported schema kind.");
   }
@@ -483,6 +506,26 @@ function decodeValue(schema: Schema, reader: BinaryReader): unknown {
       }
       return { components } satisfies CFrameValue;
     }
+    case "vector2": {
+      const x = reader.readF32();
+      const y = reader.readF32();
+      return { x, y } satisfies Vector2Value;
+    }
+    case "udim": {
+      const scale = reader.readF32();
+      const offset = reader.readNumber("i32");
+      return { scale, offset } satisfies UDimValue;
+    }
+    case "udim2": {
+      const xScale = reader.readF32();
+      const xOffset = reader.readNumber("i32");
+      const yScale = reader.readF32();
+      const yOffset = reader.readNumber("i32");
+      return {
+        x: { scale: xScale, offset: xOffset },
+        y: { scale: yScale, offset: yOffset },
+      } satisfies UDim2Value;
+    }
     default:
       throw new Error("Aruna binary decode: unsupported schema kind.");
   }
@@ -528,10 +571,16 @@ function schemaLayoutString(schema: Schema): string {
       return `u(${schema.members.map(schemaLayoutString).join("|")})`;
     case "vector3":
       return "v3";
+    case "vector2":
+      return "v2";
     case "color3":
       return "c3";
     case "cframe":
       return "cf";
+    case "udim":
+      return "ud";
+    case "udim2":
+      return "ud2";
     default:
       throw new Error("Aruna schema fingerprint: unsupported schema kind.");
   }
