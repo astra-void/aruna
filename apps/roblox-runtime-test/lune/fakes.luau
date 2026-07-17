@@ -42,6 +42,7 @@ local function makeRemoteEvent(className)
 	local onServer = makeSignal()
 	local onClient = makeSignal()
 	local fakePlayer = { UserId = 1, Name = "Tester" }
+	local attributes = {}
 
 	local fields = {
 		ClassName = remoteClassName,
@@ -58,6 +59,12 @@ local function makeRemoteEvent(className)
 		end,
 		FireClient = function(_self, _player, ...)
 			onClient:Fire(...)
+		end,
+		SetAttribute = function(_self, name, value)
+			attributes[name] = value
+		end,
+		GetAttribute = function(_self, name)
+			return attributes[name]
 		end,
 	}
 
@@ -95,7 +102,11 @@ end
 local function makeFakes()
 	local storage = makeStorage()
 	local heartbeat = makeSignal()
+	local playerAdded = makeSignal()
 	local playerRemoving = makeSignal()
+	-- Players present for `Players:GetPlayers()` boot backfill. Tests push to this
+	-- before `createServerApp` and clear it afterwards.
+	local playerList = {}
 
 	local game = {
 		GetService = function(_self, name)
@@ -104,7 +115,17 @@ local function makeFakes()
 			elseif name == "RunService" then
 				return { Heartbeat = heartbeat }
 			elseif name == "Players" then
-				return { PlayerRemoving = playerRemoving }
+				return {
+					PlayerAdded = playerAdded,
+					PlayerRemoving = playerRemoving,
+					GetPlayers = function(_self)
+						local copy = {}
+						for _, player in playerList do
+							table.insert(copy, player)
+						end
+						return copy
+					end,
+				}
 			end
 			error(`unhandled GetService: {name}`)
 		end,
@@ -124,7 +145,9 @@ local function makeFakes()
 		Instance = Instance,
 		storage = storage,
 		makeRemoteEvent = makeRemoteEvent,
+		playerAdded = playerAdded,
 		playerRemoving = playerRemoving,
+		playerList = playerList,
 	}
 end
 

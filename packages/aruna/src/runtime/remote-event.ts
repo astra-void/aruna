@@ -1,6 +1,12 @@
 import { createServerBinding, type ServerBinding } from "./binding.js";
 import { ActionRateLimitError } from "./rate-limit.js";
-import type { ActionInvoker } from "./client.js";
+import {
+  ACTION_CANCELLED_ERROR_NAME,
+  ACTION_VERSION_MISMATCH_ERROR_NAME,
+  type ActionInvoker,
+  type ContractHandshakeOptions,
+  type VersionMismatchInfo,
+} from "./client.js";
 import {
   dispatchAction,
   type ActionRateLimitOptions,
@@ -86,7 +92,36 @@ export class TimeoutError extends Error {
   }
 }
 
-export type ActionInvokerOptions = {
+// Rejection raised when a pending two-way invoke is cancelled via its
+// CancelToken. The native runtime rejects a plain { message, name } object with
+// the same name; detect either with `isActionCancelledError`, not `instanceof`.
+export class ActionCancelledError extends Error {
+  override readonly name = ACTION_CANCELLED_ERROR_NAME;
+  readonly actionId: string;
+
+  constructor(actionId: string) {
+    super(`Aruna action ${actionId} was cancelled.`);
+    this.actionId = actionId;
+  }
+}
+
+// Rejection raised for every invoke when the client's contract hash disagreed
+// with the server's and `rejectOnMismatch` was set. Detect via
+// `isActionVersionMismatchError`, never `instanceof` (the native runtime rejects
+// a plain object with the same name).
+export class ActionVersionMismatchError extends Error {
+  override readonly name = ACTION_VERSION_MISMATCH_ERROR_NAME;
+  readonly expected: string;
+  readonly actual: string;
+
+  constructor(info: VersionMismatchInfo) {
+    super(`Aruna contract mismatch: client ${info.expected} vs server ${info.actual}.`);
+    this.expected = info.expected;
+    this.actual = info.actual;
+  }
+}
+
+export type ActionInvokerOptions = ContractHandshakeOptions & {
   readonly createRequestId?: RemoteEventRequestIdFactory;
   // Milliseconds to wait for a server response before rejecting with
   // TimeoutError. Defaults to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0
@@ -95,6 +130,11 @@ export type ActionInvokerOptions = {
   // Overrides how request timeouts are scheduled. Defaults to a setTimeout
   // based scheduler; inject this under Luau or to drive timers in tests.
   readonly scheduleTimeout?: ActionTimeoutScheduler;
+  // Reads the server's advertised contract hash for the boot handshake. The
+  // native runtime reads a RemoteEvent attribute directly; the reference
+  // runtime's transport is abstract, so the source is injected (undefined = the
+  // server advertised nothing). Only consulted when `expectedContractHash` is set.
+  readonly fetchServerContractHash?: () => string | undefined;
 };
 
 export type DisposableActionInvoker = ActionInvoker & {
@@ -187,10 +227,26 @@ export function createRemoteEventActionInvoker(
   // mid-dispatch) must not leave the caller pending forever. Pass 0 to opt out.
   const requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_ACTION_REQUEST_TIMEOUT_MS;
   const scheduleTimeout = options?.scheduleTimeout ?? createDefaultTimeoutScheduler();
+
+  // Contract handshake: compare the client's compiled-in hash against the one the
+  // server advertised. A mismatch fires the callback once; a server advertising
+  // nothing (older build) is unknown, not a mismatch.
+  let versionMismatch: VersionMismatchInfo | undefined;
+  if (options?.expectedContractHash !== undefined) {
+    const actual = options.fetchServerContractHash?.();
+    if (typeof actual === "string" && actual !== options.expectedContractHash) {
+      versionMismatch = { expected: options.expectedContractHash, actual };
+      options.onVersionMismatch?.(versionMismatch);
+    }
+  }
+  const rejectOnMismatch = versionMismatch !== undefined && options?.rejectOnMismatch === true;
   type PendingRequest = {
     readonly resolve: (value: unknown) => void;
     readonly reject: (reason: unknown) => void;
     cancelTimeout?: ActionTimeoutCanceler;
+    // Removes the CancelToken listener when the request settles by any means,
+    // so a resolved/timed-out request does not keep the token subscribed.
+    unsubscribeCancel?: () => void;
   };
   const pendingRequests = new Map<string, PendingRequest>();
   let disposed = false;
@@ -204,6 +260,7 @@ export function createRemoteEventActionInvoker(
 
     pendingRequests.delete(response.requestId);
     pending.cancelTimeout?.();
+    pending.unsubscribeCancel?.();
 
     if (response.ok) {
       pending.resolve(response.output);
@@ -237,6 +294,12 @@ export function createRemoteEventActionInvoker(
       return Promise.reject(new Error("RemoteEvent action invoker is disposed."));
     }
 
+    // Hard-block every invoke when the contract hash mismatched and the caller
+    // opted into rejecting; otherwise the mismatch is warn-only.
+    if (rejectOnMismatch && versionMismatch !== undefined) {
+      return Promise.reject(new ActionVersionMismatchError(versionMismatch));
+    }
+
     const requestId = createRequestId();
 
     // Fire-and-forget: fire the request and resolve immediately. No pending
@@ -252,6 +315,14 @@ export function createRemoteEventActionInvoker(
     }
 
     return new Promise<unknown>((resolve, reject) => {
+      const signal = invokeOptions?.signal;
+
+      // Already cancelled before we fire: reject without touching the wire.
+      if (signal?.isCancelled === true) {
+        reject(new ActionCancelledError(actionId));
+        return;
+      }
+
       const pending: PendingRequest = { resolve, reject };
       pendingRequests.set(requestId, pending);
 
@@ -268,15 +339,32 @@ export function createRemoteEventActionInvoker(
       }
 
       // The response may have already settled synchronously during FireServer
-      // (some in-process transports emit immediately). Only arm a timer if the
-      // request is still pending.
-      if (requestTimeoutMs > 0 && pendingRequests.get(requestId) === pending) {
+      // (some in-process transports emit immediately). Only arm the timer and
+      // cancellation listener if the request is still pending.
+      if (pendingRequests.get(requestId) !== pending) {
+        return;
+      }
+
+      if (signal !== undefined) {
+        pending.unsubscribeCancel = signal.onCancel(() => {
+          if (pendingRequests.get(requestId) !== pending) {
+            return;
+          }
+
+          pendingRequests.delete(requestId);
+          pending.cancelTimeout?.();
+          reject(new ActionCancelledError(actionId));
+        });
+      }
+
+      if (requestTimeoutMs > 0) {
         pending.cancelTimeout = scheduleTimeout(() => {
           if (pendingRequests.get(requestId) !== pending) {
             return;
           }
 
           pendingRequests.delete(requestId);
+          pending.unsubscribeCancel?.();
           reject(new TimeoutError(actionId, requestTimeoutMs));
         }, requestTimeoutMs);
       }
@@ -295,6 +383,7 @@ export function createRemoteEventActionInvoker(
       for (const [requestId, pending] of pendingRequests) {
         pendingRequests.delete(requestId);
         pending.cancelTimeout?.();
+        pending.unsubscribeCancel?.();
         pending.reject(new Error("RemoteEvent action invoker is disposed."));
       }
     },

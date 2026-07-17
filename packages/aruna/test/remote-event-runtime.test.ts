@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearActionInvoker, invokeAction } from "../src/client.js";
-import { createClientApp } from "../src/client.js";
+import { createCancelToken, createClientApp, isActionCancelledError } from "../src/client.js";
+import { withClientMiddleware, withRetry } from "../src/client.js";
+import { isActionVersionMismatchError } from "../src/client.js";
+import type { ActionInvoker, ClientMiddleware } from "../src/client.js";
 import { createServerApp } from "../src/server.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
@@ -16,7 +19,11 @@ import {
 } from "../src/roblox.js";
 // The low-level binder is internal (the public server surface is `bindActions`
 // / `robloxRemoteEvent`); the wire tests exercise it directly.
-import { bindRemoteEventActions } from "../src/runtime/remote-event.js";
+import {
+  ActionCancelledError,
+  ActionVersionMismatchError,
+  bindRemoteEventActions,
+} from "../src/runtime/remote-event.js";
 import { type ActionRegistry } from "../src/server.js";
 
 type FakeSignal<TArgs extends readonly unknown[]> = {
@@ -456,6 +463,383 @@ describe("createRemoteEventActionInvoker request timeout", () => {
     await expect(promise).rejects.toThrowError("disposed");
     expect(scheduler.cancelCount()).toBe(1);
     expect(scheduler.activeCount()).toBe(0);
+  });
+});
+
+describe("createRemoteEventActionInvoker cancellation", () => {
+  it("cancelling before invoke rejects immediately without touching the wire", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 1000,
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const cancel = createCancelToken();
+    cancel.cancel();
+
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" }, { signal: cancel });
+
+    await expect(promise).rejects.toBeInstanceOf(ActionCancelledError);
+    await expect(promise).rejects.toMatchObject({ name: "ActionCancelledError" });
+    // Never fired the request and never armed a timer.
+    expect(remote.requests).toHaveLength(0);
+    expect(scheduler.activeCount()).toBe(0);
+
+    invoker.dispose();
+  });
+
+  it("cancelling a pending invoke rejects, clears the timer, and drops late responses", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 1000,
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const cancel = createCancelToken();
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" }, { signal: cancel });
+    expect(scheduler.activeCount()).toBe(1);
+
+    cancel.cancel();
+
+    await expect(promise).rejects.toSatisfy(isActionCancelledError);
+    // The armed timer was canceled and the pending entry removed.
+    expect(scheduler.cancelCount()).toBe(1);
+    expect(scheduler.activeCount()).toBe(0);
+
+    // A late server response finds nothing to settle.
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { late: true } });
+    await flushMicrotasks();
+
+    invoker.dispose();
+  });
+
+  it("a normal response unsubscribes the cancel listener (later cancel is inert)", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const scheduler = createControllableScheduler();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      requestTimeoutMs: 1000,
+      scheduleTimeout: scheduler.scheduler,
+    });
+
+    const cancel = createCancelToken();
+    const promise = invoker("shop.purchaseItem", { itemId: "sword" }, { signal: cancel });
+
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+
+    // Cancelling after settlement must not throw or double-reject.
+    expect(() => cancel.cancel()).not.toThrow();
+
+    invoker.dispose();
+  });
+
+  it("fire-and-forget ignores a cancelled signal (nothing to wait on)", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+    });
+
+    const cancel = createCancelToken();
+    cancel.cancel();
+
+    await expect(
+      invoker("shop.ping", { at: 1 }, { fireAndForget: true, signal: cancel }),
+    ).resolves.toBeUndefined();
+    // The one-way request still went out.
+    expect(remote.requests).toHaveLength(1);
+
+    invoker.dispose();
+  });
+});
+
+describe("client middleware", () => {
+  it("wraps the invoker outermost-first and can observe the result", async () => {
+    const calls: string[] = [];
+    const base: ActionInvoker = async (actionId, input) => {
+      calls.push(`invoke:${actionId}`);
+      return { echoed: input };
+    };
+    const outer: ClientMiddleware = async (info, next) => {
+      calls.push(`outer:before:${info.actionId}`);
+      const result = await next();
+      calls.push("outer:after");
+      return result;
+    };
+    const inner: ClientMiddleware = async (_info, next) => {
+      calls.push("inner:before");
+      return next();
+    };
+
+    const wrapped = withClientMiddleware(base, [outer, inner]);
+    await expect(wrapped("shop.buy", { n: 1 })).resolves.toEqual({ echoed: { n: 1 } });
+    expect(calls).toEqual([
+      "outer:before:shop.buy",
+      "inner:before",
+      "invoke:shop.buy",
+      "outer:after",
+    ]);
+  });
+
+  it("a layer that rejects without calling next short-circuits the invoker", async () => {
+    let invoked = false;
+    const base: ActionInvoker = async () => {
+      invoked = true;
+      return "unreachable";
+    };
+    const block: ClientMiddleware = async () => {
+      throw new Error("blocked by middleware");
+    };
+
+    const wrapped = withClientMiddleware(base, [block]);
+    await expect(wrapped("shop.buy", {})).rejects.toThrowError("blocked by middleware");
+    expect(invoked).toBe(false);
+  });
+
+  it("a synchronous throw in a layer becomes a rejection", async () => {
+    const base: ActionInvoker = async () => "ok";
+    const boom: ClientMiddleware = () => {
+      throw new Error("sync boom");
+    };
+
+    const wrapped = withClientMiddleware(base, [boom]);
+    await expect(wrapped("shop.buy", {})).rejects.toThrowError("sync boom");
+  });
+
+  it("returns the invoker unchanged when there is no middleware", () => {
+    const base: ActionInvoker = async () => "ok";
+    expect(withClientMiddleware(base, [])).toBe(base);
+  });
+
+  it("createClientApp applies middleware to both invokeAction and app.invoke", async () => {
+    const seen: string[] = [];
+    const base: ActionInvoker = async (actionId) => `ran:${actionId}`;
+    const tap: ClientMiddleware = async (info, next) => {
+      seen.push(info.actionId);
+      return next();
+    };
+
+    const app = createClientApp({ transport: base, middleware: [tap] });
+
+    await expect(invokeAction("shop.viaGlobal", {})).resolves.toBe("ran:shop.viaGlobal");
+    await expect(app.invoke("shop.viaHandle", {})).resolves.toBe("ran:shop.viaHandle");
+    expect(seen).toEqual(["shop.viaGlobal", "shop.viaHandle"]);
+
+    app.dispose();
+  });
+});
+
+describe("client contract handshake", () => {
+  it("does nothing when the client and server hashes match", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const onVersionMismatch = vi.fn();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      expectedContractHash: "abc",
+      fetchServerContractHash: () => "abc",
+      onVersionMismatch,
+    });
+
+    const promise = invoker("shop.buy", {});
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(onVersionMismatch).not.toHaveBeenCalled();
+
+    invoker.dispose();
+  });
+
+  it("fires onVersionMismatch once but still invokes when warn-only", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const onVersionMismatch = vi.fn();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      expectedContractHash: "client-hash",
+      fetchServerContractHash: () => "server-hash",
+      onVersionMismatch,
+    });
+
+    expect(onVersionMismatch).toHaveBeenCalledTimes(1);
+    expect(onVersionMismatch).toHaveBeenCalledWith({
+      expected: "client-hash",
+      actual: "server-hash",
+    });
+
+    // Warn-only: the invoke still goes through to the server.
+    const promise = invoker("shop.buy", {});
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+
+    invoker.dispose();
+  });
+
+  it("rejects every invoke with ActionVersionMismatchError when rejectOnMismatch", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const invoker = createRemoteEventActionInvoker(remote, {
+      expectedContractHash: "client-hash",
+      fetchServerContractHash: () => "server-hash",
+      rejectOnMismatch: true,
+    });
+
+    await expect(invoker("shop.buy", {})).rejects.toBeInstanceOf(ActionVersionMismatchError);
+    await expect(invoker("shop.buy", {})).rejects.toMatchObject({
+      name: "ActionVersionMismatchError",
+      expected: "client-hash",
+      actual: "server-hash",
+    });
+    // No request ever reached the wire.
+    expect(remote.requests).toHaveLength(0);
+
+    invoker.dispose();
+  });
+
+  it("treats a server advertising no hash as unknown, not a mismatch", async () => {
+    const remote = createFakeRemoteEvent({ name: "Ada" });
+    const onVersionMismatch = vi.fn();
+    const invoker = createRemoteEventActionInvoker(remote, {
+      createRequestId: () => "request-1",
+      expectedContractHash: "client-hash",
+      fetchServerContractHash: () => undefined,
+      onVersionMismatch,
+      rejectOnMismatch: true,
+    });
+
+    expect(onVersionMismatch).not.toHaveBeenCalled();
+    // Even with rejectOnMismatch, an unknown server hash does not block invokes.
+    const promise = invoker("shop.buy", {});
+    remote.clientSignal.emit({ requestId: "request-1", ok: true, output: { ok: true } });
+    await expect(promise).resolves.toEqual({ ok: true });
+
+    invoker.dispose();
+  });
+
+  it("isActionVersionMismatchError detects the rejection from either runtime", () => {
+    expect(
+      isActionVersionMismatchError(new ActionVersionMismatchError({ expected: "a", actual: "b" })),
+    ).toBe(true);
+    expect(isActionVersionMismatchError({ name: "ActionVersionMismatchError" })).toBe(true);
+    expect(isActionVersionMismatchError(new Error("nope"))).toBe(false);
+  });
+});
+
+describe("client retry", () => {
+  // A delay that resolves immediately but records each requested backoff, so
+  // retry timing is asserted without real waiting.
+  function recordingDelay() {
+    const delays: number[] = [];
+    return {
+      delays,
+      delay: (delayMs: number) => {
+        delays.push(delayMs);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  function rejectionNamed(name: string, extra?: Record<string, unknown>): Error {
+    const error = new Error(name);
+    Object.defineProperty(error, "name", { configurable: true, value: name });
+    if (extra !== undefined) {
+      Object.assign(error, extra);
+    }
+    return error;
+  }
+
+  it("returns the invoker unchanged when retries are disabled", () => {
+    const base: ActionInvoker = async () => "ok";
+    expect(withRetry(base, { maxRetries: 0 })).toBe(base);
+  });
+
+  it("retries a rate-limit rejection and honors retryAfterMs for backoff", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        throw rejectionNamed("ActionRateLimitError", { retryAfterMs: 50 });
+      }
+      return "ok";
+    };
+    const rec = recordingDelay();
+
+    const wrapped = withRetry(base, { maxRetries: 3 }, rec.delay);
+    await expect(wrapped("shop.buy", {})).resolves.toBe("ok");
+    expect(attempts).toBe(3);
+    expect(rec.delays).toEqual([50, 50]);
+  });
+
+  it("uses exponential backoff for timeouts and propagates after maxRetries", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      throw rejectionNamed("ActionTimeoutError");
+    };
+    const rec = recordingDelay();
+
+    const wrapped = withRetry(base, { maxRetries: 3, baseDelayMs: 100 }, rec.delay);
+    await expect(wrapped("shop.buy", {})).rejects.toMatchObject({ name: "ActionTimeoutError" });
+    expect(attempts).toBe(4); // initial + 3 retries
+    expect(rec.delays).toEqual([100, 200, 400]);
+  });
+
+  it("does not retry a non-retryable rejection", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      throw rejectionNamed("ActionValidationError");
+    };
+
+    const wrapped = withRetry(base, { maxRetries: 3 });
+    await expect(wrapped("shop.buy", {})).rejects.toMatchObject({ name: "ActionValidationError" });
+    expect(attempts).toBe(1);
+  });
+
+  it("never retries a cancellation", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      throw rejectionNamed("ActionCancelledError");
+    };
+
+    const wrapped = withRetry(base, { maxRetries: 3 });
+    await expect(wrapped("shop.buy", {})).rejects.toMatchObject({ name: "ActionCancelledError" });
+    expect(attempts).toBe(1);
+  });
+
+  it("never retries a fire-and-forget invoke", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async (_actionId, _input, options) => {
+      attempts += 1;
+      if (options?.fireAndForget === true) {
+        return undefined;
+      }
+      throw rejectionNamed("ActionTimeoutError");
+    };
+
+    const wrapped = withRetry(base, { maxRetries: 3 });
+    await expect(
+      wrapped("shop.ping", {}, { fireAndForget: true }),
+    ).resolves.toBeUndefined();
+    expect(attempts).toBe(1);
+  });
+
+  it("honors a custom retryOn predicate", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      throw rejectionNamed("CustomError");
+    };
+    const rec = recordingDelay();
+
+    const wrapped = withRetry(
+      base,
+      { maxRetries: 2, retryOn: (error) => (error as { name?: string }).name === "CustomError" },
+      rec.delay,
+    );
+    await expect(wrapped("x", {})).rejects.toMatchObject({ name: "CustomError" });
+    expect(attempts).toBe(3); // initial + 2 retries
   });
 });
 

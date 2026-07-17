@@ -16,6 +16,9 @@ import type { ActionRegistry } from "./server.js";
 import type { ServerTransport } from "../app/server.js";
 
 export const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
+// Attribute on the action remote where the server advertises its contract hash,
+// so a client with a mismatched compiled-in hash can detect a deploy skew.
+export const CONTRACT_HASH_ATTRIBUTE_NAME = "ArunaContractHash";
 
 function getRobloxGame(): DataModel {
   if (typeof game === "undefined") {
@@ -96,7 +99,20 @@ export function waitForActionRemote(): RemoteEvent {
 }
 
 export function createActionInvoker(options?: ActionInvokerOptions): DisposableActionInvoker {
-  return createRemoteEventActionInvoker(toRemoteEventClientLike(waitForActionRemote()), options);
+  const remote = waitForActionRemote();
+  // When a contract hash is expected but no fetcher was injected, read it from
+  // the action remote's attribute — the source the server transport advertises.
+  const resolvedOptions: ActionInvokerOptions | undefined =
+    options?.expectedContractHash !== undefined && options.fetchServerContractHash === undefined
+      ? {
+          ...options,
+          fetchServerContractHash: () => {
+            const value = remote.GetAttribute(CONTRACT_HASH_ATTRIBUTE_NAME);
+            return typeof value === "string" ? value : undefined;
+          },
+        }
+      : options;
+  return createRemoteEventActionInvoker(toRemoteEventClientLike(remote), resolvedOptions);
 }
 
 export function bindActions<TPlayer = Player>(
@@ -116,11 +132,21 @@ export function bindActions<TPlayer = Player>(
 // clock) so the fallback rate limit reaches the wire without any per-binder
 // wiring. `createContext` may still be set here; dispatch options always win.
 export function robloxRemoteEvent<TPlayer = Player>(
-  options?: Pick<BindActionsOptions<TPlayer>, "createContext">,
+  options?: Pick<BindActionsOptions<TPlayer>, "createContext"> & {
+    // The server's contract hash, advertised on the action remote so clients can
+    // detect a deploy skew. Pass the generated `contractHash`; omit to advertise
+    // nothing.
+    readonly contractHash?: string;
+  },
 ): ServerTransport<TPlayer, ActionRegistry<TPlayer>> {
-  return ({ registry, dispatch }) =>
-    bindRemoteEventActions(toRemoteEventServerLike<TPlayer>(ensureActionRemote()), registry, {
+  return ({ registry, dispatch }) => {
+    const remote = ensureActionRemote();
+    if (options?.contractHash !== undefined) {
+      remote.SetAttribute(CONTRACT_HASH_ATTRIBUTE_NAME, options.contractHash);
+    }
+    return bindRemoteEventActions(toRemoteEventServerLike<TPlayer>(remote), registry, {
       ...(options?.createContext !== undefined ? { createContext: options.createContext } : {}),
       ...dispatch,
     });
+  };
 }

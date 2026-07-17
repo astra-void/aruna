@@ -1,6 +1,12 @@
 // Aruna roblox-ts native runtime — default RemoteEvent action transport.
 
-import type { ActionInvoker } from "./client-runtime";
+import {
+	ACTION_CANCELLED_ERROR_NAME,
+	ACTION_VERSION_MISMATCH_ERROR_NAME,
+	type ActionInvoker,
+	type ContractHandshakeOptions,
+	type VersionMismatchInfo,
+} from "./client-runtime";
 import type { ActionDefinition } from "./server";
 import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding, ServerTransport } from "./server-app";
@@ -39,6 +45,9 @@ export function defineAction<
 export const ACTION_REMOTE_NAME = "ArunaActionRemoteEvent";
 export const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
 export const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemoteEvent";
+// Attribute on the action remote where the server advertises its contract hash,
+// so a client with a mismatched compiled-in hash can detect a deploy skew.
+export const CONTRACT_HASH_ATTRIBUTE_NAME = "ArunaContractHash";
 
 interface ActionResponsePayload {
 	readonly ok: boolean;
@@ -102,7 +111,7 @@ function defaultRequestId(): string {
 // Node reference runtime.
 export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
-export interface CreateActionInvokerOptions {
+export interface CreateActionInvokerOptions extends ContractHandshakeOptions {
 	readonly createRequestId?: () => string;
 	// Milliseconds to wait for a server response before rejecting with a timeout
 	// error. Defaults to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0 to
@@ -114,12 +123,33 @@ export interface CreateActionInvokerOptions {
 interface PendingActionRequest {
 	readonly resolve: (payload: ActionResponsePayload) => void;
 	timeoutThread?: thread;
+	// Removes the CancelToken listener when the request settles by any means, so
+	// a resolved/timed-out request does not keep the token subscribed.
+	unsubscribeCancel?: () => void;
 }
 
 export function createActionInvoker(
 	options?: CreateActionInvokerOptions,
 ): ActionInvoker {
 	const remote = waitForClientActionRemote();
+
+	// Contract handshake: compare the client's compiled-in hash against the one
+	// the server advertised on the action remote. A mismatch fires the callback
+	// once; a nil attribute (older server) is unknown, not a mismatch.
+	const expectedContractHash = options !== undefined ? options.expectedContractHash : undefined;
+	let versionMismatch: VersionMismatchInfo | undefined;
+	if (expectedContractHash !== undefined) {
+		const actual = remote.GetAttribute(CONTRACT_HASH_ATTRIBUTE_NAME);
+		if (typeIs(actual, "string") && actual !== expectedContractHash) {
+			versionMismatch = { expected: expectedContractHash, actual };
+			if (options !== undefined && options.onVersionMismatch !== undefined) {
+				options.onVersionMismatch(versionMismatch);
+			}
+		}
+	}
+	const rejectOnMismatch =
+		versionMismatch !== undefined && options !== undefined && options.rejectOnMismatch === true;
+
 	const createRequestId =
 		options !== undefined && options.createRequestId !== undefined
 			? options.createRequestId
@@ -139,11 +169,24 @@ export function createActionInvoker(
 			if (entry.timeoutThread !== undefined) {
 				task.cancel(entry.timeoutThread);
 			}
+			if (entry.unsubscribeCancel !== undefined) {
+				entry.unsubscribeCancel();
+			}
 			entry.resolve(payload);
 		}
 	});
 
 	return (actionId, input, options) => {
+		// Hard-block every invoke when the contract hash mismatched and the caller
+		// opted into rejecting (rejectOnMismatch); otherwise the mismatch is
+		// warn-only via onVersionMismatch and invokes proceed.
+		if (rejectOnMismatch && versionMismatch !== undefined) {
+			return Promise.reject({
+				message: `Aruna contract mismatch: client ${versionMismatch.expected} vs server ${versionMismatch.actual}.`,
+				name: ACTION_VERSION_MISMATCH_ERROR_NAME,
+			} satisfies ActionError);
+		}
+
 		// Fire-and-forget: fire the request and resolve immediately. No pending
 		// entry is registered (the server's ignored ack, if any, is dropped) and
 		// no timeout is armed. Matches the server binder skipping its response.
@@ -154,6 +197,17 @@ export function createActionInvoker(
 		}
 
 		return new Promise<unknown>((resolve, reject) => {
+			const signal = options !== undefined ? options.signal : undefined;
+
+			// Already cancelled before we fire: reject without touching the wire.
+			if (signal !== undefined && signal.isCancelled) {
+				reject({
+					message: `Aruna action ${actionId} was cancelled.`,
+					name: ACTION_CANCELLED_ERROR_NAME,
+				} satisfies ActionError);
+				return;
+			}
+
 			const requestId = createRequestId();
 			const entry: PendingActionRequest = {
 				resolve: (payload) => {
@@ -167,14 +221,38 @@ export function createActionInvoker(
 			pending.set(requestId, entry);
 			remote.FireServer(requestId, actionId, input);
 
-			// Arm a timeout only when enabled and still pending (the response may
-			// have arrived synchronously above). task.delay uses seconds.
-			if (requestTimeoutMs > 0 && pending.get(requestId) === entry) {
+			// The response may have arrived synchronously above; only arm the
+			// timeout and cancellation listener while still pending.
+			if (pending.get(requestId) !== entry) {
+				return;
+			}
+
+			if (signal !== undefined) {
+				entry.unsubscribeCancel = signal.onCancel(() => {
+					if (pending.get(requestId) !== entry) {
+						return;
+					}
+					pending.delete(requestId);
+					if (entry.timeoutThread !== undefined) {
+						task.cancel(entry.timeoutThread);
+					}
+					reject({
+						message: `Aruna action ${actionId} was cancelled.`,
+						name: ACTION_CANCELLED_ERROR_NAME,
+					} satisfies ActionError);
+				});
+			}
+
+			// Arm a timeout only when enabled. task.delay uses seconds.
+			if (requestTimeoutMs > 0) {
 				entry.timeoutThread = task.delay(requestTimeoutMs / 1000, () => {
 					if (pending.get(requestId) !== entry) {
 						return;
 					}
 					pending.delete(requestId);
+					if (entry.unsubscribeCancel !== undefined) {
+						entry.unsubscribeCancel();
+					}
 					reject({
 						message: `Aruna action ${actionId} timed out after ${requestTimeoutMs}ms.`,
 						name: "ActionTimeoutError",
@@ -185,17 +263,34 @@ export function createActionInvoker(
 	};
 }
 
+// Options for the default Aruna RemoteEvent server transport.
+export interface RobloxRemoteEventOptions {
+	// The server's contract hash, advertised on the action remote so clients can
+	// detect a deploy skew. Pass the generated `contractHash`; omit to advertise
+	// nothing (clients then treat this server as unknown, never mismatched).
+	readonly contractHash?: string;
+}
+
 // Server transport over the default Aruna RemoteEvent, for
 // `createServerApp({ transport: robloxRemoteEvent() })`. The native registry
 // already bakes `defaultRateLimit` into dispatch, so the transport just binds.
-export function robloxRemoteEvent<TPlayer = Player>(): ServerTransport<TPlayer> {
-	return (registry) => bindActions(registry);
+export function robloxRemoteEvent<TPlayer = Player>(
+	options?: RobloxRemoteEventOptions,
+): ServerTransport<TPlayer> {
+	return (registry) =>
+		bindActions(registry, options !== undefined ? options.contractHash : undefined);
 }
 
 export function bindActions<TPlayer>(
 	registry: ActionRegistry<TPlayer>,
+	contractHash?: string,
 ): ServerAppBinding {
 	const remote = ensureServerActionRemote();
+	// Advertise the contract hash so a client with a mismatched compiled-in hash
+	// can surface the skew before it corrupts a payload mid-session.
+	if (contractHash !== undefined) {
+		remote.SetAttribute(CONTRACT_HASH_ATTRIBUTE_NAME, contractHash);
+	}
 	const connection = remote.OnServerEvent.Connect((player: Player, ...args: Array<unknown>) => {
 		const requestId = args[0];
 		const actionId = args[1];

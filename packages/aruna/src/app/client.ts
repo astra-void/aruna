@@ -1,5 +1,17 @@
-import type { ActionInvokeOptions, ActionInvoker } from "../runtime/client.js";
-import { clearActionInvoker, setActionInvoker } from "../runtime/client.js";
+import type {
+  ActionInvokeOptions,
+  ActionInvoker,
+  ClientMiddleware,
+  ClientRetryPolicy,
+  ContractHandshakeOptions,
+} from "../runtime/client.js";
+import type { ActionInvokerOptions } from "../runtime/remote-event.js";
+import {
+  clearActionInvoker,
+  setActionInvoker,
+  withClientMiddleware,
+  withRetry,
+} from "../runtime/client.js";
 import { createActionInvoker } from "../runtime/roblox-action-remote.js";
 import type { RemoteSignalSubscriber } from "../runtime/remote-signal.js";
 import type { SignalRegistry } from "../runtime/signal.js";
@@ -36,12 +48,14 @@ export type ClientApp<TSignals extends SignalRegistry = SignalRegistry> = {
   readonly dispose: () => void;
 };
 
-export type CreateClientAppOptions<TSignals extends SignalRegistry = SignalRegistry> = {
+export type CreateClientAppOptions<TSignals extends SignalRegistry = SignalRegistry> =
+  ContractHandshakeOptions & {
   // The wire connection used to invoke actions — the client counterpart of
   // `createServerApp({ transport })`. When omitted, the app builds the default
   // Roblox invoker (`createActionInvoker()`), which waits for the action remote
   // the server transport creates. A caller-supplied transport stays
-  // caller-owned; only the default one is disposed with the app.
+  // caller-owned; only the default one is disposed with the app. Contract-handshake
+  // options apply only to this owned default invoker.
   readonly transport?: ClientTransport;
   // The generated signal registry (`$aruna/signals`). When paired with
   // `createSubscriber`, the app builds the subscriber at boot — the client
@@ -56,6 +70,15 @@ export type CreateClientAppOptions<TSignals extends SignalRegistry = SignalRegis
   // when a caller-supplied `transport` is given — configure that invoker
   // directly instead.
   readonly requestTimeoutMs?: number;
+  // Around-invoke middleware applied outermost-first to every action, on both
+  // the module-global `invokeAction` path and this app's `invoke`. Wraps whatever
+  // transport is used (owned default or caller-supplied). Runs per attempt when a
+  // retry policy is also configured.
+  readonly middleware?: readonly ClientMiddleware[];
+  // Opt-in automatic retry with backoff, applied outermost (so it re-runs
+  // middleware on each attempt). Disabled by default; a policy with maxRetries 0
+  // is a no-op. See ClientRetryPolicy.
+  readonly retry?: ClientRetryPolicy;
 };
 
 export function createClientApp<TSignals extends SignalRegistry = SignalRegistry>(
@@ -64,12 +87,38 @@ export function createClientApp<TSignals extends SignalRegistry = SignalRegistry
   let ownedTransport: ReturnType<typeof createActionInvoker> | undefined;
   let transport = options?.transport;
   if (transport === undefined) {
-    ownedTransport = createActionInvoker(
-      options?.requestTimeoutMs !== undefined
+    // Forward request-timeout and contract-handshake options to the owned
+    // default invoker.
+    const invokerOptions: ActionInvokerOptions = {
+      ...(options?.requestTimeoutMs !== undefined
         ? { requestTimeoutMs: options.requestTimeoutMs }
-        : undefined,
-    );
+        : {}),
+      ...(options?.expectedContractHash !== undefined
+        ? { expectedContractHash: options.expectedContractHash }
+        : {}),
+      ...(options?.onVersionMismatch !== undefined
+        ? { onVersionMismatch: options.onVersionMismatch }
+        : {}),
+      ...(options?.rejectOnMismatch !== undefined
+        ? { rejectOnMismatch: options.rejectOnMismatch }
+        : {}),
+    };
+    ownedTransport = createActionInvoker(invokerOptions);
     transport = ownedTransport;
+  }
+
+  // Wrap the resolved transport (owned default or caller-supplied) with client
+  // middleware before it is installed, so both the module-global `invokeAction`
+  // path and this app's `invoke` inherit it. Disposal still targets the
+  // underlying `ownedTransport`, not this wrapper.
+  if (options?.middleware !== undefined) {
+    transport = withClientMiddleware(transport, options.middleware);
+  }
+
+  // Retry wraps the middleware-wrapped transport, so it is outermost and re-runs
+  // middleware (and re-mints the underlying request) on every attempt.
+  if (options?.retry !== undefined) {
+    transport = withRetry(transport, options.retry);
   }
 
   // Still installs the global so generated `$aruna/actions/client` stubs (which
