@@ -92,6 +92,23 @@ describe("rbxtsc runner", () => {
     },
   );
 
+  // Windows has no extensionless shim to run (the one npm writes there is a
+  // POSIX shell script), so the resolver must pick the .cmd shim next to it.
+  it("resolves the windows shim rather than the posix entry", () => {
+    const root = makeTempRoot();
+    try {
+      const binDir = path.join(root, "node_modules", ".bin");
+      fs.mkdirSync(binDir, { recursive: true });
+      fs.writeFileSync(path.join(binDir, "rbxtsc"), "#!/bin/sh\n", "utf8");
+      expect(findRbxtscBin(root, "win32")).toBeUndefined();
+
+      fs.writeFileSync(path.join(binDir, "rbxtsc.cmd"), "@echo off\n", "utf8");
+      expect(findRbxtscBin(root, "win32")).toBe(path.join(binDir, "rbxtsc.cmd"));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it.skipIf(process.platform === "win32")("walks up parent directories to find the binary", () => {
     const root = makeTempRoot();
     try {

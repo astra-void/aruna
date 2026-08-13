@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +13,7 @@ import {
   validateAppName,
   type PackageManager,
 } from "./scaffold.js";
+import { spawnSyncCommand } from "./spawn.js";
 
 // create-aruna-app is versioned in lockstep with @arunajs/aruna, so its own version
 // is the one the scaffolded dependency should track.
@@ -30,7 +30,7 @@ function createArunaAppVersion(): string {
 }
 
 function run(command: string, args: readonly string[], cwd: string): boolean {
-  const result = spawnSync(command, [...args], { cwd, stdio: "inherit" });
+  const result = spawnSyncCommand(command, args, { cwd, stdio: "inherit" });
   return result.status === 0;
 }
 

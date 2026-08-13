@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Manifest, ModuleKind, ModuleRecord } from "@arunajs/core";
+import { spawnSyncCommand } from "./spawn.js";
 
 // Partitions the project into client/server/shared before compiling to Luau, so
 // the emitted `out/` tree maps cleanly onto the Roblox DataModel — server code
@@ -355,7 +355,7 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       `${JSON.stringify(partitionedRojoProject(extraNpmScopes), null, 2)}\n`,
     );
 
-    const result = spawnSync(rbxtscBin, ["--project", tempRoot], {
+    const result = spawnSyncCommand(rbxtscBin, ["--project", tempRoot], {
       cwd: tempRoot,
       encoding: "utf8",
     });

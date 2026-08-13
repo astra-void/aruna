@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSyncCommand } from "./spawn.js";
 
 export type RbxtscResult =
   | { readonly kind: "skipped"; readonly reason: string }
@@ -10,13 +10,22 @@ export type RbxtscResult =
 // project root looking for node_modules/.bin/rbxtsc. We deliberately use the
 // project-local roblox-ts rather than a PATH lookup so the Luau compile matches
 // the roblox-ts version the consumer pinned.
-export function findRbxtscBin(startDir: string): string | undefined {
-  const binName = process.platform === "win32" ? "rbxtsc.cmd" : "rbxtsc";
+//
+// On Windows the extensionless entry is a POSIX shell script that only Git Bash
+// can run, so we look for the executable shims npm/pnpm/yarn write next to it.
+export function findRbxtscBin(
+  startDir: string,
+  platform: string = process.platform,
+): string | undefined {
+  const binNames =
+    platform === "win32" ? ["rbxtsc.cmd", "rbxtsc.bat", "rbxtsc.exe"] : ["rbxtsc"];
   let current = path.resolve(startDir);
   for (;;) {
-    const candidate = path.join(current, "node_modules", ".bin", binName);
-    if (fs.existsSync(candidate)) {
-      return candidate;
+    for (const binName of binNames) {
+      const candidate = path.join(current, "node_modules", ".bin", binName);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
     }
     const parent = path.dirname(current);
     if (parent === current) {
@@ -43,7 +52,7 @@ export function runRbxtsc(options: {
     };
   }
 
-  const result = spawnSync(bin, ["--project", options.projectRoot], {
+  const result = spawnSyncCommand(bin, ["--project", options.projectRoot], {
     cwd: options.projectRoot,
     encoding: "utf8",
   });
