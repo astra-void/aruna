@@ -6,15 +6,30 @@ import {
   arunaTsconfigFragmentContents,
 } from "./tsconfig-paths.js";
 import { partitionedRojoProject } from "./rojo-layout.js";
+import {
+  ROJO_PROJECT_FILE,
+  formatRojoProjectProblem,
+  inspectRojoProject,
+  type RojoProjectReport,
+} from "./rojo-project.js";
 
 export type InitOptions = {
   projectRoot: string;
+  // Overwrite the scaffolded files instead of keeping what is already there.
+  // The escape hatch for adopting Aruna inside an existing Rojo project, whose
+  // project file mounts Luau sources rather than the compiled `out/` tree.
+  force?: boolean | undefined;
 };
 
 export type InitResult = {
   projectRoot: string;
   created: string[];
+  overwritten: string[];
   skipped: string[];
+  // State of the Rojo project file after init. An `incomplete` report on a file
+  // init kept is the silent-failure case worth shouting about: everything
+  // downstream exits 0 and the built place holds none of the compiled code.
+  rojoProject: RojoProjectReport;
 };
 
 // Default generated dir; matches the compiler config default so the scaffolded
@@ -99,24 +114,32 @@ export function runInit(options: InitOptions): InitResult {
       name: fragmentName,
       contents: arunaTsconfigFragmentContents(options.projectRoot, GENERATED_DIR),
     },
-    { name: "default.project.json", contents: defaultProjectTemplate() },
+    { name: ROJO_PROJECT_FILE, contents: defaultProjectTemplate() },
   ];
 
   const created: string[] = [];
+  const overwritten: string[] = [];
   const skipped: string[] = [];
 
   for (const file of files) {
     const filePath = path.join(options.projectRoot, file.name);
-    if (fs.existsSync(filePath)) {
+    const exists = fs.existsSync(filePath);
+    if (exists && !options.force) {
       skipped.push(file.name);
       continue;
     }
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, file.contents, "utf8");
-    created.push(file.name);
+    (exists ? overwritten : created).push(file.name);
   }
 
-  return { projectRoot: options.projectRoot, created, skipped };
+  return {
+    projectRoot: options.projectRoot,
+    created,
+    overwritten,
+    skipped,
+    rojoProject: inspectRojoProject(options.projectRoot),
+  };
 }
 
 export function formatInitReport(result: InitResult): string {
@@ -129,13 +152,35 @@ export function formatInitReport(result: InitResult): string {
     }
   }
 
-  if (result.skipped.length > 0) {
+  if (result.overwritten.length > 0) {
     if (result.created.length > 0) {
+      lines.push("");
+    }
+    lines.push("overwritten (--force)");
+    for (const name of result.overwritten) {
+      lines.push(`  ! ${name}`);
+    }
+  }
+
+  if (result.skipped.length > 0) {
+    if (result.created.length > 0 || result.overwritten.length > 0) {
       lines.push("");
     }
     lines.push("kept existing");
     for (const name of result.skipped) {
       lines.push(`  = ${name}`);
+    }
+  }
+
+  // Keeping an existing Rojo project file is the safe default, but it is only
+  // correct when that file already mounts the compiled `out/` tree. Say so
+  // loudly when it does not — nothing downstream fails on this.
+  const rojoProblem = formatRojoProjectProblem(result.rojoProject);
+  if (rojoProblem.length > 0) {
+    lines.push("");
+    lines.push("warning");
+    for (const line of rojoProblem) {
+      lines.push(`  ${line}`);
     }
   }
 

@@ -2,8 +2,23 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { runInit } from "../src/cli/init.ts";
+import { formatInitReport, runInit } from "../src/cli/init.ts";
 import { stripJsonComments } from "./support/jsonc.ts";
+
+// What `rojo init` leaves behind: Luau sources mounted off src/, nothing
+// pointing at the compiled out/ tree.
+const ROJO_INIT_PROJECT = `${JSON.stringify(
+  {
+    name: "basic-rojo",
+    tree: {
+      $className: "DataModel",
+      ReplicatedStorage: { Shared: { $path: "src/shared" } },
+      ServerScriptService: { Server: { $path: "src/server" } },
+    },
+  },
+  null,
+  2,
+)}\n`;
 
 describe("aruna init", () => {
   it("scaffolds an extends-managed tsconfig plus the generated alias fragment", async () => {
@@ -80,6 +95,49 @@ describe("aruna init", () => {
         "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
       ]);
+      // Its own scaffolded project file is aligned, so no warning fires.
+      expect(second.rojoProject.status).toBe("aligned");
+      expect(formatInitReport(second)).not.toContain("warning");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when it keeps a rojo project that never mounts out/", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-init-"));
+    try {
+      await fs.writeFile(path.join(root, "default.project.json"), ROJO_INIT_PROJECT, "utf8");
+      const result = runInit({ projectRoot: root });
+
+      expect(result.skipped).toEqual(["default.project.json"]);
+      expect(result.rojoProject.status).toBe("incomplete");
+      expect(result.rojoProject.present).toEqual([]);
+
+      // Without this the whole pipeline exits 0 and the built place is empty.
+      const report = formatInitReport(result);
+      expect(report).toContain("warning");
+      expect(report).toContain("does not mount");
+      expect(report).toContain("aruna init --force");
+
+      // The user's project file is left untouched without --force.
+      expect(await fs.readFile(path.join(root, "default.project.json"), "utf8")).toBe(
+        ROJO_INIT_PROJECT,
+      );
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("replaces an unmounted rojo project under --force", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-init-"));
+    try {
+      await fs.writeFile(path.join(root, "default.project.json"), ROJO_INIT_PROJECT, "utf8");
+      const result = runInit({ projectRoot: root, force: true });
+
+      expect(result.overwritten).toEqual(["default.project.json"]);
+      expect(result.skipped).toEqual([]);
+      expect(result.rojoProject.status).toBe("aligned");
+      expect(formatInitReport(result)).toContain("overwritten (--force)");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

@@ -17,6 +17,7 @@ import {
   resolveArunaSignalPaths,
 } from "../src/cli/tsconfig-paths.js";
 import { stripJsonComments } from "./support/jsonc.ts";
+import { partitionedRojoProject } from "../src/cli/rojo-layout.js";
 
 function readFragment(root: string, generatedDir = "src/.aruna"): {
   compilerOptions: { baseUrl: string; paths: Record<string, string[]> };
@@ -411,5 +412,70 @@ describe("inspectToolchain", () => {
 
     const bare = makeTempRoot();
     expect(inspectToolchain(bare).status).toBe("unknown");
+  });
+});
+
+describe("doctor rojo project check", () => {
+  const alignedProject = JSON.stringify(partitionedRojoProject());
+  // What `rojo init` leaves behind — Luau sources, no compiled out/ tree.
+  const unmountedProject = JSON.stringify({
+    tree: {
+      $className: "DataModel",
+      ReplicatedStorage: { Shared: { $path: "src/shared" } },
+      ServerScriptService: { Server: { $path: "src/server" } },
+    },
+  });
+
+  it("passes a project that mounts the partitioned out/ tree", () => {
+    const root = makeTempRoot();
+    writeProject(root, {
+      "tsconfig.json": `{\n  "compilerOptions": { "module": "ESNext" }\n}\n`,
+      "aruna.config.ts": minimalConfig(),
+      "default.project.json": alignedProject,
+    });
+
+    const report = fixDoctorProject({ projectRoot: root, fix: true });
+    expect(report.rojoProject.status).toBe("aligned");
+    expect(formatDoctorReport(report)).toContain("default.project.json: ok");
+    expect(doctorExitCode(report)).toBe(0);
+  });
+
+  it("fails a project whose rojo file never mounts out/", () => {
+    const root = makeTempRoot();
+    writeProject(root, {
+      "tsconfig.json": `{\n  "compilerOptions": { "module": "ESNext" }\n}\n`,
+      "aruna.config.ts": minimalConfig(),
+      "default.project.json": unmountedProject,
+    });
+
+    const report = fixDoctorProject({ projectRoot: root, fix: true });
+    // Aliases are healthy; only the Rojo layout is wrong — and that alone is a
+    // failure, because nothing else in the pipeline reports it.
+    expect(report.status.client).toBe("correct");
+    expect(report.rojoProject.status).toBe("incomplete");
+    expect(report.rojoProject.absent).toEqual([
+      "out/client",
+      "out/server",
+      "out/shared",
+      "include",
+    ]);
+    expect(doctorExitCode(report)).toBe(1);
+
+    const rendered = formatDoctorReport(report);
+    expect(rendered).toContain("does not mount");
+    expect(rendered).toContain("aruna init --force");
+    expect(rendered).not.toContain("\ndone");
+  });
+
+  it("does not fail on a missing project file — rojo reports that itself", () => {
+    const root = makeTempRoot();
+    writeProject(root, {
+      "tsconfig.json": `{\n  "compilerOptions": { "module": "ESNext" }\n}\n`,
+      "aruna.config.ts": minimalConfig(),
+    });
+
+    const report = fixDoctorProject({ projectRoot: root, fix: true });
+    expect(report.rojoProject.status).toBe("missing");
+    expect(doctorExitCode(report)).toBe(0);
   });
 });

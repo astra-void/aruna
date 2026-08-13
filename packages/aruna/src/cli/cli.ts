@@ -961,9 +961,16 @@ export async function main(): Promise<number> {
   program
     .command("init")
     .description("scaffold aruna.config.ts, tsconfig.json, and default.project.json")
-    .action(async () => {
+    .option(
+      "--force",
+      "overwrite the scaffolded files instead of keeping existing ones (replaces a Rojo project file that does not mount out/)",
+    )
+    .action(async (initOptions: { force?: boolean }) => {
       const options = program.optsWithGlobals<CliOptions>();
-      const result = runInit({ projectRoot: compilerInput(options).root });
+      const result = runInit({
+        projectRoot: compilerInput(options).root,
+        force: initOptions.force,
+      });
       if (options.json) {
         writeJson(result);
       } else {

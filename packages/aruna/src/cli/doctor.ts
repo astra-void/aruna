@@ -17,6 +17,11 @@ import {
   updateArunaActionPaths,
   updateArunaRuntimePaths,
 } from "./tsconfig-paths.js";
+import {
+  formatRojoProjectProblem,
+  inspectRojoProject,
+  type RojoProjectReport,
+} from "./rojo-project.js";
 
 export type DoctorOptions = {
   projectRoot: string;
@@ -77,6 +82,10 @@ export type DoctorReport = {
     baseUrlRecommended: boolean;
   };
   toolchain: ToolchainReport;
+  // The Rojo project file measured against the partitioned `out/` contract.
+  // Nothing else in the pipeline looks at it, so an unmounted `out/` is
+  // otherwise invisible: every command exits 0 and the place comes out empty.
+  rojoProject: RojoProjectReport;
   fixable: boolean;
   fixApplied: boolean;
   fixChanges: string[];
@@ -283,6 +292,17 @@ export function formatDoctorReport(report: DoctorReport): string {
     }
   }
 
+  lines.push("");
+  lines.push("rojo project");
+  const rojoProblem = formatRojoProjectProblem(report.rojoProject);
+  if (rojoProblem.length === 0) {
+    lines.push(`  ${report.rojoProject.path}: ok (mounts ${report.rojoProject.present.join(", ")})`);
+  } else {
+    for (const line of rojoProblem) {
+      lines.push(`  ${line}`);
+    }
+  }
+
   if (report.toolchain.robloxTsVersion !== undefined) {
     lines.push("");
     lines.push("toolchain");
@@ -326,6 +346,11 @@ export function formatDoctorReport(report: DoctorReport): string {
     } else {
       lines.push("unable to fix automatically until the project config and tsconfig are valid");
     }
+  } else if (rojoProblem.length > 0) {
+    // The aliases are healthy but the place would still build empty; never
+    // report "done" over that.
+    lines.push("");
+    lines.push("the Rojo project above must be fixed before the build reaches the place");
   } else {
     lines.push("");
     lines.push("done");
@@ -372,6 +397,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       : [createTsconfigDiagnostic(tsconfigPath, tsconfigResult.error)];
   const fragment = inspectFragment(options.projectRoot, generatedDir);
   const toolchain = inspectToolchain(options.projectRoot);
+  const rojoProject = inspectRojoProject(options.projectRoot);
 
   if (!tsconfigResult.value) {
     return {
@@ -397,6 +423,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
         baseUrlRecommended: false,
       },
       toolchain,
+      rojoProject,
       fixable: false,
       fixApplied: false,
       fixChanges: [],
@@ -435,6 +462,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       baseUrlRecommended: false,
     },
     toolchain,
+    rojoProject,
     fixable: configDiagnostics.length === 0 && effectiveTsconfigDiagnostics.length === 0,
     fixApplied: false,
     fixChanges: [],
@@ -593,6 +621,16 @@ export function runDoctor(options: DoctorOptions): DoctorReport {
 
 export function doctorExitCode(report: DoctorReport): number {
   if (report.configDiagnostics.length > 0 || report.tsconfigDiagnostics.length > 0) {
+    return 1;
+  }
+
+  // A Rojo project that does not mount `out/` builds an empty place while every
+  // other command reports success — the loudest signal available is this exit
+  // code, so it counts as a failure even though `--fix` cannot repair it.
+  // Deliberately narrow to `incomplete`: a missing or malformed project file is
+  // something `rojo build` itself refuses loudly, and the project may legitimately
+  // keep its Rojo config elsewhere.
+  if (report.rojoProject.status === "incomplete") {
     return 1;
   }
 
