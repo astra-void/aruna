@@ -5,6 +5,51 @@ All notable changes to the `aruna` package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-14
+
+The silent-failure release. Verifying Aruna against real Rojo projects turned up
+two ways to end up with a place that contains none of your code while every
+command in the pipeline exits 0. Both are now impossible to hit quietly.
+
+### Fixed
+
+- **Generated files under the dot-prefixed generated dir are compiled again.**
+  TypeScript's wildcard `include` globs never match a directory segment starting
+  with a dot, so `src/**/*.ts` skipped `src/.aruna/` entirely. Files there still
+  reached the program when something imported them, which masked the hole — but
+  with `entries: "generated"` the entry scripts live there and nothing imports
+  them, so they were never compiled: the built place had no `Script` or
+  `LocalScript` at all and nothing ran. The generated dir is now named
+  explicitly in both the staged tsconfig `aruna build` compiles against and the
+  tsconfig `aruna init` scaffolds, so the entries are emitted and `aruna check`
+  and your editor typecheck them. The vendored binary codec (`binary.ts`) was
+  never reaching Luau for the same reason and now does.
+- **`rbxtsc` resolves and runs on Windows.** The extensionless `rbxtsc` entry npm
+  writes is a POSIX shell script only Git Bash can run; the bin lookup now
+  prefers the `.cmd`/`.bat`/`.exe` shims and spawning routes through `cmd.exe`
+  with arguments quoted for it.
+
+### Added
+
+- **Rojo project verification.** Adopting Aruna inside an existing Rojo project
+  was a silent no-op: `aruna init` kept the project file `rojo init` scaffolds,
+  which mounts Luau sources off `src/` and never mounts `out/`, and nothing
+  downstream looked at it. The project file is now checked against the
+  partitioned `out/` contract from both ends — `aruna init` warns when it keeps
+  an unmounted project, and `aruna doctor` grows a `rojo project` section that
+  reports the missing mounts.
+- **`aruna init --force`.** Overwrites the scaffolded files instead of keeping
+  what is already there — the one-command fix for a Rojo project file that does
+  not mount `out/`. Without it `init` still keeps your files, as before.
+
+### Changed
+
+- **`aruna doctor` exits 1 when the Rojo project omits an `out/` mount.** This is
+  the only signal available for a build that would otherwise succeed into an
+  empty place. A missing or malformed project file stays report-only — `rojo
+  build` refuses those loudly on its own — and a project file under a
+  non-default `*.project.json` name is inspected rather than reported missing.
+
 ## [0.2.0] - 2026-07-16
 
 The setup-DX release: the daily loop and project scaffolding become one-command
