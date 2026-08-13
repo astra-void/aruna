@@ -168,7 +168,170 @@ export type PartitionOptions = {
   readonly generatedDir: string;
   readonly manifest: Manifest;
   readonly rbxtscBin: string;
+  // The consumer's tsconfig, whose compilerOptions the staged build inherits.
+  // Defaults to <projectRoot>/tsconfig.json.
+  readonly tsconfigPath?: string | undefined;
 };
+
+// Strips // and /* */ comments outside of string literals. tsconfig.json is
+// JSONC and real projects do comment it.
+export function stripJsonComments(contents: string): string {
+  let out = "";
+  let inString = false;
+  let inLine = false;
+  let inBlock = false;
+  for (let i = 0; i < contents.length; i += 1) {
+    const char = contents[i] ?? "";
+    const next = contents[i + 1] ?? "";
+    if (inLine) {
+      if (char === "\n") {
+        inLine = false;
+        out += char;
+      }
+      continue;
+    }
+    if (inBlock) {
+      if (char === "*" && next === "/") {
+        inBlock = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (inString) {
+      out += char;
+      if (char === "\\") {
+        out += next;
+        i += 1;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      out += char;
+      continue;
+    }
+    if (char === "/" && next === "/") {
+      inLine = true;
+      i += 1;
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      inBlock = true;
+      i += 1;
+      continue;
+    }
+    out += char;
+  }
+  return out;
+}
+
+// compilerOptions from a tsconfig and everything it extends, nearest-wins.
+// Package-name `extends` refs are skipped: they resolve through node
+// resolution, which the staged tree cannot reproduce faithfully.
+export function readInheritedCompilerOptions(
+  tsconfigPath: string,
+  seen: Set<string> = new Set(),
+): Record<string, unknown> {
+  const resolved = path.resolve(tsconfigPath);
+  if (seen.has(resolved) || !fs.existsSync(resolved)) {
+    return {};
+  }
+  seen.add(resolved);
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(stripJsonComments(fs.readFileSync(resolved, "utf8"))) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return {};
+  }
+
+  const own =
+    typeof parsed["compilerOptions"] === "object" && parsed["compilerOptions"] !== null
+      ? (parsed["compilerOptions"] as Record<string, unknown>)
+      : {};
+
+  const extendsField = parsed["extends"];
+  const refs =
+    typeof extendsField === "string"
+      ? [extendsField]
+      : Array.isArray(extendsField)
+        ? extendsField.filter((entry): entry is string => typeof entry === "string")
+        : [];
+
+  let inherited: Record<string, unknown> = {};
+  for (const ref of refs) {
+    if (!ref.startsWith(".")) {
+      continue;
+    }
+    inherited = {
+      ...inherited,
+      ...readInheritedCompilerOptions(path.resolve(path.dirname(resolved), ref), seen),
+    };
+  }
+
+  return { ...inherited, ...own };
+}
+
+// Ambient declaration files carry `declare global` / JSX augmentations that the
+// rest of the project type-checks against, but they are not modules, so the
+// compiler's manifest never lists them and staging would drop them — taking
+// every augmented prop with it. Collect them straight off disk instead.
+export function collectAmbientDeclarations(srcRoot: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules") continue;
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith(".d.ts")) {
+        found.push(toPosix(path.relative(srcRoot, full)));
+      }
+    }
+  };
+  walk(srcRoot);
+  return found.sort();
+}
+
+// compilerOptions the partitioned layout owns outright: they describe the
+// staged tree, so a value inherited from the consumer would point outside it.
+const STAGED_OWNED_COMPILER_OPTIONS = [
+  "rootDir",
+  "rootDirs",
+  "outDir",
+  "outFile",
+  "baseUrl",
+  "paths",
+  "declaration",
+  "declarationDir",
+  "declarationMap",
+  "composite",
+  "incremental",
+  "tsBuildInfoFile",
+  "noEmit",
+] as const;
+
+export function stagedCompilerOptions(
+  inherited: Record<string, unknown>,
+  owned: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...inherited };
+  for (const key of STAGED_OWNED_COMPILER_OPTIONS) {
+    delete merged[key];
+  }
+  return { ...merged, ...owned };
+}
 
 // Stages a partitioned copy of the project, compiles it with rbxtsc, and copies
 // the resulting `out/client|server|shared` tree back into the project.
@@ -209,6 +372,18 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
     const stagedInclude = path.join(tempRoot, "include");
     fs.mkdirSync(stagedInclude, { recursive: true });
 
+    // Root-level config files travel with the project. rbxtsc transformers and
+    // other toolchain plugins read their own config relative to the project root
+    // (vela.config.ts, and whatever the next plugin invents), and a staged root
+    // without them compiles against silent defaults. The three files staging
+    // writes itself are overwritten below; hidden files are left behind.
+    for (const entry of fs.readdirSync(projectRoot, { withFileTypes: true })) {
+      if (!entry.isFile() || entry.name.startsWith(".")) {
+        continue;
+      }
+      fs.copyFileSync(path.join(projectRoot, entry.name), path.join(tempRoot, entry.name));
+    }
+
     // Build the source -> staged-path map from the module classification.
     const sourceToStage = new Map<string, string>();
     const records: Array<{ record: ModuleRecord; target: LayoutTarget; stage: string }> = [];
@@ -236,6 +411,16 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       const dest = path.join(stageSrc, stage);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, rewritten);
+    }
+
+    // Ambient declarations are copied at their original path relative to src/,
+    // outside the partition dirs, so a single copy is visible to the whole
+    // staged program — duplicating a `declare global` per partition would
+    // collide instead.
+    for (const declaration of collectAmbientDeclarations(srcRoot)) {
+      const dest = path.join(stageSrc, declaration);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(path.join(srcRoot, declaration), dest);
     }
 
     // The vendored runtime is shared and self-contained — copy it wholesale into
@@ -308,18 +493,36 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       }
     }
 
+    // Start from the consumer's own compilerOptions so the staged compile is the
+    // one they configured — `jsx`/`jsxFactory`, rbxtsc `plugins` (transformers),
+    // `experimentalDecorators`, `lib`, strictness flags. Rebuilding this config
+    // from scratch silently dropped all of it: a project relying on a transformer
+    // compiled with the transform absent.
+    const inheritedOptions = readInheritedCompilerOptions(
+      options.tsconfigPath ?? path.join(projectRoot, "tsconfig.json"),
+    );
+    // The consumer's own typeRoots are relative to their project root, which the
+    // staged node_modules mirror reproduces — keep them alongside ours.
+    const inheritedTypeRoots = Array.isArray(inheritedOptions["typeRoots"])
+      ? (inheritedOptions["typeRoots"] as unknown[]).filter(
+          (entry): entry is string => typeof entry === "string",
+        )
+      : [];
+    const mergedTypeRoots = [
+      ...typeRoots,
+      ...inheritedTypeRoots.filter((entry) => !typeRoots.includes(entry)),
+    ];
+
     const tsconfig = {
-      compilerOptions: {
+      compilerOptions: stagedCompilerOptions(inheritedOptions, {
         target: "ESNext",
         module: "CommonJS",
         moduleResolution: "Node",
         moduleDetection: "force",
-        strict: true,
         noLib: true,
         baseUrl: ".",
         rootDir: "src",
         outDir: "out",
-        jsx: "preserve",
         declaration: false,
         declarationMap: false,
         downlevelIteration: true,
@@ -327,12 +530,25 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
         esModuleInterop: true,
         forceConsistentCasingInFileNames: true,
         resolveJsonModule: true,
-        noUncheckedIndexedAccess: true,
         verbatimModuleSyntax: false,
-        typeRoots,
-        types: ["@rbxts/types", "@rbxts/compiler-types"],
+        typeRoots: mergedTypeRoots,
+        // Strictness is the consumer's call, not roblox-ts's — only supply a
+        // default when their config is silent, or the staged build reports type
+        // errors their own `tsc` never would.
+        ...(inheritedOptions["strict"] === undefined ? { strict: true } : {}),
+        ...(inheritedOptions["noUncheckedIndexedAccess"] === undefined
+          ? { noUncheckedIndexedAccess: true }
+          : {}),
+        // `types` restricts which typeRoots packages load automatically, so only
+        // impose our floor when the consumer left it unset.
+        ...(inheritedOptions["types"] === undefined
+          ? { types: ["@rbxts/types", "@rbxts/compiler-types"] }
+          : {}),
+        // jsx belongs to the consumer (react vs preserve, and the factory pair);
+        // fall back to the roblox-ts default only when they say nothing.
+        ...(inheritedOptions["jsx"] === undefined ? { jsx: "preserve" } : {}),
         paths,
-      },
+      }),
       include: stagedIncludeGlobs(generatedDirRel),
       exclude: ["out", "node_modules"],
     };

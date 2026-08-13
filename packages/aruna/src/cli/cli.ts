@@ -502,6 +502,10 @@ async function executeBuildPass(
             generatedDir: generatedDirFromOutput(output),
             manifest: output.manifest,
             rbxtscBin: bin,
+            // The staged compile inherits the consumer's compilerOptions, so it
+            // needs the tsconfig their config actually points at.
+            tsconfigPath: loadProjectConfig(projectRoot, compilerInput(options).configPath)
+              .tsconfigPath,
           });
   }
 

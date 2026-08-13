@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
+  collectAmbientDeclarations,
   layoutTargetFor,
   partitionedRojoProject,
+  readInheritedCompilerOptions,
   stagePathFor,
+  stagedCompilerOptions,
   stagedIncludeGlobs,
+  stripJsonComments,
 } from "../src/cli/rojo-layout.js";
 
 describe("layoutTargetFor", () => {
@@ -84,5 +91,87 @@ describe("partitionedRojoProject", () => {
     expect(project.tree.ServerScriptService.TS.$path).toBe("out/server");
     expect(project.tree.ReplicatedStorage.TS.$path).toBe("out/shared");
     expect(project.tree.StarterPlayer.StarterPlayerScripts.TS.$path).toBe("out/client");
+  });
+});
+
+describe("staged tsconfig inheritance", () => {
+  it("strips comments but keeps them inside strings", () => {
+    expect(stripJsonComments('{ // note\n "a": "http://x", /* b */ "c": 1 }')).toContain(
+      '"a": "http://x"',
+    );
+    expect(stripJsonComments('{ // note\n "c": 1 }')).not.toContain("note");
+  });
+
+  it("reads compilerOptions through the extends chain, nearest wins", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-tsconfig-"));
+    try {
+      fs.writeFileSync(
+        path.join(root, "base.json"),
+        '{ "compilerOptions": { "strict": true, "jsx": "preserve", "target": "ES2015" } }',
+      );
+      fs.writeFileSync(
+        path.join(root, "tsconfig.json"),
+        `{
+          // a real project comments its tsconfig
+          "extends": "./base.json",
+          "compilerOptions": {
+            "jsx": "react",
+            "plugins": [{ "transform": "vela-rbxts/transformer" }]
+          }
+        }`,
+      );
+
+      const options = readInheritedCompilerOptions(path.join(root, "tsconfig.json"));
+      expect(options["jsx"]).toBe("react");
+      expect(options["strict"]).toBe(true);
+      expect(options["target"]).toBe("ES2015");
+      // Transformers must survive: dropping them compiles the project without
+      // the transform it depends on.
+      expect(options["plugins"]).toEqual([{ transform: "vela-rbxts/transformer" }]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("drops inherited options that describe the consumer's tree, not the staged one", () => {
+    const merged = stagedCompilerOptions(
+      {
+        jsx: "react",
+        plugins: [{ transform: "t" }],
+        rootDir: "src",
+        outDir: "out",
+        baseUrl: "src",
+        paths: { "@app/*": ["app/*"] },
+        incremental: true,
+        tsBuildInfoFile: "out/tsconfig.tsbuildinfo",
+      },
+      { rootDir: "src", outDir: "out", baseUrl: ".", paths: { "$aruna/signals": ["x.ts"] } },
+    );
+
+    expect(merged["jsx"]).toBe("react");
+    expect(merged["plugins"]).toEqual([{ transform: "t" }]);
+    expect(merged["baseUrl"]).toBe(".");
+    expect(merged["paths"]).toEqual({ "$aruna/signals": ["x.ts"] });
+    // Writing a tsbuildinfo would land in the consumer's out/ from a temp build.
+    expect(merged["incremental"]).toBeUndefined();
+    expect(merged["tsBuildInfoFile"]).toBeUndefined();
+  });
+});
+
+describe("collectAmbientDeclarations", () => {
+  it("finds .d.ts files the module manifest never lists", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-ambient-"));
+    try {
+      fs.mkdirSync(path.join(root, "client", "ui"), { recursive: true });
+      fs.mkdirSync(path.join(root, "node_modules", "pkg"), { recursive: true });
+      fs.writeFileSync(path.join(root, "env.d.ts"), 'import "vela-rbxts";\n');
+      fs.writeFileSync(path.join(root, "client", "ui", "jsx.d.ts"), "export {};\n");
+      fs.writeFileSync(path.join(root, "client", "ui", "app.tsx"), "export {};\n");
+      fs.writeFileSync(path.join(root, "node_modules", "pkg", "index.d.ts"), "export {};\n");
+
+      expect(collectAmbientDeclarations(root)).toEqual(["client/ui/jsx.d.ts", "env.d.ts"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
