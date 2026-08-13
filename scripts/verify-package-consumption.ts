@@ -217,9 +217,41 @@ const GENERATED_CLIENT_ACTIONS_REL = "src/.aruna/shared/actions.client.generated
 const GENERATED_SERVER_ACTIONS_REL = "src/.aruna/server/actions.server.generated.ts";
 const GENERATED_RUNTIME_CLIENT_REL = "src/.aruna/shared/runtime/client.ts";
 
+// `aruna doctor --fix` no longer writes the aliases inline: it moves them into
+// the generated fragment (src/.aruna/tsconfig.aruna.json) that the project
+// tsconfig `extends`. Follow the extends chain so this gate accepts either shape
+// and does not silently pass on a config that resolves nothing.
+function stripJsonComments(contents: string): string {
+  return contents.replace(/^\s*\/\/.*$/gm, "");
+}
+
+async function readTsconfigChain(tsconfigPath: string): Promise<JsonRecord[]> {
+  const contents = await fs.readFile(tsconfigPath, "utf8");
+  const tsconfig = JSON.parse(stripJsonComments(contents)) as unknown;
+  if (!isRecord(tsconfig)) {
+    return [];
+  }
+
+  const chain: JsonRecord[] = [tsconfig];
+  const extendsField = tsconfig.extends;
+  const refs = typeof extendsField === "string" ? [extendsField] : isStringArray(extendsField) ? extendsField : [];
+  for (const ref of refs) {
+    if (!ref.startsWith(".")) {
+      // Only relative refs can be the aruna fragment; package refs are not ours.
+      continue;
+    }
+    const resolved = path.resolve(path.dirname(tsconfigPath), ref);
+    if (!(await exists(resolved))) {
+      continue;
+    }
+    chain.push(...(await readTsconfigChain(resolved)));
+  }
+  return chain;
+}
+
 function formatGeneratedActionAliasFailure(logPath: string): string {
   return [
-    "aruna doctor --fix did not install generated action aliases in tsconfig.json.",
+    "aruna doctor --fix did not install generated action aliases reachable from tsconfig.json.",
     "Expected:",
     `  $aruna/actions/client -> ${GENERATED_CLIENT_ACTIONS_REL}`,
     `  $aruna/actions/server -> ${GENERATED_SERVER_ACTIONS_REL}`,
@@ -338,22 +370,21 @@ export async function assertPublicPackageSubpathFiles(packageRoot: string): Prom
 export async function assertGeneratedActionAliases(projectRoot: string): Promise<void> {
   const tsconfigPath = path.join(projectRoot, "tsconfig.json");
   const doctorLogPath = path.join(projectRoot, "logs", "06-doctor-fix.log");
-  const tsconfig = await readJson<TsconfigJson>(tsconfigPath);
+  const chain = await readTsconfigChain(tsconfigPath);
 
-  if (!isRecord(tsconfig)) {
+  const optionsChain = chain
+    .map((entry) => entry.compilerOptions)
+    .filter((entry): entry is JsonRecord => isRecord(entry));
+  if (optionsChain.length === 0) {
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
 
-  const compilerOptions = tsconfig.compilerOptions;
-  if (!isRecord(compilerOptions)) {
+  // baseUrl anchors the alias targets; it may come from the fragment.
+  if (!optionsChain.some((entry) => typeof entry.baseUrl === "string" && entry.baseUrl.length > 0)) {
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
 
-  if (typeof compilerOptions.baseUrl !== "string" || compilerOptions.baseUrl.length === 0) {
-    throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
-  }
-
-  const paths = compilerOptions.paths;
+  const paths = optionsChain.find((entry) => isRecord(entry.paths))?.paths;
   if (!isRecord(paths)) {
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
@@ -474,10 +505,15 @@ export async function assertLayoutTransitionRegression(projectRoot: string): Pro
     "13-check-stale.log",
   );
   const checkLog = await fs.readFile(path.join(logsRoot, "13-check-stale.log"), "utf8");
-  if (!checkLog.includes("Stale generated artifact") || !checkLog.includes("current emit layout")) {
+  // Match diagnostic codes, not prose — the alias half is reported as 111
+  // (inline aliases point at the old layout) or 112 (inline aliases shadow the
+  // generated fragment), depending on whether the tsconfig extends the fragment.
+  const flaggedStaleArtifact = checkLog.includes("aruna::110");
+  const flaggedAliasDesync = checkLog.includes("aruna::111") || checkLog.includes("aruna::112");
+  if (!flaggedStaleArtifact || !flaggedAliasDesync) {
     throw new Error(
       [
-        "`aruna check` did not flag the flat-layout desync (expected aruna::110 + aruna::111).",
+        "`aruna check` did not flag the flat-layout desync (expected aruna::110 + aruna::111/112).",
         `See ${path.join(logsRoot, "13-check-stale.log")}`,
       ].join("\n"),
     );
@@ -516,10 +552,14 @@ export async function assertLayoutTransitionRegression(projectRoot: string): Pro
     "15-doctor-realign.log",
   );
   await assertGeneratedActionAliases(projectRoot);
-  const realigned = await readJson<TsconfigJson>(tsconfigPath);
-  const realignedOptions = isRecord(realigned.compilerOptions) ? realigned.compilerOptions : {};
-  const realignedPaths = isRecord(realignedOptions.paths) ? realignedOptions.paths : {};
-  const runtimeClient = realignedPaths["aruna/client"];
+  // The realigned aliases may live in the generated fragment the tsconfig
+  // extends, so resolve them through the chain rather than inline only.
+  const realignedPaths =
+    (await readTsconfigChain(tsconfigPath))
+      .map((entry) => entry.compilerOptions)
+      .filter((entry): entry is JsonRecord => isRecord(entry))
+      .find((entry) => isRecord(entry.paths))?.paths ?? {};
+  const runtimeClient = isRecord(realignedPaths) ? realignedPaths["aruna/client"] : undefined;
   if (!isStringArray(runtimeClient) || runtimeClient[0] !== GENERATED_RUNTIME_CLIENT_REL) {
     throw new Error(
       [
@@ -725,7 +765,6 @@ async function createConsumerFiles(
       '    manifest: "src/.aruna/manifest.json",',
       "  },",
       "  actions: {",
-      '    transport: "remote-event",',
       "    defaultRateLimit: {",
       '      key: "player",',
       "      windowMs: 1000,",
@@ -884,7 +923,7 @@ async function createConsumerFiles(
       "",
       "export function startClientApp() {",
       "  const clientApp = createClientApp({",
-      "    invoker: createActionInvoker({",
+      "    transport: createActionInvoker({",
       "      createRequestId: createHarnessRequestId,",
       "    }),",
       "  });",

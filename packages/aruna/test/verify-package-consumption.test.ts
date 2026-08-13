@@ -245,7 +245,7 @@ describe("verify-package-consumption args", () => {
     });
 
     await expect(assertGeneratedActionAliases(root)).rejects.toThrow(
-      "aruna doctor --fix did not install generated action aliases in tsconfig.json.",
+      "aruna doctor --fix did not install generated action aliases reachable from tsconfig.json.",
     );
   });
 
@@ -261,7 +261,7 @@ describe("verify-package-consumption args", () => {
     });
 
     await expect(assertGeneratedActionAliases(root)).rejects.toThrow(
-      "aruna doctor --fix did not install generated action aliases in tsconfig.json.",
+      "aruna doctor --fix did not install generated action aliases reachable from tsconfig.json.",
     );
   });
 
