@@ -21,10 +21,17 @@ describe("aruna init", () => {
       // generated fragment, so codegen-layout changes can never desync it.
       const tsconfig = JSON.parse(await fs.readFile(path.join(root, "tsconfig.json"), "utf8")) as {
         extends: string;
+        include: string[];
         compilerOptions: { paths?: Record<string, string[]> };
       };
       expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
       expect(tsconfig.compilerOptions.paths).toBeUndefined();
+
+      // The dot-prefixed generated dir is named explicitly — TypeScript's
+      // wildcard globs skip it, which would leave the generated entry scripts
+      // untypechecked by `aruna check` and the IDE.
+      expect(tsconfig.include).toContain("src/.aruna/**/*.ts");
+      expect(tsconfig.include).toContain("src/.aruna/**/*.tsx");
 
       const fragment = JSON.parse(
         stripJsonComments(

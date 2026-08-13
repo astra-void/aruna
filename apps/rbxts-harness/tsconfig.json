@@ -1,5 +1,8 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": [
+    "../../tsconfig.base.json",
+    "./src/.aruna/tsconfig.aruna.json"
+  ],
   "compilerOptions": {
     "baseUrl": ".",
     "module": "commonjs",
@@ -7,23 +10,30 @@
     "moduleResolution": "node",
     "declaration": false,
     "declarationMap": false,
-    "paths": {
-      "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
-      "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
-      "$aruna/signals": ["src/.aruna/signals.generated.ts"],
-      "aruna/client": ["src/.aruna/runtime/client.ts"],
-      "aruna/server": ["src/.aruna/runtime/server.ts"],
-      "aruna/roblox": ["src/.aruna/runtime/roblox.ts"],
-      "aruna/schema": ["src/.aruna/runtime/schema.ts"]
-    },
     "noLib": true,
     "outDir": "out",
     "rootDir": "src",
     "jsx": "preserve",
     "verbatimModuleSyntax": false,
-    "typeRoots": ["./node_modules", "./node_modules/@rbxts"],
-    "types": ["@rbxts/types", "@rbxts/compiler-types"]
+    "typeRoots": [
+      "./node_modules",
+      "./node_modules/@rbxts"
+    ],
+    "types": [
+      "@rbxts/types",
+      "@rbxts/compiler-types"
+    ]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["aruna.config.ts", "dist", "node_modules", "out"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/.aruna/**/*.ts",
+    "src/.aruna/**/*.tsx"
+  ],
+  "exclude": [
+    "aruna.config.ts",
+    "dist",
+    "node_modules",
+    "out"
+  ]
 }

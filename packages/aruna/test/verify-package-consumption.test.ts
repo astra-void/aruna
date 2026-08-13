@@ -144,7 +144,13 @@ describe("verify-package-consumption args", () => {
     expect(tsconfig.compilerOptions?.baseUrl).toBe(".");
     expect(tsconfig.compilerOptions?.rootDir).toBe("src");
     expect(tsconfig.compilerOptions?.paths).toEqual({});
-    expect(tsconfig.include).toEqual(["src/**/*.ts", "src/**/*.tsx"]);
+    // The dot-prefixed generated dir is named explicitly — wildcard globs skip it.
+    expect(tsconfig.include).toEqual([
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "src/.aruna/**/*.ts",
+      "src/.aruna/**/*.tsx",
+    ]);
     expect(tsconfig.exclude).toEqual(["aruna.config.ts", "dist", "node_modules", "out"]);
     expect(JSON.stringify(tsconfig)).not.toContain("$aruna/actions/client");
     expect(JSON.stringify(tsconfig)).not.toContain("$aruna/actions/server");
@@ -170,7 +176,13 @@ describe("verify-package-consumption args", () => {
       rootDir: ".",
       noEmit: true,
     });
-    expect(tsconfig.include).toEqual(["src/**/*.ts", "src/**/*.tsx", "aruna.config.ts"]);
+    expect(tsconfig.include).toEqual([
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "src/.aruna/**/*.ts",
+      "src/.aruna/**/*.tsx",
+      "aruna.config.ts",
+    ]);
     expect(tsconfig.exclude).toEqual(["dist", "node_modules", "out"]);
   });
 

@@ -264,7 +264,10 @@ export function buildConsumerTsconfigJson(tsconfigBasePath: string): string {
     '    "typeRoots": ["./node_modules", "./node_modules/@rbxts"],',
     '    "types": ["@rbxts/types", "@rbxts/compiler-types"]',
     "  },",
-    '  "include": ["src/**/*.ts", "src/**/*.tsx"],',
+    // The generated dir is named explicitly — TypeScript's wildcard globs skip
+    // dot-prefixed segments, so `src/**/*` alone leaves it out of the program.
+    // Mirrors what `aruna init` scaffolds.
+    '  "include": ["src/**/*.ts", "src/**/*.tsx", "src/.aruna/**/*.ts", "src/.aruna/**/*.tsx"],',
     '  "exclude": ["aruna.config.ts", "dist", "node_modules", "out"]',
     "}",
     "",
@@ -281,7 +284,7 @@ export function buildConsumerTypecheckTsconfigJson(): string {
     '    "rootDir": ".",',
     '    "noEmit": true',
     "  },",
-    '  "include": ["src/**/*.ts", "src/**/*.tsx", "aruna.config.ts"],',
+    '  "include": ["src/**/*.ts", "src/**/*.tsx", "src/.aruna/**/*.ts", "src/.aruna/**/*.tsx", "aruna.config.ts"],',
     '  "exclude": ["dist", "node_modules", "out"]',
     "}",
     "",

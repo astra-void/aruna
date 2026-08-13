@@ -88,6 +88,22 @@ export function stagePathFor(
   return `${target}/${sourceRel}`;
 }
 
+// TypeScript's wildcard include globs never match a directory segment starting
+// with a dot, so `src/**/*.ts` alone skips the whole staged generated tree
+// (`src/<target>/.aruna/...`). Files there still reached the program when
+// something imported them, which hid the hole — but with `entries: "generated"`
+// the entry scripts themselves live there and nothing imports them, so they were
+// silently never compiled and the built place came out with no Script or
+// LocalScript at all. Naming the generated dir explicitly opts it back in.
+export function stagedIncludeGlobs(generatedDirRel: string): string[] {
+  return [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    `src/*/${generatedDirRel}/**/*.ts`,
+    `src/*/${generatedDirRel}/**/*.tsx`,
+  ];
+}
+
 function quoteVariants(specifier: string): string[] {
   return [`from "${specifier}"`, `from '${specifier}'`, `import("${specifier}")`, `import('${specifier}')`];
 }
@@ -317,7 +333,7 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
         types: ["@rbxts/types", "@rbxts/compiler-types"],
         paths,
       },
-      include: ["src/**/*.ts", "src/**/*.tsx"],
+      include: stagedIncludeGlobs(generatedDirRel),
       exclude: ["out", "node_modules"],
     };
     // roblox-ts requires a package.json at the project root.

@@ -63,7 +63,17 @@ function tsconfigTemplate(projectRoot: string): string {
       typeRoots: ["./node_modules", "./node_modules/@rbxts"],
       types: ["@rbxts/types", "@rbxts/compiler-types"],
     },
-    include: ["src/**/*.ts", "src/**/*.tsx"],
+    // The generated dir is named explicitly: TypeScript's wildcard globs skip
+    // dot-prefixed directories, so `src/**/*` alone would leave the generated
+    // entry scripts (entries: "generated") out of the program — `aruna check`
+    // and the IDE would never typecheck them. Mirrors the staged include that
+    // `aruna build` compiles against (stagedIncludeGlobs in rojo-layout.ts).
+    include: [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      `${GENERATED_DIR}/**/*.ts`,
+      `${GENERATED_DIR}/**/*.tsx`,
+    ],
     exclude: ["aruna.config.ts", "out", "node_modules"],
   };
 

@@ -3,6 +3,7 @@ import {
   layoutTargetFor,
   partitionedRojoProject,
   stagePathFor,
+  stagedIncludeGlobs,
 } from "../src/cli/rojo-layout.js";
 
 describe("layoutTargetFor", () => {
@@ -50,6 +51,24 @@ describe("stagePathFor", () => {
       "server/domains/shop/actions.ts",
     );
     expect(stagePathFor("src/shared/result.ts", "shared", "shared")).toBe("shared/shared/result.ts");
+  });
+});
+
+describe("stagedIncludeGlobs", () => {
+  it("names the generated dir so a dot-prefixed one still compiles", () => {
+    // `src/**/*.ts` alone never matches a dot-prefixed segment — without the
+    // explicit globs the generated entry scripts are dropped from the program
+    // and the built place ends up with no Script/LocalScript.
+    expect(stagedIncludeGlobs(".aruna")).toEqual([
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "src/*/.aruna/**/*.ts",
+      "src/*/.aruna/**/*.tsx",
+    ]);
+  });
+
+  it("follows a custom generated dir", () => {
+    expect(stagedIncludeGlobs("generated")).toContain("src/*/generated/**/*.ts");
   });
 });
 
