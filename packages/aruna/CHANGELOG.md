@@ -24,6 +24,20 @@ command in the pipeline exits 0. Both are now impossible to hit quietly.
   tsconfig `aruna init` scaffolds, so the entries are emitted and `aruna check`
   and your editor typecheck them. The vendored binary codec (`binary.ts`) was
   never reaching Luau for the same reason and now does.
+- **The staged build compiles what your project actually configures.** `aruna
+  build` partitions the project into a temp tree before running `rbxtsc`, and it
+  rebuilt the tsconfig from scratch while copying only the modules the manifest
+  lists — so everything else your compile depends on disappeared. Ambient `.d.ts`
+  files are not modules and were never staged, taking their `declare global` /
+  JSX augmentations with them; and your own `compilerOptions` were dropped,
+  including rbxtsc `plugins` transformers, the JSX factory pair, decorators and
+  `lib`. A project whose UI props come from an augmentation and whose transformer
+  lowers them failed to typecheck, and would have emitted untransformed code even
+  if it had. The staged config now inherits your `compilerOptions` through the
+  `extends` chain and overrides only what describes the staged tree, strictness
+  flags (`strict`, `noUncheckedIndexedAccess`) are left to you rather than forced,
+  every `.d.ts` under `src/` is staged, and root-level config files are copied so
+  toolchain plugins find theirs.
 - **`rbxtsc` resolves and runs on Windows.** The extensionless `rbxtsc` entry npm
   writes is a POSIX shell script only Git Bash can run; the bin lookup now
   prefers the `.cmd`/`.bat`/`.exe` shims and spawning routes through `cmd.exe`
