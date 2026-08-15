@@ -29,12 +29,16 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 - [Getting started](./docs/getting-started.md): install, project shape, the build loop, a full minimal action round-trip.
 - [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits, fire-and-forget, `ctx.player`, `ctx.publisher`.
 - [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber, publishing from inside an action (`ctx.publisher` / `createActionDefiner`).
+- [Stores](./docs/stores.md): `defineStore` / `definePlayerStore`, `StoreResult` error taxonomy, session locking, migrations, `createServerApp({ playerStore })` and `ctx.store`.
 - [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
 - [CLI](./docs/cli.md): `aruna build`/`check`/`init`/`doctor`/`inspect`/`contract`, flags, what each generates.
 - [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the dual runtime, binary codec.
 
 ## Rules of thumb (read before writing Aruna code)
 
+- Stores are server-only persistence. A failed load NEVER falls back to the default —
+  that is how a save file gets overwritten. Handle `{ ok: false }` explicitly, and treat an
+  absent `ctx.store` as "not loaded", not "new player". See stores.md.
 - Action and signal definitions are discovered by file classification (client/server/shared
   by path convention). Server-only logic must live in server-classified files or the
   compiler reports a boundary violation. See architecture.md.

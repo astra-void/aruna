@@ -123,4 +123,4 @@ Argless `createClientApp()` builds the default Roblox transport
 raw RemoteEvent. Pass `createClientApp({ transport })` to customize it (request ids,
 timeouts).
 
-Next: [actions.md](./actions.md), [signals.md](./signals.md), [schema.md](./schema.md).
+Next: [actions.md](./actions.md), [signals.md](./signals.md), [stores.md](./stores.md), [schema.md](./schema.md).

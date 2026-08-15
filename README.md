@@ -364,6 +364,56 @@ connection.disconnect();
 - An app-owned publisher is injected into every action's `ctx`, so an action's `run` can publish signals directly (`ctx.publisher?.toAll(...)`). Bind a `defineAction` with `createActionDefiner<Signals, Player>()` for a non-optional, registry-checked `ctx.publisher` — no plumbing module. See [docs/signals.md](packages/aruna/docs/signals.md#publishing-from-inside-an-action).
 - Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. Contract `diff` gates signal changes too: a removed signal or a removed/retyped payload field is breaking, an added signal or payload field is non-breaking (output compatibility rules — payloads travel server → client).
 
+## Stores (DataStore persistence)
+
+A **store** is Aruna's safe front end to `DataStoreService`: declare the record shape once,
+and the runtime owns validation, retries, request budget, versioning, and — for player save
+files — the session lock. Stores are server-only and have no client binding; a client that
+imports one is `aruna::574`.
+
+```ts
+import { definePlayerStore, createPlayerStore, createServerApp } from "aruna/server";
+import { robloxDataStore, robloxRemoteEvent } from "aruna/roblox";
+import { schema } from "aruna/schema";
+
+export const profile = definePlayerStore({
+  id: "player.profile",
+  version: 2,
+  schema: schema.object({ coins: schema.u32() }),
+  defaultValue: () => ({ coins: 0 }),
+  migrate: (stored, fromVersion) => (fromVersion === 1 ? upgradeFromV1(stored) : undefined),
+});
+
+const profiles = createPlayerStore(profile, { createBackend: robloxDataStore() });
+
+const app = createServerApp({ actions, transport: robloxRemoteEvent(), playerStore: profiles });
+```
+
+- **Nothing throws.** Every operation resolves with a `StoreResult<T>` carrying a typed
+  `StoreError` (`StoreUnavailableError`, `StoreThrottledError`, `StoreValidationError`,
+  `StoreLockedError`, ...) and whether a retry could plausibly succeed.
+- **No blind overwrite.** A read that fails — request error, corrupt payload, schema
+  mismatch, failed migration — yields an error, never a value. Only a genuinely absent key
+  resolves to `defaultValue`, so a failed load can never be saved over a real record.
+- **Bounded retries and budget awareness.** Transient failures retry with capped
+  exponential backoff and jitter; a missing API grant is not retried at all; an exhausted
+  `GetRequestBudgetForRequestType` waits instead of spending the request.
+- **Session locking.** A player store claims its lock inside the same `UpdateAsync` that
+  reads the record. A live lock held elsewhere refuses the load; a stale one (heartbeat
+  older than `lockTtlMs`) is taken over; a server that lost its lock refuses to write. The
+  heartbeat doubles as the autosave, and `createServerApp` flushes everything on
+  `BindToClose`.
+- **Versioned payloads.** Every write carries a version, so an older record is handed to
+  `migrate` rather than silently reinterpreted.
+- **App-owned lifecycle.** `createServerApp({ playerStore })` loads on join, releases on
+  leave, and injects the open document into every action as `ctx.store` — optional by
+  design, because a document that has not loaded must not be replaced by a default.
+- **Compiler-discovered.** `defineStore` / `definePlayerStore` exports are recorded in the
+  manifest (`manifest.stores`), classified as `serverStore` modules, and listed by
+  `aruna inspect stores`.
+
+See [docs/stores.md](packages/aruna/docs/stores.md).
+
 ## Binary serialization
 
 `encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed byte buffer, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint** (`schemaFingerprint(schema)`, identical across both runtimes): decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
@@ -493,7 +543,6 @@ These stay out of the next cutline:
 - policies and capabilities
 - player sessions
 - Studio overlay and Studio runner flow
-- DataStore workflows
 - generated Roblox Instance creation and Rojo integration
 - create-app scaffolding
 - full production Studio validation

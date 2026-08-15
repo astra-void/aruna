@@ -15,6 +15,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna doctor [--fix]` | Inspect (and with `--fix`, write) the `aruna/*` and `$aruna/*` tsconfig path aliases. |
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |
+| `aruna inspect stores` | List discovered stores, their version, scope, and persisted shape. |
 | `aruna inspect contract` | Print a deterministic action contract snapshot. |
 | `aruna inspect modules` | Print how each file is classified (client/server/shared). |
 | `aruna inspect graph` | Print the import graph. |
