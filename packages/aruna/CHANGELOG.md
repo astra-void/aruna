@@ -5,6 +5,72 @@ All notable changes to the `aruna` package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-15
+
+The persistence release. Aruna knew what a game sends over the wire and nothing
+about what it keeps; stores close that, with the failure modes that cost real
+player data handled by the runtime rather than by every call site. Zero-config
+also stops being an either/or: supplying `conventions` extends the built-ins now
+instead of replacing them.
+
+### Added
+
+- **Stores — `defineStore` and `definePlayerStore`.** Declare a record's shape,
+  default, and version once; the runtime owns validation, bounded retries with
+  jittered backoff, request-budget awareness, versioned payloads with `migrate`,
+  and — for player save files — a session lock claimed inside the same
+  `UpdateAsync` that reads the record. Nothing throws: every operation resolves
+  with a `StoreResult<T>` carrying a typed `StoreError` and whether a retry could
+  plausibly succeed. A failed load returns an error and never a value, so the
+  default can never be written over a record that could not be read. Both
+  runtimes ship the same surface. See [docs/stores.md](./docs/stores.md).
+- **`createServerApp({ playerStore })`.** The app loads a player's document on
+  join, releases it on leave, flushes everything on `BindToClose`, and injects
+  the open document into every action as `ctx.store` — optional by design,
+  because a document that has not loaded must not be replaced by a default.
+- **Stores in the compiler and the CLI.** Store exports are recorded in the
+  manifest, their modules classify as `serverStore` and stage into the server
+  partition, and `aruna inspect stores` lists them without executing the project.
+  A client or shared module that imports a store is `aruna::574`; structural
+  mistakes that can cost a save file (`aruna::570`, `571`, `573`, `575`, `576`)
+  are errors, and `572` / `577` warn.
+- **Generated Rojo `node_modules` mounts.** `aruna build` writes
+  `<generatedDir>/node_modules.project.json` listing every scope holding a
+  package that ships Luau, so `pnpm add` no longer comes with a hand edit to
+  `default.project.json` — the failure it removes is success everywhere and a
+  missing require in Studio. `aruna doctor` reports the scope a hand-written
+  mount is missing.
+
+### Changed
+
+- **`conventions` in `aruna.config.ts` extends the built-in globs instead of
+  replacing them.** Adding one glob used to cost a restatement of every default
+  beside it. Config globs also outrank the defaults wherever both match, so a
+  file-name glob a project pinned by hand is no longer reclassified by a default
+  directory glob. `conventions: { defaults: false }` restores the old
+  replace-everything semantics exactly. **This is a breaking change**: a project
+  supplying `conventions` now also inherits the built-ins, so classification
+  changes for paths it never covered. `**/signals.ts` joins the shared defaults,
+  which is structural — the generated signal registry lands in the shared
+  partition and imports each definition from its declaring file.
+- **The generated tsconfig fragment carries the whole roblox-ts compile
+  contract.** The `target`/`module`/`moduleResolution`/`noLib` triple rbxtsc
+  requires, the `@rbxts` type roots, `src` → `out`, and the include globs that
+  reach the dot-prefixed generated dir were hand-copied into every consumer
+  tsconfig and drifted silently. A scaffolded tsconfig is now `extends` plus what
+  the project actually chooses; an existing project's inline values still win.
+- **Watch mode keeps one `rbxtsc --watch` alive** across rebuilds and only
+  restages sources into it, instead of paying a cold compile per change. It stays
+  an optimization: no rbxtsc, `--no-emit-luau`, or a child that fails to start
+  falls back to one-shot builds with a note.
+
+### Fixed
+
+- **A source-less project is no longer reported as a malformed tsconfig.**
+  TypeScript's "No inputs were found in config file" (TS 18003) was forwarded as
+  `aruna::103`, so a freshly scaffolded project failed `aruna doctor` on a
+  perfectly well-formed file.
+
 ## [0.3.0] - 2026-08-14
 
 The silent-failure release. Verifying Aruna against real Rojo projects turned up
