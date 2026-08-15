@@ -12,7 +12,7 @@
     "contract:diff": "pnpm --filter aruna build && pnpm --filter aruna aruna contract diff --project . --baseline src/.aruna/contract.snapshot.json",
     "typecheck": "pnpm aruna:build && tsc -p tsconfig.typecheck.json --noEmit",
     "rbxtsc": "pnpm aruna:build",
-    "build": "pnpm typecheck && pnpm rbxtsc"
+    "build": "pnpm --filter aruna aruna build --emit-runtime --project . && tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
     "aruna": "workspace:@arunajs/aruna@*"

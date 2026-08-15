@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!test/**", "!**/*.test.ts", "!docs/**", "!**/*.md"],
       "outputs": ["dist/**", "src/.aruna/**", "*.js", "*.d.ts"]
     },
     "check": {

@@ -17,8 +17,8 @@
     "aruna": "pnpm --filter aruna aruna",
     "harness:rbxts": "pnpm --filter @arunajs/rbxts-harness typecheck",
     "harness:rbxts:compile": "pnpm --filter @arunajs/rbxts-harness rbxtsc",
-    "harness:package": "pnpm --filter @arunajs/package-consumption-harness build",
-    "package-consumption": "pnpm --filter @arunajs/package-consumption-harness build",
+    "harness:package": "turbo run build --filter=@arunajs/package-consumption-harness",
+    "package-consumption": "turbo run build --filter=@arunajs/package-consumption-harness",
     "verify:package-consumption": "tsx scripts/verify-package-consumption.ts",
     "verify:package-consumption:keep-temp": "tsx scripts/verify-package-consumption.ts --keep-temp"
   },
