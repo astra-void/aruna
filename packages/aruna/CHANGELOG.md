@@ -5,6 +5,49 @@ All notable changes to the `aruna` package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-15
+
+The boot-order release. `runtime.ts` was a classification and nothing else — the
+compiler knew the file was server-only and then never started it — so every
+project hand-wrote a bootstrap script listing each `start*()` call in a
+hand-chosen order. That file is derived information whose ordering rules lived
+only in comments, and as a separate Script it raced the generated entry.
+
+### Added
+
+- **Domain runtimes — `defineRuntime`.** Declare the server work that starts at
+  boot, and the runtimes it has to start after:
+
+  ```ts
+  export const emoteRuntime = defineRuntime({
+    id: "emote",
+    after: ["grab"],
+    start() { ... },
+  });
+  ```
+
+  The compiler resolves the `after` edges into a boot order (a stable
+  topological sort, ties broken by id), records it in `manifest.runtimes`, and
+  emits the sequence into the generated server entry after the app is
+  constructed — so the transport exists before the first heartbeat, and the
+  starts no longer race a hand-written Script that Roblox was free to run first.
+  The ordering comments become edges the build checks: an `after` naming no
+  runtime, a self-edge, and a cycle are `aruna::582`, a duplicate id is
+  `aruna::581`, and a runtime with no `start` is `aruna::580` — the one shape
+  that would compile and then quietly do nothing at boot. `aruna check` reports
+  all of them without writing anything. Requires `entries: "generated"`.
+
+### Fixed
+
+- **A mixed npm scope is mounted per package, not wholesale.** Scope-level Rojo
+  mounts put every build-time-only package in the scope into the DataModel as an
+  empty Folder and made Rojo walk its whole file tree — `@facet-ui/theme`,
+  `@rbxts/types` and `@rbxts/compiler-types` all materialized, which is what
+  hand-written mounts had been spelling out to avoid. A scope whose packages all
+  ship Luau still mounts wholesale. Per-package mounts take each instance name
+  from the package's own project file (`@lattice-ui/react-dialog` → `dialog`),
+  which is the name Rojo and the roblox-ts resolver both compute.
+
 ## [0.4.0] - 2026-08-15
 
 The persistence release. Aruna knew what a game sends over the wire and nothing
