@@ -39,6 +39,12 @@ only in comments, and as a separate Script it raced the generated entry.
 
 ### Fixed
 
+- **A config can import `defineConfig` from `@arunajs/aruna`.** The config
+  evaluator only shimmed the `aruna` alias, so writing the real package name —
+  which is what the rest of a project imports — fell through to a CommonJS
+  require and failed with Node's `No "exports" main defined`, an error that names
+  the package rather than the import. Both the scoped name and its `/config`
+  subpath now resolve.
 - **A mixed npm scope is mounted per package, not wholesale.** Scope-level Rojo
   mounts put every build-time-only package in the scope into the DataModel as an
   empty Folder and made Rojo walk its whole file tree — `@facet-ui/theme`,
@@ -47,6 +53,15 @@ only in comments, and as a separate Script it raced the generated entry.
   ship Luau still mounts wholesale. Per-package mounts take each instance name
   from the package's own project file (`@lattice-ui/react-dialog` → `dialog`),
   which is the name Rojo and the roblox-ts resolver both compute.
+
+### Changed
+
+- **Watch mode restages incrementally.** Staging rewrote every file each pass and
+  cleared the staged `src/` before a reuse, so every rebuild restamped the whole
+  tree and the resident `rbxtsc --watch` recompiled all of it — the cost keeping
+  it alive was meant to avoid. Staging now writes only files whose bytes changed
+  and prunes what the manifest no longer accounts for, which is what the
+  wholesale clear was protecting against.
 
 ## [0.4.0] - 2026-08-15
 
