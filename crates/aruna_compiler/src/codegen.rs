@@ -868,7 +868,16 @@ fn render_server_entry_file(
     let wires_configure = hook_exports(hooks, "configure");
     let uses_hook_exports = wires_middleware || wires_on_error || wires_configure;
 
-    lines.push("import { createServerApp } from \"aruna/server\";".to_string());
+    // One import per module, not one per binding: the generated entry is code a
+    // user reads when they want to know what Aruna wired for them.
+    let mut server_imports = vec!["createServerApp"];
+    if !runtimes.is_empty() {
+        server_imports.push("startRuntimes");
+    }
+    lines.push(format!(
+        "import {{ {} }} from \"aruna/server\";",
+        server_imports.join(", ")
+    ));
     if has_signals {
         lines.push(
             "import { createSignalPublisher, robloxRemoteEvent } from \"aruna/roblox\";"
@@ -876,9 +885,6 @@ fn render_server_entry_file(
         );
     } else {
         lines.push("import { robloxRemoteEvent } from \"aruna/roblox\";".to_string());
-    }
-    if !runtimes.is_empty() {
-        lines.push("import { startRuntimes } from \"aruna/server\";".to_string());
     }
     lines.push("import { actions, defaultRateLimit } from \"$aruna/actions/server\";".to_string());
     if has_signals {
@@ -1425,7 +1431,7 @@ mod tests {
         );
         let server = &output.files[0].contents;
 
-        assert!(server.contains("import { startRuntimes } from \"aruna/server\";"));
+        assert!(server.contains("import { createServerApp, startRuntimes } from \"aruna/server\";"));
         assert!(server
             .contains("import { scoreRuntime as score_runtime } from \"../../domains/score/runtime\";"));
         assert!(server.contains("startRuntimes([\n  score_runtime,\n  grab_runtime,\n  world_runtime,\n]);"));

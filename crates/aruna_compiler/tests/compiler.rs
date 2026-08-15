@@ -910,7 +910,9 @@ fn discovers_domain_runtimes_and_emits_the_resolved_boot_sequence() {
         .iter()
         .find(|file| file.path.ends_with("main.server.ts"))
         .expect("generated server entry");
-    assert!(entry.contents.contains("import { startRuntimes } from \"aruna/server\";"));
+    assert!(entry
+        .contents
+        .contains("import { createServerApp, startRuntimes } from \"aruna/server\";"));
     assert!(entry
         .contents
         .contains("startRuntimes([\n  score_runtime,\n  grab_runtime,\n  emote_runtime,\n]);"));
