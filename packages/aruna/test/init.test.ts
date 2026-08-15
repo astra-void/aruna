@@ -28,6 +28,7 @@ describe("aruna init", () => {
       expect(result.created.sort()).toEqual([
         "aruna.config.ts",
         "default.project.json",
+        "src/.aruna/node_modules.project.json",
         "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
       ]);
@@ -69,10 +70,18 @@ describe("aruna init", () => {
       ) as {
         tree: {
           ServerScriptService: { TS: { $path: string } };
-          ReplicatedStorage: { TS: { $path: string } };
+          ReplicatedStorage: {
+            TS: { $path: string };
+            rbxts_include: { node_modules: { $path?: string } };
+          };
           StarterPlayer: { StarterPlayerScripts: { TS: { $path: string } } };
         };
       };
+      // node_modules is mounted through the generated nested project, so adding
+      // a Roblox-facing dependency never means editing this file.
+      expect(project.tree.ReplicatedStorage.rbxts_include.node_modules.$path).toBe(
+        "src/.aruna/node_modules.project.json",
+      );
       // The scaffolded project maps the partitioned out/ onto the DataModel:
       // server code is NOT replicated to clients.
       expect(project.tree.ServerScriptService.TS.$path).toBe("out/server");
@@ -92,6 +101,7 @@ describe("aruna init", () => {
       expect(second.skipped.sort()).toEqual([
         "aruna.config.ts",
         "default.project.json",
+        "src/.aruna/node_modules.project.json",
         "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
       ]);

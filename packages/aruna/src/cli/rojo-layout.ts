@@ -604,11 +604,34 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
   }
 }
 
+export type RojoProjectShape = {
+  // Scopes mounted inline next to `@rbxts`. Used by the staged compile, whose
+  // temp root has no generated dir to point a nested project file at.
+  readonly extraNpmScopes?: readonly string[] | undefined;
+  // Project-relative path of the generated nested node_modules project file.
+  // When set it replaces the inline scope list entirely, so the consumer's
+  // project file stops needing an edit per dependency.
+  readonly nodeModulesProject?: string | undefined;
+};
+
 // The Roblox DataModel contract the partitioned `out/` maps onto.
-export function partitionedRojoProject(extraNpmScopes: string[] = []): unknown {
-  const extraNodeModules: Record<string, { $path: string }> = {};
-  for (const scope of extraNpmScopes) {
-    extraNodeModules[scope] = { $path: `node_modules/${scope}` };
+export function partitionedRojoProject(
+  options: readonly string[] | RojoProjectShape = {},
+): unknown {
+  const shape: RojoProjectShape = Array.isArray(options)
+    ? { extraNpmScopes: options }
+    : (options as RojoProjectShape);
+  const nodeModules: Record<string, unknown> =
+    shape.nodeModulesProject !== undefined
+      ? { $path: shape.nodeModulesProject }
+      : {
+          $className: "Folder",
+          "@rbxts": { $path: "node_modules/@rbxts" },
+        };
+  if (shape.nodeModulesProject === undefined) {
+    for (const scope of shape.extraNpmScopes ?? []) {
+      nodeModules[scope] = { $path: `node_modules/${scope}` };
+    }
   }
   return {
     name: "aruna-game",
@@ -623,11 +646,7 @@ export function partitionedRojoProject(extraNpmScopes: string[] = []): unknown {
         $className: "ReplicatedStorage",
         rbxts_include: {
           $path: "include",
-          node_modules: {
-            $className: "Folder",
-            "@rbxts": { $path: "node_modules/@rbxts" },
-            ...extraNodeModules,
-          },
+          node_modules: nodeModules,
         },
         TS: { $path: "out/shared" },
       },

@@ -7,6 +7,11 @@ import {
 } from "./tsconfig-paths.js";
 import { partitionedRojoProject } from "./rojo-layout.js";
 import {
+  NODE_MODULES_PROJECT_FILE,
+  arunaNodeModulesProjectContents,
+  nodeModulesProjectMount,
+} from "./rojo-node-modules.js";
+import {
   ROJO_PROJECT_FILE,
   formatRojoProjectProblem,
   inspectRojoProject,
@@ -100,7 +105,14 @@ function defaultProjectTemplate(): string {
   // onto: server code → ServerScriptService (not replicated), client →
   // StarterPlayerScripts, shared (+ vendored runtime + client stubs) →
   // ReplicatedStorage.
-  return `${JSON.stringify(partitionedRojoProject(), null, 2)}\n`;
+  //
+  // node_modules is mounted through the generated nested project file, so
+  // adding a Roblox-facing dependency never means editing this file.
+  return `${JSON.stringify(
+    partitionedRojoProject({ nodeModulesProject: nodeModulesProjectMount(GENERATED_DIR) }),
+    null,
+    2,
+  )}\n`;
 }
 
 export function runInit(options: InitOptions): InitResult {
@@ -113,6 +125,13 @@ export function runInit(options: InitOptions): InitResult {
     {
       name: fragmentName,
       contents: arunaTsconfigFragmentContents(options.projectRoot, GENERATED_DIR),
+    },
+    // Same reasoning as the tsconfig fragment: the scaffolded Rojo project
+    // mounts it, so an initial copy must exist before the first `aruna build`
+    // regenerates it from node_modules/.
+    {
+      name: path.posix.join(GENERATED_DIR, NODE_MODULES_PROJECT_FILE),
+      contents: arunaNodeModulesProjectContents(options.projectRoot, GENERATED_DIR),
     },
     { name: ROJO_PROJECT_FILE, contents: defaultProjectTemplate() },
   ];
@@ -138,7 +157,7 @@ export function runInit(options: InitOptions): InitResult {
     created,
     overwritten,
     skipped,
-    rojoProject: inspectRojoProject(options.projectRoot),
+    rojoProject: inspectRojoProject(options.projectRoot, undefined, GENERATED_DIR),
   };
 }
 

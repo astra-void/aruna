@@ -36,6 +36,10 @@ import {
   GENERATED_RUNTIME_DIR,
 } from "./tsconfig-paths.js";
 import {
+  NODE_MODULES_PROJECT_FILE,
+  arunaNodeModulesProjectContents,
+} from "./rojo-node-modules.js";
+import {
   collectLayoutDesyncDiagnostics,
   reconcileOwnedArtifacts,
 } from "./owned-artifacts.js";
@@ -435,6 +439,17 @@ async function runBuild(options: BuildCliOptions): Promise<BuildRunResult> {
     "utf8",
   );
   generatedRel.push(ARUNA_TSCONFIG_FRAGMENT_FILE);
+
+  // The generated Rojo node_modules project: the scope list is derived from
+  // what is installed, so adding a Roblox-facing dependency never means editing
+  // default.project.json. Emitted unconditionally — a project that mounts its
+  // node_modules by hand simply never points at this file.
+  await fs.writeFile(
+    path.join(generatedDirAbs, NODE_MODULES_PROJECT_FILE),
+    arunaNodeModulesProjectContents(input.root, generatedDir),
+    "utf8",
+  );
+  generatedRel.push(NODE_MODULES_PROJECT_FILE);
 
   const { pruned } = await reconcileOwnedArtifacts({
     generatedDirAbs,

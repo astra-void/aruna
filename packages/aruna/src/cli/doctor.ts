@@ -397,7 +397,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
       : [createTsconfigDiagnostic(tsconfigPath, tsconfigResult.error)];
   const fragment = inspectFragment(options.projectRoot, generatedDir);
   const toolchain = inspectToolchain(options.projectRoot);
-  const rojoProject = inspectRojoProject(options.projectRoot);
+  const rojoProject = inspectRojoProject(options.projectRoot, undefined, generatedDir);
 
   if (!tsconfigResult.value) {
     return {

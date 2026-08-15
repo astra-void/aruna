@@ -1,5 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  formatNodeModulesMountProblem,
+  inspectNodeModulesMounts,
+  type NodeModulesMountReport,
+} from "./rojo-node-modules.js";
 
 // Inspects the consumer's Rojo project file against the partitioned `out/`
 // contract that `aruna build` emits (see rojo-layout.ts).
@@ -27,6 +32,9 @@ export type RojoProjectReport = {
   present: RojoMount[];
   // Mounts the project never mounts — the code that will not reach the place.
   absent: RojoMount[];
+  // Installed Roblox-facing npm scopes measured against the project's
+  // node_modules mounts. Present only when a generatedDir was supplied.
+  nodeModules?: NodeModulesMountReport | undefined;
   error?: string | undefined;
 };
 
@@ -95,7 +103,13 @@ export function findRojoProjectFile(projectRoot: string): string | undefined {
   return candidates.length === 1 ? candidates[0] : undefined;
 }
 
-export function inspectRojoProject(projectRoot: string, fileName?: string): RojoProjectReport {
+export function inspectRojoProject(
+  projectRoot: string,
+  fileName?: string,
+  // When supplied, the report also measures the node_modules mounts against
+  // the Roblox-facing packages actually installed.
+  generatedDir?: string,
+): RojoProjectReport {
   const resolvedName = fileName ?? findRojoProjectFile(projectRoot);
   if (resolvedName === undefined) {
     return {
@@ -138,14 +152,22 @@ export function inspectRojoProject(projectRoot: string, fileName?: string): Rojo
     status: absent.length === 0 ? "aligned" : "incomplete",
     present: [...present],
     absent: [...absent],
+    ...(generatedDir !== undefined
+      ? { nodeModules: inspectNodeModulesMounts(projectRoot, generatedDir, mountedPaths) }
+      : {}),
   };
 }
 
 // One-line summary plus the actionable detail lines, shared by `aruna init` and
 // `aruna doctor` so both speak with the same voice about the same defect.
 export function formatRojoProjectProblem(report: RojoProjectReport): string[] {
+  // Same failure shape as an unmounted `out/`, one level down: the code
+  // compiles, the place builds, and the require fails at runtime.
+  const nodeModulesProblem = formatNodeModulesMountProblem(
+    report.nodeModules ?? { discovered: [], missing: [], managed: false },
+  );
   if (report.status === "aligned") {
-    return [];
+    return nodeModulesProblem;
   }
   if (report.status === "missing") {
     return [
@@ -177,5 +199,5 @@ export function formatRojoProjectProblem(report: RojoProjectReport): string[] {
     "  yourself — out/server -> ServerScriptService, out/client -> StarterPlayerScripts,",
     "  out/shared + include -> ReplicatedStorage (see `aruna init` output for the shape).",
   );
-  return lines;
+  return [...lines, ...nodeModulesProblem];
 }
