@@ -519,7 +519,11 @@ npm scopes that ship Luau, rebuilt from `node_modules/` on every `aruna build`.
 ```
 
 Adding a Roblox-facing dependency then needs no Rojo edit at all. Build-time-only
-packages (bundlers, theme generators, `@types/*`) ship no Luau and are left out.
+packages (bundlers, theme generators, `@types/*`, `@rbxts/types`) ship no Luau
+and are left out: a scope whose packages all ship Luau is mounted wholesale, and
+a mixed scope is mounted per qualifying package so the rest never reach the
+DataModel. Per-package mounts are named the way Rojo names a scope mount — from
+each package's own project file, so `@lattice-ui/react-dialog` stays `dialog`.
 A project that keeps its own hand-written mounts still works — `aruna doctor`
 reports any installed scope it never mounts, which is otherwise a silent failure:
 every build step exits 0 and the require fails at runtime.
