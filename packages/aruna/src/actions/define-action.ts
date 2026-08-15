@@ -32,9 +32,10 @@ export type PublishingActionDefinition<
   TPlayer,
   TSignals extends SignalRegistry,
   TSession = unknown,
+  TStore = unknown,
 > = Omit<ActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals>, "run"> & {
   run(
-    ctx: PublishingActionRunContext<TPlayer, TSignals, TSession>,
+    ctx: PublishingActionRunContext<TPlayer, TSignals, TSession, TStore>,
     input: ActionSchemaInput<TInputSchema>,
   ): ActionSchemaOutput<TOutputSchema> | Promise<ActionSchemaOutput<TOutputSchema>>;
 };
@@ -59,16 +60,27 @@ export type PublishingActionDefinition<
 //       return undefined;
 //     },
 //   });
+// `TStore` types `ctx.store` against the value your `playerStore` holds — pass
+// the store's value type to get `ctx.store?.get()` typed instead of `unknown`.
+// It stays optional on the ctx by design; see the note on ActionRunContext.
 export function createActionDefiner<
   TSignals extends SignalRegistry,
   TPlayer = unknown,
   TSession = unknown,
+  TStore = unknown,
 >() {
   return function definePublishingAction<
     TInputSchema extends Schema | undefined = undefined,
     TOutputSchema extends Schema | undefined = undefined,
   >(
-    definition: PublishingActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals, TSession>,
+    definition: PublishingActionDefinition<
+      TInputSchema,
+      TOutputSchema,
+      TPlayer,
+      TSignals,
+      TSession,
+      TStore
+    >,
   ): ActionDefinition<TInputSchema, TOutputSchema, TPlayer, TSignals> {
     return definition;
   };

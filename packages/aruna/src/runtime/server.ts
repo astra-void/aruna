@@ -1,5 +1,8 @@
 import { applyDefaults, assertSchema, type Infer, type Schema } from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
+// Type-only, so the store runtime is not pulled into the dispatch module's
+// require graph.
+import type { StoreDocument } from "./player-store.js";
 import type { RemoteSignalPublisher } from "./remote-signal.js";
 import type { SignalRegistry } from "./signal.js";
 import {
@@ -54,6 +57,19 @@ export type ActionRunContext<
   // definer from `createActionDefiner<TSignals, TPlayer, TSession>` for a
   // non-optional, typed one.
   readonly session?: TSession;
+  // The calling player's open store document, injected by `createServerApp` when
+  // it owns a `playerStore`. Stays optional even under the typed definer, and
+  // deliberately so: a document is absent while the load is still in flight, and
+  // after a load failure there is no trustworthy value to hand out. An action
+  // that persists state has to decide what to do when the save file is not
+  // there, rather than being handed a default that would overwrite it.
+  //
+  // Carried value-erased (`unknown`) for the same reason `publisher` is carried
+  // player-erased: `StoreDocument<T>` is invariant in T (it both returns and
+  // accepts one), so binding it here would stop an `unknown`-store action from
+  // being assignable into a typed app's registry. The precise value type lives on
+  // `PublishingActionRunContext` via the definer.
+  readonly store?: StoreDocument<unknown>;
 };
 
 // Like ActionRunContext but with `publisher` and `session` guaranteed present and
@@ -66,9 +82,13 @@ export type PublishingActionRunContext<
   TPlayer,
   TSignals extends SignalRegistry,
   TSession = unknown,
+  TStore = unknown,
 > = ActionRunContext<TPlayer, TSignals, TSession> & {
   readonly publisher: RemoteSignalPublisher<TSignals, TPlayer>;
   readonly session: TSession;
+  // Narrows the erased `store` from the base context to the value your player
+  // store holds. Still optional: the document may not be loaded yet.
+  readonly store?: StoreDocument<TStore>;
 };
 
 export type ActionSchemaInput<TSchema extends Schema | undefined> = [TSchema] extends [Schema]
@@ -158,6 +178,10 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   // `ctx.session`. Supplied by `createServerApp` from its per-player session
   // store; dispatch only reads it. Returns undefined when the player has none.
   readonly getSession?: (player: TPlayer) => unknown;
+  // Resolves the calling player's open store document, injected as `ctx.store`.
+  // Supplied by `createServerApp` from its `playerStore`. Returns undefined
+  // while the load is still in flight or after the document was released.
+  readonly getStore?: (player: TPlayer) => StoreDocument<unknown> | undefined;
   // Applied outermost-first around every action's execution.
   readonly middleware?: readonly ActionMiddleware<TPlayer>[];
   readonly onError?: ActionErrorHandler<TPlayer>;
@@ -228,22 +252,28 @@ export async function dispatchAction<TPlayer = unknown>(
     }
   }
 
-  // Inject the app-owned publisher and the per-player session into the ctx so
-  // `run` sees `ctx.publisher` / `ctx.session`. Each is filled only when the
-  // caller did not already supply one — a custom `createContext` always wins —
-  // and both are merged in a single spread to avoid cloning the ctx twice.
+  // Inject the app-owned publisher, the per-player session, and the player's
+  // open store document into the ctx so `run` sees `ctx.publisher` /
+  // `ctx.session` / `ctx.store`. Each is filled only when the caller did not
+  // already supply one — a custom `createContext` always wins — and all are
+  // merged in a single spread to avoid cloning the ctx more than once.
   const injectedPublisher =
     options?.publisher !== undefined && ctx.publisher === undefined ? options.publisher : undefined;
   const injectedSession =
     options?.getSession !== undefined && ctx.session === undefined
       ? options.getSession(ctx.player)
       : undefined;
+  const injectedStore =
+    options?.getStore !== undefined && ctx.store === undefined
+      ? options.getStore(ctx.player)
+      : undefined;
   const runCtx =
-    injectedPublisher !== undefined || injectedSession !== undefined
+    injectedPublisher !== undefined || injectedSession !== undefined || injectedStore !== undefined
       ? {
           ...ctx,
           ...(injectedPublisher !== undefined ? { publisher: injectedPublisher } : {}),
           ...(injectedSession !== undefined ? { session: injectedSession } : {}),
+          ...(injectedStore !== undefined ? { store: injectedStore } : {}),
         }
       : ctx;
 

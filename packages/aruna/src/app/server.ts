@@ -11,6 +11,7 @@ import {
 } from "../runtime/server.js";
 import { createActionRateLimiter } from "../runtime/rate-limit.js";
 import { normalizeServerBinding, type ServerBinding } from "../runtime/binding.js";
+import type { AnyPlayerStore, StoreDocument } from "../runtime/player-store.js";
 import type { RemoteSignalPublisher } from "../runtime/remote-signal.js";
 import type { SignalRegistry } from "../runtime/signal.js";
 
@@ -68,6 +69,10 @@ export type ServerApp<
   // eagerly so the signal remote exists at boot — call `publisher.toAll(...)`
   // etc. directly, no plumbing module required.
   readonly publisher?: RemoteSignalPublisher<TSignals, TPlayer>;
+  // Present when a `playerStore` was supplied. The app drives its lifecycle
+  // (load on join, release on leave); this handle is for everything else —
+  // `saveAll()` from a shutdown hook, or reading a document outside an action.
+  readonly playerStore?: AnyPlayerStore<TPlayer>;
   // Disposes the owned transport binding (no-op when no `transport` was given).
   readonly dispose: () => void;
 };
@@ -108,6 +113,15 @@ export type CreateServerAppOptions<
   // session is dropped after `onPlayerRemoving`. Pair with
   // `createActionDefiner<TSignals, TPlayer, TSession>` for a typed `ctx.session`.
   readonly createSession?: (player: TPlayer) => TSession;
+  // A session-locked player store (`createPlayerStore`) the app owns. On join it
+  // acquires the lock and opens the player's document; on leave it flushes and
+  // releases. Every action then sees the open document as `ctx.store`.
+  //
+  // The load is asynchronous — it is a locked DataStore read — so `ctx.store` is
+  // undefined for actions that arrive before it lands, and stays undefined when
+  // the load failed. That is deliberate: the alternative is handing out a
+  // default value that the next save would write over a real record.
+  readonly playerStore?: AnyPlayerStore<TPlayer>;
   // Called when a player joins (`players.PlayerAdded`), and once at boot for
   // every player already present. Receives the freshly-created session (undefined
   // when no `createSession` is configured). The app owns the connection.
@@ -155,6 +169,7 @@ export function createServerApp<
   // (and boot backfill) and drained on leave; read by dispatch via `getSession`.
   const sessions = new Map<TPlayer, TSession>();
   const createSession = options.createSession;
+  const playerStore = options.playerStore;
 
   // Build the publisher eagerly so the signal remote is created at boot. This
   // closes the boot-order gap where a client could `WaitForChild` the signal
@@ -181,6 +196,16 @@ export function createServerApp<
     ...(createSession !== undefined
       ? { getSession: (player: TPlayer) => sessions.get(player) }
       : {}),
+    ...(playerStore !== undefined
+      ? {
+          // Both sides are the same erasure of an invariant type, so neither is
+          // assignable to the other even though the object is identical. The
+          // action ctx spells it `StoreDocument<unknown>`; the cast is where the
+          // two spellings meet, and dispatch only forwards the document.
+          getStore: (player: TPlayer): StoreDocument<unknown> | undefined =>
+            playerStore.get(player) as StoreDocument<unknown> | undefined,
+        }
+      : {}),
     ...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
     ...(options.onError !== undefined ? { onError: options.onError } : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
@@ -199,14 +224,22 @@ export function createServerApp<
   // wants to observe the join; session creation precedes the hook. The leave
   // handler runs when the hook wants it or a session must be dropped to avoid
   // leaking a store entry for a departed player.
-  const needsAddedHandling = createSession !== undefined || onPlayerAdded !== undefined;
-  const needsRemovingHandling = onPlayerRemoving !== undefined || createSession !== undefined;
+  const needsAddedHandling =
+    createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
+  const needsRemovingHandling =
+    onPlayerRemoving !== undefined || createSession !== undefined || playerStore !== undefined;
 
   const handlePlayerAdded = (player: TPlayer): void => {
     let session: TSession | undefined;
     if (createSession !== undefined) {
       session = createSession(player);
       sessions.set(player, session);
+    }
+    // Kicked off, not awaited: the join handler must not block on a DataStore
+    // round trip. The store reports its own failures through `onLoadFailed`, and
+    // `ctx.store` stays undefined until the document lands.
+    if (playerStore !== undefined) {
+      void playerStore.load(player);
     }
     if (onPlayerAdded !== undefined) {
       onPlayerAdded(player, session as TSession);
@@ -216,6 +249,11 @@ export function createServerApp<
   const handlePlayerRemoving = (player: TPlayer): void => {
     if (onPlayerRemoving !== undefined) {
       onPlayerRemoving(player, sessions.get(player));
+    }
+    // After the user hook, so a last write from `onPlayerRemoving` is included
+    // in the final flush rather than racing the release.
+    if (playerStore !== undefined) {
+      void playerStore.release(player);
     }
     sessions.delete(player);
   };
@@ -244,6 +282,7 @@ export function createServerApp<
     },
     ...(transportBinding !== undefined ? { binding: transportBinding } : {}),
     ...(publisher !== undefined ? { publisher } : {}),
+    ...(playerStore !== undefined ? { playerStore } : {}),
     dispose() {
       transportBinding?.dispose();
       playerAddedConnection?.Disconnect();

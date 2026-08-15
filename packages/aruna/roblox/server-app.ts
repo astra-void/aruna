@@ -9,6 +9,7 @@ import {
 	type ActionRegistryOptions,
 } from "./server-runtime";
 import type { ActionRateLimitOptions } from "./server";
+import type { AnyPlayerStore, StoreDocument } from "./player-store";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 
 export interface ServerAppBinding {
@@ -46,6 +47,11 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// Present when both `signals` and `createPublisher` were supplied. Built
 	// eagerly so the signal remote exists at boot.
 	readonly publisher?: SignalPublisher<TSignals, TPlayer>;
+	// Present when a `playerStore` was supplied. The app drives its lifecycle
+	// (load on join, flush and release on leave and at shutdown); this handle is
+	// for everything else — reading a document outside an action, or an extra
+	// `saveAll()` around a risky operation.
+	readonly playerStore?: AnyPlayerStore<TPlayer>;
 	// Disposes the owned transport binding (no-op when no `transport` was given).
 	readonly dispose: () => void;
 }
@@ -83,6 +89,19 @@ export interface CreateServerAppOptions<
 	// `onPlayerRemoving`. Pair with `createActionDefiner<TSignals, TPlayer,
 	// TSession>` for a typed, non-optional `ctx.session`.
 	readonly createSession?: (player: TPlayer) => TSession;
+	// A session-locked player store (`createPlayerStore`) the app owns. On join it
+	// acquires the lock and opens the player's document; on leave it flushes and
+	// releases; at shutdown `BindToClose` flushes everything still held. Every
+	// action then sees the open document as `ctx.store`.
+	//
+	// The load is asynchronous — it is a locked DataStore read — so `ctx.store` is
+	// undefined for actions that arrive before it lands, and stays undefined when
+	// the load failed. That is deliberate: the alternative is handing out a
+	// default value that the next save would write over a real record.
+	readonly playerStore?: AnyPlayerStore<TPlayer>;
+	// Seconds to spend flushing held documents during BindToClose. Roblox allows
+	// 30; the default leaves headroom for the rest of your shutdown work.
+	readonly shutdownTimeoutSeconds?: number;
 	// Called when a player joins (Players.PlayerAdded), and once at boot for every
 	// player already present. Receives the freshly-created session (undefined when
 	// no `createSession` is configured). The app owns the connection (disconnected
@@ -111,6 +130,7 @@ export function createServerApp<
 	// (and boot backfill) and drained on leave; read by dispatch via `getSession`.
 	const sessions = new Map<TPlayer, TSession>();
 	const createSession = options.createSession;
+	const playerStore = options.playerStore;
 
 	const registryOptions: ActionRegistryOptions<TPlayer> = {
 		...(options.defaultRateLimit !== undefined
@@ -122,6 +142,17 @@ export function createServerApp<
 			? { publisher: publisher as unknown as SignalPublisher<SignalMap, unknown> }
 			: {}),
 		...(createSession !== undefined ? { getSession: (player: TPlayer) => sessions.get(player) } : {}),
+		...(playerStore !== undefined
+			? {
+					// Both sides are the same erasure of an invariant type, so
+					// neither is assignable to the other even though the object is
+					// identical. The action ctx spells it `StoreDocument<unknown>`;
+					// the cast is where the two spellings meet, and dispatch only
+					// forwards the document.
+					getStore: (player: TPlayer): StoreDocument<unknown> | undefined =>
+						playerStore.get(player) as StoreDocument<unknown> | undefined,
+				}
+			: {}),
 		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
 		...(options.onError !== undefined ? { onError: options.onError } : {}),
 	};
@@ -133,16 +164,24 @@ export function createServerApp<
 	const onPlayerRemoving = options.onPlayerRemoving;
 	// The join handler runs when either a session must be created or `onPlayerAdded`
 	// wants to observe the join. Session creation precedes the hook.
-	const needsAddedHandling = createSession !== undefined || onPlayerAdded !== undefined;
+	const needsAddedHandling =
+		createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
 	// The leave handler runs when either the hook wants it or a session must be
 	// dropped to avoid leaking a store entry for a departed player.
-	const needsRemovingHandling = onPlayerRemoving !== undefined || createSession !== undefined;
+	const needsRemovingHandling =
+		onPlayerRemoving !== undefined || createSession !== undefined || playerStore !== undefined;
 
 	const handlePlayerAdded = (player: TPlayer): void => {
 		let session: TSession | undefined;
 		if (createSession !== undefined) {
 			session = createSession(player);
 			sessions.set(player, session);
+		}
+		// Started, not waited on: the join handler must not block on a locked
+		// DataStore read. The store reports its own failures through `onLoadFailed`,
+		// and `ctx.store` stays undefined until the document lands.
+		if (playerStore !== undefined) {
+			playerStore.load(player);
 		}
 		if (onPlayerAdded !== undefined) {
 			onPlayerAdded(player, session as TSession);
@@ -152,6 +191,11 @@ export function createServerApp<
 	const handlePlayerRemoving = (player: TPlayer): void => {
 		if (onPlayerRemoving !== undefined) {
 			onPlayerRemoving(player, sessions.get(player));
+		}
+		// After the user hook, so a last write from `onPlayerRemoving` is included
+		// in the final flush rather than racing the release.
+		if (playerStore !== undefined) {
+			playerStore.release(player);
 		}
 		sessions.delete(player);
 	};
@@ -176,6 +220,26 @@ export function createServerApp<
 		}
 	}
 
+	// Shutdown flush. Roblox gives BindToClose about 30 seconds and expects the
+	// callback to yield until it is done, so this waits on a plain flag rather
+	// than the promise — the release chain resolves on its own threads. Documents
+	// that do not finish in time keep their lock, and the next server takes it
+	// over once the TTL lapses; that is the safe end of the trade.
+	if (playerStore !== undefined) {
+		const timeoutSeconds =
+			options.shutdownTimeoutSeconds !== undefined ? options.shutdownTimeoutSeconds : 20;
+		game.BindToClose(() => {
+			let finished = false;
+			playerStore.releaseAll().then(() => {
+				finished = true;
+			});
+			const deadline = os.clock() + timeoutSeconds;
+			while (!finished && os.clock() < deadline) {
+				task.wait(0.1);
+			}
+		});
+	}
+
 	return {
 		actions: options.actions,
 		dispatch: (actionId, ctx, input) =>
@@ -194,6 +258,7 @@ export function createServerApp<
 			}),
 		...(binding !== undefined ? { binding } : {}),
 		...(publisher !== undefined ? { publisher } : {}),
+		...(playerStore !== undefined ? { playerStore } : {}),
 		dispose: () => {
 			if (binding !== undefined) {
 				binding.disconnect();

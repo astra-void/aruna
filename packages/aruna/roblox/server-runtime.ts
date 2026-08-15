@@ -1,6 +1,7 @@
 // Aruna roblox-ts native runtime — server action registry and dispatch.
 
 import type { ActionContext, ActionDefinition, ActionRateLimitOptions } from "./server";
+import type { StoreDocument } from "./player-store";
 import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
@@ -73,6 +74,10 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// store; dispatch only reads it. Returns undefined when the player has no
 	// session (no `createSession` configured, or not yet added).
 	readonly getSession?: (player: TPlayer) => unknown;
+	// Resolves the calling player's open store document, injected as `ctx.store`.
+	// Supplied by `createServerApp` from its `playerStore`. Returns undefined
+	// while the locked read is in flight or after the document was released.
+	readonly getStore?: (player: TPlayer) => StoreDocument<unknown> | undefined;
 	// Around-run middleware, applied outermost-first to every action.
 	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
 	readonly onError?: ActionErrorHandler<TPlayer>;
@@ -92,6 +97,7 @@ export function createActionRegistry<TPlayer>(
 	const defaultRateLimit = options?.defaultRateLimit;
 	const publisher = options?.publisher;
 	const getSession = options?.getSession;
+	const getStore = options?.getStore;
 	const middleware = options?.middleware;
 	const onError = options?.onError;
 	const rateLimiter = createActionRateLimiter();
@@ -163,6 +169,12 @@ export function createActionRegistry<TPlayer>(
 					const session = getSession(player);
 					if (session !== undefined) {
 						(context as { session?: unknown }).session = session;
+					}
+				}
+				if (getStore !== undefined) {
+					const document = getStore(player);
+					if (document !== undefined) {
+						(context as { store?: StoreDocument<unknown> }).store = document;
 					}
 				}
 

@@ -30,6 +30,13 @@ export { defineSignal } from "./signal";
 // `createActionDefiner` (Player-defaulting) is shared with the `aruna/server`
 // surface so a registry-typed `ctx.publisher` is available from either import.
 export { createActionDefiner } from "./server";
+// Store definitions are identical on both surfaces; `definePlayerStore` already
+// defaults its player to `Player`.
+export { defineStore, definePlayerStore } from "./define-store";
+// The DataStoreService adapter. Roblox-only by nature — the reference runtime
+// has no DataStore to talk to — so it lives on this entry rather than
+// `aruna/server`, alongside the RemoteEvent transport.
+export * from "./datastore";
 
 export function defineAction<
 	TInput extends Schema | undefined = undefined,

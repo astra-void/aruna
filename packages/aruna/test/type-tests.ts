@@ -8,6 +8,7 @@ import {
   type DisposableActionInvoker,
   type RemoteEventClientLike,
 } from "../src/roblox.js";
+import { createPlayerStore } from "../src/server.js";
 import { createServerApp } from "../src/server.js";
 import { defineAction } from "../src/server.js";
 import { createActionDefiner, defineSignal } from "../src/server.js";
@@ -299,3 +300,21 @@ defineAction({
     return undefined;
   },
 });
+
+// Gap 3: an app that owns a player store. `createServerApp` names the store
+// with its schema erased, so a concretely-typed `PlayerStore` must flow into
+// `playerStore` without a cast, and `app.playerStore` must come back usable.
+const profileSchemaForTypes = schema.object({ coins: schema.number() });
+
+const playerStoreForTypes = createPlayerStore<typeof profileSchemaForTypes, string>({
+  id: "player.profile",
+  schema: profileSchemaForTypes,
+  defaultValue: { coins: 0 },
+});
+
+const appWithPlayerStore = createServerApp<string>({
+  actions: {},
+  playerStore: playerStoreForTypes,
+});
+
+void appWithPlayerStore.playerStore?.saveAll();

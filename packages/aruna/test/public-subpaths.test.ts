@@ -47,14 +47,21 @@ function resolveRelativeImports(filePath: string, contents: string): string[] {
   );
   const specifiers: string[] = [];
 
+  // Only a call whose callee is the `import` keyword is a module specifier.
+  // Matching every call expression treats any first string argument beginning
+  // with "." as an import — `parts.join(".")` and friends included — which
+  // resolves to a directory and makes the walk read one.
+  const isDynamicImport = (node: ts.Node): node is ts.CallExpression =>
+    ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword;
+
   const visit = (node: ts.Node): void => {
     if (
       ts.isImportDeclaration(node) ||
       ts.isExportDeclaration(node) ||
-      ts.isCallExpression(node) ||
+      isDynamicImport(node) ||
       ts.isImportTypeNode(node)
     ) {
-      const maybeSpecifier = ts.isCallExpression(node)
+      const maybeSpecifier = isDynamicImport(node)
         ? node.arguments[0]
         : ts.isImportTypeNode(node)
           ? node.argument

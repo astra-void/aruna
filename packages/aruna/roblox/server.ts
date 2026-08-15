@@ -2,6 +2,7 @@
 
 import type { Infer, Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
+import type { StoreDocument } from "./player-store";
 
 // defineSignal lives alongside defineAction on the `aruna/server` surface so
 // signal definitions import from the same entry as actions (mirrors the Node
@@ -31,6 +32,18 @@ export interface ActionContext<
 	// session factory is configured. Optional on the base context; use
 	// `createActionDefiner<TSignals, TPlayer, TSession>` for a non-optional, typed one.
 	readonly session?: TSession;
+	// The calling player's open store document, injected by `createServerApp` when
+	// it owns a `playerStore`. Stays optional even under the typed definer, and
+	// deliberately so: the document is absent while the locked read is still in
+	// flight, and after a failed load there is no trustworthy value to hand out.
+	// An action that persists state has to decide what to do when the save file is
+	// missing, rather than being handed a default that would overwrite it.
+	//
+	// Carried value-erased for the same reason `publisher` is player-erased:
+	// `StoreDocument<T>` is invariant in T (it both returns and accepts one), so
+	// binding it here would stop an untyped action from being assignable into a
+	// typed app's registry. The precise type lives on `PublishingActionContext`.
+	readonly store?: StoreDocument<unknown>;
 }
 
 // Like ActionContext but with `publisher` and `session` guaranteed present and
@@ -42,9 +55,13 @@ export type PublishingActionContext<
 	TPlayer,
 	TSignals extends SignalMap,
 	TSession = unknown,
+	TStore = unknown,
 > = ActionContext<TPlayer, TSignals, TSession> & {
 	readonly publisher: SignalPublisher<TSignals, TPlayer>;
 	readonly session: TSession;
+	// Narrows the erased `store` from the base context to the value your player
+	// store holds. Still optional: the document may not be loaded yet.
+	readonly store?: StoreDocument<TStore>;
 };
 
 // What a custom rate-limit key function receives about the throttled call. The
@@ -102,9 +119,10 @@ export type PublishingActionDefinition<
 	TPlayer,
 	TSignals extends SignalMap,
 	TSession = unknown,
+	TStore = unknown,
 > = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals>, "run"> & {
 	run(
-		context: PublishingActionContext<TPlayer, TSignals, TSession>,
+		context: PublishingActionContext<TPlayer, TSignals, TSession, TStore>,
 		input: InferInput<TInput>,
 	): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
@@ -125,11 +143,19 @@ export function defineAction<
 // payloads — and present without a `?`. The publisher is still injected by
 // `createServerApp`; this is pure typing sugar, no runtime state. Mirrors the
 // Node reference runtime's `createActionDefiner`.
-export function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown>() {
+// `TStore` types `ctx.store` against the value your player store holds — pass
+// the store's value type to get `ctx.store?.get()` typed instead of `unknown`.
+// It stays optional on the ctx by design; see the note on ActionContext.
+export function createActionDefiner<
+	TSignals extends SignalMap,
+	TPlayer = Player,
+	TSession = unknown,
+	TStore = unknown,
+>() {
 	// Anonymous arrow (not a named function expression): roblox-ts rejects named
 	// function expressions, and this runtime is compiled to Luau by rbxtsc.
 	return <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined>(
-		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession>,
+		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore>,
 	): ActionDefinition<TInput, TOutput, TPlayer, TSignals> => definition;
 }
 
@@ -138,3 +164,7 @@ export function createActionDefiner<TSignals extends SignalMap, TPlayer = Player
 // no cycle.
 export * from "./server-runtime";
 export * from "./server-app";
+// Persistence: the safe DataStore core and the session-locked player document.
+export * from "./define-store";
+export * from "./store";
+export * from "./player-store";

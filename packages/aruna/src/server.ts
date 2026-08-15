@@ -3,6 +3,10 @@
 // the former /server, /server-app, and /server-runtime entry points.
 export * from "./actions/define-action.js";
 export * from "./signals/define-signal.js";
+export * from "./stores/define-store.js";
 export * from "./app/server.js";
 export * from "./runtime/server.js";
 export * from "./runtime/serialization.js";
+// Persistence: the safe DataStore core and the session-locked player document.
+export * from "./runtime/store.js";
+export * from "./runtime/player-store.js";

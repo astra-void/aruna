@@ -49,6 +49,10 @@ local function makeLoader(runtimeDirs, promisePath, fakes)
 			UDim = roblox.UDim,
 			UDim2 = roblox.UDim2,
 			BrickColor = roblox.BrickColor,
+			-- Store-side globals: a settable clock and the DataStore request-type
+			-- enum the backend reads when it checks the request budget.
+			DateTime = fakes.DateTime,
+			Enum = fakes.Enum,
 			-- The Promise library warns on unhandled rejections; the dispatch
 			-- path intentionally swallows rejections into result payloads, so
 			-- keep the test output clean.

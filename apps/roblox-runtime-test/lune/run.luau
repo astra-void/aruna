@@ -31,6 +31,7 @@ require("./specs/server-app")(ctx)
 require("./specs/transport")(ctx)
 require("./specs/binary")(ctx)
 require("./specs/signal")(ctx)
+require("./specs/store")(ctx)
 
 local failed = framework.finish()
 if failed > 0 then
