@@ -172,6 +172,7 @@ export function formatModuleInspection(
     server: [],
     serverEntry: [],
     serverAction: [],
+    serverStore: [],
     shared: [],
     unknown: [],
   };
@@ -192,6 +193,7 @@ export function formatModuleInspection(
     "server",
     "serverEntry",
     "serverAction",
+    "serverStore",
     "shared",
     "unknown",
   ] as const) {

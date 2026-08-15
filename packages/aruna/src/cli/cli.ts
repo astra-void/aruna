@@ -25,6 +25,7 @@ import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { formatInitReport, runInit } from "./init.js";
 import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
 import { buildSignalInspectionReport, formatSignalInspection } from "./inspect-signals.js";
+import { buildStoreInspectionReport, formatStoreInspection } from "./inspect-stores.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
@@ -749,6 +750,29 @@ export async function main(): Promise<number> {
 
       const colors = resolveColorMode(options);
       writeText(formatSignalInspection(output, colors));
+      if (!options.quiet && output.diagnostics.length > 0) {
+        const diagnostics = formatDiagnostics(output, colors);
+        if (diagnostics.length > 0) {
+          writeText(diagnostics);
+        }
+      }
+      process.exitCode = output.ok ? 0 : 1;
+    });
+
+  inspect
+    .command("stores")
+    .description("show discovered stores and their persisted shape")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const output = await runInspect(options);
+      if (options.json) {
+        writeJson(buildStoreInspectionReport(output));
+        process.exitCode = output.ok ? 0 : 1;
+        return;
+      }
+
+      const colors = resolveColorMode(options);
+      writeText(formatStoreInspection(output, colors));
       if (!options.quiet && output.diagnostics.length > 0) {
         const diagnostics = formatDiagnostics(output, colors);
         if (diagnostics.length > 0) {

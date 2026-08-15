@@ -66,6 +66,10 @@ export function layoutTargetFor(
     case "server":
     case "serverEntry":
     case "serverAction":
+    // A store module holds the DataStore name and the persistence code. It is
+    // server-only for the same reason an action source is: landing it in the
+    // shared partition would replicate it to every client.
+    case "serverStore":
       return "server";
     default:
       return "shared";
@@ -480,14 +484,15 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
     // bare "{dir}/*" import needs an alias to bridge the extra target prefix.
     //
     // Only "canonical" kinds (client/server/shared) define these aliases —
-    // serverAction modules live in a different partition and are accessed via
-    // the generated action registry, not bare baseUrl imports. Including them
-    // would map "shared/*" → "src/server/shared/*", breaking cross-partition
-    // imports of plain shared utilities like "shared/constants".
+    // serverAction and serverStore modules are directive-classified and can sit
+    // anywhere in the source tree, so a `{prefix}/*` alias derived from one would
+    // map that whole prefix into the server partition. That would break
+    // cross-partition imports of plain shared utilities living under the same
+    // prefix (e.g. "domains/*" holding both a store and a shared model).
     const baseUrlAliases: Record<string, string[]> = {};
     const genDirPrefix = `src/${generatedDirRel}/`;
     for (const { record, target } of records) {
-      if (record.kind === "serverAction") continue;
+      if (record.kind === "serverAction" || record.kind === "serverStore") continue;
       const recordPath = toPosix(record.path);
       if (recordPath.startsWith(genDirPrefix)) continue;
       const sourceRel = recordPath.replace(/^src\//, "");

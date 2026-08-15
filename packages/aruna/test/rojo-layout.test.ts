@@ -23,6 +23,14 @@ describe("layoutTargetFor", () => {
     expect(layoutTargetFor("src/domains/shop/schema.ts", "shared", ".aruna")).toBe("shared");
   });
 
+  it("keeps store modules out of the replicated partition", () => {
+    // A store module carries the DataStore name and the persistence code. In
+    // the shared partition it would be replicated to every client, which the
+    // import-level boundary rules cannot catch — nothing has to import it for
+    // the file itself to ship.
+    expect(layoutTargetFor("src/domains/economy/store.ts", "serverStore", ".aruna")).toBe("server");
+  });
+
   it("keeps the server action registry server-side and other generated files shared", () => {
     // The server stub imports server implementations — it must NOT be replicated.
     expect(layoutTargetFor("src/.aruna/actions.server.generated.ts", "serverAction", ".aruna")).toBe(
