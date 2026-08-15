@@ -131,6 +131,14 @@ pub struct ConventionConfig {
     pub shared: Vec<String>,
 }
 
+impl ConventionConfig {
+    // No convention at all was supplied, so the built-in Recommended Layout set
+    // applies. Deliberately not per-kind: see `convention_patterns`.
+    pub fn is_empty(&self) -> bool {
+        self.client.is_empty() && self.server.is_empty() && self.shared.is_empty()
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaConfig {
@@ -146,8 +154,14 @@ pub struct ArunaConfig {
     pub compiler: CompilerConfig,
     #[serde(default)]
     pub actions: ActionsConfig,
+    // The effective convention set: built-in defaults merged with the project's
+    // own globs (unless it opted out via `conventions.defaults: false`).
     #[serde(default)]
     pub conventions: ConventionConfig,
+    // Just the project's own globs, which outrank the defaults inside
+    // `conventions`. See `classify_with_overrides`.
+    #[serde(default)]
+    pub convention_overrides: ConventionConfig,
     #[serde(default)]
     pub strict: StrictConfig,
 }
@@ -174,6 +188,7 @@ impl Default for ArunaConfig {
             compiler: CompilerConfig::default(),
             actions: ActionsConfig::default(),
             conventions: ConventionConfig::default(),
+            convention_overrides: ConventionConfig::default(),
             strict: StrictConfig::default(),
         }
     }

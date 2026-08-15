@@ -53,6 +53,7 @@ type MutableActionsConfig = {
 };
 
 type MutableConventionConfig = {
+  defaults?: boolean;
   client?: string[];
   server?: string[];
   shared?: string[];
@@ -90,14 +91,34 @@ const DIAGNOSTIC_META: Record<
 // Recommended Layout v0 defaults; must stay in sync with
 // `ConventionSet::for_root` in crates/aruna_compiler/src/module_kind.rs.
 // Directory conventions beat file-name conventions when they disagree.
+//
+// `**/signals.ts` is shared for a structural reason, not a stylistic one: the
+// generated signal registry is emitted into the shared partition and imports
+// each definition from the file that declared it, so a signal declared in a
+// server-classified file cannot resolve from the client.
 function defaultConventionsForRoot(
   root: string,
 ): Required<Pick<NormalizedConfig["conventions"], "client" | "server" | "shared">> {
   return {
     client: ["**/client/**", "**/ui.tsx"],
     server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
-    shared: ["**/shared/**", `${root}/app/**`, "**/schema.ts", "**/model.ts"],
+    shared: ["**/shared/**", `${root}/app/**`, "**/schema.ts", "**/model.ts", "**/signals.ts"],
   };
+}
+
+// User conventions extend the defaults instead of replacing them: supplying one
+// extra glob used to silently drop every default in that kind, which is the
+// single most repeated shape in real aruna.config.ts files (restating 8+ globs
+// to add one). `conventions.defaults: false` restores replace semantics.
+function resolveConventionPatterns(
+  defaults: readonly string[],
+  overrides: readonly string[] | undefined,
+  useDefaults: boolean,
+): string[] {
+  if (!useDefaults) {
+    return [...(overrides ?? [])];
+  }
+  return [...new Set([...defaults, ...(overrides ?? [])])];
 }
 
 const DEFAULT_ROOT = "src";
@@ -170,10 +191,9 @@ function flatConfigSuggestion(): string {
     "      max: 20,",
     "    },",
     "  },",
+    "  // Only the globs the built-in conventions do not already cover.",
     "  conventions: {",
-    '    client: ["src/client.tsx", "src/domains/**/ui.tsx"],',
-    '    server: ["src/server.ts", "src/domains/**/actions.ts"],',
-    '    shared: ["src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],',
+    '    shared: ["src/domains/**/policy.ts"],',
     "  },",
     "  strict: {",
     "    sharedSafety: true,",
@@ -239,6 +259,7 @@ function mergeConventionConfig(
   return {
     ...base,
     ...override,
+    defaults: override?.defaults ?? base?.defaults,
     client: mergeStringArray(base?.client, override?.client),
     server: mergeStringArray(base?.server, override?.server),
     shared: mergeStringArray(base?.shared, override?.shared),
@@ -490,11 +511,18 @@ function normalizeConfigObject(value: unknown): {
     } else {
       validateUnsupportedKeys(
         conventionsValue,
-        ["client", "server", "shared"],
+        ["defaults", "client", "server", "shared"],
         diagnostics,
         "conventions",
       );
       const conventions: MutableConventionConfig = {};
+      if (conventionsValue["defaults"] !== undefined) {
+        if (typeof conventionsValue["defaults"] !== "boolean") {
+          diagnostics.push("conventions.defaults must be a boolean");
+        } else {
+          conventions.defaults = conventionsValue["defaults"];
+        }
+      }
       for (const key of ["client", "server", "shared"] as const) {
         const conventionValue = conventionsValue[key];
         if (conventionValue !== undefined) {
@@ -608,6 +636,7 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       ? config.compiler.manifest
       : (config.compiler?.manifest?.output ?? `${generatedDir}/manifest.json`);
   const defaultRateLimit = config.actions?.defaultRateLimit ?? DEFAULT_RATE_LIMIT;
+  const useConventionDefaults = config.conventions?.defaults ?? true;
 
   return {
     root,
@@ -625,15 +654,29 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       },
     },
     conventions: {
-      client: mergeStringArray(defaultConventions.client, config.conventions?.client) ?? [
-        ...defaultConventions.client,
-      ],
-      server: mergeStringArray(defaultConventions.server, config.conventions?.server) ?? [
-        ...defaultConventions.server,
-      ],
-      shared: mergeStringArray(defaultConventions.shared, config.conventions?.shared) ?? [
-        ...defaultConventions.shared,
-      ],
+      client: resolveConventionPatterns(
+        defaultConventions.client,
+        config.conventions?.client,
+        useConventionDefaults,
+      ),
+      server: resolveConventionPatterns(
+        defaultConventions.server,
+        config.conventions?.server,
+        useConventionDefaults,
+      ),
+      shared: resolveConventionPatterns(
+        defaultConventions.shared,
+        config.conventions?.shared,
+        useConventionDefaults,
+      ),
+    },
+    // The project's own globs, kept apart from the merged set so the compiler
+    // can let them outrank the defaults instead of competing with them on
+    // pattern shape alone.
+    conventionOverrides: {
+      client: [...(config.conventions?.client ?? [])],
+      server: [...(config.conventions?.server ?? [])],
+      shared: [...(config.conventions?.shared ?? [])],
     },
     strict: {
       sharedSafety: config.strict?.sharedSafety ?? true,

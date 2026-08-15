@@ -11,7 +11,7 @@
       "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
       "name": "invalid-config",
       "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  conventions: {\n    client: [\"src/client.tsx\", \"src/domains/**/ui.tsx\"],\n    server: [\"src/server.ts\", \"src/domains/**/actions.ts\"],\n    shared: [\"src/shared/**\", \"src/domains/**/schema.ts\", \"src/domains/**/model.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
     }
   ]
 }

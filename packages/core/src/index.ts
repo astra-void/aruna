@@ -176,7 +176,12 @@ export type ActionsConfig = {
   readonly defaultRateLimit?: NonNullable<ActionRecord["rateLimit"]> | undefined;
 };
 
+// Classification globs. The arrays *extend* the built-in Recommended Layout
+// defaults rather than replacing them, so a project that only needs one extra
+// pattern writes exactly that one pattern. `defaults: false` opts out of the
+// built-in set entirely and makes the arrays the whole convention set.
 export type ConventionConfig = {
+  readonly defaults?: boolean | undefined;
   readonly client?: readonly string[] | undefined;
   readonly server?: readonly string[] | undefined;
   readonly shared?: readonly string[] | undefined;
@@ -225,7 +230,16 @@ export type NormalizedConfig = {
   readonly actions: {
     readonly defaultRateLimit: NonNullable<ActionsConfig["defaultRateLimit"]>;
   };
+  // The effective set: built-in defaults merged with the project's globs
+  // (unless `conventions.defaults: false` opted the defaults out).
   readonly conventions: {
+    readonly client: readonly string[];
+    readonly server: readonly string[];
+    readonly shared: readonly string[];
+  };
+  // Only the project's own globs. They win over a default whenever both match,
+  // so opting into the defaults can never reclassify a hand-pinned file.
+  readonly conventionOverrides: {
     readonly client: readonly string[];
     readonly server: readonly string[];
     readonly shared: readonly string[];
@@ -289,7 +303,14 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
   conventions: {
     client: ["**/client/**", "**/ui.tsx"],
     server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
-    shared: ["**/shared/**", "src/app/**", "**/schema.ts", "**/model.ts"],
+    shared: ["**/shared/**", "src/app/**", "**/schema.ts", "**/model.ts", "**/signals.ts"],
+  },
+  // Nothing is overridden in the default config, so the defaults above are the
+  // whole effective set.
+  conventionOverrides: {
+    client: [],
+    server: [],
+    shared: [],
   },
   strict: {
     sharedSafety: true,

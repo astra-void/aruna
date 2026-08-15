@@ -1,4 +1,4 @@
-use crate::config::{ArunaConfig, EntriesMode};
+use crate::config::{ArunaConfig, ConventionConfig, EntriesMode};
 use crate::files::normalize_path;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,12 @@ impl ConventionSet {
     // Recommended Layout v0 defaults: directory conventions plus file-name
     // conventions (`ui.tsx`, `actions.ts`, `schema.ts`, ...) so a plain
     // `domains/<feature>/` layout classifies with no aruna.config.ts at all.
+    //
+    // `**/signals.ts` is shared structurally: the generated signal registry
+    // lands in the shared partition and imports each definition from the file
+    // that declared it, so a server-classified declaration cannot resolve on
+    // the client. Must stay in sync with `defaultConventionsForRoot` in
+    // packages/compiler/src/config.ts.
     pub fn for_root(root: &str) -> Self {
         let root = if root.is_empty() { "src" } else { root };
         Self {
@@ -48,6 +54,7 @@ impl ConventionSet {
                 format!("{root}/app/**"),
                 "**/schema.ts".to_string(),
                 "**/model.ts".to_string(),
+                "**/signals.ts".to_string(),
             ],
         }
     }
@@ -82,18 +89,27 @@ fn matches_any(patterns: &[String], path: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
-    let defaults = ConventionSet::for_root(&config.root);
-    let convention = match kind {
-        ModuleKind::Client | ModuleKind::ClientEntry => config.conventions.client.clone(),
+fn patterns_for_kind(conventions: &ConventionConfig, kind: &ModuleKind) -> Vec<String> {
+    match kind {
+        ModuleKind::Client | ModuleKind::ClientEntry => conventions.client.clone(),
         ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
-            config.conventions.server.clone()
+            conventions.server.clone()
         }
-        ModuleKind::Shared => config.conventions.shared.clone(),
+        ModuleKind::Shared => conventions.shared.clone(),
         ModuleKind::Unknown => Vec::new(),
-    };
+    }
+}
 
-    if convention.is_empty() {
+fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
+    let convention = patterns_for_kind(&config.conventions, kind);
+
+    // The fallback is all-or-nothing on purpose. A per-kind fallback makes an
+    // intentionally empty kind (`conventions: { defaults: false, client: [...] }`
+    // with no `shared`) impossible to express: it would silently reinstate the
+    // shared defaults the caller just opted out of. The JS side always sends a
+    // fully resolved convention set, so this only governs direct crate use.
+    if config.conventions.is_empty() {
+        let defaults = ConventionSet::for_root(&config.root);
         match kind {
             ModuleKind::Client | ModuleKind::ClientEntry => defaults.client,
             ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
@@ -277,6 +293,17 @@ pub fn classify_module(
         server: convention_patterns(config, &ModuleKind::Server),
         shared: convention_patterns(config, &ModuleKind::Shared),
     };
+    // Globs written in aruna.config.ts outrank the built-in Recommended Layout
+    // set, whatever their shape. Without this tier the merged set would let a
+    // *default* directory glob beat a *user's* file-name glob — so opting into
+    // the defaults would silently reclassify files the project had already
+    // pinned by hand. Empty when the project supplied no conventions, which
+    // makes this a no-op for the zero-config case.
+    let overrides = ConventionSet {
+        client: patterns_for_kind(&config.convention_overrides, &ModuleKind::Client),
+        server: patterns_for_kind(&config.convention_overrides, &ModuleKind::Server),
+        shared: patterns_for_kind(&config.convention_overrides, &ModuleKind::Shared),
+    };
 
     // Aruna owns the layout under `generatedDir` (server registry under
     // `server/`, stubs/signals/runtime under `shared/`). Classify generated
@@ -286,7 +313,24 @@ pub fn classify_module(
     // produce a spurious multi-convention (ambiguous) match.
     let match_path = strip_generated_dir_prefix(&relative, &config.generated_dir).unwrap_or(relative);
 
-    classify_relative_path(&match_path, &convention_set)
+    classify_with_overrides(&match_path, &overrides, &convention_set)
+}
+
+// Two-tier classification: config globs decide on their own whenever any of
+// them matches — including an ambiguous multi-kind match, which is a defect in
+// the project's own config and must not be papered over by a default. Only a
+// path no config glob matches falls through to the full (defaults-inclusive)
+// set.
+pub fn classify_with_overrides(
+    path: &str,
+    overrides: &ConventionSet,
+    effective: &ConventionSet,
+) -> ModuleClassification {
+    let from_overrides = classify_relative_path(path, overrides);
+    if !from_overrides.matched_kinds.is_empty() {
+        return from_overrides;
+    }
+    classify_relative_path(path, effective)
 }
 
 // Returns `path` with the `generated_dir` prefix removed when `path` lives inside
@@ -484,5 +528,39 @@ mod tests {
             classification.reason_detail.as_deref(),
             Some("matched multiple conventions: client, shared")
         );
+    }
+
+    #[test]
+    fn config_globs_outrank_the_defaults_they_are_merged_with() {
+        let mut config = ArunaConfig::default();
+        // A project that pinned `src/app/client.ts` as client by hand, and now
+        // also inherits the `src/app/**` shared default. Without the override
+        // tier the default's directory shape would beat the file-name glob and
+        // silently reclassify the file.
+        config.convention_overrides.client = vec!["src/app/client.ts".to_string()];
+        config.conventions = ConventionConfig {
+            client: vec![
+                "**/client/**".to_string(),
+                "**/ui.tsx".to_string(),
+                "src/app/client.ts".to_string(),
+            ],
+            server: vec!["**/server/**".to_string()],
+            shared: vec!["src/app/**".to_string()],
+        };
+
+        let pinned = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/app/client.ts"),
+            &config,
+        );
+        assert_eq!(pinned.kind, ModuleKind::Client);
+
+        // Anything the project did not pin still falls through to the defaults.
+        let untouched = classify_module(
+            std::path::Path::new("/workspace"),
+            std::path::Path::new("/workspace/src/app/providers.ts"),
+            &config,
+        );
+        assert_eq!(untouched.kind, ModuleKind::Shared);
     }
 }
