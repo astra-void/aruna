@@ -414,6 +414,49 @@ const app = createServerApp({ actions, transport: robloxRemoteEvent(), playerSto
 
 See [docs/stores.md](packages/aruna/docs/stores.md).
 
+## Domain runtimes (server work that starts at boot)
+
+Actions are pull: a client asks, the server answers. A domain's `runtime.ts` is
+push — a heartbeat, a `PlayerAdded` connection, a round loop. Aruna classified
+those files as server-only but never started them, so projects hand-wrote a
+bootstrap Script listing every `start*()` in a carefully chosen order.
+
+`defineRuntime` makes that a declaration, and the boot order an input to the
+build rather than a comment:
+
+```ts
+// src/domains/score/runtime.ts
+export const scoreRuntime = defineRuntime({
+  id: "score",
+  start() {
+    Players.PlayerAdded.Connect(createStatsFolder);
+  },
+});
+
+// src/domains/emote/runtime.ts
+export const emoteRuntime = defineRuntime({
+  id: "emote",
+  // Registers carry hooks on the grab runtime, so it has to exist first.
+  after: ["grab"],
+  start() { ... },
+});
+```
+
+- **The order is resolved, not written.** `after` edges are topologically sorted
+  (ties broken by id, so the emitted sequence is stable), and the result is
+  recorded in `manifest.runtimes` and emitted into the generated server entry.
+- **Bad order is a build error, not a Studio surprise.** An `after` naming no
+  runtime, a self-edge and a cycle are all `aruna::582`; a duplicate id is
+  `aruna::581`; a runtime with no `start` is `aruna::580`. `aruna check` reports
+  them without writing anything.
+- **No boot race.** The starts run inside the generated entry, after the app is
+  constructed — a hand-written bootstrap Script raced it, because Roblox does not
+  order Scripts against each other.
+- **`id` and every `after` entry must be static string literals**, like action and
+  signal ids: the build resolves the order without executing your code.
+
+Requires `entries: "generated"` — the generated server entry is what runs them.
+
 ## Binary serialization
 
 `encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed byte buffer, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint** (`schemaFingerprint(schema)`, identical across both runtimes): decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
