@@ -154,6 +154,61 @@ function rewriteImports(
   return next;
 }
 
+// Writes only when the bytes differ. Rewriting an identical file still bumps
+// its mtime, and a watching TypeScript program treats that as a change — which
+// is the difference between recompiling one edited module and recompiling the
+// whole staged tree on every rebuild.
+function writeFileIfChanged(dest: string, contents: string): void {
+  try {
+    if (fs.readFileSync(dest, "utf8") === contents) {
+      return;
+    }
+  } catch {
+    // Missing or unreadable — fall through and write it.
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, contents);
+}
+
+function copyFileIfChanged(src: string, dest: string): void {
+  writeFileIfChanged(dest, fs.readFileSync(src, "utf8"));
+}
+
+// Recursively copies `from` into `to`, skipping byte-identical files, and
+// records every destination it is responsible for into `seen`.
+function copyDirTracked(from: string, to: string, seen: Set<string>): void {
+  fs.mkdirSync(to, { recursive: true });
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    if (entry.isDirectory()) {
+      copyDirTracked(src, dest, seen);
+    } else if (entry.isFile()) {
+      copyFileIfChanged(src, dest);
+      seen.add(path.resolve(dest));
+    }
+  }
+}
+
+// Deletes staged files the current manifest no longer accounts for, so a
+// renamed, deleted, or reclassified module cannot linger and keep compiling.
+function pruneStagedFiles(root: string, keep: Set<string>): void {
+  if (!fs.existsSync(root)) {
+    return;
+  }
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      pruneStagedFiles(full, keep);
+      if (fs.readdirSync(full).length === 0) {
+        fs.rmdirSync(full);
+      }
+    } else if (entry.isFile() && !keep.has(path.resolve(full))) {
+      fs.rmSync(full, { force: true });
+    }
+  }
+}
+
 function copyDirSync(from: string, to: string): void {
   fs.mkdirSync(to, { recursive: true });
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
@@ -457,7 +512,7 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
       if (!entry.isFile() || entry.name.startsWith(".")) {
         continue;
       }
-      fs.copyFileSync(path.join(projectRoot, entry.name), path.join(tempRoot, entry.name));
+      copyFileIfChanged(path.join(projectRoot, entry.name), path.join(tempRoot, entry.name));
     }
 
     // Build the source -> staged-path map from the module classification.
@@ -476,12 +531,12 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     const stageSrc = path.join(tempRoot, "src");
     const edges = manifest.imports ?? [];
 
-    // A restage rebuilds src/ from scratch: a module that was renamed, deleted,
-    // or reclassified into another partition would otherwise linger at its old
-    // staged path and keep compiling as a phantom source file.
-    if (reuseRoot !== undefined) {
-      fs.rmSync(stageSrc, { recursive: true, force: true });
-    }
+    // Every staged file this pass is responsible for. Anything left over under
+    // stageSrc afterwards is a module that was renamed, deleted, or
+    // reclassified into another partition, and gets pruned below — clearing the
+    // tree wholesale instead would restamp every file and defeat incremental
+    // recompilation for the resident watcher.
+    const staged = new Set<string>();
 
     // Stage each classified module, rewriting its relative imports.
     for (const { record, stage } of records) {
@@ -492,8 +547,8 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
       const contents = fs.readFileSync(absoluteSource, "utf8");
       const rewritten = rewriteImports(contents, record.path, stage, edges, sourceToStage);
       const dest = path.join(stageSrc, stage);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.writeFileSync(dest, rewritten);
+      writeFileIfChanged(dest, rewritten);
+      staged.add(path.resolve(dest));
     }
 
     // Ambient declarations are copied at their original path relative to src/,
@@ -502,8 +557,8 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     // collide instead.
     for (const declaration of collectAmbientDeclarations(srcRoot)) {
       const dest = path.join(stageSrc, declaration);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(path.join(srcRoot, declaration), dest);
+      copyFileIfChanged(path.join(srcRoot, declaration), dest);
+      staged.add(path.resolve(dest));
     }
 
     // The vendored runtime is shared and self-contained — copy it wholesale into
@@ -511,8 +566,10 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     // Split-tree layout vendors it under `<generatedDir>/shared/runtime`.
     const runtimeSrc = path.join(srcRoot, generatedDirRel, "shared", "runtime");
     if (fs.existsSync(runtimeSrc)) {
-      copyDirSync(runtimeSrc, path.join(stageSrc, "shared", generatedDirRel, "runtime"));
+      copyDirTracked(runtimeSrc, path.join(stageSrc, "shared", generatedDirRel, "runtime"), staged);
     }
+
+    pruneStagedFiles(stageSrc, staged);
 
     // Resolve the generated/runtime aliases to their partitioned locations.
     const aliasPath = (target: LayoutTarget, rel: string): string[] => [`src/${target}/${generatedDirRel}/${rel}`];
@@ -637,11 +694,16 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
       exclude: ["out", "node_modules"],
     };
     // roblox-ts requires a package.json at the project root.
-    fs.writeFileSync(
+    writeFileIfChanged(
       path.join(tempRoot, "package.json"),
       `${JSON.stringify({ name: "aruna-staged", version: "0.0.0" }, null, 2)}\n`,
     );
-    fs.writeFileSync(path.join(tempRoot, "tsconfig.json"), `${JSON.stringify(tsconfig, null, 2)}\n`);
+    // Restamping tsconfig.json would make the resident watcher tear down and
+    // rebuild its whole program, which is exactly what this path avoids.
+    writeFileIfChanged(
+      path.join(tempRoot, "tsconfig.json"),
+      `${JSON.stringify(tsconfig, null, 2)}\n`,
+    );
     // Pass every scoped (@*) package from staged node_modules so rojo-resolver
     // can locate their compiled output (e.g. @lattice-ui, @rbxts-js).
     const extraNpmScopes: string[] = [];
@@ -650,7 +712,7 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
         extraNpmScopes.push(entry);
       }
     }
-    fs.writeFileSync(
+    writeFileIfChanged(
       path.join(tempRoot, "default.project.json"),
       `${JSON.stringify(partitionedRojoProject(extraNpmScopes), null, 2)}\n`,
     );
