@@ -776,7 +776,15 @@ function loadTsConfig(
   // generated dir is not committed. Name kept in sync with
   // ARUNA_TSCONFIG_FRAGMENT_FILE in packages/aruna/src/cli/tsconfig-paths.ts.
   // TS 5083 "Cannot read file" / 6053 "File not found" for the extends target.
+  //
+  // TS 18003 ("No inputs were found") is likewise not a malformed tsconfig: a
+  // freshly scaffolded project has no source files yet, and this loader only
+  // reads compilerOptions — which files the program includes is none of its
+  // business.
   const fatalErrors = parsed.errors.filter((error) => {
+    if (error.code === 18003) {
+      return false;
+    }
     const text = ts.flattenDiagnosticMessageText(error.messageText, " ");
     return !((error.code === 5083 || error.code === 6053) && text.includes("tsconfig.aruna.json"));
   });
