@@ -67,6 +67,14 @@ shared: src/shared/**, src/app/**, **/schema.ts, **/model.ts, **/shared/**
 
 - `aruna.config.ts` becomes optional for the standard layout; `conventions` is only for
   overrides (user globs still win over defaults, as merge order already allows).
+- **Landed.** The first cut shipped the defaults but had `conventions` *replace* them
+  per kind, which is the failure this pillar existed to remove — adding one glob still
+  cost a restatement of the whole kind. Config globs now merge into the defaults and
+  sit in their own precedence tier above them (`convention_overrides` on the wire,
+  `classify_with_overrides` in the classifier), so merging in a default can never
+  reclassify a path the project pinned by hand. `conventions: { defaults: false }` is
+  the escape hatch. `**/signals.ts` joined the shared defaults: it is a structural
+  requirement of the signal registry's emit location, not a layout preference.
 - `aruna init` stops emitting a conventions block; the scaffolded config shrinks to
   near-empty.
 - Guardrails stay: unclassified-module diagnostics remain, and
@@ -97,14 +105,39 @@ vendored `aruna/*` runtime aliases. The user tsconfig references it once:
   form and delete the inline aliases. aruna::110/111 remain for projects that opt out.
 - Layout changes (like the flat → split-tree move) become invisible: the fragment is
   regenerated with the layout, and no user file mentions generated paths again.
+- **Extended.** The fragment now also carries the roblox-ts compile contract itself —
+  the `target`/`module`/`noLib` triple, the `@rbxts` type roots, `src` → `out`, and the
+  include globs that reach the dot-prefixed generated dir. That block was ~40 lines
+  every consumer hand-copied and could silently drift from what the staged build
+  compiles with, and none of it is a project decision. A scaffolded tsconfig is now
+  `extends` plus whatever the project actually chooses (JSX runtime, transformers).
+  Paths in it are anchored on the fragment's own directory, which is how TypeScript
+  resolves an extended config — the staged build rebases inherited `typeRoots` back
+  onto the project root accordingly.
 
 ### Rojo
 
-`default.project.json` gains explicit ownership semantics: while it carries an
-`"$aruna": { "generated": true }` marker (or a ledger entry), `aruna build` regenerates
-it from `partitionedRojoProject()` whenever the partition contract changes. Deleting
-the marker hands the file to the user permanently; doctor then only validates the
-contract (out/server → ServerScriptService etc.) instead of the full shape.
+**Landed, by reference rather than by marker.** A marker inside
+`default.project.json` would have made Aruna a co-author of a file Rojo parses
+strictly, so the split went the other way: the part that must track what is
+installed — the `rbxts_include/node_modules` scope list — became a file Aruna
+owns outright.
+
+`aruna build` writes `<generatedDir>/node_modules.project.json`, a nested Rojo
+project (Rojo resolves a `$path` pointing at another `*.project.json`, with the
+paths inside it relative to that file) listing every npm scope holding a package
+that ships Luau. `default.project.json` mounts it once:
+
+```json
+"node_modules": { "$path": "src/.aruna/node_modules.project.json" }
+```
+
+The rest of `default.project.json` is a static contract (out/server →
+ServerScriptService etc.) that does not change per dependency, so it stays the
+user's file; `aruna init` scaffolds it and doctor validates it. Doctor also
+measures the mounts against what is installed, so a project keeping its own
+hand-written scope list is told which scope it is missing rather than finding
+out at runtime.
 
 ## Pillar 3 — Generated entries (`main.server.ts` / `main.client.ts`)
 

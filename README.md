@@ -70,6 +70,16 @@ Policy notes:
 Aruna is still pre-public, so the config surface is being shaped around the intended public API now.
 Use `defineConfig()` and the nested config shape directly.
 
+Every section is optional. A project on the Recommended Layout needs no config at all:
+
+```ts
+import { defineConfig } from "aruna";
+
+export default defineConfig({});
+```
+
+The full surface, with each field set to its default:
+
 ```ts
 import { defineConfig } from "aruna";
 
@@ -87,10 +97,9 @@ export default defineConfig({
       max: 20,
     },
   },
+  // Extends the built-in set — list only what the defaults do not cover.
   conventions: {
-    client: ["src/client.tsx", "src/domains/**/ui.tsx"],
-    server: ["src/server.ts", "src/domains/**/actions.ts", "src/domains/**/runtime.ts"],
-    shared: ["src/app/**", "src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],
+    shared: ["src/domains/**/policy.ts"],
   },
   strict: {
     sharedSafety: true,
@@ -108,6 +117,28 @@ export default defineConfig({
 - The legacy flat `generatedDir` / `manifest.output` config shape is no longer supported.
 - `domains/` remains recommended, not required.
 
+### Conventions
+
+The built-in set is the Recommended Layout:
+
+| kind | globs |
+| --- | --- |
+| client | `**/client/**`, `**/ui.tsx` |
+| server | `**/server/**`, `**/actions.ts`, `**/runtime.ts` |
+| shared | `**/shared/**`, `<root>/app/**`, `**/schema.ts`, `**/model.ts`, `**/signals.ts` |
+
+- Your globs **extend** this set rather than replacing it, so adding one pattern
+  costs one line. `conventions: { defaults: false, ... }` opts out and makes your
+  globs the whole set.
+- Your globs also **outrank** the built-ins: when both match a file, yours decides.
+  A default can therefore never reclassify a path you pinned by hand.
+- Within one tier, a directory glob (`**/server/**`) beats a file-name glob
+  (`**/model.ts`), so `src/server/model.ts` stays server.
+- `**/signals.ts` is shared for a structural reason: the generated signal registry
+  lives in the shared partition and imports every definition from the file that
+  declared it, so a signal declared in a server-classified file cannot resolve on
+  the client.
+
 ## Quickstart flow
 
 1. Config:
@@ -116,21 +147,12 @@ export default defineConfig({
    import { defineConfig } from "aruna";
 
    export default defineConfig({
-     compiler: {
-       generatedDir: "src/.aruna",
-       manifest: "src/.aruna/manifest.json",
-     },
      actions: {
        defaultRateLimit: {
          key: "player",
          windowMs: 1000,
          max: 20,
        },
-     },
-     conventions: {
-       client: ["src/client.tsx", "src/domains/**/ui.tsx"],
-       server: ["src/server.ts", "src/domains/**/actions.ts"],
-       shared: ["src/shared/**", "src/domains/**/schema.ts", "src/domains/**/model.ts"],
      },
    });
    ```
@@ -413,6 +435,44 @@ Aruna owns the physical files under `src/.aruna/`.
 `aruna check` resolves these virtual modules without writing files.
 `aruna build` writes the physical generated files used by TypeScript and roblox-ts tooling.
 For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install the required tsconfig path aliases.
+
+### Generated project wiring
+
+Anything that must stay in step with codegen or with what is installed is
+generated into `<generatedDir>/` and referenced once, rather than copied into a
+file you then have to maintain.
+
+`<generatedDir>/tsconfig.aruna.json` carries the roblox-ts compile contract
+(`target`/`module`/`noLib`, the `@rbxts` type roots, `src` → `out`, the include
+globs that reach the dot-prefixed generated dir) plus every `$aruna/*` and
+`aruna/*` path alias. A project tsconfig is therefore only what the project
+actually decides:
+
+```jsonc
+{
+  "extends": "./src/.aruna/tsconfig.aruna.json",
+  "compilerOptions": {
+    // e.g. a JSX runtime and rbxtsc transformers — anything here wins over the fragment
+  }
+}
+```
+
+`<generatedDir>/node_modules.project.json` is a nested Rojo project holding the
+npm scopes that ship Luau, rebuilt from `node_modules/` on every `aruna build`.
+`default.project.json` mounts it once:
+
+```json
+"rbxts_include": {
+  "$path": "include",
+  "node_modules": { "$path": "src/.aruna/node_modules.project.json" }
+}
+```
+
+Adding a Roblox-facing dependency then needs no Rojo edit at all. Build-time-only
+packages (bundlers, theme generators, `@types/*`) ship no Luau and are left out.
+A project that keeps its own hand-written mounts still works — `aruna doctor`
+reports any installed scope it never mounts, which is otherwise a silent failure:
+every build step exits 0 and the require fails at runtime.
 
 ## Real app harness
 
