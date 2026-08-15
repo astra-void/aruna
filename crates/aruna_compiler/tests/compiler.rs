@@ -854,3 +854,91 @@ fn reports_a_runtime_order_cycle() {
     assert_eq!(diagnostics[0].code, "aruna::582");
     assert!(diagnostics[0].message.contains("cycle"));
 }
+
+#[test]
+fn discovers_domain_runtimes_and_emits_the_resolved_boot_sequence() {
+    use aruna_compiler::EntriesMode;
+
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    let runtime = |id: &str, after: &str| {
+        format!(
+            "import {{ defineRuntime }} from \"aruna/server\";\n\
+             export const {id}Runtime = defineRuntime({{\n\
+             \x20 id: \"{id}\",\n{after}\
+             \x20 start() {{}},\n\
+             }});\n"
+        )
+    };
+
+    // The shape a real game declares: the boot order lives in `after` edges
+    // rather than in a hand-written bootstrap script.
+    write_file(root, "src/domains/score/runtime.ts", &runtime("score", ""));
+    write_file(
+        root,
+        "src/domains/grab/runtime.ts",
+        &runtime("grab", "  after: [\"score\"],\n"),
+    );
+    write_file(
+        root,
+        "src/domains/emote/runtime.ts",
+        &runtime("emote", "  after: [\"grab\"],\n"),
+    );
+
+    let mut input = compiler_input(root);
+    input.config.entries = EntriesMode::Generated;
+    input.write_manifest = false;
+    input.write_generated = true;
+    let output = check_project(input);
+
+    assert!(output.ok, "{:?}", diagnostic_codes(&output));
+
+    // Recorded in resolved boot order, not discovery order.
+    let ids: Vec<&str> = output
+        .manifest
+        .runtimes
+        .iter()
+        .map(|entry| entry.id.as_str())
+        .collect();
+    assert_eq!(ids, vec!["score", "grab", "emote"]);
+
+    let entry = output
+        .generated_files
+        .as_ref()
+        .expect("generated files")
+        .iter()
+        .find(|file| file.path.ends_with("main.server.ts"))
+        .expect("generated server entry");
+    assert!(entry.contents.contains("import { startRuntimes } from \"aruna/server\";"));
+    assert!(entry
+        .contents
+        .contains("startRuntimes([\n  score_runtime,\n  grab_runtime,\n  emote_runtime,\n]);"));
+}
+
+#[test]
+fn rejects_a_runtime_after_edge_that_names_no_runtime() {
+    use aruna_compiler::EntriesMode;
+
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(
+        root,
+        "src/domains/round/runtime.ts",
+        "import { defineRuntime } from \"aruna/server\";\n\
+         export const roundRuntime = defineRuntime({\n\
+         \x20 id: \"round\",\n\
+         \x20 after: [\"playtime\"],\n\
+         \x20 start() {},\n\
+         });\n",
+    );
+
+    let mut input = compiler_input(root);
+    input.config.entries = EntriesMode::Generated;
+    input.write_manifest = false;
+    let output = check_project(input);
+
+    // A boot-order mistake used to surface only in Studio; it fails the build now.
+    assert!(!output.ok);
+    assert!(diagnostic_codes(&output).contains(&"aruna::582".to_string()));
+}

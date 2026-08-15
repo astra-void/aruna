@@ -26,7 +26,7 @@ pub use actions::{
     StoreDiscoveryResult,
 };
 pub use config::{
-    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig,
+    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig, EntriesMode,
     StrictConfig, StrictSeverity,
 };
 pub use diagnostics::{
