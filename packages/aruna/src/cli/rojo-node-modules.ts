@@ -61,12 +61,42 @@ export function isRobloxFacingPackage(packageDir: string): boolean {
   return containsLuau(packageDir, LUAU_SCAN_DEPTH);
 }
 
-// Scopes under `node_modules/` holding at least one Roblox-facing package,
-// sorted. Whole scopes are the unit on purpose: it is the shape roblox-ts
-// projects already use for `@rbxts`, and it stays correct when a package is
-// added to a scope that is already mounted. A package in the scope that ships
-// no Luau just materializes as an empty Folder.
-export function discoverRobloxScopes(projectRoot: string): string[] {
+// Rojo names an instance after the directory it mounts, unless that directory
+// holds a `default.project.json` — then the nested project's `name` wins. That
+// is how `@lattice-ui/react-dialog` lands in the DataModel as `dialog`, and it
+// is the name roblox-ts's resolver computes for a require. Per-package mounts
+// have to reproduce it exactly, because an explicit key overrides it.
+function rojoInstanceName(packageDir: string, directoryName: string): string {
+  try {
+    const project = JSON.parse(
+      fs.readFileSync(path.join(packageDir, "default.project.json"), "utf8"),
+    ) as { name?: unknown };
+    if (typeof project.name === "string" && project.name.length > 0) {
+      return project.name;
+    }
+  } catch {
+    // No nested project, or an unreadable one: the directory name it is.
+  }
+  return directoryName;
+}
+
+export type RobloxScopeMount = {
+  scope: string;
+  // Roblox-facing packages in the scope, as {instance name -> directory name}
+  // pairs. Empty when every package in the scope qualifies, which mounts the
+  // scope directory wholesale.
+  packages: Array<{ name: string; directory: string }>;
+};
+
+// Scopes under `node_modules/` holding at least one Roblox-facing package.
+//
+// A scope whose packages all ship Luau is mounted wholesale — the shape
+// roblox-ts projects already use for `@rbxts`, and one that keeps working when
+// a package is added to it. A mixed scope is mounted per qualifying package
+// instead: mounting it wholesale would put every build-time-only package in the
+// DataModel as an empty Folder and make Rojo walk its whole file tree, which is
+// exactly what hand-written project files were spelling out mounts to avoid.
+export function discoverRobloxScopes(projectRoot: string): RobloxScopeMount[] {
   const nodeModules = path.join(projectRoot, "node_modules");
   let scopes: fs.Dirent[];
   try {
@@ -75,26 +105,40 @@ export function discoverRobloxScopes(projectRoot: string): string[] {
     return [];
   }
 
-  const found: string[] = [];
+  const found: RobloxScopeMount[] = [];
   for (const scope of scopes) {
     if (!scope.isDirectory() || !scope.name.startsWith("@")) {
       continue;
     }
     const scopeDir = path.join(nodeModules, scope.name);
-    let packages: fs.Dirent[];
+    let entries: fs.Dirent[];
     try {
-      packages = fs.readdirSync(scopeDir, { withFileTypes: true });
+      entries = fs.readdirSync(scopeDir, { withFileTypes: true });
     } catch {
       continue;
     }
-    const hasRobloxPackage = packages.some(
-      (entry) => entry.isDirectory() && isRobloxFacingPackage(path.join(scopeDir, entry.name)),
+
+    const directories = entries.filter((entry) => entry.isDirectory());
+    const robloxFacing = directories.filter((entry) =>
+      isRobloxFacingPackage(path.join(scopeDir, entry.name)),
     );
-    if (hasRobloxPackage) {
-      found.push(scope.name);
+    if (robloxFacing.length === 0) {
+      continue;
     }
+    found.push({
+      scope: scope.name,
+      packages:
+        robloxFacing.length === directories.length
+          ? []
+          : robloxFacing
+              .map((entry) => ({
+                name: rojoInstanceName(path.join(scopeDir, entry.name), entry.name),
+                directory: entry.name,
+              }))
+              .sort((left, right) => left.name.localeCompare(right.name)),
+    });
   }
-  return found.sort();
+  return found.sort((left, right) => left.scope.localeCompare(right.scope));
 }
 
 // Project-relative posix path of the generated nested project file, i.e. the
@@ -108,12 +152,20 @@ export function nodeModulesProjectMount(generatedDir: string): string {
 export function arunaNodeModulesProjectContents(
   projectRoot: string,
   generatedDir: string,
-  scopes: readonly string[] = discoverRobloxScopes(projectRoot),
+  scopes: readonly RobloxScopeMount[] = discoverRobloxScopes(projectRoot),
 ): string {
   const upToRoot = toPosix(path.relative(path.resolve(projectRoot, generatedDir), projectRoot));
   const tree: Record<string, unknown> = { $className: "Folder" };
-  for (const scope of scopes) {
-    tree[scope] = { $path: `${upToRoot}/node_modules/${scope}` };
+  for (const { scope, packages } of scopes) {
+    if (packages.length === 0) {
+      tree[scope] = { $path: `${upToRoot}/node_modules/${scope}` };
+      continue;
+    }
+    const scopeTree: Record<string, unknown> = { $className: "Folder" };
+    for (const entry of packages) {
+      scopeTree[entry.name] = { $path: `${upToRoot}/node_modules/${scope}/${entry.directory}` };
+    }
+    tree[scope] = scopeTree;
   }
   return `${JSON.stringify(
     {
@@ -147,7 +199,7 @@ export function inspectNodeModulesMounts(
   generatedDir: string,
   mountedPaths: readonly string[],
 ): NodeModulesMountReport {
-  const discovered = discoverRobloxScopes(projectRoot);
+  const discovered = discoverRobloxScopes(projectRoot).map((entry) => entry.scope);
   const managedMount = nodeModulesProjectMount(generatedDir);
   const managed = mountedPaths.includes(managedMount);
   if (managed) {

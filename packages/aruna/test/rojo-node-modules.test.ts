@@ -57,13 +57,42 @@ describe("isRobloxFacingPackage", () => {
 });
 
 describe("discoverRobloxScopes", () => {
-  it("keeps a scope when any package in it ships Luau", async () => {
+  it("mounts a fully Roblox-facing scope wholesale and a mixed one per package", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-nm-"));
     try {
       await scaffoldNodeModules(root);
-      // @facet-ui qualifies through no package here; @rbxts qualifies through
-      // services even though types/ ships only declarations.
-      expect(discoverRobloxScopes(root)).toEqual(["@lattice-ui", "@rbxts"]);
+      expect(discoverRobloxScopes(root)).toEqual([
+        // Every package in @lattice-ui ships Luau, so the scope directory is the
+        // mount and a package added to it later needs no regeneration to work.
+        { scope: "@lattice-ui", packages: [] },
+        // @rbxts is mixed: types/ ships only declarations, so mounting the scope
+        // would put it in the DataModel as an empty Folder.
+        { scope: "@rbxts", packages: [{ name: "services", directory: "services" }] },
+      ]);
+      // @facet-ui holds no Luau package at all and drops out entirely.
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("names a per-package mount the way rojo would", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-nm-"));
+    try {
+      await scaffoldNodeModules(root);
+      // Rojo takes the instance name from a mounted directory's own project
+      // file, and roblox-ts resolves requires against that name — so an explicit
+      // key has to reproduce it rather than use the directory name.
+      await writeFile(
+        path.join(root, "node_modules/@facet-ui/react-variants/out/init.lua"),
+        "return {}\n",
+      );
+      await writeFile(
+        path.join(root, "node_modules/@facet-ui/react-variants/default.project.json"),
+        JSON.stringify({ name: "variants", tree: { $path: "out" } }),
+      );
+
+      const facet = discoverRobloxScopes(root).find((entry) => entry.scope === "@facet-ui");
+      expect(facet?.packages).toEqual([{ name: "variants", directory: "react-variants" }]);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -85,12 +114,17 @@ describe("arunaNodeModulesProjectContents", () => {
     try {
       await scaffoldNodeModules(root);
       const project = JSON.parse(arunaNodeModulesProjectContents(root, "src/.aruna")) as {
-        tree: Record<string, { $path?: string }>;
+        tree: Record<string, { $path?: string; $className?: string } | string>;
       };
       expect(project.tree["$className"]).toBe("Folder");
       // Rojo resolves a nested project's paths relative to that file.
-      expect(project.tree["@rbxts"]?.$path).toBe("../../node_modules/@rbxts");
       expect(project.tree["@lattice-ui"]?.$path).toBe("../../node_modules/@lattice-ui");
+      // Mixed scope: only the package that ships Luau is mounted, so the
+      // declaration-only ones stay out of the DataModel.
+      expect(project.tree["@rbxts"]).toEqual({
+        $className: "Folder",
+        services: { $path: "../../node_modules/@rbxts/services" },
+      });
       expect(project.tree["@types"]).toBeUndefined();
     } finally {
       await fs.rm(root, { recursive: true, force: true });
