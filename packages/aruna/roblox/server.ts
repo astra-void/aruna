@@ -164,6 +164,9 @@ export function createActionDefiner<
 // no cycle.
 export * from "./server-runtime";
 export * from "./server-app";
+// Domain runtimes: the boot sequence the compiler resolves from `after` edges.
+export * from "./define-runtime";
+export * from "./domain-runtime";
 // Persistence: the safe DataStore core and the session-locked player document.
 export * from "./define-store";
 export * from "./store";

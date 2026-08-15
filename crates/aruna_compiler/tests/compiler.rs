@@ -787,3 +787,70 @@ export const demo = defineAction({
         .expect("expected action metadata");
     assert!(action.rate_limit.is_none());
 }
+
+#[test]
+fn resolves_runtime_boot_order_from_after_edges() {
+    use aruna_compiler::{resolve_runtime_order, ArunaRuntimeRecord};
+
+    let runtime = |id: &str, after: &[&str]| ArunaRuntimeRecord {
+        id: id.to_string(),
+        file: format!("src/domains/{id}/runtime.ts"),
+        export_name: format!("{id}Runtime"),
+        after: after.iter().map(|entry| entry.to_string()).collect(),
+    };
+
+    // The shape a real game declares: score first because everything credits it,
+    // playtime before anything gating on time, emote after the grab runtime it
+    // registers hooks on, world after the round its parts call into.
+    let (ordered, diagnostics) = resolve_runtime_order(&[
+        runtime("world", &["round"]),
+        runtime("emote", &["grab"]),
+        runtime("score", &[]),
+        runtime("grab", &["score"]),
+        runtime("round", &["playtime"]),
+        runtime("playtime", &["score"]),
+    ]);
+
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let ids: Vec<&str> = ordered.iter().map(|entry| entry.id.as_str()).collect();
+    // Every dependency lands before its dependent, and independents are ordered
+    // by id so the emitted sequence is stable across builds.
+    assert_eq!(ids, vec!["score", "grab", "emote", "playtime", "round", "world"]);
+}
+
+#[test]
+fn reports_an_after_edge_naming_no_runtime() {
+    use aruna_compiler::{resolve_runtime_order, ArunaRuntimeRecord};
+
+    let (ordered, diagnostics) = resolve_runtime_order(&[ArunaRuntimeRecord {
+        id: "round".to_string(),
+        file: "src/domains/round/runtime.ts".to_string(),
+        export_name: "roundRuntime".to_string(),
+        after: vec!["playtime".to_string()],
+    }]);
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "aruna::582");
+    assert!(diagnostics[0].message.contains("playtime"));
+    // The runtime itself still boots: one bad edge is not a reason to drop the
+    // work, and the diagnostic already fails the build.
+    assert_eq!(ordered.len(), 1);
+}
+
+#[test]
+fn reports_a_runtime_order_cycle() {
+    use aruna_compiler::{resolve_runtime_order, ArunaRuntimeRecord};
+
+    let runtime = |id: &str, after: &str| ArunaRuntimeRecord {
+        id: id.to_string(),
+        file: format!("src/domains/{id}/runtime.ts"),
+        export_name: format!("{id}Runtime"),
+        after: vec![after.to_string()],
+    };
+
+    let (_, diagnostics) = resolve_runtime_order(&[runtime("a", "b"), runtime("b", "a")]);
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "aruna::582");
+    assert!(diagnostics[0].message.contains("cycle"));
+}

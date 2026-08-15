@@ -92,6 +92,9 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::575" => Some(("invalid-store-version", DiagnosticSeverity::Error)),
         "aruna::576" => Some(("store-missing-default", DiagnosticSeverity::Error)),
         "aruna::577" => Some(("store-version-without-migrate", DiagnosticSeverity::Warning)),
+        "aruna::580" => Some(("invalid-runtime-definition", DiagnosticSeverity::Error)),
+        "aruna::581" => Some(("duplicate-runtime-id", DiagnosticSeverity::Error)),
+        "aruna::582" => Some(("unresolved-runtime-order", DiagnosticSeverity::Error)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

@@ -1,7 +1,8 @@
 use crate::config::{ArunaConfig, EntriesMode};
 use crate::actions::{
-    collect_action_definitions, collect_signal_definitions, collect_store_definitions,
-    ArunaActionRecord, ArunaSignalRecord, ArunaStoreRecord,
+    collect_action_definitions, collect_runtime_definitions, collect_signal_definitions,
+    collect_store_definitions, resolve_runtime_order,
+    ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord,
 };
 use crate::codegen::{
     EntryHooks, HookModuleRecord, RECOGNIZED_CLIENT_HOOKS, RECOGNIZED_SERVER_HOOKS,
@@ -67,6 +68,10 @@ pub struct BuildGraphResult {
     // pre-store snapshots.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub stores: Vec<ArunaStoreRecord>,
+    // In resolved boot order, not discovery order. Omitted when empty so a
+    // project without domain runtimes stays byte-stable with older snapshots.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub runtimes: Vec<ArunaRuntimeRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub module_map: BTreeMap<String, ArunaModuleRecord>,
     // Hook modules discovered at the recommended entry paths under
@@ -253,6 +258,7 @@ pub fn build_project_graph(
     let mut signal_records = Vec::new();
     let mut store_records = Vec::new();
     let mut store_files = BTreeSet::new();
+    let mut runtime_records = Vec::new();
     let mut entry_hooks = EntryHooks::default();
 
     for absolute_path in files {
@@ -330,7 +336,43 @@ pub fn build_project_graph(
             store_files.extend(result.store_files);
             diagnostics.extend(result.diagnostics);
         }
+
+        // Domain runtime discovery, same pattern. The boot order these declare
+        // is resolved once, after every file has been seen.
+        if let Ok(result) = collect_runtime_definitions(project_root, absolute_path, &source_text) {
+            runtime_records.extend(result.runtimes);
+            diagnostics.extend(result.diagnostics);
+        }
     }
+
+    // A duplicated runtime id makes `after` ambiguous and the boot order
+    // unresolvable, so it is rejected before the order is computed.
+    let mut seen_runtime_ids = BTreeMap::new();
+    let mut duplicate_runtime_ids = BTreeSet::new();
+    for runtime in &runtime_records {
+        if let Some(previous_file) = seen_runtime_ids.insert(runtime.id.clone(), runtime.file.clone())
+        {
+            duplicate_runtime_ids.insert(runtime.id.clone());
+            diagnostics.push(create_diagnostic(
+                "aruna::581",
+                format!("Runtime id {} is defined more than once.", runtime.id),
+                Some(runtime.file.clone()),
+                None,
+                Some(format!(
+                    "First defined in {}, then again in {}. An after edge naming it could mean either.",
+                    previous_file, runtime.file
+                )),
+                Some("Use one defineRuntime per id, such as one per domain.".to_string()),
+            ));
+        }
+    }
+    runtime_records.retain(|runtime| !duplicate_runtime_ids.contains(&runtime.id));
+
+    // Resolved here rather than in codegen so `aruna check` reports a bad boot
+    // order without writing anything, and so the manifest records the order the
+    // generated entry will actually use.
+    let (runtime_records, runtime_order_diagnostics) = resolve_runtime_order(&runtime_records);
+    diagnostics.extend(runtime_order_diagnostics);
 
     store_records.sort_by(|left, right| {
         left.id
@@ -581,6 +623,7 @@ pub fn build_project_graph(
         actions: action_records,
         signals: signal_records,
         stores: store_records,
+        runtimes: runtime_records,
         module_map,
         hooks: entry_hooks,
         diagnostics,

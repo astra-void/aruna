@@ -4,9 +4,12 @@
 export * from "./actions/define-action.js";
 export * from "./signals/define-signal.js";
 export * from "./stores/define-store.js";
+export * from "./runtimes/define-runtime.js";
 export * from "./app/server.js";
 export * from "./runtime/server.js";
 export * from "./runtime/serialization.js";
+// The boot sequence for domain runtimes, in the order the compiler resolved.
+export * from "./runtime/domain-runtime.js";
 // Persistence: the safe DataStore core and the session-locked player document.
 export * from "./runtime/store.js";
 export * from "./runtime/player-store.js";

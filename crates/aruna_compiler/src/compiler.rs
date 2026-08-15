@@ -90,6 +90,7 @@ fn internal_error_output(input: &CompilerInput, message: String) -> CompilerOutp
             actions: Vec::new(),
             signals: Vec::new(),
             stores: Vec::new(),
+            runtimes: Vec::new(),
             diagnostics: vec![diagnostic],
         },
         generated_files: None,
@@ -417,6 +418,7 @@ fn run_project_inner(
             let generated_entries = generate_entry_files(
                 &input.config.generated_dir,
                 !graph.signals.is_empty(),
+                &graph.runtimes,
                 &graph.hooks,
                 input.config.compiler.preserve_generated_comments,
             );
@@ -457,6 +459,7 @@ fn run_project_inner(
         &graph.actions,
         &graph.signals,
         &graph.stores,
+        &graph.runtimes,
         &mutable_diagnostics,
     );
 
@@ -519,6 +522,7 @@ fn run_project_inner(
         &graph.actions,
         &graph.signals,
         &graph.stores,
+        &graph.runtimes,
         &mutable_diagnostics,
     );
     let summary = summarize_diagnostics(&mutable_diagnostics, warnings_as_errors);

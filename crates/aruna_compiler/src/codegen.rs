@@ -1,5 +1,6 @@
 use crate::actions::{
-    ArunaActionRecord, ArunaSchemaLiteralMetadata, ArunaSchemaMetadata, ArunaSignalRecord,
+    ArunaActionRecord, ArunaRuntimeRecord, ArunaSchemaLiteralMetadata, ArunaSchemaMetadata,
+    ArunaSignalRecord,
 };
 use crate::config::ActionRateLimitConfig;
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic};
@@ -813,6 +814,18 @@ pub fn generate_signal_files(
     }
 }
 
+
+// Import alias for a runtime binding in the generated entry. Two domains may
+// both export `runtime`, so the alias carries the id to keep them apart.
+fn runtime_import_alias(runtime: &ArunaRuntimeRecord) -> String {
+    let sanitized: String = runtime
+        .id
+        .chars()
+        .map(|character| if character.is_ascii_alphanumeric() { character } else { '_' })
+        .collect();
+    format!("{}_runtime", sanitized)
+}
+
 fn generated_entry_header(preserve_generated_comments: bool) -> Vec<String> {
     if preserve_generated_comments {
         vec![
@@ -843,6 +856,7 @@ fn hook_import_specifier(entry_path: &str, hook_file: &str) -> String {
 fn render_server_entry_file(
     generated_dir: &str,
     has_signals: bool,
+    runtimes: &[ArunaRuntimeRecord],
     hooks: Option<&HookModuleRecord>,
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
@@ -863,9 +877,26 @@ fn render_server_entry_file(
     } else {
         lines.push("import { robloxRemoteEvent } from \"aruna/roblox\";".to_string());
     }
+    if !runtimes.is_empty() {
+        lines.push("import { startRuntimes } from \"aruna/server\";".to_string());
+    }
     lines.push("import { actions, defaultRateLimit } from \"$aruna/actions/server\";".to_string());
     if has_signals {
         lines.push("import { signals } from \"$aruna/signals\";".to_string());
+    }
+    // Domain runtimes, imported in the boot order the compiler resolved from
+    // their `after` edges.
+    for runtime in runtimes {
+        let import_path = relative_path(
+            &path,
+            &normalize_path(&Path::new(&runtime.file).with_extension("").to_string_lossy()),
+        );
+        lines.push(format!(
+            "import {{ {} as {} }} from \"{}\";",
+            runtime.export_name,
+            runtime_import_alias(runtime),
+            import_path
+        ));
     }
     if let Some(hook_module) = hooks {
         let specifier = hook_import_specifier(&path, &hook_module.file);
@@ -902,6 +933,19 @@ fn render_server_entry_file(
     if wires_configure {
         lines.push(String::new());
         lines.push("hooks.configure(app);".to_string());
+    }
+
+    // Domain runtimes start last, and from inside this Script rather than a
+    // hand-written one: the app is wired by the time the first heartbeat or
+    // PlayerAdded handler runs, and the two no longer race as separate Scripts
+    // (Roblox does not order Scripts against each other).
+    if !runtimes.is_empty() {
+        lines.push(String::new());
+        lines.push("startRuntimes([".to_string());
+        for runtime in runtimes {
+            lines.push(format!("  {},", runtime_import_alias(runtime)));
+        }
+        lines.push("]);".to_string());
     }
 
     GeneratedFile {
@@ -993,6 +1037,7 @@ fn render_client_entry_file(
 pub fn generate_entry_files(
     generated_dir: &str,
     has_signals: bool,
+    runtimes: &[ArunaRuntimeRecord],
     hooks: &EntryHooks,
     preserve_generated_comments: bool,
 ) -> GeneratedEntryOutput {
@@ -1001,6 +1046,7 @@ pub fn generate_entry_files(
             render_server_entry_file(
                 generated_dir,
                 has_signals,
+                runtimes,
                 hooks.server.as_ref(),
                 preserve_generated_comments,
             ),
@@ -1286,7 +1332,7 @@ mod tests {
             }),
         };
 
-        let output = generate_entry_files("src/.aruna", true, &hooks, true);
+        let output = generate_entry_files("src/.aruna", true, &[], &hooks, true);
 
         assert_eq!(output.files.len(), 2);
         assert_eq!(output.files[0].path, "src/.aruna/server/main.server.ts");
@@ -1324,7 +1370,7 @@ mod tests {
 
     #[test]
     fn renders_minimal_generated_entries_without_signals_or_hooks() {
-        let output = generate_entry_files("src/.aruna", false, &EntryHooks::default(), true);
+        let output = generate_entry_files("src/.aruna", false, &[], &EntryHooks::default(), true);
 
         let server = &output.files[0].contents;
         assert!(server.contains("import { robloxRemoteEvent } from \"aruna/roblox\";"));
@@ -1351,11 +1397,54 @@ mod tests {
             client: None,
         };
 
-        let output = generate_entry_files("src/.aruna", false, &hooks, true);
+        let output = generate_entry_files("src/.aruna", false, &[], &hooks, true);
 
         let server = &output.files[0].contents;
         assert!(server.contains("import \"../../server\";"));
         assert!(!server.contains("import * as hooks"));
+    }
+
+    #[test]
+    fn starts_domain_runtimes_in_the_order_the_records_carry() {
+        let runtime = |id: &str| ArunaRuntimeRecord {
+            id: id.to_string(),
+            file: format!("src/domains/{id}/runtime.ts"),
+            export_name: format!("{id}Runtime"),
+            after: Vec::new(),
+        };
+        // Already resolved upstream, so codegen emits them verbatim rather than
+        // sorting again — the order is the record.
+        let runtimes = vec![runtime("score"), runtime("grab"), runtime("world")];
+
+        let output = generate_entry_files(
+            "src/.aruna",
+            false,
+            &runtimes,
+            &EntryHooks::default(),
+            true,
+        );
+        let server = &output.files[0].contents;
+
+        assert!(server.contains("import { startRuntimes } from \"aruna/server\";"));
+        assert!(server
+            .contains("import { scoreRuntime as score_runtime } from \"../../domains/score/runtime\";"));
+        assert!(server.contains("startRuntimes([\n  score_runtime,\n  grab_runtime,\n  world_runtime,\n]);"));
+
+        // The starts come after the app is constructed: a runtime's first
+        // heartbeat must not beat the action transport into existence.
+        let app_at = server.find("createServerApp").expect("app");
+        let start_at = server.find("startRuntimes([").expect("starts");
+        assert!(app_at < start_at);
+    }
+
+    #[test]
+    fn omits_the_runtime_boot_sequence_when_no_runtime_is_declared() {
+        let output =
+            generate_entry_files("src/.aruna", false, &[], &EntryHooks::default(), true);
+        let server = &output.files[0].contents;
+
+        assert!(!server.contains("startRuntimes"));
+        assert!(!server.contains("aruna/server\";\nimport { startRuntimes"));
     }
 
     #[test]

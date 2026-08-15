@@ -198,6 +198,28 @@ pub struct StoreDiscoveryResult {
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
+// A domain runtime discovered from `export const X = defineRuntime({...})`: the
+// long-lived server work a project used to start from a hand-written bootstrap
+// script. `after` carries the boot-order edges the build resolves.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArunaRuntimeRecord {
+    pub id: String,
+    pub file: String,
+    pub export_name: String,
+    // Ids that must start before this one. Omitted from the manifest JSON when
+    // empty, so a project whose runtimes are independent stays terse.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub after: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RuntimeDiscoveryResult {
+    pub runtimes: Vec<ArunaRuntimeRecord>,
+    pub runtime_files: BTreeSet<String>,
+    pub diagnostics: Vec<ArunaDiagnostic>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SignalDiscoveryResult {
     pub signals: Vec<ArunaSignalRecord>,
@@ -2479,6 +2501,352 @@ fn collect_store_candidates(
     }
 
     (stores, saw_define_store)
+}
+
+// Reads the optional `after: [...]` boot-order edges off a defineRuntime object.
+// Every entry must be a static string literal — the build resolves the order
+// without executing the project, so a computed id has nothing to resolve.
+fn extract_runtime_after(
+    file: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Vec<String> {
+    let Some(property) = find_object_property(object, "after") else {
+        return Vec::new();
+    };
+
+    let Expression::ArrayExpression(array) = &property.value else {
+        diagnostics.push(create_diagnostic(
+            "aruna::580",
+            format!("Runtime {export_name} in {file} has an invalid after list."),
+            Some(file.to_string()),
+            Some(DiagnosticSpan {
+                start: property.span.start as usize,
+                end: property.span.end as usize,
+            }),
+            Some("after must be an array of runtime ids.".to_string()),
+            Some("Use after: [\"otherRuntimeId\"].".to_string()),
+        ));
+        return Vec::new();
+    };
+
+    let mut after = Vec::new();
+    for element in &array.elements {
+        match element {
+            ArrayExpressionElement::StringLiteral(literal) => {
+                after.push(literal.value.to_string());
+            }
+            _ => {
+                diagnostics.push(create_diagnostic(
+                    "aruna::580",
+                    format!("Runtime {export_name} in {file} has a non-literal after entry."),
+                    Some(file.to_string()),
+                    Some(DiagnosticSpan {
+                        start: property.span.start as usize,
+                        end: property.span.end as usize,
+                    }),
+                    Some("after entries must be static string literals.".to_string()),
+                    Some("Use after: [\"otherRuntimeId\"] with literal string values.".to_string()),
+                ));
+            }
+        }
+    }
+    after
+}
+
+fn analyze_define_runtime_call<'a>(
+    file: &str,
+    export_name: &str,
+    call: &'a CallExpression<'a>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<ArunaRuntimeRecord> {
+    let Some(Argument::ObjectExpression(object)) = call.arguments.first() else {
+        diagnostics.push(create_diagnostic(
+            "aruna::580",
+            format!("Runtime {export_name} in {file} has an invalid defineRuntime definition."),
+            Some(file.to_string()),
+            Some(call_span(call)),
+            Some("defineRuntime expects a single object literal with an id and a start function.".to_string()),
+            Some("Use defineRuntime({ id: \"domain\", start() { ... } }).".to_string()),
+        ));
+        return None;
+    };
+
+    let Some(id_property) = find_object_property(object, "id") else {
+        diagnostics.push(create_diagnostic(
+            "aruna::580",
+            format!("Runtime {export_name} in {file} is missing an id."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some("Runtime ids must be declared as a static string literal.".to_string()),
+            Some("Add id: \"domain\" to the defineRuntime object.".to_string()),
+        ));
+        return None;
+    };
+
+    let Some(id) = (match &id_property.value {
+        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        _ => None,
+    }) else {
+        diagnostics.push(create_diagnostic(
+            "aruna::580",
+            format!("Runtime {export_name} in {file} has an invalid id."),
+            Some(file.to_string()),
+            Some(DiagnosticSpan {
+                start: id_property.span.start as usize,
+                end: id_property.span.end as usize,
+            }),
+            Some("Runtime ids must be static string literals.".to_string()),
+            Some("Use id: \"domain\" with a literal string value.".to_string()),
+        ));
+        return None;
+    };
+
+    // A runtime with no `start` is the one shape that would compile and then do
+    // nothing at boot, which is exactly the failure this feature exists to
+    // remove — so it is rejected rather than recorded.
+    if find_object_property(object, "start").is_none() {
+        diagnostics.push(create_diagnostic(
+            "aruna::580",
+            format!("Runtime {id} in {file} is missing a start function."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some("A runtime must declare the work it starts at boot.".to_string()),
+            Some("Add start() { ... } to the defineRuntime object.".to_string()),
+        ));
+        return None;
+    }
+
+    Some(ArunaRuntimeRecord {
+        id,
+        file: file.to_string(),
+        export_name: export_name.to_string(),
+        after: extract_runtime_after(file, export_name, object, diagnostics),
+    })
+}
+
+fn collect_runtime_candidates(
+    file: &str,
+    program: &oxc_ast::ast::Program<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> (Vec<ArunaRuntimeRecord>, bool) {
+    let mut runtimes = Vec::new();
+    let mut saw_define_runtime = false;
+
+    for statement in &program.body {
+        let Statement::ExportNamedDeclaration(export_decl) = statement else {
+            continue;
+        };
+
+        let Some(Declaration::VariableDeclaration(variable_decl)) = &export_decl.declaration else {
+            continue;
+        };
+
+        if variable_decl.kind != VariableDeclarationKind::Const {
+            continue;
+        }
+
+        for declarator in &variable_decl.declarations {
+            let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                continue;
+            };
+
+            let Some(Expression::CallExpression(call)) = declarator.init.as_ref() else {
+                continue;
+            };
+
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+
+            if callee.name.as_str() != "defineRuntime" {
+                continue;
+            }
+
+            // Recorded even when the definition turns out to be invalid: the
+            // file still holds server-only boot code the client must stay away
+            // from.
+            saw_define_runtime = true;
+
+            let Some(candidate) =
+                analyze_define_runtime_call(file, binding.name.as_str(), call, diagnostics)
+            else {
+                continue;
+            };
+            runtimes.push(candidate);
+        }
+    }
+
+    (runtimes, saw_define_runtime)
+}
+
+pub fn collect_runtime_definitions(
+    project_root: &Path,
+    path: &Path,
+    source_text: &str,
+) -> Result<RuntimeDiscoveryResult, String> {
+    let file = project_relative(project_root, path);
+    let allocator = Allocator::default();
+    let source_type = source_type_for_path(path)?;
+    let parser_return = Parser::new(&allocator, source_text, source_type).parse();
+
+    if parser_return.panicked || !parser_return.errors.is_empty() {
+        let errors = parser_return
+            .errors
+            .into_iter()
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        return Err(if errors.is_empty() {
+            "Oxc parser panicked without reporting a recoverable error.".to_string()
+        } else {
+            errors.join("\n")
+        });
+    }
+
+    let mut diagnostics = Vec::new();
+    let (mut runtimes, saw_define_runtime) =
+        collect_runtime_candidates(&file, &parser_return.program, &mut diagnostics);
+    let mut runtime_files = BTreeSet::new();
+
+    if saw_define_runtime {
+        runtime_files.insert(file.clone());
+    }
+
+    runtimes.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+
+    Ok(RuntimeDiscoveryResult {
+        runtimes,
+        runtime_files,
+        diagnostics,
+    })
+}
+
+// Resolves the boot order from the `after` edges: a stable topological sort that
+// breaks ties by id, so the emitted sequence is deterministic and a diff only
+// moves when the declarations do. Reports an `after` naming a runtime that does
+// not exist, and a cycle, as errors — both are boot-order bugs that used to
+// surface only in Studio.
+pub fn resolve_runtime_order(
+    runtimes: &[ArunaRuntimeRecord],
+) -> (Vec<ArunaRuntimeRecord>, Vec<ArunaDiagnostic>) {
+    let mut diagnostics = Vec::new();
+    let known: BTreeSet<&str> = runtimes.iter().map(|entry| entry.id.as_str()).collect();
+
+    // Sorted by id first so the traversal below is deterministic regardless of
+    // discovery order (which follows the file walk).
+    let mut sorted: Vec<&ArunaRuntimeRecord> = runtimes.iter().collect();
+    sorted.sort_by(|left, right| left.id.cmp(&right.id));
+
+    let mut dependencies: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for runtime in &sorted {
+        let mut edges = Vec::new();
+        for dependency in &runtime.after {
+            if dependency == &runtime.id {
+                diagnostics.push(create_diagnostic(
+                    "aruna::582",
+                    format!("Runtime {} lists itself in after.", runtime.id),
+                    Some(runtime.file.clone()),
+                    None,
+                    Some("A runtime cannot start after itself.".to_string()),
+                    Some(format!("Remove \"{}\" from its own after list.", runtime.id)),
+                ));
+                continue;
+            }
+            if !known.contains(dependency.as_str()) {
+                diagnostics.push(create_diagnostic(
+                    "aruna::582",
+                    format!(
+                        "Runtime {} declares after: \"{}\", which no runtime defines.",
+                        runtime.id, dependency
+                    ),
+                    Some(runtime.file.clone()),
+                    None,
+                    Some(
+                        "after entries name other runtimes by their defineRuntime id.".to_string(),
+                    ),
+                    Some(format!(
+                        "Define a runtime with id \"{dependency}\", or remove it from after."
+                    )),
+                ));
+                continue;
+            }
+            edges.push(dependency.as_str());
+        }
+        edges.sort_unstable();
+        edges.dedup();
+        dependencies.insert(runtime.id.as_str(), edges);
+    }
+
+    // Depth-first post-order emit: a runtime lands after everything it names.
+    let mut ordered_ids: Vec<&str> = Vec::new();
+    let mut done: BTreeSet<&str> = BTreeSet::new();
+    let mut on_stack: Vec<&str> = Vec::new();
+
+    fn visit<'a>(
+        id: &'a str,
+        dependencies: &BTreeMap<&'a str, Vec<&'a str>>,
+        done: &mut BTreeSet<&'a str>,
+        on_stack: &mut Vec<&'a str>,
+        ordered_ids: &mut Vec<&'a str>,
+        cycles: &mut Vec<Vec<String>>,
+    ) {
+        if done.contains(id) {
+            return;
+        }
+        if let Some(position) = on_stack.iter().position(|entry| *entry == id) {
+            let mut cycle: Vec<String> = on_stack[position..].iter().map(|s| s.to_string()).collect();
+            cycle.push(id.to_string());
+            cycles.push(cycle);
+            return;
+        }
+        on_stack.push(id);
+        for dependency in dependencies.get(id).map(Vec::as_slice).unwrap_or(&[]) {
+            visit(dependency, dependencies, done, on_stack, ordered_ids, cycles);
+        }
+        on_stack.pop();
+        done.insert(id);
+        ordered_ids.push(id);
+    }
+
+    let mut cycles: Vec<Vec<String>> = Vec::new();
+    for runtime in &sorted {
+        visit(
+            runtime.id.as_str(),
+            &dependencies,
+            &mut done,
+            &mut on_stack,
+            &mut ordered_ids,
+            &mut cycles,
+        );
+    }
+
+    for cycle in cycles {
+        diagnostics.push(create_diagnostic(
+            "aruna::582",
+            format!("Runtime start order has a cycle: {}.", cycle.join(" -> ")),
+            None,
+            None,
+            Some("Every runtime in the cycle waits for another one in it.".to_string()),
+            Some("Break the cycle by dropping one after edge.".to_string()),
+        ));
+    }
+
+    let by_id: BTreeMap<&str, &ArunaRuntimeRecord> = sorted
+        .iter()
+        .map(|runtime| (runtime.id.as_str(), *runtime))
+        .collect();
+    let ordered = ordered_ids
+        .into_iter()
+        .filter_map(|id| by_id.get(id).map(|runtime| (*runtime).clone()))
+        .collect();
+
+    (ordered, diagnostics)
 }
 
 pub fn collect_store_definitions(
