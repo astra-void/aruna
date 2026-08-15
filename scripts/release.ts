@@ -151,11 +151,17 @@ function npmCacheDirectory(): string {
   return path.join(process.env.TMPDIR ?? "/tmp", "aruna-npm-cache");
 }
 
+// Windows has no extensionless executable: the `pnpm` on PATH there is a shell
+// script only a POSIX shell can run, and its `.cmd` sibling is what Windows
+// resolves. Spawning either as a process image fails (ENOENT / EINVAL since the
+// CVE-2024-27980 fix), so name the shim and let `runCommand` route it.
+const PNPM_BIN = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
 async function resolvePnpmInvocation(): Promise<{ command: string; args: string[] }> {
   // pnpm is the workspace package manager and always on PATH; it proxies
   // `pack`, `publish`, `whoami`, and `view` to the npm registry tooling.
   return {
-    command: "pnpm",
+    command: PNPM_BIN,
     args: [],
   };
 }
@@ -207,6 +213,10 @@ function runCommand(
   const result = spawn(command, args, {
     cwd,
     stdio: "inherit",
+    // A `.cmd` shim is a batch file, not an executable, so Windows needs the
+    // command interpreter to run it. Arguments here are release-internal and
+    // contain no shell metacharacters.
+    shell: process.platform === "win32" && command.endsWith(".cmd"),
     env: {
       ...process.env,
       ...extraEnv,
@@ -408,7 +418,7 @@ function buildPublishableTypeScriptPackages(spawn: typeof spawnSync): void {
   // fail. The `^build` dependency pulls in their workspace deps anyway.
   runCommand(
     spawn,
-    "pnpm",
+    PNPM_BIN,
     [
       "exec",
       "turbo",
