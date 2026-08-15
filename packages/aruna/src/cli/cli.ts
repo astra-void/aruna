@@ -5,7 +5,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import type { CompilerOutput, Diagnostic } from "@arunajs/core";
+import type { CompilerOutput, Diagnostic, Manifest } from "@arunajs/core";
 import {
   buildProject,
   checkProject,
@@ -30,7 +30,11 @@ import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
-import { runPartitionedRbxtsc } from "./rojo-layout.js";
+import {
+  runPartitionedRbxtsc,
+  startPartitionedRbxtscWatch,
+  type PartitionWatch,
+} from "./rojo-layout.js";
 import {
   ARUNA_TSCONFIG_FRAGMENT_FILE,
   arunaTsconfigFragmentContents,
@@ -499,14 +503,19 @@ type DevCliOptions = CliOptions & {
 
 // One full build pass: stub generation + runtime vendoring + rbxtsc, with the
 // same rendering as a one-shot `aruna build`. Returns what watch mode needs.
+//
+// `mode: "codegen-only"` stops after stub generation and hands the manifest
+// back instead of compiling. Watch mode uses it because it drives a resident
+// `rbxtsc --watch` itself rather than paying a cold compile per change.
 async function executeBuildPass(
   options: BuildCliOptions,
-): Promise<{ ok: boolean; generatedDir: string }> {
+  mode: "compile" | "codegen-only" = "compile",
+): Promise<{ ok: boolean; generatedDir: string; manifest?: Manifest | undefined }> {
   const startedAt = Date.now();
   const { output, pruned } = await runBuild(options);
   const projectRoot = compilerInput(options).root;
   let rbxtsc: RbxtscResult | undefined;
-  if (output.ok && options.emitLuau !== false) {
+  if (output.ok && options.emitLuau !== false && mode === "compile") {
     // Partition the project into client/server/shared so the emitted out/ maps
     // onto the Roblox DataModel (server code stays in ServerScriptService).
     const bin = findRbxtscBin(projectRoot);
@@ -545,7 +554,94 @@ async function executeBuildPass(
   }
 
   const luauOk = rbxtsc === undefined || rbxtscOk(rbxtsc);
-  return { ok: output.ok && luauOk, generatedDir: generatedDirFromOutput(output) };
+  return {
+    ok: output.ok && luauOk,
+    generatedDir: generatedDirFromOutput(output),
+    manifest: output.ok ? output.manifest : undefined,
+  };
+}
+
+// Holds the single `rbxtsc --watch` child that serves a whole watch session.
+type ResidentLuauWatch = {
+  // Stages the project into the resident compiler. The first call starts the
+  // child; later calls only rewrite the staged sources, which the compiler's
+  // own watcher picks up as an incremental rebuild. False means the resident
+  // compiler is unavailable and the caller must fall back to a one-shot pass.
+  readonly stage: (manifest: Manifest, generatedDir: string) => boolean;
+  readonly active: () => boolean;
+  readonly stop: () => void;
+};
+
+// Prepares the resident Luau compiler for a watch session, or returns undefined
+// when this session must keep using one-shot compiles (`--no-emit-luau`, or no
+// rbxtsc installed).
+function startResidentLuauWatch(
+  options: BuildCliOptions,
+  colors: ReturnType<typeof resolveColorMode>,
+): ResidentLuauWatch | undefined {
+  if (options.emitLuau === false) {
+    return undefined;
+  }
+  const projectRoot = compilerInput(options).root;
+  const rbxtscBin = findRbxtscBin(projectRoot);
+  if (rbxtscBin === undefined) {
+    return undefined;
+  }
+  const tsconfigPath = loadProjectConfig(projectRoot, compilerInput(options).configPath)
+    .tsconfigPath;
+
+  let watch: PartitionWatch | undefined;
+  let unavailable = false;
+
+  return {
+    active: () => !unavailable,
+    stage(manifest, generatedDir) {
+      if (unavailable) {
+        return false;
+      }
+      if (watch !== undefined) {
+        watch.restage(manifest);
+        return true;
+      }
+      const started = startPartitionedRbxtscWatch({
+        projectRoot,
+        generatedDir,
+        manifest,
+        rbxtscBin,
+        tsconfigPath,
+        onOutput: (chunk, stream) => {
+          (stream === "stdout" ? process.stdout : process.stderr).write(chunk);
+        },
+        onCompile: ({ errorCount }) => {
+          if (options.quiet) {
+            return;
+          }
+          writeText("");
+          writeText(
+            errorCount === 0
+              ? formatSuccess("rbxtsc compiled the project to Luau", colors)
+              : formatError(
+                  `rbxtsc reported ${errorCount} error${errorCount === 1 ? "" : "s"}`,
+                  colors,
+                ),
+          );
+        },
+      });
+      if (started.kind === "skipped") {
+        unavailable = true;
+        if (!options.quiet) {
+          writeText("");
+          writeText(formatMuted(`resident rbxtsc watch unavailable — ${started.reason}`, colors));
+        }
+        return false;
+      }
+      watch = started.watch;
+      return true;
+    },
+    stop() {
+      watch?.stop();
+    },
+  };
 }
 
 // The watch loop shared by `aruna build --watch` and `aruna dev`: one full
@@ -559,7 +655,29 @@ async function runWatchSession(
 ): Promise<void> {
   const projectRoot = compilerInput(options).root;
   const colors = resolveColorMode(options);
-  const first = await executeBuildPass(options);
+
+  // Try to keep one rbxtsc alive for the whole session. A cold rbxtsc rebuilds
+  // its TypeScript program over the entire @rbxts type surface every run, which
+  // costs far more than compiling the project itself — so respawning it per
+  // change makes watch mode no faster than repeated one-shot builds.
+  const resident = startResidentLuauWatch(options, colors);
+
+  // One pass of the loop. Codegen runs first; the Luau compile is either handed
+  // to the resident watcher or, when that is unavailable, done inline.
+  const runPass = async (): Promise<{ generatedDir: string }> => {
+    const useResident = resident?.active() === true;
+    const pass = await executeBuildPass(options, useResident ? "codegen-only" : "compile");
+    if (useResident && pass.manifest !== undefined) {
+      // A resident watcher that fails to start leaves this pass without Luau
+      // output, so redo it as a one-shot compile.
+      if (!resident.stage(pass.manifest, pass.generatedDir)) {
+        await executeBuildPass(options, "compile");
+      }
+    }
+    return { generatedDir: pass.generatedDir };
+  };
+
+  const first = await runPass();
   // The generatedDir is stable across rebuilds (it comes from config), so the
   // first pass's answer is enough to filter the build's own writes.
   const generatedDir = first.generatedDir;
@@ -570,7 +688,7 @@ async function runWatchSession(
       writeText("");
       writeText(formatMuted("change detected — rebuilding…", colors));
     }
-    await executeBuildPass(options);
+    await runPass();
     if (!options.quiet) {
       writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
     }
@@ -595,6 +713,7 @@ async function runWatchSession(
   await new Promise<void>((resolve) => {
     const stop = (): void => {
       watcher.close();
+      resident?.stop();
       cleanup?.();
       resolve();
     };

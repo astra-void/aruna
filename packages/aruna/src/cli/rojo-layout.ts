@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Manifest, ModuleKind, ModuleRecord } from "@arunajs/core";
-import { spawnSyncCommand } from "./spawn.js";
+import { spawnCommand, spawnSyncCommand } from "./spawn.js";
 
 // Partitions the project into client/server/shared before compiling to Luau, so
 // the emitted `out/` tree maps cleanly onto the Roblox DataModel — server code
@@ -368,21 +368,59 @@ export function stagedCompilerOptions(
   return { ...merged, ...owned };
 }
 
-// Stages a partitioned copy of the project, compiles it with rbxtsc, and copies
-// the resulting `out/client|server|shared` tree back into the project.
-export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult {
-  const { projectRoot, manifest, rbxtscBin } = options;
+// A staged partition tree that has been prepared but not yet compiled. Watch
+// mode keeps one of these alive across rebuilds; the one-shot path throws it
+// away as soon as rbxtsc exits.
+export type StagedPartition = {
+  readonly tempRoot: string;
+  readonly stagedInclude: string;
+  readonly outRoot: string;
+};
+
+export type StageResult =
+  | { readonly ok: true; readonly staged: StagedPartition }
+  | { readonly ok: false; readonly reason: string };
+
+// Copies a finished staged compile back into the project: the partitioned
+// `out/` tree and the rbxtsc-generated `include/` runtime library.
+function syncStagedOutput(staged: StagedPartition): void {
+  const stagedOut = path.join(staged.tempRoot, "out");
+  if (fs.existsSync(stagedOut)) {
+    fs.rmSync(staged.outRoot, { recursive: true, force: true });
+    copyDirSync(stagedOut, staged.outRoot);
+  }
+  // Copy the rbxtsc-generated runtime library back so the Rojo `rbxts_include`
+  // mount resolves when `rojo build` runs against the project.
+  if (fs.existsSync(staged.stagedInclude)) {
+    const includeRoot = path.join(path.dirname(staged.outRoot), "include");
+    fs.rmSync(includeRoot, { recursive: true, force: true });
+    copyDirSync(staged.stagedInclude, includeRoot);
+  }
+  // Ensure every partition dir exists so the Rojo $path mounts resolve even
+  // when a project declares no modules of a given kind.
+  for (const partition of ["client", "server", "shared"]) {
+    fs.mkdirSync(path.join(staged.outRoot, partition), { recursive: true });
+  }
+}
+
+// Builds the staged partition tree. `reuseRoot` restages into an existing tree
+// instead of creating a new one — watch mode reuses a single temp root so the
+// node_modules mirror and rbxtsc's resident TypeScript program both survive
+// across rebuilds. Source files are rewritten every time because the manifest
+// (and therefore the partition map) can change with any edit.
+export function stagePartition(options: PartitionOptions, reuseRoot?: string): StageResult {
+  const { projectRoot, manifest } = options;
   const generatedDirRel = toPosix(path.relative("src", options.generatedDir)) || ".aruna";
   const srcRoot = path.join(projectRoot, "src");
   const outRoot = path.join(projectRoot, "out");
 
   const nodeModules = path.join(projectRoot, "node_modules");
   if (!fs.existsSync(nodeModules)) {
-    return { kind: "skipped", reason: "node_modules not found for partitioned rbxtsc" };
+    return { ok: false, reason: "node_modules not found for partitioned rbxtsc" };
   }
 
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-layout-"));
-  try {
+  const tempRoot = reuseRoot ?? fs.mkdtempSync(path.join(os.tmpdir(), "aruna-layout-"));
+  {
     // Mirror every top-level entry in the consumer's node_modules so rbxtsc
     // resolves all packages (@rbxts, @types, and any other scopes or flat
     // packages the project depends on). Each entry is symlinked individually
@@ -394,6 +432,9 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       if (entry.startsWith(".")) continue;
       const src = path.join(nodeModules, entry);
       const dest = path.join(tempRoot, "node_modules", entry);
+      // A restage into a reused root already has the mirror in place; relinking
+      // would throw EEXIST on every entry.
+      if (fs.existsSync(dest)) continue;
       try {
         fs.symlinkSync(fs.realpathSync(src), dest, "dir");
       } catch {
@@ -434,6 +475,13 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
 
     const stageSrc = path.join(tempRoot, "src");
     const edges = manifest.imports ?? [];
+
+    // A restage rebuilds src/ from scratch: a module that was renamed, deleted,
+    // or reclassified into another partition would otherwise linger at its old
+    // staged path and keep compiling as a phantom source file.
+    if (reuseRoot !== undefined) {
+      fs.rmSync(stageSrc, { recursive: true, force: true });
+    }
 
     // Stage each classified module, rewriting its relative imports.
     for (const { record, stage } of records) {
@@ -607,8 +655,21 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
       `${JSON.stringify(partitionedRojoProject(extraNpmScopes), null, 2)}\n`,
     );
 
-    const result = spawnSyncCommand(rbxtscBin, ["--project", tempRoot], {
-      cwd: tempRoot,
+    return { ok: true, staged: { tempRoot, stagedInclude, outRoot } };
+  }
+}
+
+// Stages a partitioned copy of the project, compiles it with rbxtsc, and copies
+// the resulting `out/client|server|shared` tree back into the project.
+export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult {
+  const stage = stagePartition(options);
+  if (!stage.ok) {
+    return { kind: "skipped", reason: stage.reason };
+  }
+  const { staged } = stage;
+  try {
+    const result = spawnSyncCommand(options.rbxtscBin, ["--project", staged.tempRoot], {
+      cwd: staged.tempRoot,
       encoding: "utf8",
     });
     if (result.error) {
@@ -616,28 +677,121 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
     }
     const status = result.status ?? 1;
     if (status === 0) {
-      const stagedOut = path.join(tempRoot, "out");
-      if (fs.existsSync(stagedOut)) {
-        fs.rmSync(outRoot, { recursive: true, force: true });
-        copyDirSync(stagedOut, outRoot);
-      }
-      // Copy the rbxtsc-generated runtime library back so the Rojo `rbxts_include`
-      // mount resolves when `rojo build` runs against the project.
-      if (fs.existsSync(stagedInclude)) {
-        const includeRoot = path.join(projectRoot, "include");
-        fs.rmSync(includeRoot, { recursive: true, force: true });
-        copyDirSync(stagedInclude, includeRoot);
-      }
-      // Ensure every partition dir exists so the Rojo $path mounts resolve even
-      // when a project declares no modules of a given kind.
-      for (const partition of ["client", "server", "shared"]) {
-        fs.mkdirSync(path.join(outRoot, partition), { recursive: true });
-      }
+      syncStagedOutput(staged);
     }
     return { kind: "ran", status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
   } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    fs.rmSync(staged.tempRoot, { recursive: true, force: true });
   }
+}
+
+// TypeScript's watch mode ends every compile pass with a summary line —
+// "[10:31:04 AM] Found 0 errors. Watching for file changes." — which is the
+// only reliable signal that the staged `out/` is complete and ready to copy
+// back. Returns the error count for a pass-ending line, undefined otherwise.
+export function parseWatchPass(line: string): { readonly errorCount: number } | undefined {
+  // eslint-disable-next-line no-control-regex
+  const plain = line.replace(/\[[0-9;]*m/g, "");
+  if (!/Watching for file changes/i.test(plain)) {
+    return undefined;
+  }
+  const found = /Found (\d+) error/i.exec(plain);
+  return { errorCount: found?.[1] === undefined ? 0 : Number(found[1]) };
+}
+
+export type PartitionWatchEvent = {
+  readonly errorCount: number;
+};
+
+export type PartitionWatch = {
+  // Rewrites the staged sources from a fresh manifest. rbxtsc's resident
+  // watcher notices the writes and recompiles incrementally — the whole point
+  // of keeping the staged tree alive.
+  readonly restage: (manifest: Manifest) => void;
+  readonly stop: () => void;
+};
+
+export type PartitionWatchStart =
+  | { readonly kind: "started"; readonly watch: PartitionWatch }
+  | { readonly kind: "skipped"; readonly reason: string };
+
+export type PartitionWatchOptions = PartitionOptions & {
+  // Fires after every completed compile pass, once a clean pass has been copied
+  // back into the project.
+  readonly onCompile: (event: PartitionWatchEvent) => void;
+  readonly onOutput?: ((chunk: string, stream: "stdout" | "stderr") => void) | undefined;
+};
+
+// Stages the partitioned tree once and keeps a single `rbxtsc --watch` child
+// alive against it. A cold rbxtsc pays full TypeScript program construction
+// over the whole @rbxts type surface on every run, which dwarfs the cost of
+// compiling the project's own source — so the dev loop restages the changed
+// sources into the resident program instead of respawning the compiler.
+export function startPartitionedRbxtscWatch(options: PartitionWatchOptions): PartitionWatchStart {
+  const stage = stagePartition(options);
+  if (!stage.ok) {
+    return { kind: "skipped", reason: stage.reason };
+  }
+  const { staged } = stage;
+
+  let child;
+  try {
+    child = spawnCommand(options.rbxtscBin, ["--project", staged.tempRoot, "--watch"], {
+      cwd: staged.tempRoot,
+    });
+  } catch (error) {
+    fs.rmSync(staged.tempRoot, { recursive: true, force: true });
+    const detail = error instanceof Error ? error.message : String(error);
+    return { kind: "skipped", reason: `failed to launch rbxtsc --watch: ${detail}` };
+  }
+
+  let stopped = false;
+  const consume = (stream: "stdout" | "stderr") => {
+    let buffered = "";
+    return (chunk: Buffer | string): void => {
+      const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      options.onOutput?.(text, stream);
+      buffered += text;
+      const lines = buffered.split(/\r?\n/);
+      buffered = lines.pop() ?? "";
+      for (const line of lines) {
+        const pass = parseWatchPass(line);
+        if (pass === undefined || stopped) {
+          continue;
+        }
+        if (pass.errorCount === 0) {
+          syncStagedOutput(staged);
+        }
+        options.onCompile({ errorCount: pass.errorCount });
+      }
+    };
+  };
+
+  child.stdout.on("data", consume("stdout"));
+  child.stderr.on("data", consume("stderr"));
+  child.on("error", (error) => {
+    options.onOutput?.(`failed to launch rbxtsc --watch: ${error.message}\n`, "stderr");
+  });
+
+  return {
+    kind: "started",
+    watch: {
+      restage(manifest: Manifest): void {
+        if (stopped) {
+          return;
+        }
+        stagePartition({ ...options, manifest }, staged.tempRoot);
+      },
+      stop(): void {
+        if (stopped) {
+          return;
+        }
+        stopped = true;
+        child.kill();
+        fs.rmSync(staged.tempRoot, { recursive: true, force: true });
+      },
+    },
+  };
 }
 
 export type RojoProjectShape = {

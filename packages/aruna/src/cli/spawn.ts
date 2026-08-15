@@ -1,9 +1,13 @@
 import {
+  spawn,
   spawnSync,
+  type ChildProcessByStdio,
+  type SpawnOptions,
   type SpawnSyncOptionsWithStringEncoding,
   type SpawnSyncReturns,
 } from "node:child_process";
 import path from "node:path";
+import type { Readable } from "node:stream";
 
 // Windows cannot execute a `.cmd`/`.bat` shim as a process image. Node used to
 // paper over this, but since the CVE-2024-27980 fix (18.20.2 / 20.12.2 / 21.7.3)
@@ -66,6 +70,22 @@ export function spawnSyncCommand(
   const plan = commandPlan(command, args);
   return spawnSync(plan.command, [...plan.args], {
     ...options,
+    windowsVerbatimArguments: plan.windowsVerbatimArguments,
+  });
+}
+
+// Async spawn with the same Windows shim handling. Long-lived children (the
+// `rbxtsc --watch` the dev loop keeps alive) need the streaming variant, and
+// they need the `.cmd` rewrite just as much as the one-shot path does.
+export function spawnCommand(
+  command: string,
+  args: readonly string[],
+  options: Omit<SpawnOptions, "windowsVerbatimArguments" | "stdio">,
+): ChildProcessByStdio<null, Readable, Readable> {
+  const plan = commandPlan(command, args);
+  return spawn(plan.command, [...plan.args], {
+    ...options,
+    stdio: ["ignore", "pipe", "pipe"],
     windowsVerbatimArguments: plan.windowsVerbatimArguments,
   });
 }
