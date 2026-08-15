@@ -1,0 +1,40 @@
+[
+  {
+    "from": "src/domains/economy/store.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/schema"
+  },
+  {
+    "from": "src/domains/economy/store.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  },
+  {
+    "from": "src/domains/settings/store.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/schema"
+  },
+  {
+    "from": "src/domains/settings/store.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  },
+  {
+    "from": "src/server.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./domains/economy/store",
+    "to": "src/domains/economy/store.ts"
+  },
+  {
+    "from": "src/server.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./domains/settings/store",
+    "to": "src/domains/settings/store.ts"
+  }
+]

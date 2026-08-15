@@ -1,0 +1,110 @@
+{
+  "actions": [],
+  "diagnostics": [],
+  "imports": [
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/domains/settings/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/settings/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./domains/economy/store",
+      "to": "src/domains/economy/store.ts"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./domains/settings/store",
+      "to": "src/domains/settings/store.ts"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/domains/economy/store.ts",
+      "kind": "serverStore",
+      "path": "src/domains/economy/store.ts",
+      "reason": "directive",
+      "reasonDetail": "defineStore(...) export detected"
+    },
+    {
+      "id": "src/domains/settings/store.ts",
+      "kind": "serverStore",
+      "path": "src/domains/settings/store.ts",
+      "reason": "directive",
+      "reasonDetail": "defineStore(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "projectRoot": ".",
+  "stores": [
+    {
+      "exportName": "settings",
+      "file": "src/domains/settings/store.ts",
+      "id": "game.settings",
+      "kind": "store",
+      "schema": {
+        "kind": "object",
+        "properties": {
+          "doubleCoinsEnabled": {
+            "kind": "boolean"
+          }
+        }
+      },
+      "scope": "live",
+      "version": 1
+    },
+    {
+      "exportName": "profile",
+      "file": "src/domains/economy/store.ts",
+      "hasMigrate": true,
+      "id": "player.profile",
+      "kind": "playerStore",
+      "schema": {
+        "kind": "object",
+        "properties": {
+          "coins": {
+            "kind": "number",
+            "numericFormat": "u32"
+          },
+          "unlocked": {
+            "items": {
+              "kind": "string"
+            },
+            "kind": "array"
+          }
+        }
+      },
+      "version": 2
+    }
+  ],
+  "version": 1
+}

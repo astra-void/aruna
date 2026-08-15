@@ -5,6 +5,9 @@ export type ModuleKind =
   | "clientEntry"
   | "serverEntry"
   | "serverAction"
+  // A module exporting a store definition. Server-only, and distinguished from
+  // serverAction so a client import can be reported as a store violation.
+  | "serverStore"
   | "unknown";
 
 export type DiagnosticSeverity = "error" | "warning" | "info";
@@ -109,6 +112,23 @@ export type SignalRecord = {
   payloadSchema?: SchemaMetadata | undefined;
 };
 
+// A plain keyed store, or a session-locked per-player document.
+export type StoreKind = "store" | "playerStore";
+
+export type StoreRecord = {
+  // The DataStore name.
+  id: string;
+  file: string;
+  exportName: string;
+  kind: StoreKind;
+  // The declared data version; 1 when the definition omits it.
+  version: number;
+  scope?: string | undefined;
+  // Whether a migrate() was declared. Omitted from the manifest JSON when false.
+  hasMigrate?: boolean | undefined;
+  schema?: SchemaMetadata | undefined;
+};
+
 export type SchemaLiteralMetadata =
   | {
       kind: "string";
@@ -158,6 +178,7 @@ export type Manifest = {
   actions: ActionRecord[];
   // Omitted from manifest JSON when empty; treat as [] when absent.
   signals?: SignalRecord[] | undefined;
+  stores?: StoreRecord[] | undefined;
   diagnostics: Diagnostic[];
 };
 

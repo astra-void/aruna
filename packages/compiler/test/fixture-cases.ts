@@ -21,6 +21,8 @@ export const fixtureCases = [
   { name: "action-missing-run", mode: "inspect" },
   { name: "invalid-action-rate-limit", mode: "inspect" },
   { name: "client-imports-action-source", mode: "inspect" },
+  { name: "store-basic", mode: "inspect" },
+  { name: "client-imports-store-source", mode: "inspect" },
   { name: "virtual-generated-action-imports", mode: "inspect" },
   { name: "invalid-virtual-generated-action-imports", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },

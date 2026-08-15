@@ -1,6 +1,7 @@
 use crate::config::{ArunaConfig, EntriesMode};
 use crate::actions::{
-    collect_action_definitions, collect_signal_definitions, ArunaActionRecord, ArunaSignalRecord,
+    collect_action_definitions, collect_signal_definitions, collect_store_definitions,
+    ArunaActionRecord, ArunaSignalRecord, ArunaStoreRecord,
 };
 use crate::codegen::{
     EntryHooks, HookModuleRecord, RECOGNIZED_CLIENT_HOOKS, RECOGNIZED_SERVER_HOOKS,
@@ -62,6 +63,10 @@ pub struct BuildGraphResult {
     pub actions: Vec<ArunaActionRecord>,
     #[serde(default)]
     pub signals: Vec<ArunaSignalRecord>,
+    // Omitted when empty so graphs without stores stay byte-stable with
+    // pre-store snapshots.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub stores: Vec<ArunaStoreRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub module_map: BTreeMap<String, ArunaModuleRecord>,
     // Hook modules discovered at the recommended entry paths under
@@ -246,6 +251,8 @@ pub fn build_project_graph(
     let mut action_records = Vec::new();
     let mut action_files = BTreeSet::new();
     let mut signal_records = Vec::new();
+    let mut store_records = Vec::new();
+    let mut store_files = BTreeSet::new();
     let mut entry_hooks = EntryHooks::default();
 
     for absolute_path in files {
@@ -316,6 +323,40 @@ pub fn build_project_graph(
             signal_records.extend(result.signals);
             diagnostics.extend(result.diagnostics);
         }
+
+        // Store discovery, same pattern.
+        if let Ok(result) = collect_store_definitions(project_root, absolute_path, &source_text) {
+            store_records.extend(result.stores);
+            store_files.extend(result.store_files);
+            diagnostics.extend(result.diagnostics);
+        }
+    }
+
+    store_records.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+
+    // A duplicated store id is two definitions pointed at the same DataStore
+    // name, which is how two unrelated features end up overwriting each other's
+    // records.
+    let mut seen_store_ids = BTreeMap::new();
+    for store in &store_records {
+        if let Some(previous_file) = seen_store_ids.insert(store.id.clone(), store.file.clone()) {
+            diagnostics.push(create_diagnostic(
+                "aruna::573",
+                format!("Store id {} is defined more than once.", store.id),
+                Some(store.file.clone()),
+                None,
+                Some(format!(
+                    "First defined in {}, then again in {}. Both would read and write the same DataStore.",
+                    previous_file, store.file
+                )),
+                Some("Use globally unique store ids such as domain.storeName.".to_string()),
+            ));
+        }
     }
 
     action_records.sort_by(|left, right| {
@@ -347,6 +388,13 @@ pub fn build_project_graph(
             module.kind = ModuleKind::ServerAction;
             module.reason = ModuleReason::Directive;
             module.reason_detail = Some("defineAction(...) export detected".to_string());
+        } else if store_files.contains(&module.path) {
+            // Only when the file is not already an action module: an action file
+            // that also declares a store stays a ServerAction, which is the
+            // stricter classification for a client import.
+            module.kind = ModuleKind::ServerStore;
+            module.reason = ModuleReason::Directive;
+            module.reason_detail = Some("defineStore(...) export detected".to_string());
         }
     }
     for module in module_map.values_mut() {
@@ -354,6 +402,10 @@ pub fn build_project_graph(
             module.kind = ModuleKind::ServerAction;
             module.reason = ModuleReason::Directive;
             module.reason_detail = Some("defineAction(...) export detected".to_string());
+        } else if store_files.contains(&module.path) {
+            module.kind = ModuleKind::ServerStore;
+            module.reason = ModuleReason::Directive;
+            module.reason_detail = Some("defineStore(...) export detected".to_string());
         }
     }
 
@@ -528,6 +580,7 @@ pub fn build_project_graph(
         imports,
         actions: action_records,
         signals: signal_records,
+        stores: store_records,
         module_map,
         hooks: entry_hooks,
         diagnostics,

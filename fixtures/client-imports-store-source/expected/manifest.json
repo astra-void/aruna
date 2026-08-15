@@ -1,0 +1,75 @@
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/client.tsx",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./domains/economy/store",
+      "to": "src/domains/economy/store.ts"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/client.tsx",
+      "kind": "clientEntry",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/economy/store.ts",
+      "kind": "serverStore",
+      "path": "src/domains/economy/store.ts",
+      "reason": "directive",
+      "reasonDetail": "defineStore(...) export detected"
+    }
+  ],
+  "projectRoot": ".",
+  "stores": [
+    {
+      "exportName": "profile",
+      "file": "src/domains/economy/store.ts",
+      "id": "player.profile",
+      "kind": "playerStore",
+      "schema": {
+        "kind": "object",
+        "properties": {
+          "coins": {
+            "kind": "number",
+            "numericFormat": "u32"
+          }
+        }
+      },
+      "version": 1
+    }
+  ],
+  "version": 1
+}

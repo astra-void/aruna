@@ -1,0 +1,21 @@
+[
+  {
+    "from": "src/client.tsx",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./domains/economy/store",
+    "to": "src/domains/economy/store.ts"
+  },
+  {
+    "from": "src/domains/economy/store.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/schema"
+  },
+  {
+    "from": "src/domains/economy/store.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  }
+]

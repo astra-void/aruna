@@ -1,0 +1,23 @@
+[
+  {
+    "id": "src/domains/economy/store.ts",
+    "kind": "serverStore",
+    "path": "src/domains/economy/store.ts",
+    "reason": "directive",
+    "reasonDetail": "defineStore(...) export detected"
+  },
+  {
+    "id": "src/domains/settings/store.ts",
+    "kind": "serverStore",
+    "path": "src/domains/settings/store.ts",
+    "reason": "directive",
+    "reasonDetail": "defineStore(...) export detected"
+  },
+  {
+    "id": "src/server.ts",
+    "kind": "serverEntry",
+    "path": "src/server.ts",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
+  }
+]

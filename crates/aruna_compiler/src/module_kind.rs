@@ -12,6 +12,9 @@ pub enum ModuleKind {
     ClientEntry,
     ServerEntry,
     ServerAction,
+    // A module that exports a store definition. Server-only like ServerAction,
+    // and separated from it so the client-side violation can say "store".
+    ServerStore,
     Unknown,
 }
 
@@ -92,9 +95,10 @@ fn matches_any(patterns: &[String], path: &str) -> bool {
 fn patterns_for_kind(conventions: &ConventionConfig, kind: &ModuleKind) -> Vec<String> {
     match kind {
         ModuleKind::Client | ModuleKind::ClientEntry => conventions.client.clone(),
-        ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
-            conventions.server.clone()
-        }
+        ModuleKind::Server
+        | ModuleKind::ServerEntry
+        | ModuleKind::ServerAction
+        | ModuleKind::ServerStore => conventions.server.clone(),
         ModuleKind::Shared => conventions.shared.clone(),
         ModuleKind::Unknown => Vec::new(),
     }
@@ -112,9 +116,10 @@ fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
         let defaults = ConventionSet::for_root(&config.root);
         match kind {
             ModuleKind::Client | ModuleKind::ClientEntry => defaults.client,
-            ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => {
-                defaults.server
-            }
+            ModuleKind::Server
+            | ModuleKind::ServerEntry
+            | ModuleKind::ServerAction
+            | ModuleKind::ServerStore => defaults.server,
             ModuleKind::Shared => defaults.shared,
             ModuleKind::Unknown => Vec::new(),
         }
@@ -214,6 +219,7 @@ fn kind_label(kind: &ModuleKind) -> &'static str {
         ModuleKind::ClientEntry => "client entry",
         ModuleKind::ServerEntry => "server entry",
         ModuleKind::ServerAction => "server action",
+        ModuleKind::ServerStore => "server store",
         ModuleKind::Unknown => "unknown",
     }
 }

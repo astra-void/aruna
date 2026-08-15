@@ -81,6 +81,17 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
             DiagnosticSeverity::Error,
         )),
         "aruna::568" => Some(("unknown-hook-export", DiagnosticSeverity::Warning)),
+        // Stores. Persistence failures are unrecoverable in a way a wrong remote
+        // payload is not — a bad store definition can cost a player their save
+        // file — so the structural rules are errors, not warnings.
+        "aruna::570" => Some(("invalid-store-definition", DiagnosticSeverity::Error)),
+        "aruna::571" => Some(("store-missing-schema", DiagnosticSeverity::Error)),
+        "aruna::572" => Some(("store-schema-invalid", DiagnosticSeverity::Warning)),
+        "aruna::573" => Some(("duplicate-store-id", DiagnosticSeverity::Error)),
+        "aruna::574" => Some(("store-imported-from-client", DiagnosticSeverity::Error)),
+        "aruna::575" => Some(("invalid-store-version", DiagnosticSeverity::Error)),
+        "aruna::576" => Some(("store-missing-default", DiagnosticSeverity::Error)),
+        "aruna::577" => Some(("store-version-without-migrate", DiagnosticSeverity::Warning)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

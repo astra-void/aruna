@@ -80,6 +80,7 @@ enum SchemaRole {
     Input,
     Output,
     Payload,
+    Store,
 }
 
 impl SchemaRole {
@@ -88,6 +89,7 @@ impl SchemaRole {
             SchemaRole::Input => "aruna::553",
             SchemaRole::Output => "aruna::554",
             SchemaRole::Payload => "aruna::564",
+            SchemaRole::Store => "aruna::572",
         }
     }
 
@@ -96,6 +98,7 @@ impl SchemaRole {
             SchemaRole::Input => "input",
             SchemaRole::Output => "output",
             SchemaRole::Payload => "payload",
+            SchemaRole::Store => "schema",
         }
     }
 }
@@ -154,6 +157,45 @@ pub struct ArunaSignalRecord {
     pub serialization: ArunaActionSerializationMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload_schema: Option<ArunaSchemaMetadata>,
+}
+
+// Whether a store is a plain keyed store (`defineStore`) or a session-locked
+// per-player document (`definePlayerStore`). The distinction is what tooling
+// reports and what the boundary rules key off; both are server-only.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ArunaStoreKind {
+    Store,
+    PlayerStore,
+}
+
+// A persisted store discovered from `export const X = defineStore({...})` (or
+// `definePlayerStore`). The id is the DataStore name, so it is recorded here and
+// surfaced by `aruna inspect stores` without running the project's code.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArunaStoreRecord {
+    pub id: String,
+    pub file: String,
+    pub export_name: String,
+    pub kind: ArunaStoreKind,
+    // The declared data version; defaults to 1 when omitted, matching the runtime.
+    pub version: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    // Whether a `migrate` was declared. A store at version > 1 without one cannot
+    // read its own older records, which is worth reporting.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub has_migrate: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<ArunaSchemaMetadata>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct StoreDiscoveryResult {
+    pub stores: Vec<ArunaStoreRecord>,
+    pub store_files: BTreeSet<String>,
+    pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -2186,6 +2228,305 @@ fn collect_signal_candidates(
     (signals, saw_define_signal)
 }
 
+// Reads the optional numeric `version` off a store definition. Defaults to 1,
+// matching `resolveStoreVersion` in both runtimes.
+fn extract_store_version(
+    file: &str,
+    store_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> u32 {
+    let Some(property) = find_object_property(object, "version") else {
+        return 1;
+    };
+
+    match &property.value {
+        Expression::NumericLiteral(literal)
+            if literal.value >= 1.0 && literal.value.fract() == 0.0 =>
+        {
+            literal.value as u32
+        }
+        _ => {
+            diagnostics.push(create_diagnostic(
+                "aruna::575",
+                format!("Store {store_id} in {file} has an invalid version."),
+                Some(file.to_string()),
+                Some(DiagnosticSpan {
+                    start: property.value.span().start as usize,
+                    end: property.value.span().end as usize,
+                }),
+                Some(format!("export name: {export_name}")),
+                Some(
+                    "Set version to a positive integer literal, and bump it when the stored shape changes."
+                        .to_string(),
+                ),
+            ));
+            1
+        }
+    }
+}
+
+fn extract_store_scope(object: &ObjectExpression<'_>) -> Option<String> {
+    match &find_object_property(object, "scope")?.value {
+        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        _ => None,
+    }
+}
+
+fn analyze_define_store_call<'a>(
+    file: &str,
+    export_name: &str,
+    kind: ArunaStoreKind,
+    call: &'a CallExpression<'a>,
+    scope: &SchemaScope<'a>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<ArunaStoreRecord> {
+    let definer = match kind {
+        ArunaStoreKind::Store => "defineStore",
+        ArunaStoreKind::PlayerStore => "definePlayerStore",
+    };
+
+    let Some(Argument::ObjectExpression(object)) = call.arguments.first() else {
+        diagnostics.push(create_diagnostic(
+            "aruna::570",
+            format!("Store {export_name} in {file} has an invalid {definer} definition."),
+            Some(file.to_string()),
+            Some(call_span(call)),
+            Some(format!(
+                "{definer} expects a single object literal with at least an id, a schema, and a defaultValue."
+            )),
+            Some(format!(
+                "Use {definer}({{ id: \"domain.store\", schema: schema.object({{ ... }}), defaultValue: {{ ... }} }})."
+            )),
+        ));
+        return None;
+    };
+
+    let Some(id_property) = find_object_property(object, "id") else {
+        diagnostics.push(create_diagnostic(
+            "aruna::570",
+            format!("Store {export_name} in {file} is missing an id."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some("Store ids are DataStore names and must be static string literals.".to_string()),
+            Some("Add id: \"domain.storeName\" to the store definition.".to_string()),
+        ));
+        return None;
+    };
+
+    let Some(id) = (match &id_property.value {
+        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        _ => None,
+    }) else {
+        diagnostics.push(create_diagnostic(
+            "aruna::570",
+            format!("Store {export_name} in {file} has an invalid id."),
+            Some(file.to_string()),
+            Some(DiagnosticSpan {
+                start: id_property.span.start as usize,
+                end: id_property.span.end as usize,
+            }),
+            Some("Store ids are DataStore names and must be static string literals.".to_string()),
+            Some("Use id: \"domain.storeName\" with a literal string value.".to_string()),
+        ));
+        return None;
+    };
+
+    // The schema is what stops a corrupt record from reaching game code, so a
+    // store without one is an error rather than a degraded-but-working store.
+    let (has_schema, schema_metadata) = extract_action_schema(
+        file,
+        &id,
+        export_name,
+        SchemaRole::Store,
+        object,
+        "schema",
+        scope,
+        diagnostics,
+    );
+    if !has_schema {
+        diagnostics.push(create_diagnostic(
+            "aruna::571",
+            format!("Store {id} in {file} is missing a schema."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some(
+                "A store validates every record it reads against its schema; without one a corrupt record would reach game code."
+                    .to_string(),
+            ),
+            Some("Add schema: schema.object({ ... }) to the store definition.".to_string()),
+        ));
+        return None;
+    }
+
+    // Same reasoning for the default: it is what a never-written key resolves to,
+    // and the runtime has nothing to fall back on without it.
+    if find_object_property(object, "defaultValue").is_none() {
+        diagnostics.push(create_diagnostic(
+            "aruna::576",
+            format!("Store {id} in {file} is missing a defaultValue."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some("defaultValue is what a key that was never written resolves to.".to_string()),
+            Some(
+                "Add defaultValue: { ... } (or a factory returning it) to the store definition."
+                    .to_string(),
+            ),
+        ));
+        return None;
+    }
+
+    let version = extract_store_version(file, &id, export_name, object, diagnostics);
+    let has_migrate = find_object_property(object, "migrate").is_some();
+
+    // A bumped version with no migrate means every record written at the old
+    // version fails to load — the store cannot read its own history.
+    if version > 1 && !has_migrate {
+        diagnostics.push(create_diagnostic(
+            "aruna::577",
+            format!("Store {id} in {file} is at version {version} but declares no migrate()."),
+            Some(file.to_string()),
+            Some(object_span(object)),
+            Some(
+                "Records written at an earlier version fail to load, and the runtime refuses to overwrite them."
+                    .to_string(),
+            ),
+            Some("Add migrate: (stored, fromVersion) => ... to upgrade older records.".to_string()),
+        ));
+    }
+
+    Some(ArunaStoreRecord {
+        id,
+        file: file.to_string(),
+        export_name: export_name.to_string(),
+        kind,
+        version,
+        scope: extract_store_scope(object),
+        has_migrate,
+        schema: schema_metadata,
+    })
+}
+
+fn store_kind_for_callee(name: &str) -> Option<ArunaStoreKind> {
+    match name {
+        "defineStore" => Some(ArunaStoreKind::Store),
+        "definePlayerStore" => Some(ArunaStoreKind::PlayerStore),
+        _ => None,
+    }
+}
+
+fn collect_store_candidates(
+    file: &str,
+    path: &Path,
+    program: &oxc_ast::ast::Program<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> (Vec<ArunaStoreRecord>, bool) {
+    let mut stores = Vec::new();
+    let mut saw_define_store = false;
+    let scope = SchemaScope {
+        env: collect_schema_bindings(program),
+        imported: resolve_imported_schema_bindings(path, program),
+    };
+
+    for statement in &program.body {
+        let Statement::ExportNamedDeclaration(export_decl) = statement else {
+            continue;
+        };
+
+        let Some(Declaration::VariableDeclaration(variable_decl)) = &export_decl.declaration else {
+            continue;
+        };
+
+        if variable_decl.kind != VariableDeclarationKind::Const {
+            continue;
+        }
+
+        for declarator in &variable_decl.declarations {
+            let BindingPattern::BindingIdentifier(binding) = &declarator.id else {
+                continue;
+            };
+
+            let Some(Expression::CallExpression(call)) = declarator.init.as_ref() else {
+                continue;
+            };
+
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+
+            let Some(kind) = store_kind_for_callee(callee.name.as_str()) else {
+                continue;
+            };
+
+            // Recorded even when the definition turns out to be invalid: the file
+            // still holds server-only persistence code, and the boundary rules
+            // must keep the client away from it.
+            saw_define_store = true;
+
+            let Some(candidate) = analyze_define_store_call(
+                file,
+                binding.name.as_str(),
+                kind,
+                call,
+                &scope,
+                diagnostics,
+            ) else {
+                continue;
+            };
+            stores.push(candidate);
+        }
+    }
+
+    (stores, saw_define_store)
+}
+
+pub fn collect_store_definitions(
+    project_root: &Path,
+    path: &Path,
+    source_text: &str,
+) -> Result<StoreDiscoveryResult, String> {
+    let file = project_relative(project_root, path);
+    let allocator = Allocator::default();
+    let source_type = source_type_for_path(path)?;
+    let parser_return = Parser::new(&allocator, source_text, source_type).parse();
+
+    if parser_return.panicked || !parser_return.errors.is_empty() {
+        let errors = parser_return
+            .errors
+            .into_iter()
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>();
+        return Err(if errors.is_empty() {
+            "Oxc parser panicked without reporting a recoverable error.".to_string()
+        } else {
+            errors.join("\n")
+        });
+    }
+
+    let mut diagnostics = Vec::new();
+    let (mut stores, saw_define_store) =
+        collect_store_candidates(&file, path, &parser_return.program, &mut diagnostics);
+    let mut store_files = BTreeSet::new();
+
+    if saw_define_store {
+        store_files.insert(file.clone());
+    }
+
+    stores.sort_by(|left, right| {
+        left.id
+            .cmp(&right.id)
+            .then_with(|| left.file.cmp(&right.file))
+            .then_with(|| left.export_name.cmp(&right.export_name))
+    });
+
+    Ok(StoreDiscoveryResult {
+        stores,
+        store_files,
+        diagnostics,
+    })
+}
+
 pub fn collect_signal_definitions(
     project_root: &Path,
     path: &Path,
@@ -2303,6 +2644,175 @@ mod tests {
 
         assert_eq!(result.actions.len(), 1);
         (result.actions[0].clone(), result.diagnostics)
+    }
+
+    fn collect_stores(source: &str) -> StoreDiscoveryResult {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path();
+        let path = write_file(root, "src/stores.ts", source);
+        collect_store_definitions(root, &path, &std::fs::read_to_string(&path).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn collects_store_and_player_store_definitions() {
+        let result = collect_stores(
+            r#"
+import { defineStore, definePlayerStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const settings = defineStore({
+  id: "game.settings",
+  scope: "live",
+  schema: schema.object({ musicEnabled: schema.boolean() }),
+  defaultValue: { musicEnabled: true },
+});
+
+export const profile = definePlayerStore({
+  id: "player.profile",
+  schema: schema.object({ coins: schema.u32() }),
+  defaultValue: () => ({ coins: 0 }),
+});
+"#,
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.stores.len(), 2);
+        assert!(result.store_files.contains("src/stores.ts"));
+
+        let settings = &result.stores[0];
+        assert_eq!(settings.id, "game.settings");
+        assert_eq!(settings.export_name, "settings");
+        assert_eq!(settings.kind, ArunaStoreKind::Store);
+        assert_eq!(settings.scope.as_deref(), Some("live"));
+        assert_eq!(settings.version, 1);
+        assert!(!settings.has_migrate);
+        assert!(settings.schema.is_some());
+
+        let profile = &result.stores[1];
+        assert_eq!(profile.id, "player.profile");
+        assert_eq!(profile.kind, ArunaStoreKind::PlayerStore);
+    }
+
+    #[test]
+    fn records_the_declared_version_and_migrate() {
+        let result = collect_stores(
+            r#"
+import { definePlayerStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const profile = definePlayerStore({
+  id: "player.profile",
+  version: 3,
+  schema: schema.object({ coins: schema.u32() }),
+  defaultValue: { coins: 0 },
+  migrate: (stored, from) => (from === 2 ? (stored as { coins: number }) : undefined),
+});
+"#,
+        );
+
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.stores[0].version, 3);
+        assert!(result.stores[0].has_migrate);
+    }
+
+    #[test]
+    fn reports_a_bumped_version_without_a_migrate() {
+        let result = collect_stores(
+            r#"
+import { defineStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const settings = defineStore({
+  id: "game.settings",
+  version: 2,
+  schema: schema.object({ musicEnabled: schema.boolean() }),
+  defaultValue: { musicEnabled: true },
+});
+"#,
+        );
+
+        // Still discovered — the store works, it just cannot read its own history.
+        assert_eq!(result.stores.len(), 1);
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].code, "aruna::577");
+    }
+
+    #[test]
+    fn rejects_a_store_without_a_schema() {
+        let result = collect_stores(
+            r#"
+import { defineStore } from "aruna/server";
+
+export const settings = defineStore({
+  id: "game.settings",
+  defaultValue: { musicEnabled: true },
+});
+"#,
+        );
+
+        assert!(result.stores.is_empty());
+        assert_eq!(result.diagnostics[0].code, "aruna::571");
+        // The file is still marked as a store module, so the boundary rules keep
+        // the client away from it even while the definition is broken.
+        assert!(result.store_files.contains("src/stores.ts"));
+    }
+
+    #[test]
+    fn rejects_a_store_without_a_default_value() {
+        let result = collect_stores(
+            r#"
+import { defineStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const settings = defineStore({
+  id: "game.settings",
+  schema: schema.object({ musicEnabled: schema.boolean() }),
+});
+"#,
+        );
+
+        assert!(result.stores.is_empty());
+        assert_eq!(result.diagnostics[0].code, "aruna::576");
+    }
+
+    #[test]
+    fn rejects_a_non_literal_store_id() {
+        let result = collect_stores(
+            r#"
+import { defineStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const id = "game.settings";
+
+export const settings = defineStore({
+  id,
+  schema: schema.object({ musicEnabled: schema.boolean() }),
+  defaultValue: { musicEnabled: true },
+});
+"#,
+        );
+
+        assert!(result.stores.is_empty());
+        assert_eq!(result.diagnostics[0].code, "aruna::570");
+    }
+
+    #[test]
+    fn rejects_an_invalid_store_version() {
+        let result = collect_stores(
+            r#"
+import { defineStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const settings = defineStore({
+  id: "game.settings",
+  version: 0,
+  schema: schema.object({ musicEnabled: schema.boolean() }),
+  defaultValue: { musicEnabled: true },
+});
+"#,
+        );
+
+        assert_eq!(result.diagnostics[0].code, "aruna::575");
     }
 
     fn collect_signals(source: &str) -> SignalDiscoveryResult {

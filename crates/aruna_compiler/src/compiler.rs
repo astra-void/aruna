@@ -89,6 +89,7 @@ fn internal_error_output(input: &CompilerInput, message: String) -> CompilerOutp
             imports: Vec::new(),
             actions: Vec::new(),
             signals: Vec::new(),
+            stores: Vec::new(),
             diagnostics: vec![diagnostic],
         },
         generated_files: None,
@@ -111,6 +112,7 @@ fn boundary_suggestion(code: &str) -> &'static str {
         "aruna::302" => "Keep shared modules free of client-only imports, or split client code into client/.",
         "aruna::303" => "Keep shared modules free of server-only imports, or split server code into server/.",
         "aruna::556" => "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.",
+        "aruna::574" => "Stores are server-only and have no client binding. Read the data on the server and return it through an action.",
         _ => "Refactor the import so each module only reaches the boundaries it is allowed to use.",
     }
 }
@@ -136,6 +138,7 @@ fn module_kind_label(kind: ModuleKind) -> &'static str {
         ModuleKind::ClientEntry => "client entry",
         ModuleKind::ServerEntry => "server entry",
         ModuleKind::ServerAction => "server action",
+        ModuleKind::ServerStore => "server store",
         ModuleKind::Unknown => "unknown",
     }
 }
@@ -453,6 +456,7 @@ fn run_project_inner(
             .collect::<Vec<ArunaImportEdge>>(),
         &graph.actions,
         &graph.signals,
+        &graph.stores,
         &mutable_diagnostics,
     );
 
@@ -514,6 +518,7 @@ fn run_project_inner(
             .collect::<Vec<ArunaImportEdge>>(),
         &graph.actions,
         &graph.signals,
+        &graph.stores,
         &mutable_diagnostics,
     );
     let summary = summarize_diagnostics(&mutable_diagnostics, warnings_as_errors);

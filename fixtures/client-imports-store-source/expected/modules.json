@@ -1,0 +1,16 @@
+[
+  {
+    "id": "src/client.tsx",
+    "kind": "clientEntry",
+    "path": "src/client.tsx",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
+  },
+  {
+    "id": "src/domains/economy/store.ts",
+    "kind": "serverStore",
+    "path": "src/domains/economy/store.ts",
+    "reason": "directive",
+    "reasonDetail": "defineStore(...) export detected"
+  }
+]

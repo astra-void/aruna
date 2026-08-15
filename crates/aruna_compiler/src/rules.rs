@@ -8,7 +8,10 @@ pub struct BoundaryViolation {
 fn normalize_boundary_kind(kind: ModuleKind) -> ModuleKind {
     match kind {
         ModuleKind::Client | ModuleKind::ClientEntry => ModuleKind::Client,
-        ModuleKind::Server | ModuleKind::ServerEntry | ModuleKind::ServerAction => ModuleKind::Server,
+        ModuleKind::Server
+        | ModuleKind::ServerEntry
+        | ModuleKind::ServerAction
+        | ModuleKind::ServerStore => ModuleKind::Server,
         ModuleKind::Shared => ModuleKind::Shared,
         // Unclassified modules are evaluated as shared, the most restrictive
         // kind: an unknown file importing server or client code is a violation.
@@ -22,6 +25,12 @@ pub fn boundary_code(importer: ModuleKind, imported: ModuleKind) -> Option<&'sta
     match (importer, imported) {
         (ModuleKind::Client | ModuleKind::ClientEntry, ModuleKind::ServerAction) => {
             Some("aruna::556")
+        }
+        // A store holds the server's authority over persisted state. There is no
+        // generated client binding for it — unlike an action — so the client has
+        // no legitimate reason to reach one at all.
+        (ModuleKind::Client | ModuleKind::ClientEntry, ModuleKind::ServerStore) => {
+            Some("aruna::574")
         }
         _ => match (normalize_boundary_kind(importer), normalize_boundary_kind(imported)) {
             (ModuleKind::Client, ModuleKind::Server) => Some("aruna::300"),
@@ -67,6 +76,27 @@ mod tests {
         assert_eq!(
             boundary_code(ModuleKind::Client, ModuleKind::ServerAction),
             Some("aruna::556")
+        );
+        // A store has no generated client binding at all, so a client import is
+        // reported as a store violation rather than the action one.
+        assert_eq!(
+            boundary_code(ModuleKind::Client, ModuleKind::ServerStore),
+            Some("aruna::574")
+        );
+        assert_eq!(
+            boundary_code(ModuleKind::ClientEntry, ModuleKind::ServerStore),
+            Some("aruna::574")
+        );
+        // Server code reaching a store is exactly what stores are for.
+        assert_eq!(boundary_code(ModuleKind::Server, ModuleKind::ServerStore), None);
+        assert_eq!(
+            boundary_code(ModuleKind::ServerAction, ModuleKind::ServerStore),
+            None
+        );
+        // Shared code must not reach one either: it would be replicated.
+        assert_eq!(
+            boundary_code(ModuleKind::Shared, ModuleKind::ServerStore),
+            Some("aruna::303")
         );
     }
 
