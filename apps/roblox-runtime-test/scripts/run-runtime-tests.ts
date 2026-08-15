@@ -9,6 +9,7 @@
 
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +21,15 @@ const runtimeSource = join(repoRoot, "packages", "aruna", "roblox");
 const compiledSource = join(packageDir, "src", "runtime");
 const compiledOutput = join(packageDir, "out", "runtime");
 const promisePath = join(packageDir, "node_modules", "roblox-ts", "include", "Promise.lua");
-const rbxtscBin = join(packageDir, "node_modules", ".bin", "rbxtsc");
+// Spawn rbxtsc's entry point with the running Node rather than the `.bin` shim:
+// on Windows the extensionless shim is a shell script (ENOENT) and its `.cmd`
+// sibling cannot be spawned without a shell (EINVAL since Node 20.12).
+const rbxtscEntry = join(
+  dirname(createRequire(import.meta.url).resolve("roblox-ts/package.json")),
+  "out",
+  "CLI",
+  "cli.js",
+);
 const runScript = join(packageDir, "lune", "run.luau");
 
 const keepArtifacts = process.argv.includes("--keep");
@@ -47,7 +56,7 @@ for (const entry of readdirSync(runtimeSource)) {
 
 // 2. Compile to Luau.
 step("Compiling runtime to Luau with rbxtsc");
-const compile = spawnSync(rbxtscBin, ["--project", "tsconfig.json"], {
+const compile = spawnSync(process.execPath, [rbxtscEntry, "--project", "tsconfig.json"], {
   cwd: packageDir,
   stdio: "inherit",
 });
