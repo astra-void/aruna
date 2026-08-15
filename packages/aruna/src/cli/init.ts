@@ -53,48 +53,15 @@ export default defineConfig({
 function tsconfigTemplate(projectRoot: string): string {
   const tsconfigPath = path.join(projectRoot, "tsconfig.json");
 
+  // Everything a roblox-ts + Aruna project needs and nobody chooses — the
+  // compile contract, the src -> out layout, the @rbxts type roots, and the
+  // aruna path aliases — comes from the generated fragment, so this file holds
+  // only what the project actually decides. Any key here overrides the
+  // fragment (TypeScript `extends` semantics), so `jsx` and friends stay the
+  // project's call.
   const tsconfig = {
-    // All aruna-owned path aliases live in the generated fragment; the project
-    // tsconfig references it once and can never drift from the codegen layout.
     extends: arunaTsconfigExtendsRef(tsconfigPath, GENERATED_DIR),
-    compilerOptions: {
-      target: "ESNext",
-      module: "CommonJS",
-      moduleResolution: "Node",
-      moduleDetection: "force",
-      strict: true,
-      noLib: true,
-      // @rbxts/types ships ambient declarations that only typecheck under the
-      // exact compiler-types they were generated against; skipLibCheck keeps a
-      // point release of the types package from breaking consumer typechecks.
-      skipLibCheck: true,
-      baseUrl: ".",
-      rootDir: "src",
-      outDir: "out",
-      jsx: "preserve",
-      declaration: false,
-      downlevelIteration: true,
-      allowSyntheticDefaultImports: true,
-      esModuleInterop: true,
-      forceConsistentCasingInFileNames: true,
-      resolveJsonModule: true,
-      noUncheckedIndexedAccess: true,
-      verbatimModuleSyntax: false,
-      typeRoots: ["./node_modules", "./node_modules/@rbxts"],
-      types: ["@rbxts/types", "@rbxts/compiler-types"],
-    },
-    // The generated dir is named explicitly: TypeScript's wildcard globs skip
-    // dot-prefixed directories, so `src/**/*` alone would leave the generated
-    // entry scripts (entries: "generated") out of the program — `aruna check`
-    // and the IDE would never typecheck them. Mirrors the staged include that
-    // `aruna build` compiles against (stagedIncludeGlobs in rojo-layout.ts).
-    include: [
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      `${GENERATED_DIR}/**/*.ts`,
-      `${GENERATED_DIR}/**/*.tsx`,
-    ],
-    exclude: ["aruna.config.ts", "out", "node_modules"],
+    compilerOptions: {},
   };
 
   return `${JSON.stringify(tsconfig, null, 2)}\n`;

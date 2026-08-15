@@ -33,30 +33,45 @@ describe("aruna init", () => {
         "tsconfig.json",
       ]);
 
-      // The scaffolded tsconfig holds no inline aruna aliases — it extends the
-      // generated fragment, so codegen-layout changes can never desync it.
+      // The scaffolded tsconfig carries no aruna aliases and no roblox-ts
+      // boilerplate — it extends the generated fragment, so neither the codegen
+      // layout nor the compile contract can drift out from under it.
       const tsconfig = JSON.parse(await fs.readFile(path.join(root, "tsconfig.json"), "utf8")) as {
         extends: string;
-        include: string[];
-        compilerOptions: { paths?: Record<string, string[]> };
+        include?: string[];
+        compilerOptions: { paths?: Record<string, string[]>; target?: string };
       };
       expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
       expect(tsconfig.compilerOptions.paths).toBeUndefined();
-
-      // The dot-prefixed generated dir is named explicitly — TypeScript's
-      // wildcard globs skip it, which would leave the generated entry scripts
-      // untypechecked by `aruna check` and the IDE.
-      expect(tsconfig.include).toContain("src/.aruna/**/*.ts");
-      expect(tsconfig.include).toContain("src/.aruna/**/*.tsx");
+      expect(tsconfig.compilerOptions.target).toBeUndefined();
 
       const fragment = JSON.parse(
         stripJsonComments(
           await fs.readFile(path.join(root, "src/.aruna/tsconfig.aruna.json"), "utf8"),
         ),
       ) as {
-        compilerOptions: { baseUrl: string; paths: Record<string, string[]> };
+        compilerOptions: {
+          baseUrl: string;
+          paths: Record<string, string[]>;
+          rootDir: string;
+          outDir: string;
+          types: string[];
+        };
+        include: string[];
+        exclude: string[];
       };
       expect(fragment.compilerOptions.baseUrl).toBe("../..");
+      // The compile contract roblox-ts requires, anchored on the fragment's own
+      // directory the way TypeScript resolves an extended config's paths.
+      expect(fragment.compilerOptions.rootDir).toBe("../../src");
+      expect(fragment.compilerOptions.outDir).toBe("../../out");
+      expect(fragment.compilerOptions.types).toEqual(["@rbxts/types", "@rbxts/compiler-types"]);
+      expect(fragment.include).toContain("../../src/**/*.ts");
+      // The dot-prefixed generated dir is named explicitly — TypeScript's
+      // wildcard globs skip it, which would leave the generated entry scripts
+      // untypechecked by `aruna check` and the IDE. The fragment lives inside
+      // that dir, so its own relative glob covers it.
+      expect(fragment.include).toContain("**/*.ts");
       const paths = fragment.compilerOptions.paths;
       expect(paths["aruna/server"]).toEqual(["src/.aruna/shared/runtime/server.ts"]);
       expect(paths["aruna/schema"]).toEqual(["src/.aruna/shared/runtime/schema.ts"]);

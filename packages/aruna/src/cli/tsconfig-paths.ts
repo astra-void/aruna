@@ -210,18 +210,74 @@ export function isArunaOwnedAlias(alias: string): boolean {
   return alias.startsWith("$aruna/") || ARUNA_RUNTIME_ALIAS_PATTERN.test(alias);
 }
 
-// Contents of the generated fragment. `baseUrl` re-anchors the fragment at the
-// project root, so its `paths` targets are byte-identical to the ones doctor
-// would install inline in the root tsconfig.
+// The roblox-ts compile contract every Aruna project needs and nobody chooses:
+// the module/target/lib triple rbxtsc requires, the @rbxts type roots, and the
+// src -> out layout. It used to be ~40 hand-copied lines in each consumer's
+// tsconfig, where it could drift silently from what the staged build actually
+// compiles with. Values are the project's to override — TypeScript's `extends`
+// gives the child the last word on every key here.
+//
+// `rootDir`/`outDir`/`typeRoots`/`include`/`exclude` are written relative to
+// the fragment's own directory, which is how TypeScript resolves paths in an
+// extended config.
+function arunaTsconfigBase(upToRoot: string): {
+  compilerOptions: Record<string, unknown>;
+  include: string[];
+  exclude: string[];
+} {
+  return {
+    compilerOptions: {
+      target: "ESNext",
+      module: "CommonJS",
+      moduleResolution: "Node",
+      moduleDetection: "force",
+      strict: true,
+      noLib: true,
+      // @rbxts/types ships ambient declarations that only typecheck under the
+      // exact compiler-types they were generated against; skipLibCheck keeps a
+      // point release of the types package from breaking consumer typechecks.
+      skipLibCheck: true,
+      rootDir: `${upToRoot}/src`,
+      outDir: `${upToRoot}/out`,
+      jsx: "preserve",
+      declaration: false,
+      downlevelIteration: true,
+      allowSyntheticDefaultImports: true,
+      esModuleInterop: true,
+      forceConsistentCasingInFileNames: true,
+      resolveJsonModule: true,
+      noUncheckedIndexedAccess: true,
+      verbatimModuleSyntax: false,
+      typeRoots: [`${upToRoot}/node_modules`, `${upToRoot}/node_modules/@rbxts`],
+      types: ["@rbxts/types", "@rbxts/compiler-types"],
+    },
+    // The generated dir is named explicitly: TypeScript's wildcard globs skip
+    // dot-prefixed directories, so `src/**/*` alone would leave the generated
+    // entry scripts (entries: "generated") out of the program — `aruna check`
+    // and the IDE would never typecheck them. Mirrors the staged include that
+    // `aruna build` compiles against (stagedIncludeGlobs in rojo-layout.ts).
+    include: [`${upToRoot}/src/**/*.ts`, `${upToRoot}/src/**/*.tsx`, "**/*.ts", "**/*.tsx"],
+    exclude: [`${upToRoot}/aruna.config.ts`, `${upToRoot}/out`, `${upToRoot}/node_modules`],
+  };
+}
+
+// Contents of the generated fragment: the roblox-ts compile contract plus every
+// aruna-owned path alias. `baseUrl` re-anchors the fragment at the project
+// root, so its `paths` targets are byte-identical to the ones doctor would
+// install inline in the root tsconfig.
 export function arunaTsconfigFragmentContents(projectRoot: string, generatedDir: string): string {
   const rootTsconfigPath = path.join(projectRoot, "tsconfig.json");
   const fragmentDir = path.resolve(projectRoot, generatedDir);
-  const baseUrl = path.relative(fragmentDir, projectRoot) || ".";
+  const baseUrl = (path.relative(fragmentDir, projectRoot) || ".").split(path.sep).join("/");
+  const base = arunaTsconfigBase(baseUrl);
   const fragment = {
     compilerOptions: {
-      baseUrl: baseUrl.split(path.sep).join("/"),
+      ...base.compilerOptions,
+      baseUrl,
       paths: resolveAllArunaAliasPaths(rootTsconfigPath, generatedDir),
     },
+    include: base.include,
+    exclude: base.exclude,
   };
   const json = JSON.stringify(fragment, null, 2);
   // tsconfig files are JSONC, so a human-facing header comment is safe for the

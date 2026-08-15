@@ -227,12 +227,42 @@ export function stripJsonComments(contents: string): string {
   return out;
 }
 
+// Relative `typeRoots` in an extended config are resolved by TypeScript against
+// *that* config's directory, so a fragment under `src/.aruna/` writes them as
+// `../../node_modules`. The staged compile writes one flat tsconfig at the
+// staged root, where those would climb out of the temp tree — rebase them onto
+// the root config's directory, which is what the staged node_modules mirror
+// reproduces. Absolute entries are left alone.
+function rebaseTypeRoots(
+  options: Record<string, unknown>,
+  fromDir: string,
+  toDir: string,
+): Record<string, unknown> {
+  const typeRoots = options["typeRoots"];
+  if (fromDir === toDir || !Array.isArray(typeRoots)) {
+    return options;
+  }
+  return {
+    ...options,
+    typeRoots: typeRoots.map((entry) => {
+      if (typeof entry !== "string" || path.isAbsolute(entry)) {
+        return entry;
+      }
+      const rebased = path.relative(toDir, path.resolve(fromDir, entry)).split(path.sep).join("/");
+      return rebased.startsWith(".") ? rebased : `./${rebased}`;
+    }),
+  };
+}
+
 // compilerOptions from a tsconfig and everything it extends, nearest-wins.
 // Package-name `extends` refs are skipped: they resolve through node
 // resolution, which the staged tree cannot reproduce faithfully.
 export function readInheritedCompilerOptions(
   tsconfigPath: string,
   seen: Set<string> = new Set(),
+  // Directory the returned relative paths are anchored on. Defaults to the
+  // entry config's own directory.
+  baseDir?: string,
 ): Record<string, unknown> {
   const resolved = path.resolve(tsconfigPath);
   if (seen.has(resolved) || !fs.existsSync(resolved)) {
@@ -263,6 +293,7 @@ export function readInheritedCompilerOptions(
         ? extendsField.filter((entry): entry is string => typeof entry === "string")
         : [];
 
+  const anchorDir = baseDir ?? path.dirname(resolved);
   let inherited: Record<string, unknown> = {};
   for (const ref of refs) {
     if (!ref.startsWith(".")) {
@@ -270,11 +301,11 @@ export function readInheritedCompilerOptions(
     }
     inherited = {
       ...inherited,
-      ...readInheritedCompilerOptions(path.resolve(path.dirname(resolved), ref), seen),
+      ...readInheritedCompilerOptions(path.resolve(path.dirname(resolved), ref), seen, anchorDir),
     };
   }
 
-  return { ...inherited, ...own };
+  return { ...inherited, ...rebaseTypeRoots(own, path.dirname(resolved), anchorDir) };
 }
 
 // Ambient declaration files carry `declare global` / JSX augmentations that the

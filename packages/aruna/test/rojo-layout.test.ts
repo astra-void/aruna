@@ -175,3 +175,30 @@ describe("collectAmbientDeclarations", () => {
     }
   });
 });
+
+describe("readInheritedCompilerOptions typeRoots", () => {
+  it("rebases an extended config's relative typeRoots onto the root config", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-inherit-"));
+    try {
+      fs.mkdirSync(path.join(root, "src/.aruna"), { recursive: true });
+      // What the generated fragment writes: paths anchored on its own directory.
+      fs.writeFileSync(
+        path.join(root, "src/.aruna/tsconfig.aruna.json"),
+        JSON.stringify({
+          compilerOptions: { typeRoots: ["../../node_modules", "../../node_modules/@rbxts"] },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(root, "tsconfig.json"),
+        JSON.stringify({ extends: "./src/.aruna/tsconfig.aruna.json", compilerOptions: {} }),
+      );
+
+      const options = readInheritedCompilerOptions(path.join(root, "tsconfig.json"));
+      // Anchored on the project root, which is what the staged node_modules
+      // mirror reproduces — `../../node_modules` would climb out of the temp tree.
+      expect(options["typeRoots"]).toEqual(["./node_modules", "./node_modules/@rbxts"]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
