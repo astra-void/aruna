@@ -33,6 +33,25 @@ describe("loadProjectConfig conventions", () => {
     expect(loaded.config.conventions.shared).toContain("**/signals.ts");
   });
 
+  it("loads a config that imports defineConfig from the scoped package name", () => {
+    // `@arunajs/aruna` is the real npm name, and the package is ESM-only with no
+    // `require` condition — so a config written this way used to fail to load
+    // with Node's "No \"exports\" main defined", which names the package rather
+    // than the import.
+    const loaded = loadProjectConfig(
+      projectWithConfig(
+        `import { defineConfig } from "@arunajs/aruna";
+export default defineConfig({
+  conventions: { shared: ["**/policy.ts"] },
+});
+`,
+      ),
+    );
+
+    expect(loaded.diagnostics).toEqual([]);
+    expect(loaded.config.conventions.shared).toContain("**/policy.ts");
+  });
+
   it("adds user globs to the built-in set instead of replacing it", () => {
     const loaded = loadProjectConfig(
       projectWithConfig(

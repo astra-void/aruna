@@ -686,6 +686,22 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
   };
 }
 
+// Every specifier a config file can legitimately import `defineConfig` from.
+// The scoped package name matters as much as the alias: `@arunajs/aruna` is the
+// real npm name, so a user who writes it is not doing anything unusual — and
+// letting it fall through to the CommonJS require below fails outright, because
+// the package is ESM-only and its export map has no `require` condition. The
+// error Node produces for that ("No \"exports\" main defined") points at the
+// package rather than at the import, which is why it is worth intercepting here.
+function isArunaConfigSpecifier(specifier: string): boolean {
+  return (
+    specifier === "aruna" ||
+    specifier === "aruna/config" ||
+    specifier === "@arunajs/aruna" ||
+    specifier === "@arunajs/aruna/config"
+  );
+}
+
 function evaluateCommonJs(sourceText: string, filename: string): unknown {
   const requireForConfig = createRequire(filename);
   const defineConfig = (config: unknown): unknown => config;
@@ -703,7 +719,7 @@ function evaluateCommonJs(sourceText: string, filename: string): unknown {
     exports: module.exports,
     module,
     require(specifier: string) {
-      if (specifier === "aruna" || specifier === "aruna/config") {
+      if (isArunaConfigSpecifier(specifier)) {
         return {
           __esModule: true,
           defineConfig,
