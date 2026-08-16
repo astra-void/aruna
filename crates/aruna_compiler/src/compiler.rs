@@ -1,10 +1,12 @@
-use crate::config::{ArunaConfig, EntriesMode};
+use crate::config::{ArunaConfig, EntriesMode, StrictSeverity};
 use crate::codegen::{
     generate_action_files, generate_entry_files, generate_signal_files, GeneratedFile,
 };
 use crate::diagnostics::{
     create_diagnostic, strip_ignored_diagnostics, summarize_diagnostics, ArunaDiagnostic,
+    DiagnosticSeverity,
 };
+use crate::domains::{DomainIndex, PublicSurface, DOMAIN_PRIVATE_SEGMENTS};
 use crate::files::discover_source_files;
 use crate::graph::{build_project_graph, ArunaImportEdge, GraphImportRecord};
 use crate::manifest::{create_manifest, ArunaManifest, ArunaModuleRecord};
@@ -249,6 +251,80 @@ fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<Aruna
     ))
 }
 
+// Domain-to-domain public API boundary. A domain owns its `client/` and
+// `server/` subtrees; what it offers the rest of the project is what sits at
+// its root — or exactly its `index.ts`, once it declares one. Reaching past
+// that surface couples two domains through an implementation detail, which is
+// the coupling `domains/` exists to prevent.
+//
+// Only domain-to-domain edges are checked. App-shell code (`src/client/**`,
+// `src/app/**`, the entry files) legitimately boots a domain's own client and
+// server modules, and code outside any domain has no domain to answer to.
+fn create_domain_boundary_diagnostic(
+    edge: &GraphImportRecord,
+    domains: &DomainIndex,
+    severity: &StrictSeverity,
+) -> Option<ArunaDiagnostic> {
+    if !edge.edge.resolved || matches!(severity, StrictSeverity::Off) {
+        return None;
+    }
+
+    let imported_path = edge.edge.to.as_deref()?;
+    let importer_domain = domains.domain_for(&edge.importer_path)?;
+    let imported_domain = domains.domain_for(imported_path)?;
+    if importer_domain.dir == imported_domain.dir {
+        return None;
+    }
+    if domains.is_public(&imported_domain, imported_path) {
+        return None;
+    }
+
+    let (surface, suggestion) = match domains.public_surface(&imported_domain) {
+        PublicSurface::Index(index_file) => (
+            format!("{index_file} (the domain's index module)"),
+            format!(
+                "Import from {index_file}, or re-export what {} needs from it.",
+                importer_domain.name
+            ),
+        ),
+        PublicSurface::RootFiles => (
+            format!(
+                "modules at {} outside {}",
+                imported_domain.dir,
+                DOMAIN_PRIVATE_SEGMENTS
+                    .iter()
+                    .map(|segment| format!("{segment}/"))
+                    .collect::<Vec<_>>()
+                    .join(" and ")
+            ),
+            format!(
+                "Move what {} needs into {}'s public surface (model.ts, schema.ts, signals.ts, ...), or call the {} domain through an action or signal.",
+                importer_domain.name, imported_domain.name, imported_domain.name
+            ),
+        ),
+    };
+
+    let mut diagnostic = create_diagnostic(
+        "aruna::304",
+        format!(
+            "{} imports {imported_path}, which is private to the {} domain.",
+            edge.importer_path, imported_domain.name
+        ),
+        Some(edge.importer_path.clone()),
+        edge.span.clone(),
+        Some(format!(
+            "importer domain: {}\nimported domain: {}\n{} public surface: {surface}",
+            importer_domain.name, imported_domain.name, imported_domain.name
+        )),
+        Some(suggestion),
+    );
+    diagnostic.severity = match severity {
+        StrictSeverity::Error => DiagnosticSeverity::Error,
+        _ => DiagnosticSeverity::Warning,
+    };
+    Some(diagnostic)
+}
+
 fn create_unknown_module_diagnostics(
     modules: &[ArunaModuleRecord],
     touched_unknown_kinds: &BTreeSet<String>,
@@ -279,12 +355,15 @@ fn build_diagnostics(
     graph_diagnostics: &[ArunaDiagnostic],
     imports: &[GraphImportRecord],
     modules: &[ArunaModuleRecord],
+    config: &ArunaConfig,
     config_diagnostics: &[ArunaDiagnostic],
     ignore: &[String],
 ) -> Vec<ArunaDiagnostic> {
     let mut diagnostics = Vec::new();
     diagnostics.extend(config_diagnostics.iter().cloned());
     diagnostics.extend(graph_diagnostics.iter().cloned());
+
+    let domains = DomainIndex::new(config, modules.iter().map(|module| module.path.as_str()));
 
     let mut touched_unknown_kinds = BTreeSet::new();
     for edge in imports {
@@ -306,6 +385,12 @@ fn build_diagnostics(
 
         if let Some(boundary) = create_boundary_diagnostic(edge) {
             diagnostics.push(boundary);
+        }
+
+        if let Some(domain_boundary) =
+            create_domain_boundary_diagnostic(edge, &domains, &config.strict.domain_boundary)
+        {
+            diagnostics.push(domain_boundary);
         }
     }
 
@@ -374,6 +459,7 @@ fn run_project_inner(
         &graph.diagnostics,
         &graph.imports,
         &graph.modules,
+        &input.config,
         &input.config_diagnostics,
         &ignore,
     );

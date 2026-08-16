@@ -109,6 +109,9 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::301" => Some(("server-imports-client", DiagnosticSeverity::Error)),
         "aruna::302" => Some(("shared-imports-client", DiagnosticSeverity::Error)),
         "aruna::303" => Some(("shared-imports-server", DiagnosticSeverity::Error)),
+        // Severity is configurable through `strict.domainBoundary`; this is the
+        // default the compiler stamps before that setting is applied.
+        "aruna::304" => Some(("cross-domain-private-import", DiagnosticSeverity::Warning)),
         "aruna::700" => Some(("manifest-write-failed", DiagnosticSeverity::Error)),
         "aruna::701" => Some(("generated-output-write-failed", DiagnosticSeverity::Error)),
         "aruna::900" => Some(("internal-compiler-error", DiagnosticSeverity::Error)),

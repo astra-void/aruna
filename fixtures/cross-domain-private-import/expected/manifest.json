@@ -1,0 +1,120 @@
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::304",
+      "details": "importer domain: shop\nimported domain: inventory\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "src/domains/shop/server/actions.ts imports src/domains/inventory/model.ts, which is private to the inventory domain.",
+      "name": "cross-domain-private-import",
+      "severity": "warning",
+      "span": {
+        "end": 49,
+        "start": 26
+      },
+      "suggestion": "Import from src/domains/inventory/index.ts, or re-export what shop needs from it."
+    },
+    {
+      "code": "aruna::304",
+      "details": "importer domain: shop\nimported domain: inventory\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "src/domains/shop/server/actions.ts imports src/domains/inventory/server/ledger.ts, which is private to the inventory domain.",
+      "name": "cross-domain-private-import",
+      "severity": "warning",
+      "span": {
+        "end": 105,
+        "start": 74
+      },
+      "suggestion": "Import from src/domains/inventory/index.ts, or re-export what shop needs from it."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/inventory/index.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./model",
+      "to": "src/domains/inventory/model.ts"
+    },
+    {
+      "from": "src/domains/shop/client/state.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../../quest/model",
+      "to": "src/domains/quest/model.ts"
+    },
+    {
+      "from": "src/domains/shop/model.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../inventory",
+      "to": "src/domains/inventory/index.ts"
+    },
+    {
+      "from": "src/domains/shop/server/actions.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../../inventory/model",
+      "to": "src/domains/inventory/model.ts"
+    },
+    {
+      "from": "src/domains/shop/server/actions.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../../inventory/server/ledger",
+      "to": "src/domains/inventory/server/ledger.ts"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/domains/inventory/index.ts",
+      "kind": "shared",
+      "path": "src/domains/inventory/index.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/inventory/model.ts",
+      "kind": "shared",
+      "path": "src/domains/inventory/model.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/inventory/server/ledger.ts",
+      "kind": "server",
+      "path": "src/domains/inventory/server/ledger.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/quest/model.ts",
+      "kind": "shared",
+      "path": "src/domains/quest/model.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/quest/server/tracker.ts",
+      "kind": "server",
+      "path": "src/domains/quest/server/tracker.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/shop/client/state.ts",
+      "kind": "client",
+      "path": "src/domains/shop/client/state.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/shop/model.ts",
+      "kind": "shared",
+      "path": "src/domains/shop/model.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/shop/server/actions.ts",
+      "kind": "server",
+      "path": "src/domains/shop/server/actions.ts",
+      "reason": "path"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

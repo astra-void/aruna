@@ -10,6 +10,7 @@ import type {
   ConventionConfig,
   DevConfig,
   Diagnostic,
+  DomainsConfig,
   EntriesMode,
   StrictConfig,
   NormalizedConfig,
@@ -59,10 +60,15 @@ type MutableConventionConfig = {
   shared?: string[];
 };
 
+type MutableDomainsConfig = {
+  roots?: string[];
+};
+
 type MutableStrictConfig = {
   sharedSafety?: boolean;
   rawRemoteUsage?: StrictConfig["rawRemoteUsage"];
   unresolvedImports?: StrictConfig["unresolvedImports"];
+  domainBoundary?: StrictConfig["domainBoundary"];
 };
 
 type MutableDevConfig = {
@@ -75,6 +81,7 @@ type MutableConfig = {
   compiler?: MutableCompilerConfig;
   actions?: MutableActionsConfig;
   conventions?: MutableConventionConfig;
+  domains?: MutableDomainsConfig;
   strict?: MutableStrictConfig;
   dev?: MutableDevConfig;
 };
@@ -102,8 +109,25 @@ function defaultConventionsForRoot(
   return {
     client: ["**/client/**", "**/ui.tsx"],
     server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
-    shared: ["**/shared/**", `${root}/app/**`, "**/schema.ts", "**/model.ts", "**/signals.ts"],
+    shared: [
+      "**/shared/**",
+      `${root}/app/**`,
+      "**/schema.ts",
+      "**/model.ts",
+      "**/signals.ts",
+      // A barrel is a surface other modules import through — a domain's
+      // `index.ts` is exactly its cross-domain public API — so it is
+      // shared-safe by default. A barrel inside a partition folder keeps that
+      // folder's kind: the directory tier wins.
+      "**/index.ts",
+    ],
   };
+}
+
+// A domain unit is one directory below `domains/`. Must stay in sync with
+// `default_domain_roots` in crates/aruna_compiler/src/domains.rs.
+function defaultDomainRootsForRoot(root: string): string[] {
+  return [`${root}/domains/*`];
 }
 
 // User conventions extend the defaults instead of replacing them: supplying one
@@ -266,6 +290,21 @@ function mergeConventionConfig(
   };
 }
 
+function mergeDomainsConfig(
+  base: DomainsConfig | undefined,
+  override: DomainsConfig | undefined,
+): DomainsConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+    roots: mergeStringArray(base?.roots, override?.roots),
+  };
+}
+
 function mergeStrictConfig(
   base: StrictConfig | undefined,
   override: StrictConfig | undefined,
@@ -301,6 +340,7 @@ function mergePublicConfig(base: Config, override: Config): Config {
     compiler: mergeCompilerConfig(base.compiler, override.compiler),
     actions: mergeActionsConfig(base.actions, override.actions),
     conventions: mergeConventionConfig(base.conventions, override.conventions),
+    domains: mergeDomainsConfig(base.domains, override.domains),
     strict: mergeStrictConfig(base.strict, override.strict),
     dev: mergeDevConfig(base.dev, override.dev),
   };
@@ -361,6 +401,7 @@ function normalizeConfigObject(value: unknown): {
     "compiler",
     "actions",
     "conventions",
+    "domains",
     "strict",
     "dev",
   ] as const;
@@ -537,6 +578,24 @@ function normalizeConfigObject(value: unknown): {
     }
   }
 
+  if (candidateRecord["domains"] !== undefined) {
+    const domainsValue = candidateRecord["domains"];
+    if (!isRecord(domainsValue)) {
+      diagnostics.push("domains must be an object");
+    } else {
+      validateUnsupportedKeys(domainsValue, ["roots"], diagnostics, "domains");
+      const domains: MutableDomainsConfig = {};
+      if (domainsValue["roots"] !== undefined) {
+        if (!isStringArray(domainsValue["roots"])) {
+          diagnostics.push("domains.roots must be an array of strings");
+        } else {
+          domains.roots = [...domainsValue["roots"]];
+        }
+      }
+      config.domains = domains;
+    }
+  }
+
   if (candidateRecord["strict"] !== undefined) {
     const strictValue = candidateRecord["strict"];
     if (!isRecord(strictValue)) {
@@ -544,7 +603,7 @@ function normalizeConfigObject(value: unknown): {
     } else {
       validateUnsupportedKeys(
         strictValue,
-        ["sharedSafety", "rawRemoteUsage", "unresolvedImports"],
+        ["sharedSafety", "rawRemoteUsage", "unresolvedImports", "domainBoundary"],
         diagnostics,
         "strict",
       );
@@ -571,6 +630,14 @@ function normalizeConfigObject(value: unknown): {
           diagnostics.push('strict.unresolvedImports must be one of "off", "warning", or "error"');
         } else {
           strict.unresolvedImports = strictValue["unresolvedImports"];
+        }
+      }
+
+      if (strictValue["domainBoundary"] !== undefined) {
+        if (!isStrictSeverity(strictValue["domainBoundary"])) {
+          diagnostics.push('strict.domainBoundary must be one of "off", "warning", or "error"');
+        } else {
+          strict.domainBoundary = strictValue["domainBoundary"];
         }
       }
 
@@ -678,10 +745,17 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       server: [...(config.conventions?.server ?? [])],
       shared: [...(config.conventions?.shared ?? [])],
     },
+    // Domain roots extend the built-in one, like conventions: adding
+    // `src/features/*` must not silently stop `src/domains/*` from being a
+    // domain root.
+    domains: {
+      roots: [...new Set([...defaultDomainRootsForRoot(root), ...(config.domains?.roots ?? [])])],
+    },
     strict: {
       sharedSafety: config.strict?.sharedSafety ?? true,
       rawRemoteUsage: config.strict?.rawRemoteUsage ?? "warning",
       unresolvedImports: config.strict?.unresolvedImports ?? "warning",
+      domainBoundary: config.strict?.domainBoundary ?? "warning",
     },
   };
 }

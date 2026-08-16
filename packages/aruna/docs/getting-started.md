@@ -22,13 +22,28 @@ my-game/
       shop/
         actions.ts           # defineAction(...)  (server-classified)
         schema.ts            # schema.object(...) shared types
+      grab/                  # the same domain, once it outgrows one file per concern
+        model.ts
+        schema/              # folder form of schema.ts
+          buy.ts
+        server/              # domain-private: any number of files
+          actions.ts
+          runtime.ts
+        client/              # domain-private
+          controller.ts
     shared/                  # code safe for both sides
     .aruna/                  # GENERATED — do not edit, safe to delete & rebuild
 ```
 
 Files are classified into `client` / `server` / `shared` by path convention (default
 globs: `**/client/**`, `**/server/**`, `**/shared/**`, plus a few well-known entry
-filenames). See [architecture.md](./architecture.md).
+filenames). Every file-name convention also covers its folder form — `actions.ts` or
+`actions/`, `ui.tsx` or `ui/` — and definitions are found by their `define*` call, not
+by file name, so a concern can be split across as many files as you like.
+
+Across domains, a domain's `client/` and `server/` subtrees are private: other domains
+import its root modules, or only its `index.ts` once it has one. See
+[architecture.md](./architecture.md).
 
 ## The build loop
 

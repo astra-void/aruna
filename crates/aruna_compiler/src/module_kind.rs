@@ -58,6 +58,11 @@ impl ConventionSet {
                 "**/schema.ts".to_string(),
                 "**/model.ts".to_string(),
                 "**/signals.ts".to_string(),
+                // A barrel is a surface other modules import through — a
+                // domain's `index.ts` is exactly its cross-domain public API —
+                // so it is shared-safe by default. A barrel inside a partition
+                // folder keeps that folder's kind: the directory tier wins.
+                "**/index.ts".to_string(),
             ],
         }
     }
@@ -139,45 +144,91 @@ fn is_file_name_pattern(pattern: &str) -> bool {
     !last_segment.contains(['*', '?', '['])
 }
 
+// The folder form of a file-name convention: a concern that outgrew one file
+// becomes a directory of the same name. `**/actions.ts` also covers
+// `**/actions/**`, `**/ui.tsx` covers `**/ui/**`, and a project's own
+// `src/domains/**/policy.ts` covers `src/domains/**/policy/**` — so splitting a
+// concern never needs a config edit.
+//
+// The derived pattern sits in its own tier *below* real directory conventions:
+// `src/shared/actions/util.ts` stays Shared because the `shared/` partition
+// folder still outranks the `actions` concern, and it sits *above* the
+// file-name tier so an enclosing concern folder beats a file name inside it
+// (`domains/shop/ui/schema.ts` is client UI, not a shared schema).
+fn derive_concern_directory_pattern(pattern: &str) -> Option<String> {
+    let (prefix, last_segment) = match pattern.rsplit_once('/') {
+        Some((prefix, last_segment)) => (Some(prefix), last_segment),
+        None => (None, pattern),
+    };
+    let stem = last_segment.rsplit_once('.')?.0;
+    if stem.is_empty() {
+        return None;
+    }
+    Some(match prefix {
+        Some(prefix) => format!("{prefix}/{stem}/**"),
+        None => format!("{stem}/**"),
+    })
+}
+
+// Match strength, strongest last. A path is classified by the kinds that match
+// at its highest tier; lower-tier matches for other kinds are recorded as
+// overridden rather than treated as a conflict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum ConventionTier {
+    FileName,
+    ConcernDirectory,
+    Directory,
+}
+
+fn matched_tier(patterns: &[String], path: &str) -> Option<ConventionTier> {
+    let (file_patterns, directory_patterns): (Vec<String>, Vec<String>) = patterns
+        .iter()
+        .cloned()
+        .partition(|pattern| is_file_name_pattern(pattern));
+    let concern_directory_patterns: Vec<String> = file_patterns
+        .iter()
+        .filter_map(|pattern| derive_concern_directory_pattern(pattern))
+        .collect();
+
+    if matches_any(&directory_patterns, path) {
+        Some(ConventionTier::Directory)
+    } else if matches_any(&concern_directory_patterns, path) {
+        Some(ConventionTier::ConcernDirectory)
+    } else if matches_any(&file_patterns, path) {
+        Some(ConventionTier::FileName)
+    } else {
+        None
+    }
+}
+
 pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> ModuleClassification {
     let relative_path = normalize_path(path);
-    let mut directory_matches = Vec::new();
-    let mut file_name_matches = Vec::new();
+    let mut tier_matches: Vec<(ConventionTier, ModuleKind)> = Vec::new();
 
     for (kind, patterns) in [
         (ModuleKind::Client, &conventions.client),
         (ModuleKind::Server, &conventions.server),
         (ModuleKind::Shared, &conventions.shared),
     ] {
-        let (file_patterns, directory_patterns): (Vec<String>, Vec<String>) = patterns
-            .iter()
-            .cloned()
-            .partition(|pattern| is_file_name_pattern(pattern));
-
-        if matches_any(&directory_patterns, &relative_path) {
-            directory_matches.push(kind);
-        } else if matches_any(&file_patterns, &relative_path) {
-            file_name_matches.push(kind);
+        if let Some(tier) = matched_tier(patterns, &relative_path) {
+            tier_matches.push((tier, kind));
         }
     }
 
-    let matched = if directory_matches.is_empty() {
-        file_name_matches.clone()
-    } else {
-        directory_matches.clone()
-    };
+    let winning_tier = tier_matches.iter().map(|(tier, _)| *tier).max();
+    let matched: Vec<ModuleKind> = tier_matches
+        .iter()
+        .filter(|(tier, _)| Some(*tier) == winning_tier)
+        .map(|(_, kind)| *kind)
+        .collect();
 
     match matched.as_slice() {
         [kind] => {
-            let overridden: Vec<&str> = if directory_matches.len() == 1 {
-                file_name_matches
-                    .iter()
-                    .filter(|other| **other != *kind)
-                    .map(kind_label)
-                    .collect()
-            } else {
-                Vec::new()
-            };
+            let overridden: Vec<&str> = tier_matches
+                .iter()
+                .filter(|(tier, other)| Some(*tier) != winning_tier && other != kind)
+                .map(|(_, other)| kind_label(other))
+                .collect();
             ModuleClassification {
                 kind: *kind,
                 matched_kinds: matched,
@@ -491,6 +542,71 @@ mod tests {
         assert_eq!(
             classify_relative_path("src/utils/debug.ts", &conventions).kind,
             ModuleKind::Unknown
+        );
+    }
+
+    #[test]
+    fn classifies_folder_form_concerns() {
+        let conventions = ConventionSet::default();
+
+        // A concern that outgrew one file becomes a directory of the same name.
+        for (path, expected) in [
+            ("src/domains/shop/actions/buy.ts", ModuleKind::Server),
+            ("src/domains/shop/runtime/boot.ts", ModuleKind::Server),
+            ("src/domains/shop/ui/panel.tsx", ModuleKind::Client),
+            ("src/domains/shop/schema/buy.ts", ModuleKind::Shared),
+            ("src/domains/shop/model/entity.ts", ModuleKind::Shared),
+            ("src/domains/shop/model/index.ts", ModuleKind::Shared),
+            ("src/domains/round/signals/lifecycle.ts", ModuleKind::Shared),
+            // Nested files inside the concern folder classify the same way.
+            ("src/domains/shop/actions/admin/grant.ts", ModuleKind::Server),
+        ] {
+            assert_eq!(
+                classify_relative_path(path, &conventions).kind,
+                expected,
+                "{path}"
+            );
+        }
+
+        // A partition folder still outranks a concern folder, so a `shared/`
+        // tree keeps its kind even when a segment shares a concern's name.
+        let shared_actions = classify_relative_path("src/shared/actions/util.ts", &conventions);
+        assert_eq!(shared_actions.kind, ModuleKind::Shared);
+        assert_eq!(shared_actions.matched_kinds, vec![ModuleKind::Shared]);
+        assert_eq!(
+            classify_relative_path("src/domains/shop/server/schema.ts", &conventions).kind,
+            ModuleKind::Server
+        );
+
+        // A concern folder outranks a file-name convention inside it: the
+        // enclosing folder is the author's more specific statement.
+        let ui_schema = classify_relative_path("src/domains/shop/ui/schema.ts", &conventions);
+        assert_eq!(ui_schema.kind, ModuleKind::Client);
+        assert_eq!(
+            ui_schema.reason_detail.as_deref(),
+            Some("directory convention overrode file-name convention: shared")
+        );
+    }
+
+    #[test]
+    fn derives_concern_directories_from_project_globs() {
+        let mut config = ArunaConfig::default();
+        config.convention_overrides.shared = vec!["src/domains/**/policy.ts".to_string()];
+        config.conventions = ConventionConfig {
+            client: vec!["**/ui.tsx".to_string()],
+            server: vec!["**/actions.ts".to_string()],
+            shared: vec!["src/domains/**/policy.ts".to_string()],
+        };
+
+        // The folder form comes with the glob the project already wrote.
+        assert_eq!(
+            classify_module(
+                std::path::Path::new("/workspace"),
+                std::path::Path::new("/workspace/src/domains/shop/policy/refunds.ts"),
+                &config,
+            )
+            .kind,
+            ModuleKind::Shared
         );
     }
 

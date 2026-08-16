@@ -1,0 +1,42 @@
+[
+  {
+    "from": "src/client.tsx",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./domains/shop/ui/panel",
+    "to": "src/domains/shop/ui/panel.tsx"
+  },
+  {
+    "from": "src/domains/shop/schema/buy.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/schema"
+  },
+  {
+    "from": "src/domains/shop/server/actions.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../schema/buy",
+    "to": "src/domains/shop/schema/buy.ts"
+  },
+  {
+    "from": "src/domains/shop/server/actions.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./pricing",
+    "to": "src/domains/shop/server/pricing.ts"
+  },
+  {
+    "from": "src/domains/shop/server/actions.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  },
+  {
+    "from": "src/domains/shop/ui/panel.tsx",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../model",
+    "to": "src/domains/shop/model.ts"
+  }
+]

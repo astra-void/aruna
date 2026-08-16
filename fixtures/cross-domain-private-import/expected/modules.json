@@ -1,0 +1,50 @@
+[
+  {
+    "id": "src/domains/inventory/index.ts",
+    "kind": "shared",
+    "path": "src/domains/inventory/index.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/inventory/model.ts",
+    "kind": "shared",
+    "path": "src/domains/inventory/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/inventory/server/ledger.ts",
+    "kind": "server",
+    "path": "src/domains/inventory/server/ledger.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/quest/model.ts",
+    "kind": "shared",
+    "path": "src/domains/quest/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/quest/server/tracker.ts",
+    "kind": "server",
+    "path": "src/domains/quest/server/tracker.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/client/state.ts",
+    "kind": "client",
+    "path": "src/domains/shop/client/state.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/model.ts",
+    "kind": "shared",
+    "path": "src/domains/shop/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/server/actions.ts",
+    "kind": "server",
+    "path": "src/domains/shop/server/actions.ts",
+    "reason": "path"
+  }
+]

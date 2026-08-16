@@ -55,11 +55,58 @@ src/
     manifest.json
 ```
 
+A domain outgrows one file per concern quickly. Every concern also has a folder
+form, and a domain can carry its own `client/` and `server/` partitions:
+
+```text
+src/
+  domains/
+    grab/
+      model.ts
+      schema.ts
+      signals.ts
+
+      server/            # domain-private: any number of files
+        actions.ts
+        runtime.ts
+
+      client/            # domain-private
+        controller.ts
+        esp.ts
+        state.ts
+
+    shop/
+      index.ts           # optional barrel: narrows the public surface to this file
+      model/             # folder form of model.ts
+        item.ts
+        receipt.ts
+      schema/
+        buy.ts
+      ui/
+        panel.tsx
+        shelf.tsx
+      store.ts
+      server/
+        actions.ts
+
+  client/
+    main.client.ts
+    ui/
+
+  shared/
+    i18n/
+```
+
+Both shapes are the same layout to the compiler. Actions, signals, stores, and
+runtimes are discovered by their definition call, not by file name, so splitting
+`actions.ts` into `server/actions.ts` + `server/pickup.ts` needs no config.
+
 Policy notes:
 
 - `src/client.tsx` and `src/server.ts` are the harness runtime entry files.
 - The harness source stays spec-shaped; emitted output is partitioned separately for `rbxtsc`.
-- `domains/` is a recommended organization pattern, not a boundary kind.
+- `domains/` is a recommended organization pattern, not a boundary kind. It is the
+  unit of the domain-to-domain public API boundary — see [Domain boundaries](#domain-boundaries).
 - `shared/` is reserved for cross-domain shared-safe code.
 - `.aruna/` is generated output and can be deleted and regenerated safely.
 - Do not require every client-only or server-only module to use `.client.ts` or `.server.ts`.
@@ -101,10 +148,15 @@ export default defineConfig({
   conventions: {
     shared: ["src/domains/**/policy.ts"],
   },
+  // Also extends: `src/domains/*` is always a domain root.
+  domains: {
+    roots: ["src/features/*"],
+  },
   strict: {
     sharedSafety: true,
     rawRemoteUsage: "warning",
     unresolvedImports: "warning",
+    domainBoundary: "warning",
   },
 });
 ```
@@ -113,6 +165,9 @@ export default defineConfig({
 - `compiler.manifest` accepts a manifest path string or `{ output }`.
 - `actions.defaultRateLimit` uses `key`, `windowMs`, and `max`.
 - `conventions.client`, `conventions.server`, and `conventions.shared` are arrays of glob strings.
+- `domains.roots` are globs matching a domain *directory* (`src/domains/*` matches
+  `src/domains/shop`), and `strict.domainBoundary` sets the severity of a
+  cross-domain private import.
 - `strict` is accepted and normalized; the current implementation does not fully enforce every strict behavior yet.
 - The legacy flat `generatedDir` / `manifest.output` config shape is no longer supported.
 - `domains/` remains recommended, not required.
@@ -125,19 +180,57 @@ The built-in set is the Recommended Layout:
 | --- | --- |
 | client | `**/client/**`, `**/ui.tsx` |
 | server | `**/server/**`, `**/actions.ts`, `**/runtime.ts` |
-| shared | `**/shared/**`, `<root>/app/**`, `**/schema.ts`, `**/model.ts`, `**/signals.ts` |
+| shared | `**/shared/**`, `<root>/app/**`, `**/schema.ts`, `**/model.ts`, `**/signals.ts`, `**/index.ts` |
 
 - Your globs **extend** this set rather than replacing it, so adding one pattern
   costs one line. `conventions: { defaults: false, ... }` opts out and makes your
   globs the whole set.
 - Your globs also **outrank** the built-ins: when both match a file, yours decides.
   A default can therefore never reclassify a path you pinned by hand.
-- Within one tier, a directory glob (`**/server/**`) beats a file-name glob
-  (`**/model.ts`), so `src/server/model.ts` stays server.
+- Every file-name glob also covers its **folder form**: `**/actions.ts` classifies
+  `**/actions/**`, `**/ui.tsx` classifies `**/ui/**`, and your own
+  `src/domains/**/policy.ts` classifies `src/domains/**/policy/**`. Splitting a
+  concern into a folder is never a config change.
+- Matches are ranked in three tiers — directory glob (`**/server/**`), then the
+  derived concern folder (`**/actions/**`), then file name (`**/actions.ts`) — and
+  the highest tier that matches decides. So `src/server/model.ts` stays server,
+  `src/shared/actions/util.ts` stays shared, and `domains/shop/ui/schema.ts` is
+  client UI rather than a shared schema. Only a cross-kind tie *within* one tier
+  is ambiguous (`aruna::203`).
 - `**/signals.ts` is shared for a structural reason: the generated signal registry
   lives in the shared partition and imports every definition from the file that
   declared it, so a signal declared in a server-classified file cannot resolve on
   the client.
+- `**/index.ts` is shared because a barrel is a surface other modules import
+  through — a domain's `index.ts` is exactly its cross-domain public API. A barrel
+  inside a partition folder keeps that folder's kind.
+
+### Domain boundaries
+
+Client/server/shared is one axis; domain-to-domain is the other. A **domain** is
+one directory below `domains/` (`domains.roots` adds more), and its public API is:
+
+| the domain has | other domains may import |
+| --- | --- |
+| no `index.ts` | every module at the domain root and its concern folders — `model.ts`, `schema/`, `store.ts`, ... |
+| `index.ts` | that file, and nothing else |
+
+A domain's `client/` and `server/` subtrees are always private. Reaching past the
+public surface reports `aruna::304 cross-domain-private-import`:
+
+```text
+warning aruna::304 cross-domain-private-import
+  src/domains/shop/server/actions.ts imports src/domains/inventory/server/ledger.ts,
+  which is private to the inventory domain.
+```
+
+- Only domain-to-domain edges are checked. App-shell code (`src/client/**`,
+  `<root>/app/**`, the entry files) legitimately boots a domain's own client and
+  server modules, and imports inside one domain are never restricted.
+- `strict.domainBoundary` is `"warning"` by default; `"error"` makes it a build
+  failure, `"off"` disables the rule.
+- Adding an `index.ts` to a domain is the opt-in to the strict form: the barrel
+  becomes the only thing other domains can see.
 
 ## Quickstart flow
 

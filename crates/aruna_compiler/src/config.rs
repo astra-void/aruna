@@ -90,6 +90,11 @@ pub struct StrictConfig {
     pub raw_remote_usage: StrictSeverity,
     #[serde(default)]
     pub unresolved_imports: StrictSeverity,
+    // Cross-domain imports that reach past a domain's public surface. A warning
+    // by default: domain taxonomy is the project's, and a boundary the project
+    // never asked for must not fail its build on the day it upgrades.
+    #[serde(default)]
+    pub domain_boundary: StrictSeverity,
 }
 
 fn default_shared_safety() -> bool {
@@ -102,6 +107,7 @@ impl Default for StrictConfig {
             shared_safety: default_shared_safety(),
             raw_remote_usage: StrictSeverity::default(),
             unresolved_imports: StrictSeverity::default(),
+            domain_boundary: StrictSeverity::default(),
         }
     }
 }
@@ -139,6 +145,16 @@ impl ConventionConfig {
     }
 }
 
+// Which directories are domain units. Empty means the built-in
+// `<root>/domains/*`; see `default_domain_roots` in domains.rs. The JS side
+// always sends the effective list, so this only governs direct crate use.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DomainsConfig {
+    #[serde(default)]
+    pub roots: Vec<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaConfig {
@@ -162,6 +178,8 @@ pub struct ArunaConfig {
     // `conventions`. See `classify_with_overrides`.
     #[serde(default)]
     pub convention_overrides: ConventionConfig,
+    #[serde(default)]
+    pub domains: DomainsConfig,
     #[serde(default)]
     pub strict: StrictConfig,
 }
@@ -189,6 +207,7 @@ impl Default for ArunaConfig {
             actions: ActionsConfig::default(),
             conventions: ConventionConfig::default(),
             convention_overrides: ConventionConfig::default(),
+            domains: DomainsConfig::default(),
             strict: StrictConfig::default(),
         }
     }

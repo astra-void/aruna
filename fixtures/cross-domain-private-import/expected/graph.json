@@ -1,0 +1,37 @@
+[
+  {
+    "from": "src/domains/inventory/index.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./model",
+    "to": "src/domains/inventory/model.ts"
+  },
+  {
+    "from": "src/domains/shop/client/state.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../../quest/model",
+    "to": "src/domains/quest/model.ts"
+  },
+  {
+    "from": "src/domains/shop/model.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../inventory",
+    "to": "src/domains/inventory/index.ts"
+  },
+  {
+    "from": "src/domains/shop/server/actions.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../../inventory/model",
+    "to": "src/domains/inventory/model.ts"
+  },
+  {
+    "from": "src/domains/shop/server/actions.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../../inventory/server/ledger",
+    "to": "src/domains/inventory/server/ledger.ts"
+  }
+]

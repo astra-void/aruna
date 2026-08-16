@@ -138,7 +138,10 @@ via the Rojo plugin and hit Play.
 ## Project layout
 
 - \`src/domains/<name>/\` — one folder per feature: \`schema.ts\` + \`model.ts\`
-  (shared), \`actions.ts\` (server), \`ui.tsx\` (client).
+  (shared), \`actions.ts\` (server), \`ui.tsx\` (client). Each concern also has a
+  folder form (\`actions/\`, \`ui/\`, ...), and a domain can carry its own
+  \`server/\` and \`client/\` folders — those two are private to the domain, so
+  other domains import its root modules (or only its \`index.ts\`, if it has one).
 - \`src/shared/\`, \`src/server/\`, \`src/client/\` — classified by directory.
 - \`src/.aruna/\` — generated: action stubs, entry scripts, vendored runtime.
 

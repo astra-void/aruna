@@ -1,0 +1,67 @@
+[
+  {
+    "id": "src/.aruna/server/actions.server.generated.ts",
+    "kind": "serverAction",
+    "path": "src/.aruna/server/actions.server.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/actions module"
+  },
+  {
+    "id": "src/.aruna/shared/actions.client.generated.ts",
+    "kind": "client",
+    "path": "src/.aruna/shared/actions.client.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/actions module"
+  },
+  {
+    "id": "src/client.tsx",
+    "kind": "clientEntry",
+    "path": "src/client.tsx",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
+  },
+  {
+    "id": "src/domains/shop/client/state.ts",
+    "kind": "client",
+    "path": "src/domains/shop/client/state.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/model.ts",
+    "kind": "shared",
+    "path": "src/domains/shop/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/schema/buy.ts",
+    "kind": "shared",
+    "path": "src/domains/shop/schema/buy.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/server/actions.ts",
+    "kind": "serverAction",
+    "path": "src/domains/shop/server/actions.ts",
+    "reason": "directive",
+    "reasonDetail": "defineAction(...) export detected"
+  },
+  {
+    "id": "src/domains/shop/server/pricing.ts",
+    "kind": "server",
+    "path": "src/domains/shop/server/pricing.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/ui/panel.tsx",
+    "kind": "client",
+    "path": "src/domains/shop/ui/panel.tsx",
+    "reason": "path"
+  },
+  {
+    "id": "src/server.ts",
+    "kind": "serverEntry",
+    "path": "src/server.ts",
+    "reason": "path",
+    "reasonDetail": "matched recommended entry file"
+  }
+]

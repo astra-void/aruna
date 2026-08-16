@@ -42,6 +42,13 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 - Action and signal definitions are discovered by file classification (client/server/shared
   by path convention). Server-only logic must live in server-classified files or the
   compiler reports a boundary violation. See architecture.md.
+- Concerns have a file form and a folder form: `actions.ts` or `actions/`, `ui.tsx` or
+  `ui/`, and so on. Definitions are found by their `define*` call, so split a concern
+  across as many files as you want — no config change, no naming ceremony.
+- A domain (`src/domains/<name>/`) keeps its `client/` and `server/` subtrees private.
+  Other domains may import its root modules — or only its `index.ts` once it has one —
+  and reaching past that reports `aruna::304`. Same-domain and app-shell imports are
+  unrestricted. See architecture.md.
 - After adding or changing any `defineAction`/`defineSignal`, run `aruna build` — `aruna check`
   does NOT regenerate stubs or the manifest, so client stubs go stale.
 - `ctx.player` is always present (wire dispatches carry the caller; in-process

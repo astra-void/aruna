@@ -3,6 +3,7 @@ pub mod actions;
 pub mod compiler;
 pub mod config;
 pub mod diagnostics;
+pub mod domains;
 pub mod files;
 pub mod graph;
 pub mod manifest;
@@ -26,9 +27,10 @@ pub use actions::{
     StoreDiscoveryResult,
 };
 pub use config::{
-    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig, EntriesMode,
-    StrictConfig, StrictSeverity,
+    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig, DomainsConfig,
+    EntriesMode, StrictConfig, StrictSeverity,
 };
+pub use domains::{DomainIndex, DomainRef, PublicSurface};
 pub use diagnostics::{
     create_diagnostic, diagnostic_meta, is_error_severity, stable_sort_diagnostics,
     strip_ignored_diagnostics, summarize_diagnostics, ArunaDiagnostic, DiagnosticSeverity,

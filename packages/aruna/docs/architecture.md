@@ -20,6 +20,30 @@ Rule: action `run` implementations and server registration live in server-classi
 files. Schemas and pure helpers live in `shared`. UI and `invokeAction` calls live in
 client.
 
+Every file-name convention also covers its folder form — `**/actions.ts` classifies
+`**/actions/**`, `**/ui.tsx` classifies `**/ui/**` — so a concern that outgrew one file
+splits into a folder without a config change. Definitions are found by their
+`defineAction`/`defineSignal`/`defineStore`/`defineRuntime` call, not by file name, so
+they can live in any file on the right side of the boundary. Ranking, strongest first:
+a directory glob (`**/server/**`), the derived concern folder (`**/actions/**`), then the
+file name. `src/shared/actions/util.ts` is therefore shared, not server.
+
+## Domain boundaries (domain to domain)
+
+A **domain** is one directory below `domains/` (`domains.roots` in aruna.config.ts adds
+more roots). Its `client/` and `server/` subtrees are private to it; what other domains
+may import is everything else at the domain root — or, once the domain has an
+`index.ts`, exactly that barrel. An import that reaches past this surface reports
+`aruna::304 cross-domain-private-import` (`strict.domainBoundary`: `warning` by default,
+`error` to fail the build, `off` to disable).
+
+Imports inside a single domain are unrestricted, and app-shell code (`src/client/**`,
+`<root>/app/**`, the entry files) may boot a domain's own client and server modules —
+the rule only governs domain-to-domain edges.
+
+Rule: cross-domain reuse goes through the other domain's public surface (its model,
+schema, signals, or barrel), or through an action or signal. Not through its internals.
+
 ## Generated modules
 
 `aruna build` writes into the generated dir (default `src/.aruna/`, treat it as

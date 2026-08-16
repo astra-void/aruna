@@ -6,6 +6,8 @@ export const fixtureCases = [
   { name: "invalid-shared-imports-server", mode: "inspect" },
   { name: "feature-local-layout", mode: "inspect" },
   { name: "recommended-layout", mode: "inspect" },
+  { name: "domain-folder-layout", mode: "inspect" },
+  { name: "cross-domain-private-import", mode: "inspect" },
   { name: "unknown-module-kind", mode: "inspect" },
   { name: "unresolved-import", mode: "inspect" },
   { name: "missing-tsconfig", mode: "inspect" },

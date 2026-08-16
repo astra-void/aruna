@@ -172,7 +172,9 @@ export function formatInitReport(result: InitResult): string {
 
   lines.push("");
   lines.push("next steps");
-  lines.push("  1. add your actions under src/ (e.g. src/domains/<feature>/actions.ts)");
+  lines.push(
+    "  1. add your actions under src/ (e.g. src/domains/<feature>/actions.ts, or actions/ once it grows)",
+  );
   lines.push(
     "  2. aruna build   # generate stubs, vendor the Roblox runtime, and compile to Luau via rbxtsc",
   );

@@ -1,4 +1,4 @@
-import type { StartWaveInput } from "./schema";
+import type { StartWaveInput } from "../schema/start-wave";
 
 export function describeWave(input: StartWaveInput): string {
   return `${input.waveId}:${input.difficulty}`;

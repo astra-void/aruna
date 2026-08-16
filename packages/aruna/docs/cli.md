@@ -110,6 +110,11 @@ server, `**/ui.tsx` client), so scaffolded files are correctly classified by
 construction. Existing files are never overwritten. Follow up with `aruna build` (or
 just save under a running `aruna dev`) to regenerate stubs for the new domain.
 
+When a concern outgrows one file, rename it into a folder of the same name
+(`actions.ts` → `actions/buy.ts`, `actions/sell.ts`) or move it under the domain's own
+`server/` or `client/` folder. Both are the same classification to the compiler, and
+`aruna build` finds the definitions either way.
+
 ## `aruna doctor`
 
 If `aruna/server`, `aruna/schema`, `$aruna/actions/client`, etc. fail to resolve, the
@@ -131,10 +136,14 @@ export default defineConfig({
     server: ["**/server/**"],
     shared: ["**/shared/**"],
   },
+  domains: {
+    roots: ["src/features/*"],                // added to the built-in src/domains/*
+  },
   strict: {
     sharedSafety: true,                       // forbid shared → server leaks
     rawRemoteUsage: "warning",                // "off" | "warning" | "error"
     unresolvedImports: "warning",
+    domainBoundary: "warning",                // imports past a domain's public surface
   },
 });
 ```

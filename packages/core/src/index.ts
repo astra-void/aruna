@@ -43,6 +43,7 @@ export type DiagnosticCode =
   | "aruna::301"
   | "aruna::302"
   | "aruna::303"
+  | "aruna::304"
   | "aruna::700"
   | "aruna::701"
   | "aruna::900";
@@ -208,10 +209,19 @@ export type ConventionConfig = {
   readonly shared?: readonly string[] | undefined;
 };
 
+// Which directories are domain units, for the domain-to-domain public API
+// boundary. Roots are globs matching a domain *directory* (`src/domains/*`
+// matches `src/domains/shop`), and they extend the built-in `<root>/domains/*`.
+export type DomainsConfig = {
+  readonly roots?: readonly string[] | undefined;
+};
+
 export type StrictConfig = {
   readonly sharedSafety?: boolean | undefined;
   readonly rawRemoteUsage?: "off" | "warning" | "error" | undefined;
   readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
+  // Imports that reach past another domain's public surface (aruna::304).
+  readonly domainBoundary?: "off" | "warning" | "error" | undefined;
 };
 
 // `aruna dev` process options. `rojo: true` (the default) spawns `rojo serve`
@@ -236,6 +246,7 @@ export type Config = {
   readonly compiler?: CompilerConfig | undefined;
   readonly actions?: ActionsConfig | undefined;
   readonly conventions?: ConventionConfig | undefined;
+  readonly domains?: DomainsConfig | undefined;
   readonly strict?: StrictConfig | undefined;
   readonly dev?: DevConfig | undefined;
 };
@@ -265,10 +276,16 @@ export type NormalizedConfig = {
     readonly server: readonly string[];
     readonly shared: readonly string[];
   };
+  // The effective domain roots: the built-in `<root>/domains/*` plus the
+  // project's own.
+  readonly domains: {
+    readonly roots: readonly string[];
+  };
   readonly strict: {
     readonly sharedSafety: boolean;
     readonly rawRemoteUsage: "off" | "warning" | "error";
     readonly unresolvedImports: "off" | "warning" | "error";
+    readonly domainBoundary: "off" | "warning" | "error";
   };
 };
 
@@ -324,7 +341,14 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
   conventions: {
     client: ["**/client/**", "**/ui.tsx"],
     server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
-    shared: ["**/shared/**", "src/app/**", "**/schema.ts", "**/model.ts", "**/signals.ts"],
+    shared: [
+      "**/shared/**",
+      "src/app/**",
+      "**/schema.ts",
+      "**/model.ts",
+      "**/signals.ts",
+      "**/index.ts",
+    ],
   },
   // Nothing is overridden in the default config, so the defaults above are the
   // whole effective set.
@@ -333,10 +357,16 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
     server: [],
     shared: [],
   },
+  // Must stay in sync with `default_domain_roots` in
+  // crates/aruna_compiler/src/domains.rs.
+  domains: {
+    roots: ["src/domains/*"],
+  },
   strict: {
     sharedSafety: true,
     rawRemoteUsage: "warning",
     unresolvedImports: "warning",
+    domainBoundary: "warning",
   },
 };
 
