@@ -5,6 +5,51 @@ All notable changes to the `aruna` package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-16
+
+The domain-layout release. A domain was one file per concern — every action in
+`actions.ts`, every schema in `schema.ts` — so the only way to grow one was to
+keep appending to the same files, and the only way to split them was a config
+edit. Meanwhile nothing stopped one domain from importing another's internals:
+`domains/` was a naming convention with no boundary behind it, so cross-domain
+coupling formed against implementation details the owning domain never meant to
+publish.
+
+### Added
+
+- **Folder form for every concern.** A file-name convention now also classifies
+  the directory of the same name: `**/actions.ts` covers `**/actions/**`,
+  `**/ui.tsx` covers `**/ui/**`, and a project's own
+  `conventions: { shared: ["src/domains/**/policy.ts"] }` covers
+  `src/domains/**/policy/**`. A concern that outgrew one file splits into a
+  folder with no config change — and since actions, signals, stores, and
+  runtimes are discovered by their definition call rather than by file name,
+  the definitions come along. Matches are ranked in three tiers: a directory
+  glob (`**/server/**`), then the derived concern folder (`**/actions/**`),
+  then the file name, so `src/shared/actions/util.ts` is still shared and
+  `domains/shop/ui/schema.ts` is client UI rather than a shared schema.
+- **`**/index.ts` classifies as shared.** A barrel is a surface other modules
+  import through, so it is shared-safe by default instead of unclassified. A
+  barrel inside a partition folder keeps that folder's kind.
+- **Domain-to-domain public API boundary — `aruna::304`.** A domain (one
+  directory below `domains/`, extended by `domains: { roots: [...] }`) keeps its
+  `client/` and `server/` subtrees to itself. What other domains may import is
+  every module at the domain root — or, once the domain has an `index.ts`,
+  exactly that barrel. An import that reaches past the surface is
+  `aruna::304 cross-domain-private-import`:
+
+  ```text
+  warning aruna::304 cross-domain-private-import
+    src/domains/shop/server/actions.ts imports src/domains/inventory/server/ledger.ts,
+    which is private to the inventory domain.
+  ```
+
+  `strict.domainBoundary` sets the severity — `"warning"` by default, `"error"`
+  to fail the build, `"off"` to disable. Only domain-to-domain edges are
+  checked: imports inside one domain are unrestricted, and app-shell code
+  (`src/client/**`, `<root>/app/**`, the entry files) still boots a domain's own
+  client and server modules.
+
 ## [0.5.0] - 2026-08-15
 
 The boot-order release. `runtime.ts` was a classification and nothing else — the
