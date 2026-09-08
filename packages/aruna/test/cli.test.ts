@@ -749,6 +749,9 @@ describe("Roblox runtime vendoring integrity", () => {
       "server-app.ts": "export type ServerAppBinding = unknown;\n",
       "server.ts": 'export { defineSignal } from "./signal";\nexport * from "./server-runtime";\nexport * from "./server-app";\n',
       "roblox.ts": 'import "./signal-runtime";\nimport type { ActionInvoker } from "./client-runtime";\nexport const bindActions = 0;\n',
+      "testing-framework.ts": "export const expect = 0;\n",
+      "testing.ts":
+        'import "./server-app";\nimport "./client";\nimport "./signal-runtime";\nexport * from "./testing-framework";\n',
     };
     for (const [name, contents] of Object.entries(modules)) {
       fs.writeFileSync(path.join(dir, name), contents, "utf8");

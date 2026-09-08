@@ -31,10 +31,12 @@ import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
 import {
+  compileTestPartition,
   runPartitionedRbxtsc,
   startPartitionedRbxtscWatch,
   type PartitionWatch,
 } from "./rojo-layout.js";
+import { findLuneRunnerDir, probeLune, runLuneSpecs } from "./test-run.js";
 import {
   ARUNA_TSCONFIG_FRAGMENT_FILE,
   arunaTsconfigFragmentContents,
@@ -282,6 +284,9 @@ const ROBLOX_RUNTIME_ANCHOR_MODULES = [
   "schema",
   "signal",
   "signal-runtime",
+  // The test surface is vendored like the rest of the runtime so `aruna/testing`
+  // resolves in an editor and under `aruna check`; only `aruna test` compiles it.
+  "testing",
 ] as const;
 
 // Pulls every relative module specifier (`./x`, with or without a `.ts`
@@ -490,6 +495,108 @@ function renderRbxtscResult(result: RbxtscResult, options: BuildCliOptions): voi
         ? formatSuccess("rbxtsc compiled the project to Luau", colors)
         : formatError(`rbxtsc exited with status ${result.status}`, colors),
     );
+  }
+}
+
+type TestCliOptions = CliOptions & {
+  emitRuntime?: boolean;
+  filter?: string;
+};
+
+// `aruna test`: build, stage the project *with* its specs, compile the lot to
+// Luau, and run the specs under Lune.
+//
+// The compile is deliberately not the one `aruna build` produces. Specs are
+// staged into their own partition and the result stays in the temp tree, so a
+// test run never touches the `out/` the game build owns and no spec can reach
+// the place file.
+async function runTestSession(options: TestCliOptions): Promise<boolean> {
+  const startedAt = Date.now();
+  const colors = resolveColorMode(options);
+  const input = compilerInput(options);
+  const projectRoot = input.root;
+
+  const { output } = await runBuild(options);
+  renderCompilerOutput(output, options, Date.now() - startedAt, "build");
+  if (!output.ok) {
+    return false;
+  }
+
+  const runnerDir = findLuneRunnerDir();
+  if (runnerDir === undefined) {
+    writeText("");
+    writeText(
+      formatError(
+        "the Lune runner assets are missing from the aruna package — reinstall @arunajs/aruna",
+        colors,
+      ),
+    );
+    return false;
+  }
+
+  const lune = probeLune();
+  if (lune.kind === "missing") {
+    writeText("");
+    writeText(formatError(lune.reason, colors));
+    return false;
+  }
+
+  const rbxtscBin = findRbxtscBin(projectRoot);
+  if (rbxtscBin === undefined) {
+    writeText("");
+    writeText(
+      formatError(
+        "rbxtsc not found in node_modules/.bin — install roblox-ts to compile the specs",
+        colors,
+      ),
+    );
+    return false;
+  }
+
+  const generatedDir = generatedDirFromOutput(output);
+  const compiled = compileTestPartition({
+    projectRoot,
+    generatedDir,
+    manifest: output.manifest,
+    rbxtscBin,
+    tsconfigPath: loadProjectConfig(projectRoot, input.configPath).tsconfigPath,
+  });
+
+  if (compiled.kind === "skipped") {
+    writeText("");
+    writeText(formatError(`could not compile the specs: ${compiled.reason}`, colors));
+    return false;
+  }
+
+  try {
+    if (compiled.status !== 0) {
+      // rbxtsc's own diagnostics are the useful output here, so they go through
+      // verbatim rather than being summarized.
+      process.stdout.write(compiled.stdout);
+      process.stderr.write(compiled.stderr);
+      writeText("");
+      writeText(formatError(`rbxtsc exited with status ${compiled.status}`, colors));
+      return false;
+    }
+
+    if (!options.quiet) {
+      writeText("");
+      writeText(formatMuted("running specs under Lune", colors));
+      writeText("");
+    }
+
+    const status = await runLuneSpecs({
+      luneBin: lune.bin,
+      runnerDir,
+      outRoot: compiled.outRoot,
+      includeRoot: compiled.includeRoot,
+      generatedDirName: path.posix.basename(generatedDir.split(path.sep).join("/")),
+      nodeModules: path.join(projectRoot, "node_modules"),
+      ...(options.filter !== undefined ? { filter: options.filter } : {}),
+    });
+    return status === 0;
+  } finally {
+    compiled.dispose();
   }
 }
 
@@ -1074,6 +1181,22 @@ export async function main(): Promise<number> {
 
       return spawnRojoServe(input.root, plan.args, options, colors);
     });
+  });
+
+  const test = program
+    .command("test")
+    .description("compile the project with its specs and run them under Lune")
+    .option("--no-emit-runtime", "skip vendoring the Roblox-targeted runtime into the generated dir")
+    .option("--filter <pattern>", "only run specs whose path contains this substring");
+
+  test.action(async () => {
+    const options = test.optsWithGlobals<TestCliOptions>();
+    if (options.json) {
+      process.stderr.write("aruna test does not support --json output.\n");
+      process.exitCode = 1;
+      return;
+    }
+    process.exitCode = (await runTestSession(options)) ? 0 : 1;
   });
 
   const add = program.command("add").description("scaffold project files from the conventions");

@@ -16,7 +16,9 @@ import { spawnCommand, spawnSyncCommand } from "./spawn.js";
 // the consumer's `rbxtsc` against that staged tree and copy `out/` back. This
 // avoids re-parsing TypeScript: the Rust compiler already resolved every import.
 
-export type LayoutTarget = "client" | "server" | "shared";
+// The fourth partition is not a partition of the *place*: specs are staged into
+// `test/` only for `aruna test`, and a game build never stages them at all.
+export type LayoutTarget = "client" | "server" | "shared" | "test";
 
 export type PartitionResult =
   | { readonly kind: "skipped"; readonly reason: string }
@@ -60,6 +62,8 @@ export function layoutTargetFor(
     return kind === "serverAction" ? "server" : "shared";
   }
   switch (kind) {
+    case "test":
+      return "test";
     case "client":
     case "clientEntry":
       return "client";
@@ -176,19 +180,33 @@ function copyFileIfChanged(src: string, dest: string): void {
 
 // Recursively copies `from` into `to`, skipping byte-identical files, and
 // records every destination it is responsible for into `seen`.
-function copyDirTracked(from: string, to: string, seen: Set<string>): void {
+function copyDirTracked(
+  from: string,
+  to: string,
+  seen: Set<string>,
+  skip?: readonly string[],
+): void {
   fs.mkdirSync(to, { recursive: true });
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    if (skip?.includes(entry.name) === true) {
+      continue;
+    }
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
     if (entry.isDirectory()) {
-      copyDirTracked(src, dest, seen);
+      copyDirTracked(src, dest, seen, skip);
     } else if (entry.isFile()) {
       copyFileIfChanged(src, dest);
       seen.add(path.resolve(dest));
     }
   }
 }
+
+// The vendored runtime's test surface. It is vendored to disk like the rest of
+// the runtime — so `aruna/testing` resolves in an editor and under `aruna check`
+// — but staging it into a game build would replicate the whole test framework
+// into the place for code that, by construction, nothing there imports.
+export const TEST_RUNTIME_MODULES: readonly string[] = ["testing.ts", "testing-framework.ts"];
 
 // Deletes staged files the current manifest no longer accounts for, so a
 // renamed, deleted, or reclassified module cannot linger and keep compiling.
@@ -224,6 +242,10 @@ function copyDirSync(from: string, to: string): void {
 
 export type PartitionOptions = {
   readonly projectRoot: string;
+  // Stage the project's specs alongside the game code, into their own `test/`
+  // partition. Set by `aruna test`; a game build leaves them out entirely, so
+  // nothing a spec imports can reach the place file.
+  readonly includeTests?: boolean | undefined;
   readonly generatedDir: string;
   readonly manifest: Manifest;
   readonly rbxtscBin: string;
@@ -522,6 +544,9 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
       if (!toPosix(record.path).startsWith("src/")) {
         continue;
       }
+      if (record.kind === "test" && options.includeTests !== true) {
+        continue;
+      }
       const target = layoutTargetFor(record.path, record.kind, generatedDirRel);
       const stage = stagePathFor(record.path, record.kind, target);
       sourceToStage.set(record.path, stage);
@@ -566,7 +591,12 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     // Split-tree layout vendors it under `<generatedDir>/shared/runtime`.
     const runtimeSrc = path.join(srcRoot, generatedDirRel, "shared", "runtime");
     if (fs.existsSync(runtimeSrc)) {
-      copyDirTracked(runtimeSrc, path.join(stageSrc, "shared", generatedDirRel, "runtime"), staged);
+      copyDirTracked(
+        runtimeSrc,
+        path.join(stageSrc, "shared", generatedDirRel, "runtime"),
+        staged,
+        options.includeTests === true ? undefined : TEST_RUNTIME_MODULES,
+      );
     }
 
     pruneStagedFiles(stageSrc, staged);
@@ -598,6 +628,9 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     const genDirPrefix = `src/${generatedDirRel}/`;
     for (const { record, target } of records) {
       if (record.kind === "serverAction" || record.kind === "serverStore") continue;
+      // A spec is not a canonical partition either: an alias derived from one
+      // would map its whole prefix into the test partition.
+      if (record.kind === "test") continue;
       const recordPath = toPosix(record.path);
       if (recordPath.startsWith(genDirPrefix)) continue;
       const sourceRel = recordPath.replace(/^src\//, "");
@@ -714,7 +747,14 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     }
     writeFileIfChanged(
       path.join(tempRoot, "default.project.json"),
-      `${JSON.stringify(partitionedRojoProject(extraNpmScopes), null, 2)}\n`,
+      `${JSON.stringify(
+        partitionedRojoProject({
+          extraNpmScopes,
+          ...(options.includeTests === true ? { includeTests: true } : {}),
+        }),
+        null,
+        2,
+      )}\n`,
     );
 
     return { ok: true, staged: { tempRoot, stagedInclude, outRoot } };
@@ -745,6 +785,54 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
   } finally {
     fs.rmSync(staged.tempRoot, { recursive: true, force: true });
   }
+}
+
+export type TestCompileResult =
+  | { readonly kind: "skipped"; readonly reason: string }
+  | {
+      readonly kind: "ran";
+      readonly status: number;
+      readonly stdout: string;
+      readonly stderr: string;
+      // Compiled output root (`<temp>/out`), holding the client/server/shared
+      // partitions plus `test/`. Deliberately NOT copied back into the project:
+      // a test run must never touch the `out/` the game build owns.
+      readonly outRoot: string;
+      // rbxtsc's runtime library (RuntimeLib, Promise), which the Lune runner
+      // loads instead of requiring it out of a DataModel.
+      readonly includeRoot: string;
+      // Removes the staged tree. The caller owns it until the specs have run.
+      readonly dispose: () => void;
+    };
+
+// Stages the project *including* its specs and compiles the lot to Luau, leaving
+// the result in the staged temp tree for the Lune runner to execute.
+export function compileTestPartition(options: PartitionOptions): TestCompileResult {
+  const stage = stagePartition({ ...options, includeTests: true });
+  if (!stage.ok) {
+    return { kind: "skipped", reason: stage.reason };
+  }
+  const { staged } = stage;
+  const dispose = (): void => {
+    fs.rmSync(staged.tempRoot, { recursive: true, force: true });
+  };
+  const result = spawnSyncCommand(options.rbxtscBin, ["--project", staged.tempRoot], {
+    cwd: staged.tempRoot,
+    encoding: "utf8",
+  });
+  if (result.error) {
+    dispose();
+    return { kind: "skipped", reason: `failed to launch rbxtsc: ${result.error.message}` };
+  }
+  return {
+    kind: "ran",
+    status: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    outRoot: path.join(staged.tempRoot, "out"),
+    includeRoot: staged.stagedInclude,
+    dispose,
+  };
 }
 
 // TypeScript's watch mode ends every compile pass with a summary line —
@@ -864,6 +952,11 @@ export type RojoProjectShape = {
   // When set it replaces the inline scope list entirely, so the consumer's
   // project file stops needing an edit per dependency.
   readonly nodeModulesProject?: string | undefined;
+  // Mounts the compiled test partition. Only `aruna test` sets this: the mount
+  // is what lets rbxtsc resolve a spec's imports (its RojoResolver maps every
+  // module through this project file), and it is absent from the game build so
+  // no spec can reach the place.
+  readonly includeTests?: boolean | undefined;
 };
 
 // The Roblox DataModel contract the partitioned `out/` maps onto.
@@ -885,15 +978,19 @@ export function partitionedRojoProject(
       nodeModules[scope] = { $path: `node_modules/${scope}` };
     }
   }
+  const serverScriptService: Record<string, unknown> = {
+    $className: "ServerScriptService",
+    TS: { $path: "out/server" },
+  };
+  if (shape.includeTests === true) {
+    serverScriptService["ArunaTests"] = { $path: "out/test" };
+  }
   return {
     name: "aruna-game",
     globIgnorePaths: ["**/package.json", "**/tsconfig.json"],
     tree: {
       $className: "DataModel",
-      ServerScriptService: {
-        $className: "ServerScriptService",
-        TS: { $path: "out/server" },
-      },
+      ServerScriptService: serverScriptService,
       ReplicatedStorage: {
         $className: "ReplicatedStorage",
         rbxts_include: {

@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Manifest } from "@arunajs/core";
 import {
   collectAmbientDeclarations,
   layoutTargetFor,
   partitionedRojoProject,
   readInheritedCompilerOptions,
+  stagePartition,
   stagePathFor,
   stagedCompilerOptions,
   stagedIncludeGlobs,
@@ -21,6 +23,10 @@ describe("layoutTargetFor", () => {
     expect(layoutTargetFor("src/domains/waves/runtime.ts", "server", ".aruna")).toBe("server");
     expect(layoutTargetFor("src/server.ts", "serverEntry", ".aruna")).toBe("server");
     expect(layoutTargetFor("src/domains/shop/schema.ts", "shared", ".aruna")).toBe("shared");
+    // A spec goes to its own partition, which no game build ever stages.
+    expect(layoutTargetFor("src/domains/shop/server/pricing.test.ts", "test", ".aruna")).toBe(
+      "test",
+    );
   });
 
   it("keeps store modules out of the replicated partition", () => {
@@ -99,6 +105,19 @@ describe("partitionedRojoProject", () => {
     expect(project.tree.ServerScriptService.TS.$path).toBe("out/server");
     expect(project.tree.ReplicatedStorage.TS.$path).toBe("out/shared");
     expect(project.tree.StarterPlayer.StarterPlayerScripts.TS.$path).toBe("out/client");
+    expect(
+      (project.tree.ServerScriptService as Record<string, unknown>)["ArunaTests"],
+    ).toBeUndefined();
+  });
+
+  it("mounts the compiled specs only for a test run", () => {
+    // rbxtsc resolves every import through this project file, so a spec that is
+    // being compiled needs a mount — and a place that is being built must not
+    // have one.
+    const project = partitionedRojoProject({ includeTests: true }) as {
+      tree: { ServerScriptService: Record<string, { $path: string }> };
+    };
+    expect(project.tree.ServerScriptService["ArunaTests"]?.$path).toBe("out/test");
   });
 });
 
@@ -208,5 +227,106 @@ describe("readInheritedCompilerOptions typeRoots", () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("staging the test partition", () => {
+  // A minimal project on disk: stagePartition needs a node_modules to mirror, a
+  // tsconfig to inherit from, and the sources the manifest lists.
+  function makeProject(): { root: string; manifest: Manifest } {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-stage-test-"));
+    fs.mkdirSync(path.join(root, "node_modules"), { recursive: true });
+    fs.writeFileSync(path.join(root, "tsconfig.json"), "{}\n", "utf8");
+
+    const write = (relative: string, contents: string): void => {
+      const absolute = path.join(root, relative);
+      fs.mkdirSync(path.dirname(absolute), { recursive: true });
+      fs.writeFileSync(absolute, contents, "utf8");
+    };
+    write("src/domains/shop/server/pricing.ts", "export const priceOf = 1;\n");
+    write("src/domains/shop/server/pricing.test.ts", "export const spec = 1;\n");
+    // The vendored runtime, including the test surface `aruna build` writes to
+    // disk so `aruna/testing` resolves in an editor.
+    write("src/.aruna/shared/runtime/server.ts", "export const server = 1;\n");
+    write("src/.aruna/shared/runtime/testing.ts", "export const testing = 1;\n");
+    write("src/.aruna/shared/runtime/testing-framework.ts", "export const framework = 1;\n");
+
+    const manifest: Manifest = {
+      version: 1,
+      projectRoot: root,
+      modules: [
+        {
+          id: "src/domains/shop/server/pricing.ts",
+          path: "src/domains/shop/server/pricing.ts",
+          kind: "server",
+          reason: "path",
+        },
+        {
+          id: "src/domains/shop/server/pricing.test.ts",
+          path: "src/domains/shop/server/pricing.test.ts",
+          kind: "test",
+          reason: "path",
+        },
+      ],
+      imports: [],
+      actions: [],
+      diagnostics: [],
+    };
+    return { root, manifest };
+  }
+
+  const stagedFiles = (root: string, manifest: Manifest, includeTests: boolean): string[] => {
+    const result = stagePartition({
+      projectRoot: root,
+      generatedDir: "src/.aruna",
+      manifest,
+      rbxtscBin: "rbxtsc",
+      ...(includeTests ? { includeTests: true } : {}),
+    });
+    if (!result.ok) {
+      throw new Error(`staging failed: ${result.reason}`);
+    }
+    const staged: string[] = [];
+    const walk = (directory: string, prefix: string): void => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const next = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+        if (entry.isDirectory()) {
+          walk(path.join(directory, entry.name), next);
+        } else {
+          staged.push(next);
+        }
+      }
+    };
+    walk(path.join(result.staged.tempRoot, "src"), "");
+    fs.rmSync(result.staged.tempRoot, { recursive: true, force: true });
+    return staged;
+  };
+
+  it("leaves specs and the test runtime out of a game build", () => {
+    const { root, manifest } = makeProject();
+    const staged = stagedFiles(root, manifest, false);
+
+    expect(staged).toContain("server/domains/shop/server/pricing.ts");
+    // Nothing in the place should be able to reach a spec — the surest way is
+    // for it never to be compiled.
+    expect(staged.some((file) => file.includes("pricing.test"))).toBe(false);
+    // The test framework is vendored to disk but must not be replicated to
+    // every client along with the rest of the shared runtime.
+    expect(staged).toContain("shared/.aruna/runtime/server.ts");
+    expect(staged.some((file) => file.includes("runtime/testing"))).toBe(false);
+
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("stages specs into their own partition for a test run", () => {
+    const { root, manifest } = makeProject();
+    const staged = stagedFiles(root, manifest, true);
+
+    expect(staged).toContain("test/domains/shop/server/pricing.test.ts");
+    expect(staged).toContain("server/domains/shop/server/pricing.ts");
+    expect(staged).toContain("shared/.aruna/runtime/testing.ts");
+    expect(staged).toContain("shared/.aruna/runtime/testing-framework.ts");
+
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
