@@ -5,7 +5,7 @@
   "scripts": {
     "build": "aruna build",
     "check": "aruna check",
-    "test": "aruna build"
+    "test": "aruna test"
   },
   "dependencies": {
     "aruna": "workspace:@arunajs/aruna@*"
