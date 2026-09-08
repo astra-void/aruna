@@ -83,6 +83,7 @@ never compiles specs. That import is `aruna::305 test-module-imported`.
 | `players()` | Who is currently "in the server". |
 | `published()` | Every signal emit so far — `{ signalId, payload, player? }`, no player for a broadcast. |
 | `takePublished()` | The emits so far, clearing the log. |
+| `advance(ms)` | Steps the harness clock, which is how a spec crosses a rate-limit window. |
 | `client(player)` | A client app whose transport dispatches into this server and whose subscriber receives that player's signals. |
 | `app` | The real `ServerApp` underneath, for anything the harness does not wrap. |
 | `dispose()` | Tears down the app and every client it handed out. |
@@ -116,6 +117,24 @@ await client.invoke("shop.buy", { item: "rope" });
 `client()` installs the module-global action invoker, so the generated
 `$aruna/actions/client` stubs work inside a spec — which also means the most recently
 created client is the one that global serves.
+
+## Time
+
+The harness freezes the clock the rate limiter reads, so a window elapses when the spec
+says it does rather than in real time:
+
+```ts
+const harness = createTestServerApp({ actions });     // rateLimit: max 1 per 60s
+await harness.invoke(player, "ping", undefined);      // ok
+await expect(harness.invoke(player, "ping", undefined)).rejects.toThrow("rate limited");
+
+harness.advance(60_000);
+await harness.invoke(player, "ping", undefined);      // ok again — no waiting
+```
+
+Only the rate limiter reads this clock; `os.clock()`, `DateTime`, and store heartbeats are
+untouched. Passing your own `nowMs` to `createTestServerApp` keeps that clock and makes
+`advance()` an error, since the harness is then not the one holding it.
 
 ## Persistence in a spec
 

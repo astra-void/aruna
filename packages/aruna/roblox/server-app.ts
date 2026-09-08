@@ -132,6 +132,11 @@ export interface CreateServerAppOptions<
 	// the home for per-player cleanup: persisting session state, caches, anything
 	// keyed by the player. Receives the player's session (undefined when none).
 	readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
+	// The clock the rate limiter reads, in milliseconds. Left unset in a game;
+	// set by `createTestServerApp`, which freezes it so a spec steps past a
+	// window with `advance(ms)` rather than waiting one out. Mirrors the Node
+	// reference runtime's option of the same name.
+	readonly nowMs?: () => number;
 	// Replaces the Players service as the source of joins and leaves. Left unset
 	// in a game — the app connects to `Players` itself; set by the test harness,
 	// which fires the handlers on demand.
@@ -179,6 +184,7 @@ export function createServerApp<
 			: {}),
 		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
 		...(options.onError !== undefined ? { onError: options.onError } : {}),
+		...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
 	};
 	const registry = createActionRegistry<TPlayer>(options.actions, registryOptions);
 

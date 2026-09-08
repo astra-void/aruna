@@ -49,6 +49,13 @@ the game build like any other module.
   included, so a generated stub and the signal it triggers can both be asserted.
   `createTestPlayer()` returns a player double typed as `Player`.
 
+- **A frozen, steppable clock.** The harness freezes the clock the rate limiter
+  reads and `harness.advance(ms)` steps it, so a spec crosses a rate-limit
+  window instead of waiting one out. `createServerApp({ nowMs })` — which the
+  Node reference runtime already had — now exists on the native runtime too, and
+  the native limiter's `check` accepts the clock rather than always reading
+  `os.clock()`.
+
 - **The test framework, in both runtimes.** `describe`, `it`, `itSkip`,
   `beforeEach`, `afterEach`, and `expect` (with `.not`, `toEqual`, `toThrow`, and
   `expect(promise).rejects.toThrow`) ship from `aruna/testing`, because under

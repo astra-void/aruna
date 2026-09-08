@@ -72,6 +72,11 @@ export interface TestServerApp<TPlayer extends defined = Player, TSignals extend
 	// Returns the recorded emits and clears the log — the usual shape for
 	// "assert what this call published, then move on".
 	readonly takePublished: () => ReadonlyArray<TestSignalRecord<TPlayer>>;
+	// Steps the harness clock forward, which is how a spec crosses a rate-limit
+	// window: the clock is frozen at creation, so windows elapse only when the
+	// spec says they do. Errors when the caller supplied its own `nowMs` — the
+	// harness is not the one holding the clock then.
+	readonly advance: (milliseconds: number) => void;
 	// A client app whose transport dispatches into this server as `player`, and
 	// whose subscriber receives the signals published to that player. Installs the
 	// module-global action invoker, so generated `$aruna/actions/client` stubs
@@ -125,6 +130,12 @@ export function createTestServerApp<
 		},
 	};
 
+	// Frozen at zero and stepped by `advance`, so a rate-limit window elapses
+	// when the spec decides rather than in real time. A caller that supplies its
+	// own `nowMs` keeps it.
+	let clockMs = 0;
+	const ownsClock = options.nowMs === undefined;
+
 	const present = new Array<TPlayer>();
 	const addedHandlers = new Array<(player: TPlayer) => void>();
 	const removingHandlers = new Array<(player: TPlayer) => void>();
@@ -142,6 +153,7 @@ export function createTestServerApp<
 	const signals = options.signals;
 	const app = createServerApp<TPlayer, TSignals, TSession>({
 		...options,
+		...(ownsClock ? { nowMs: () => clockMs } : {}),
 		...(signals !== undefined
 			? {
 					createPublisher: (registry: TSignals) =>
@@ -202,6 +214,14 @@ export function createTestServerApp<
 		},
 		players: () => present,
 		published: () => published,
+		advance: (milliseconds) => {
+			if (!ownsClock) {
+				error(
+					"Aruna test harness: advance() is unavailable because createTestServerApp was given its own nowMs.",
+				);
+			}
+			clockMs += milliseconds;
+		},
 		takePublished: () => {
 			const taken = [...published];
 			published.clear();

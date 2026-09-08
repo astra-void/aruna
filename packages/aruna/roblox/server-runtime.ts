@@ -81,6 +81,10 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Around-run middleware, applied outermost-first to every action.
 	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
 	readonly onError?: ActionErrorHandler<TPlayer>;
+	// The clock the rate limiter reads, in milliseconds. Left unset in a game,
+	// where os.clock() is the right answer; set by the test harness so a spec can
+	// step past a rate-limit window instead of waiting out a real one.
+	readonly nowMs?: () => number;
 }
 
 export function createActionRegistry<TPlayer>(
@@ -101,6 +105,7 @@ export function createActionRegistry<TPlayer>(
 	const middleware = options?.middleware;
 	const onError = options?.onError;
 	const rateLimiter = createActionRateLimiter();
+	const nowMs = options?.nowMs;
 
 	return {
 		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
@@ -148,7 +153,15 @@ export function createActionRegistry<TPlayer>(
 				const rateLimit = definition.rateLimit ?? defaultRateLimit;
 				if (rateLimit !== undefined) {
 					const limitKey = resolveRateLimitKey(rateLimit, { actionId, player, input });
-					const limitResult = rateLimiter.check(actionId, limitKey, rateLimit);
+					// The limiter works in seconds; the injected clock mirrors the Node
+					// reference runtime's `nowMs`, so the option means the same thing in
+					// both runtimes.
+					const limitResult = rateLimiter.check(
+						actionId,
+						limitKey,
+						rateLimit,
+						nowMs !== undefined ? nowMs() / 1000 : undefined,
+					);
 					if (!limitResult.ok) {
 						resolve({
 							ok: false,

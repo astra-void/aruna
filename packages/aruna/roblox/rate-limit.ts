@@ -15,10 +15,15 @@ export type RateLimitCheckResult =
 	| { readonly ok: false; readonly retryAfterMs: number; readonly resetAtMs: number };
 
 export interface ActionRateLimiter {
+	// `nowSeconds` overrides the clock, so a caller that owns time — the test
+	// harness, which freezes it and advances on demand — gets a deterministic
+	// window instead of one that only elapses in real time. Defaults to
+	// os.clock(), which is what a game always uses.
 	readonly check: (
 		actionId: string,
 		key: string,
 		options: ActionRateLimitOptions,
+		nowSeconds?: number,
 	) => RateLimitCheckResult;
 	// Removes buckets whose window has fully elapsed at `now` (seconds, defaults
 	// to os.clock()) and returns how many were removed. Mirrors the Node
@@ -48,9 +53,9 @@ export function createActionRateLimiter(): ActionRateLimiter {
 	}
 
 	return {
-		check: (actionId, key, options) => {
+		check: (actionId, key, options, nowSeconds) => {
 			const windowSeconds = options.windowMs / 1000;
-			const now = os.clock();
+			const now = nowSeconds !== undefined ? nowSeconds : os.clock();
 
 			// Opportunistic cleanup, at most once per window, so abandoned keys
 			// (e.g. players who left) do not accumulate.

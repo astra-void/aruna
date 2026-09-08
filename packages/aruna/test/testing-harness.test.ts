@@ -159,6 +159,36 @@ describe("createTestServerApp", () => {
     harness.dispose();
   });
 
+  it("crosses a rate-limit window when the spec advances the clock", async () => {
+    const ping = defineAction({
+      id: "ping",
+      rateLimit: { key: "player", windowMs: 60_000, max: 1 },
+      run: () => "pong",
+    });
+    const harness = createTestServerApp({ actions: { ping } });
+    const player = createTestPlayer();
+
+    await expect(harness.invoke(player, "ping", undefined)).resolves.toBe("pong");
+    await expect(harness.invoke(player, "ping", undefined)).rejects.toThrow(/rate limited/i);
+
+    // The clock is frozen, so the window elapses only here — no real waiting.
+    harness.advance(60_000);
+    await expect(harness.invoke(player, "ping", undefined)).resolves.toBe("pong");
+
+    harness.dispose();
+  });
+
+  it("refuses to advance a clock the caller owns", () => {
+    const harness = createTestServerApp({
+      actions: { ping: defineAction({ id: "ping", run: () => "pong" }) },
+      nowMs: () => 1_000,
+    });
+
+    expect(() => harness.advance(1_000)).toThrow(/given its own nowMs/);
+
+    harness.dispose();
+  });
+
   it("runs middleware around the action", async () => {
     const seen: string[] = [];
     const ping = defineAction({ id: "ping", run: () => "pong" });

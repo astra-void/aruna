@@ -153,6 +153,33 @@ return function(ctx)
 			harness.dispose()
 		end)
 
+		t.it("crosses a rate-limit window when the spec advances the clock", function()
+			local harness = testing.createTestServerApp({
+				actions = {
+					ping = {
+						id = "ping",
+						rateLimit = { key = "player", windowMs = 60000, max = 1 },
+						run = function(_self, _context, _input)
+							return "pong"
+						end,
+					},
+				},
+			})
+			local player = testing.createTestPlayer()
+
+			local _, firstOk = t.await(harness.invoke(player, "ping", nil))
+			t.isTrue(firstOk, "first call allowed")
+			local _, secondOk = t.await(harness.invoke(player, "ping", nil))
+			t.isFalse(secondOk, "second call throttled")
+
+			-- The clock is frozen, so the window elapses only here.
+			harness.advance(60000)
+			local _, thirdOk = t.await(harness.invoke(player, "ping", nil))
+			t.isTrue(thirdOk, "call after the window allowed")
+
+			harness.dispose()
+		end)
+
 		t.it("routes a client's invoke and its subscriber through the server", function()
 			local harness = testing.createTestServerApp({
 				actions = { ["shop.buy"] = buyAction() },
