@@ -25,6 +25,7 @@ export const fixtureCases = [
   { name: "client-imports-action-source", mode: "inspect" },
   { name: "store-basic", mode: "inspect" },
   { name: "client-imports-store-source", mode: "inspect" },
+  { name: "test-module-boundary", mode: "inspect" },
   { name: "virtual-generated-action-imports", mode: "inspect" },
   { name: "invalid-virtual-generated-action-imports", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },

@@ -116,6 +116,7 @@ fn boundary_suggestion(code: &str) -> &'static str {
         "aruna::303" => "Keep shared modules free of server-only imports, or split server code into server/.",
         "aruna::556" => "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.",
         "aruna::574" => "Stores are server-only and have no client binding. Read the data on the server and return it through an action.",
+        "aruna::305" => "A spec is compiled by `aruna test` and left out of the game build, so this import would dangle in the built place. Move what both need into a module the game build also compiles.",
         _ => "Refactor the import so each module only reaches the boundaries it is allowed to use.",
     }
 }
@@ -142,6 +143,7 @@ fn module_kind_label(kind: ModuleKind) -> &'static str {
         ModuleKind::ServerEntry => "server entry",
         ModuleKind::ServerAction => "server action",
         ModuleKind::ServerStore => "server store",
+        ModuleKind::Test => "test",
         ModuleKind::Unknown => "unknown",
     }
 }

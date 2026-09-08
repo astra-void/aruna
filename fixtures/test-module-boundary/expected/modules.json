@@ -1,0 +1,20 @@
+[
+  {
+    "id": "src/domains/shop/server/actions.ts",
+    "kind": "server",
+    "path": "src/domains/shop/server/actions.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/server/pricing.test.ts",
+    "kind": "test",
+    "path": "src/domains/shop/server/pricing.test.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/shop/server/pricing.ts",
+    "kind": "server",
+    "path": "src/domains/shop/server/pricing.ts",
+    "reason": "path"
+  }
+]

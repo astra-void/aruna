@@ -1,0 +1,68 @@
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::305",
+      "details": "importer: src/domains/shop/server/actions.ts\nimporter kind: server\nimported: src/domains/shop/server/pricing.test.ts\nimported kind: test",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "src/domains/shop/server/actions.ts is classified as server. It imports src/domains/shop/server/pricing.test.ts, which is classified as test.",
+      "name": "test-module-imported",
+      "severity": "error",
+      "span": {
+        "end": 181,
+        "start": 165
+      },
+      "suggestion": "A spec is compiled by `aruna test` and left out of the game build, so this import would dangle in the built place. Move what both need into a module the game build also compiles."
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/shop/server/actions.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./pricing.test",
+      "to": "src/domains/shop/server/pricing.test.ts"
+    },
+    {
+      "from": "src/domains/shop/server/pricing.test.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./pricing",
+      "to": "src/domains/shop/server/pricing.ts"
+    },
+    {
+      "from": "src/domains/shop/server/pricing.test.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/domains/shop/server/pricing.test.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/testing"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/domains/shop/server/actions.ts",
+      "kind": "server",
+      "path": "src/domains/shop/server/actions.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/shop/server/pricing.test.ts",
+      "kind": "test",
+      "path": "src/domains/shop/server/pricing.test.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/shop/server/pricing.ts",
+      "kind": "server",
+      "path": "src/domains/shop/server/pricing.ts",
+      "reason": "path"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

@@ -135,13 +135,21 @@ pub struct ConventionConfig {
     pub server: Vec<String>,
     #[serde(default)]
     pub shared: Vec<String>,
+    // Specs. Separate from the three partition kinds because a test is not a
+    // partition of the game at all: it is compiled and run by `aruna test` and
+    // left out of the place the game build produces.
+    #[serde(default)]
+    pub test: Vec<String>,
 }
 
 impl ConventionConfig {
     // No convention at all was supplied, so the built-in Recommended Layout set
     // applies. Deliberately not per-kind: see `convention_patterns`.
     pub fn is_empty(&self) -> bool {
-        self.client.is_empty() && self.server.is_empty() && self.shared.is_empty()
+        self.client.is_empty()
+            && self.server.is_empty()
+            && self.shared.is_empty()
+            && self.test.is_empty()
     }
 }
 

@@ -261,7 +261,21 @@ pub fn build_project_graph(
     let mut runtime_records = Vec::new();
     let mut entry_hooks = EntryHooks::default();
 
+    // Specs are excluded from every discovery pass below. A `defineAction` inside
+    // a spec is a fixture, not an action the game ships: registering it would put
+    // it in the manifest, the generated registry, and the contract — and a
+    // duplicate id in a spec would then break the build it was only meant to test.
+    let test_files: BTreeSet<String> = module_map
+        .values()
+        .filter(|module| module.kind == ModuleKind::Test)
+        .map(|module| module.path.clone())
+        .collect();
+
     for absolute_path in files {
+        if test_files.contains(&project_relative(project_root, absolute_path)) {
+            continue;
+        }
+
         let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
 
         // Hook-module discovery (entries: "generated"): the recommended entry

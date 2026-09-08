@@ -13,6 +13,10 @@ fn normalize_boundary_kind(kind: ModuleKind) -> ModuleKind {
         | ModuleKind::ServerAction
         | ModuleKind::ServerStore => ModuleKind::Server,
         ModuleKind::Shared => ModuleKind::Shared,
+        // Never reached: `boundary_code` decides both directions of a test edge
+        // before normalizing. Mapped to the most restrictive kind so a future
+        // caller cannot accidentally give a spec more reach than shared code.
+        ModuleKind::Test => ModuleKind::Shared,
         // Unclassified modules are evaluated as shared, the most restrictive
         // kind: an unknown file importing server or client code is a violation.
         // Before this, Unknown bypassed every boundary rule — a file placed one
@@ -22,6 +26,18 @@ fn normalize_boundary_kind(kind: ModuleKind) -> ModuleKind {
 }
 
 pub fn boundary_code(importer: ModuleKind, imported: ModuleKind) -> Option<&'static str> {
+    // A spec is not part of the game build, so nothing in the game may import
+    // one: the import would resolve while the specs are being compiled and dangle
+    // in the place the game build produces.
+    if matches!(imported, ModuleKind::Test) && !matches!(importer, ModuleKind::Test) {
+        return Some("aruna::305");
+    }
+    // A spec exercises whatever it is a spec for — client, server, and shared
+    // alike — so no boundary applies in this direction.
+    if matches!(importer, ModuleKind::Test) {
+        return None;
+    }
+
     match (importer, imported) {
         (ModuleKind::Client | ModuleKind::ClientEntry, ModuleKind::ServerAction) => {
             Some("aruna::556")
@@ -98,6 +114,22 @@ mod tests {
             boundary_code(ModuleKind::Shared, ModuleKind::ServerStore),
             Some("aruna::303")
         );
+    }
+
+    #[test]
+    fn test_modules_reach_everything_and_are_reached_by_nothing() {
+        // A spec imports the code it exercises, on either side of the boundary.
+        assert_eq!(boundary_code(ModuleKind::Test, ModuleKind::Server), None);
+        assert_eq!(boundary_code(ModuleKind::Test, ModuleKind::Client), None);
+        assert_eq!(boundary_code(ModuleKind::Test, ModuleKind::ServerAction), None);
+        assert_eq!(boundary_code(ModuleKind::Test, ModuleKind::ServerStore), None);
+        assert_eq!(boundary_code(ModuleKind::Test, ModuleKind::Shared), None);
+        assert_eq!(boundary_code(ModuleKind::Test, ModuleKind::Test), None);
+        // Game code importing a spec would dangle once the game build drops it.
+        assert_eq!(boundary_code(ModuleKind::Server, ModuleKind::Test), Some("aruna::305"));
+        assert_eq!(boundary_code(ModuleKind::Client, ModuleKind::Test), Some("aruna::305"));
+        assert_eq!(boundary_code(ModuleKind::Shared, ModuleKind::Test), Some("aruna::305"));
+        assert_eq!(boundary_code(ModuleKind::Unknown, ModuleKind::Test), Some("aruna::305"));
     }
 
     #[test]

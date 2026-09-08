@@ -174,6 +174,7 @@ export function formatModuleInspection(
     serverAction: [],
     serverStore: [],
     shared: [],
+    test: [],
     unknown: [],
   };
 
@@ -195,6 +196,7 @@ export function formatModuleInspection(
     "serverAction",
     "serverStore",
     "shared",
+    "test",
     "unknown",
   ] as const) {
     const files = groups[kind];

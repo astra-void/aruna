@@ -58,6 +58,7 @@ type MutableConventionConfig = {
   client?: string[];
   server?: string[];
   shared?: string[];
+  test?: string[];
 };
 
 type MutableDomainsConfig = {
@@ -105,7 +106,7 @@ const DIAGNOSTIC_META: Record<
 // server-classified file cannot resolve from the client.
 function defaultConventionsForRoot(
   root: string,
-): Required<Pick<NormalizedConfig["conventions"], "client" | "server" | "shared">> {
+): Required<Pick<NormalizedConfig["conventions"], "client" | "server" | "shared" | "test">> {
   return {
     client: ["**/client/**", "**/ui.tsx"],
     server: ["**/server/**", "**/actions.ts", "**/runtime.ts"],
@@ -121,6 +122,9 @@ function defaultConventionsForRoot(
       // folder's kind: the directory tier wins.
       "**/index.ts",
     ],
+    // A spec is a spec wherever it lives, so the compiler applies these before
+    // the client/server/shared tiers rather than alongside them.
+    test: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
   };
 }
 
@@ -287,6 +291,7 @@ function mergeConventionConfig(
     client: mergeStringArray(base?.client, override?.client),
     server: mergeStringArray(base?.server, override?.server),
     shared: mergeStringArray(base?.shared, override?.shared),
+    test: mergeStringArray(base?.test, override?.test),
   };
 }
 
@@ -564,7 +569,7 @@ function normalizeConfigObject(value: unknown): {
           conventions.defaults = conventionsValue["defaults"];
         }
       }
-      for (const key of ["client", "server", "shared"] as const) {
+      for (const key of ["client", "server", "shared", "test"] as const) {
         const conventionValue = conventionsValue[key];
         if (conventionValue !== undefined) {
           if (!isStringArray(conventionValue)) {
@@ -736,6 +741,11 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
         config.conventions?.shared,
         useConventionDefaults,
       ),
+      test: resolveConventionPatterns(
+        defaultConventions.test,
+        config.conventions?.test,
+        useConventionDefaults,
+      ),
     },
     // The project's own globs, kept apart from the merged set so the compiler
     // can let them outrank the defaults instead of competing with them on
@@ -744,6 +754,7 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       client: [...(config.conventions?.client ?? [])],
       server: [...(config.conventions?.server ?? [])],
       shared: [...(config.conventions?.shared ?? [])],
+      test: [...(config.conventions?.test ?? [])],
     },
     // Domain roots extend the built-in one, like conventions: adding
     // `src/features/*` must not silently stop `src/domains/*` from being a

@@ -112,6 +112,10 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         // Severity is configurable through `strict.domainBoundary`; this is the
         // default the compiler stamps before that setting is applied.
         "aruna::304" => Some(("cross-domain-private-import", DiagnosticSeverity::Warning)),
+        // An error rather than a warning: the game build does not compile specs,
+        // so this import does not merely bend a rule — it does not resolve in the
+        // place that ships.
+        "aruna::305" => Some(("test-module-imported", DiagnosticSeverity::Error)),
         "aruna::700" => Some(("manifest-write-failed", DiagnosticSeverity::Error)),
         "aruna::701" => Some(("generated-output-write-failed", DiagnosticSeverity::Error)),
         "aruna::900" => Some(("internal-compiler-error", DiagnosticSeverity::Error)),

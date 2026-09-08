@@ -15,6 +15,10 @@ pub enum ModuleKind {
     // A module that exports a store definition. Server-only like ServerAction,
     // and separated from it so the client-side violation can say "store".
     ServerStore,
+    // A spec. Never part of a game build: `aruna test` compiles it, and the
+    // place `aruna build` produces leaves it out. Free to import client, server,
+    // and shared code alike — nothing may import it.
+    Test,
     Unknown,
 }
 
@@ -31,6 +35,7 @@ pub struct ConventionSet {
     pub client: Vec<String>,
     pub server: Vec<String>,
     pub shared: Vec<String>,
+    pub test: Vec<String>,
 }
 
 impl ConventionSet {
@@ -63,6 +68,15 @@ impl ConventionSet {
                 // so it is shared-safe by default. A barrel inside a partition
                 // folder keeps that folder's kind: the directory tier wins.
                 "**/index.ts".to_string(),
+            ],
+            // A spec is a spec wherever it lives, so these outrank every other
+            // convention instead of competing with them by tier — a
+            // `shop.test.ts` inside `server/` is a test, not server code.
+            test: vec![
+                "**/*.test.ts".to_string(),
+                "**/*.test.tsx".to_string(),
+                "**/*.spec.ts".to_string(),
+                "**/*.spec.tsx".to_string(),
             ],
         }
     }
@@ -105,6 +119,7 @@ fn patterns_for_kind(conventions: &ConventionConfig, kind: &ModuleKind) -> Vec<S
         | ModuleKind::ServerAction
         | ModuleKind::ServerStore => conventions.server.clone(),
         ModuleKind::Shared => conventions.shared.clone(),
+        ModuleKind::Test => conventions.test.clone(),
         ModuleKind::Unknown => Vec::new(),
     }
 }
@@ -126,6 +141,7 @@ fn convention_patterns(config: &ArunaConfig, kind: &ModuleKind) -> Vec<String> {
             | ModuleKind::ServerAction
             | ModuleKind::ServerStore => defaults.server,
             ModuleKind::Shared => defaults.shared,
+            ModuleKind::Test => defaults.test,
             ModuleKind::Unknown => Vec::new(),
         }
     } else {
@@ -203,6 +219,20 @@ fn matched_tier(patterns: &[String], path: &str) -> Option<ConventionTier> {
 
 pub fn classify_relative_path(path: &str, conventions: &ConventionSet) -> ModuleClassification {
     let relative_path = normalize_path(path);
+
+    // Tests are decided before the tier competition, not inside it. A spec sits
+    // next to the code it exercises — `src/domains/shop/server/pricing.test.ts`
+    // matches `**/server/**` too — and a tie between two directory-tier
+    // conventions would report it as ambiguous (aruna::203) instead of as the
+    // test it plainly is.
+    if matches_any(&conventions.test, &relative_path) {
+        return ModuleClassification {
+            kind: ModuleKind::Test,
+            matched_kinds: vec![ModuleKind::Test],
+            reason_detail: None,
+        };
+    }
+
     let mut tier_matches: Vec<(ConventionTier, ModuleKind)> = Vec::new();
 
     for (kind, patterns) in [
@@ -271,6 +301,7 @@ fn kind_label(kind: &ModuleKind) -> &'static str {
         ModuleKind::ServerEntry => "server entry",
         ModuleKind::ServerAction => "server action",
         ModuleKind::ServerStore => "server store",
+        ModuleKind::Test => "test",
         ModuleKind::Unknown => "unknown",
     }
 }
@@ -349,6 +380,7 @@ pub fn classify_module(
         client: convention_patterns(config, &ModuleKind::Client),
         server: convention_patterns(config, &ModuleKind::Server),
         shared: convention_patterns(config, &ModuleKind::Shared),
+        test: convention_patterns(config, &ModuleKind::Test),
     };
     // Globs written in aruna.config.ts outrank the built-in Recommended Layout
     // set, whatever their shape. Without this tier the merged set would let a
@@ -360,6 +392,7 @@ pub fn classify_module(
         client: patterns_for_kind(&config.convention_overrides, &ModuleKind::Client),
         server: patterns_for_kind(&config.convention_overrides, &ModuleKind::Server),
         shared: patterns_for_kind(&config.convention_overrides, &ModuleKind::Shared),
+        test: patterns_for_kind(&config.convention_overrides, &ModuleKind::Test),
     };
 
     // Aruna owns the layout under `generatedDir` (server registry under
@@ -596,6 +629,7 @@ mod tests {
             client: vec!["**/ui.tsx".to_string()],
             server: vec!["**/actions.ts".to_string()],
             shared: vec!["src/domains/**/policy.ts".to_string()],
+            test: Vec::new(),
         };
 
         // The folder form comes with the glob the project already wrote.
@@ -634,11 +668,40 @@ mod tests {
     }
 
     #[test]
+    fn classifies_specs_as_tests_wherever_they_live() {
+        let conventions = ConventionSet::default();
+        // Next to the code it exercises, inside a partition folder: still a test.
+        assert_eq!(
+            classify_relative_path("src/domains/shop/server/pricing.test.ts", &conventions).kind,
+            ModuleKind::Test
+        );
+        assert_eq!(
+            classify_relative_path("src/domains/shop/client/panel.spec.tsx", &conventions).kind,
+            ModuleKind::Test
+        );
+        // Unambiguous: a spec never reports a multi-convention match.
+        let spec = classify_relative_path("src/shared/schema.test.ts", &conventions);
+        assert_eq!(spec.kind, ModuleKind::Test);
+        assert_eq!(spec.reason_detail, None);
+        // A file that merely mentions "test" in its name is not one: it keeps
+        // whatever the ordinary conventions make of it.
+        assert_eq!(
+            classify_relative_path("src/shared/testing-utils.ts", &conventions).kind,
+            ModuleKind::Shared
+        );
+        assert_eq!(
+            classify_relative_path("src/utils/testing-utils.ts", &conventions).kind,
+            ModuleKind::Unknown
+        );
+    }
+
+    #[test]
     fn detects_ambiguous_convention_match() {
         let conventions = ConventionSet {
             client: vec!["**/client/**".to_string(), "**/shared/**".to_string()],
             server: vec!["**/server/**".to_string()],
             shared: vec!["**/shared/**".to_string()],
+            test: Vec::new(),
         };
         let classification = classify_relative_path("src/shared/mixed.ts", &conventions);
         assert_eq!(classification.kind, ModuleKind::Unknown);
@@ -668,6 +731,7 @@ mod tests {
             ],
             server: vec!["**/server/**".to_string()],
             shared: vec!["src/app/**".to_string()],
+            test: Vec::new(),
         };
 
         let pinned = classify_module(

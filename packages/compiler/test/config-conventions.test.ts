@@ -76,6 +76,7 @@ export default defineConfig({
       client: [],
       server: [],
       shared: ["**/policy.ts"],
+      test: [],
     });
   });
 

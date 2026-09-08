@@ -8,6 +8,10 @@ export type ModuleKind =
   // A module exporting a store definition. Server-only, and distinguished from
   // serverAction so a client import can be reported as a store violation.
   | "serverStore"
+  // A spec. Compiled and run by `aruna test`, and left out of the game build —
+  // free to import client, server, and shared modules alike, while nothing may
+  // import it (aruna::305).
+  | "test"
   | "unknown";
 
 export type DiagnosticSeverity = "error" | "warning" | "info";
@@ -44,6 +48,7 @@ export type DiagnosticCode =
   | "aruna::302"
   | "aruna::303"
   | "aruna::304"
+  | "aruna::305"
   | "aruna::700"
   | "aruna::701"
   | "aruna::900";
@@ -207,6 +212,10 @@ export type ConventionConfig = {
   readonly client?: readonly string[] | undefined;
   readonly server?: readonly string[] | undefined;
   readonly shared?: readonly string[] | undefined;
+  // Globs for spec files. These outrank every other convention — a spec sits
+  // next to the code it exercises, so `**/server/**` would otherwise claim it.
+  // Defaults to `**/*.test.ts(x)` and `**/*.spec.ts(x)`.
+  readonly test?: readonly string[] | undefined;
 };
 
 // Which directories are domain units, for the domain-to-domain public API
@@ -268,6 +277,7 @@ export type NormalizedConfig = {
     readonly client: readonly string[];
     readonly server: readonly string[];
     readonly shared: readonly string[];
+    readonly test: readonly string[];
   };
   // Only the project's own globs. They win over a default whenever both match,
   // so opting into the defaults can never reclassify a hand-pinned file.
@@ -275,6 +285,7 @@ export type NormalizedConfig = {
     readonly client: readonly string[];
     readonly server: readonly string[];
     readonly shared: readonly string[];
+    readonly test: readonly string[];
   };
   // The effective domain roots: the built-in `<root>/domains/*` plus the
   // project's own.
@@ -349,6 +360,7 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
       "**/signals.ts",
       "**/index.ts",
     ],
+    test: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
   },
   // Nothing is overridden in the default config, so the defaults above are the
   // whole effective set.
@@ -356,6 +368,7 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
     client: [],
     server: [],
     shared: [],
+    test: [],
   },
   // Must stay in sync with `default_domain_roots` in
   // crates/aruna_compiler/src/domains.rs.
