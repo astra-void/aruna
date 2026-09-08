@@ -52,15 +52,19 @@ describe("pascalCase", () => {
 
 describe("planDomainFiles", () => {
   it("emits the base trio, adding ui/runtime only when requested", () => {
+    // The spec is part of the base scaffold: a new domain starts with a passing
+    // test to extend rather than one to remember to write.
     expect(planDomainFiles("shop", []).map((file) => file.name)).toEqual([
       "schema.ts",
       "model.ts",
       "actions.ts",
+      "actions.test.ts",
     ]);
     expect(planDomainFiles("shop", ["ui", "runtime"]).map((file) => file.name)).toEqual([
       "schema.ts",
       "model.ts",
       "actions.ts",
+      "actions.test.ts",
       "ui.tsx",
       "runtime.ts",
     ]);
@@ -79,9 +83,26 @@ describe("planDomainFiles", () => {
         .filter((pattern) => pattern.startsWith("**/") && !pattern.endsWith("/**"))
         .map((pattern) => pattern.slice("**/".length)),
     );
+    // Spec globs are wildcards rather than literal names, so they are matched by
+    // suffix: `**/*.test.ts` covers `actions.test.ts`.
+    const testSuffixes = DEFAULT_CONFIG.conventions.test
+      .filter((pattern) => pattern.startsWith("**/*"))
+      .map((pattern) => pattern.slice("**/*".length));
+
     for (const file of planDomainFiles("shop", ["ui", "runtime"])) {
-      expect(conventionFileNames.has(file.name)).toBe(true);
+      const classified =
+        conventionFileNames.has(file.name) ||
+        testSuffixes.some((suffix) => file.name.endsWith(suffix));
+      expect({ file: file.name, classified }).toEqual({ file: file.name, classified: true });
     }
+  });
+
+  it("scaffolds a spec that exercises the starter action", () => {
+    const spec = planDomainFiles("player-stats", []).find(
+      (file) => file.name === "actions.test.ts",
+    );
+    expect(spec?.contents).toContain('from "aruna/testing"');
+    expect(spec?.contents).toContain('"player-stats.ping": pingPlayerStats');
   });
 
   it("names the starter action after the domain", () => {
@@ -115,6 +136,7 @@ describe("runAddDomain", () => {
       "src/domains/shop/schema.ts",
       "src/domains/shop/model.ts",
       "src/domains/shop/actions.ts",
+      "src/domains/shop/actions.test.ts",
     ]);
     expect(first.skipped).toEqual([]);
 
@@ -125,6 +147,7 @@ describe("runAddDomain", () => {
       "src/domains/shop/schema.ts",
       "src/domains/shop/model.ts",
       "src/domains/shop/actions.ts",
+      "src/domains/shop/actions.test.ts",
     ]);
     expect(fs.readFileSync(path.join(projectRoot, "src/domains/shop/actions.ts"), "utf8")).toBe(
       "// mine\n",

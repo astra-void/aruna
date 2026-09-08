@@ -12,7 +12,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna build` | Generate action stubs + manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc. |
 | `aruna dev` | One-terminal dev loop: `build --watch` plus a `rojo serve` child. |
 | `aruna test` | Compile the project *with* its specs and run them under Lune (`--filter <pattern>`). See [Testing](./testing.md). |
-| `aruna add domain <name>` | Scaffold `<root>/domains/<name>/{schema,model,actions}.ts` (`--with ui,runtime` for extras). |
+| `aruna add domain <name>` | Scaffold `<root>/domains/<name>/{schema,model,actions,actions.test}.ts` (`--with ui,runtime` for extras). |
 | `aruna doctor [--fix]` | Inspect (and with `--fix`, write) the `aruna/*` and `$aruna/*` tsconfig path aliases. |
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |

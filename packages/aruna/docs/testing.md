@@ -34,6 +34,9 @@ rather than being supplied by a host runner: under Lune there is no host runner.
 
 ## Writing a spec
 
+`aruna add domain <name>` scaffolds one for you — `actions.test.ts` next to the starter
+action, already passing — so a new domain begins with a test to extend.
+
 A spec is any file matching `**/*.test.ts(x)` or `**/*.spec.ts(x)`. Put it next to the
 code it covers:
 

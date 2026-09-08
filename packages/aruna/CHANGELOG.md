@@ -98,6 +98,10 @@ the game build like any other module.
 
 ### Changed
 
+- **`aruna add domain` scaffolds a spec.** A new domain now starts with
+  `actions.test.ts` next to its starter action — already passing, and already
+  exercising validation — instead of an empty habit to remember.
+
 - **The game build leaves specs out entirely.** They are never staged, so nothing
   in the place can reach one, and the vendored test framework
   (`runtime/testing*.ts`) is skipped along with them rather than replicated to

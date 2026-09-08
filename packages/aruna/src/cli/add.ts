@@ -112,6 +112,45 @@ export const ping${pascal} = defineAction({
 `;
 }
 
+// A passing spec for the action the scaffold just wrote, so a new domain starts
+// with a test to extend rather than an empty file to remember to create. It is
+// classified `test` by the `**/*.test.ts` convention, which keeps it out of the
+// game build; `aruna test` compiles and runs it.
+function actionsSpecTemplate(name: string, pascal: string): string {
+  return `import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";
+import { ping${pascal} } from "./actions";
+import type { Ping${pascal}Output } from "./schema";
+
+const actions = { "${name}.ping": ping${pascal} };
+
+describe("${name}.ping", () => {
+  it("replies to the message it was sent", async () => {
+    // The harness owns the transport, the publisher, and the players source, so
+    // this dispatch goes through the real validation and rate-limiting path.
+    const harness = createTestServerApp({ actions });
+    const player = createTestPlayer();
+
+    const output = (await harness.invoke(player, "${name}.ping", {
+      message: "hello",
+    })) as Ping${pascal}Output;
+
+    expect(output.reply).toContain("hello");
+    harness.dispose();
+  });
+
+  it("rejects input the schema does not accept", async () => {
+    const harness = createTestServerApp({ actions });
+
+    await expect(
+      harness.invoke(createTestPlayer(), "${name}.ping", { message: 42 }),
+    ).rejects.toThrow("invalid action input");
+
+    harness.dispose();
+  });
+});
+`;
+}
+
 function uiTemplate(name: string, pascal: string): string {
   return `// Client-only ${name} UI (classified client by the \`**/ui.tsx\` convention).
 // Call server actions through the generated stubs, e.g.
@@ -150,6 +189,7 @@ export function planDomainFiles(
     { name: "schema.ts", contents: schemaTemplate(pascal) },
     { name: "model.ts", contents: modelTemplate(name, pascal) },
     { name: "actions.ts", contents: actionsTemplate(name, pascal) },
+    { name: "actions.test.ts", contents: actionsSpecTemplate(name, pascal) },
   ];
   if (extras.includes("ui")) {
     files.push({ name: "ui.tsx", contents: uiTemplate(name, pascal) });
@@ -204,6 +244,7 @@ export function formatAddDomainReport(name: string, result: AddDomainResult): st
   lines.push("next steps");
   lines.push(`  1. fill in the schemas and actions under ${result.domainDir}/`);
   lines.push("  2. aruna build   # regenerate stubs and the manifest for the new domain");
+  lines.push("  3. aruna test    # run the scaffolded spec (and the rest)");
 
   return lines.join("\n");
 }
