@@ -102,6 +102,15 @@ fn is_ts_source_file(file_path: &Path) -> bool {
 fn candidate_paths(base: &Path) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     candidates.push(base.to_path_buf());
+    // Appending comes first, because that is TypeScript's own rule for an
+    // extensionless specifier: `./pricing.test` is `pricing.test.ts`. Only after
+    // that does the replacing form apply, which exists for the `./foo.js` shape
+    // an ESM-style import writes for a `.ts` file. Replacing first would strip
+    // any dotted name segment — `./pricing.test` silently resolved to
+    // `pricing.ts`, and the boundary check then ran against the wrong module.
+    let base_text = base.to_string_lossy().to_string();
+    candidates.push(PathBuf::from(format!("{base_text}.ts")));
+    candidates.push(PathBuf::from(format!("{base_text}.tsx")));
     candidates.push(base.with_extension("ts"));
     candidates.push(base.with_extension("tsx"));
     candidates.push(base.join("index.ts"));
