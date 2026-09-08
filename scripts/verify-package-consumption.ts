@@ -38,7 +38,13 @@ export const publicArunaSubpathFiles = [
   "schema.js",
   "server.d.ts",
   "server.js",
+  "testing.d.ts",
+  "testing.js",
 ] as const;
+
+// Shipped as package data for `aruna test`; resolved at runtime relative to
+// dist/cli, which is a sibling of lune/ in both the repo and an install.
+export const arunaLuneRunnerAssets = ["run.luau", "loader.luau", "fakes.luau"] as const;
 
 export const forbiddenPackageConsumptionFragments = [
   "../../packages/aruna",
@@ -343,6 +349,7 @@ export async function assertPublicPackageSubpathFiles(packageRoot: string): Prom
     "./roblox": { import: "./roblox.js", types: "./roblox.d.ts" },
     "./schema": { import: "./schema.js", types: "./schema.d.ts" },
     "./server": { import: "./server.js", types: "./server.d.ts" },
+    "./testing": { import: "./testing.js", types: "./testing.d.ts" },
   };
 
   for (const [subpath, expected] of Object.entries(expectedExports)) {
@@ -363,6 +370,16 @@ export async function assertPublicPackageSubpathFiles(packageRoot: string): Prom
     const contents = await fs.readFile(absolutePath, "utf8");
     if (contents.trim().length === 0) {
       throw new Error(`Public package subpath file is empty: ${absolutePath}`);
+    }
+  }
+
+  // The Lune runner `aruna test` spawns. It is data rather than compiled output,
+  // so only the package `files` list carries it — and a consumer would not find
+  // out until their first test run.
+  for (const asset of arunaLuneRunnerAssets) {
+    const absolutePath = path.join(packageRoot, "lune", asset);
+    if (!(await exists(absolutePath))) {
+      throw new Error(`Missing Lune runner asset in the packed package: ${absolutePath}`);
     }
   }
 }
@@ -577,27 +594,39 @@ async function stagePackage(options: {
 }): Promise<PackageJson> {
   const packageJsonPath = path.join(options.sourcePackageDirectory, "package.json");
   const sourcePackageJson = await readJson<PackageJson>(packageJsonPath);
-  const distSource = path.join(options.sourcePackageDirectory, "dist");
-  const distDestination = path.join(options.stagedPackageDirectory, "dist");
   const sourceVersion = sourcePackageJson.version ?? "0.0.0";
   const workspaceVersions = options.workspaceVersions ?? {};
 
   await fs.rm(options.stagedPackageDirectory, { recursive: true, force: true });
   await fs.mkdir(options.stagedPackageDirectory, { recursive: true });
-  await fs.cp(distSource, distDestination, { recursive: true });
-  for (const fileName of publicArunaSubpathFiles) {
-    const sourcePath = path.join(options.sourcePackageDirectory, fileName);
-    if (await exists(sourcePath)) {
-      await fs.cp(sourcePath, path.join(options.stagedPackageDirectory, fileName));
+
+  // Staged from the package's own `files` list rather than a copy of it kept
+  // here, because a hand-maintained list drifts: this one still said
+  // "dist + subpaths + roblox" after `lune/` shipped, so the package under test
+  // was not the package npm would publish. Same rules as
+  // packages/compiler/scripts/stage-package.ts, which is what the real release
+  // uses: literal paths, directories, and the root-level `*.ext` shim globs.
+  const declaredFiles = sourcePackageJson.files ?? ["dist"];
+  for (const entry of declaredFiles) {
+    if (entry.startsWith("*")) {
+      const suffix = entry.slice(1);
+      for (const dirent of await fs.readdir(options.sourcePackageDirectory, {
+        withFileTypes: true,
+      })) {
+        if (dirent.isFile() && dirent.name.endsWith(suffix)) {
+          await fs.cp(
+            path.join(options.sourcePackageDirectory, dirent.name),
+            path.join(options.stagedPackageDirectory, dirent.name),
+          );
+        }
+      }
+      continue;
     }
-  }
-  // The roblox-ts-native runtime source is shipped (via package "files") and
-  // vendored into consumers by `aruna build --emit-runtime`. Only aruna has it.
-  const robloxSource = path.join(options.sourcePackageDirectory, "roblox");
-  if (await exists(robloxSource)) {
-    await fs.cp(robloxSource, path.join(options.stagedPackageDirectory, "roblox"), {
-      recursive: true,
-    });
+
+    const source = path.join(options.sourcePackageDirectory, entry);
+    if (await exists(source)) {
+      await fs.cp(source, path.join(options.stagedPackageDirectory, entry), { recursive: true });
+    }
   }
 
   const stagedPackageJson: PackageJson = {
