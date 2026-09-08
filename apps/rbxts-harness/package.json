@@ -5,7 +5,8 @@
   "scripts": {
     "build": "aruna build",
     "check": "aruna check",
-    "test": "aruna test"
+    "test": "tsx scripts/run-specs.ts",
+    "test:specs": "aruna test"
   },
   "dependencies": {
     "aruna": "workspace:@arunajs/aruna@*"

@@ -192,7 +192,10 @@ are current before anything compiles.
 
 **Lune is required.** It is not an npm package; install it with
 `rokit add lune-org/lune` (or see the Lune docs). Without it `aruna test` stops and says
-so rather than pretending the suite passed.
+so rather than pretending the suite passed — so a CI job that runs it has to install Lune
+too. If you would rather have CI skip the specs than fail on a machine without the Roblox
+toolchain, probe for Lune in your own script and call `aruna test` only when it is there
+(`apps/rbxts-harness/scripts/run-specs.ts` in this repo does exactly that).
 
 ## Conventions
 
