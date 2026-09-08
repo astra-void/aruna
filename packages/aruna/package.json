@@ -12,6 +12,7 @@
   "files": [
     "dist",
     "roblox",
+    "lune",
     "docs",
     "llms.txt",
     "*.js",
@@ -41,6 +42,10 @@
     "./schema": {
       "types": "./schema.d.ts",
       "import": "./schema.js"
+    },
+    "./testing": {
+      "types": "./testing.d.ts",
+      "import": "./testing.js"
     }
   },
   "scripts": {

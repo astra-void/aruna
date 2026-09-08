@@ -26,6 +26,7 @@ const ENTRIES = {
   "aruna/client": ["src/client.ts", "roblox/client.ts"],
   "aruna/roblox": ["src/roblox.ts", "roblox/roblox.ts"],
   "aruna/schema": ["src/schema.ts", "roblox/schema.ts"],
+  "aruna/testing": ["src/testing.ts", "roblox/testing.ts"],
 } as const;
 
 // The documented, consumer-facing public contract every entry must expose from
@@ -105,6 +106,36 @@ const CONTRACT: Record<keyof typeof ENTRIES, readonly string[]> = {
     "SIGNAL_REMOTE_NAME",
   ],
   "aruna/schema": ["schema", "Schema", "Infer", "NumberFormat", "SchemaLiteral"],
+  // The test surface. A spec is written against exactly these names, so a
+  // one-sided drop here would only surface when a consumer's `aruna test` run
+  // failed to compile.
+  "aruna/testing": [
+    "createTestPlayer",
+    "createTestServerApp",
+    "TestPlayer",
+    "TestServerApp",
+    "TestSignalRecord",
+    "CreateTestServerAppOptions",
+    "describe",
+    "it",
+    "itSkip",
+    "beforeEach",
+    "afterEach",
+    "expect",
+    "runTests",
+    "resetTests",
+    "collectedTestCount",
+    "deepEquals",
+    "describeThrown",
+    "TestBody",
+    "TestHook",
+    "TestOutcome",
+    "TestReport",
+    "RunTestsOptions",
+    "Expectation",
+    "NegatableExpectation",
+    "RejectsExpectation",
+  ],
 };
 
 function exportNamesOf(relativeEntry: string): Set<string> {

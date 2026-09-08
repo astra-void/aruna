@@ -148,7 +148,7 @@ export function inspectArunaActionPaths(
 // by `aruna build --emit-runtime`. The bare `aruna/<name>` subpaths are aliased to
 // those project-source files so roblox-ts compiles them instead of rejecting a
 // `node_modules` package import.
-export const ARUNA_RUNTIME_MODULES = ["client", "server", "roblox", "schema"] as const;
+export const ARUNA_RUNTIME_MODULES = ["client", "server", "roblox", "schema", "testing"] as const;
 
 export function resolveArunaRuntimePaths(
   tsconfigPath: string,

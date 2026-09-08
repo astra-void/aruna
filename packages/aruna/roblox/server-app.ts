@@ -56,6 +56,26 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	readonly dispose: () => void;
 }
 
+// A Players-service-shaped source for the player lifecycle hooks, for callers
+// that drive joins and leaves themselves — `createTestServerApp` passes an
+// in-memory one so a spec can join a fake player without a running game.
+// `PlayerAdded` and `GetPlayers` are optional: without `PlayerAdded` the app
+// never fires `onPlayerAdded`, and without `GetPlayers` it skips boot backfill.
+// Mirrors the Node reference runtime's PlayersSource.
+export interface PlayersSource<TPlayer> {
+	readonly PlayerAdded?: {
+		readonly Connect: (callback: (player: TPlayer) => void) => {
+			readonly Disconnect: () => void;
+		};
+	};
+	readonly PlayerRemoving: {
+		readonly Connect: (callback: (player: TPlayer) => void) => {
+			readonly Disconnect: () => void;
+		};
+	};
+	readonly GetPlayers?: () => readonly TPlayer[];
+}
+
 export interface CreateServerAppOptions<
 	TPlayer,
 	TSignals extends SignalMap = SignalMap,
@@ -112,6 +132,10 @@ export interface CreateServerAppOptions<
 	// the home for per-player cleanup: persisting session state, caches, anything
 	// keyed by the player. Receives the player's session (undefined when none).
 	readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
+	// Replaces the Players service as the source of joins and leaves. Left unset
+	// in a game — the app connects to `Players` itself; set by the test harness,
+	// which fires the handlers on demand.
+	readonly players?: PlayersSource<TPlayer>;
 }
 
 export function createServerApp<
@@ -200,23 +224,57 @@ export function createServerApp<
 		sessions.delete(player);
 	};
 
-	const players = game.GetService("Players");
-	const playerAddedConnection = needsAddedHandling
-		? players.PlayerAdded.Connect((player) => {
-				handlePlayerAdded(player as unknown as TPlayer);
-			})
-		: undefined;
-	const playerRemovingConnection = needsRemovingHandling
-		? players.PlayerRemoving.Connect((player) => {
-				handlePlayerRemoving(player as unknown as TPlayer);
-			})
-		: undefined;
+	// Lifecycle teardown is collected as closures rather than as a shared
+	// connection variable: a real RBXScriptConnection is disconnected with a
+	// method call and an injected source's with a plain field call, and each
+	// closure is typed at the site that created it so roblox-ts emits the right
+	// one for each.
+	const lifecycleCleanups = new Array<() => void>();
 
-	// Boot backfill: fire the join handler for players already in the server when
-	// the app is created, so a mid-session boot does not miss anyone.
-	if (needsAddedHandling) {
-		for (const player of players.GetPlayers()) {
-			handlePlayerAdded(player as unknown as TPlayer);
+	const source = options.players;
+	if (source !== undefined) {
+		// Injected source (tests, and anything that drives joins itself). Never
+		// touches the Players service, so it works outside a running game.
+		const addedSignal = source.PlayerAdded;
+		if (needsAddedHandling && addedSignal !== undefined) {
+			const connection = addedSignal.Connect((player) => {
+				handlePlayerAdded(player);
+			});
+			lifecycleCleanups.push(() => connection.Disconnect());
+		}
+		if (needsRemovingHandling) {
+			const connection = source.PlayerRemoving.Connect((player) => {
+				handlePlayerRemoving(player);
+			});
+			lifecycleCleanups.push(() => connection.Disconnect());
+		}
+		const getPlayers = source.GetPlayers;
+		if (needsAddedHandling && getPlayers !== undefined) {
+			for (const player of getPlayers()) {
+				handlePlayerAdded(player);
+			}
+		}
+	} else {
+		const players = game.GetService("Players");
+		if (needsAddedHandling) {
+			const connection = players.PlayerAdded.Connect((player) => {
+				handlePlayerAdded(player as unknown as TPlayer);
+			});
+			lifecycleCleanups.push(() => connection.Disconnect());
+		}
+		if (needsRemovingHandling) {
+			const connection = players.PlayerRemoving.Connect((player) => {
+				handlePlayerRemoving(player as unknown as TPlayer);
+			});
+			lifecycleCleanups.push(() => connection.Disconnect());
+		}
+
+		// Boot backfill: fire the join handler for players already in the server
+		// when the app is created, so a mid-session boot does not miss anyone.
+		if (needsAddedHandling) {
+			for (const player of players.GetPlayers()) {
+				handlePlayerAdded(player as unknown as TPlayer);
+			}
 		}
 	}
 
@@ -263,12 +321,10 @@ export function createServerApp<
 			if (binding !== undefined) {
 				binding.disconnect();
 			}
-			if (playerAddedConnection !== undefined) {
-				playerAddedConnection.Disconnect();
+			for (const cleanup of lifecycleCleanups) {
+				cleanup();
 			}
-			if (playerRemovingConnection !== undefined) {
-				playerRemovingConnection.Disconnect();
-			}
+			lifecycleCleanups.clear();
 			sessions.clear();
 		},
 	};

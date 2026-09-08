@@ -7,6 +7,6 @@
     "declarationMap": false,
     "sourceMap": false
   },
-  "include": ["client.ts", "server.ts", "roblox.ts", "schema.ts"],
+  "include": ["client.ts", "server.ts", "roblox.ts", "schema.ts", "testing.ts"],
   "exclude": ["dist", "node_modules", "src", "test"]
 }
