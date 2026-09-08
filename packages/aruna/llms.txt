@@ -16,6 +16,7 @@ virtual modules:
 - `aruna/client`  — `createClientApp` (argless default transport; can own the signal subscriber via `{ signals, createSubscriber }`), `invokeAction`
 - `aruna/roblox`  — the RemoteEvent server transport (`robloxRemoteEvent` for `createServerApp({ transport })`), `createActionInvoker`, low-level `bindActions`, signal pub/sub
 - `aruna/schema`  — `schema.*` builders + `Infer` (the single schema-inference type)
+- `aruna/testing` — the spec surface: `createTestServerApp`, `createTestPlayer`, `describe`/`it`/`expect` (compiled and run by `aruna test`, never part of a game build)
 - `$aruna/actions/server` — generated server action registry (`actions`, `defaultRateLimit`)
 - `$aruna/actions/client` — generated per-action client call functions
 - `$aruna/signals` — generated signal registry (`signals`)
@@ -31,6 +32,7 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 - [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber, publishing from inside an action (`ctx.publisher` / `createActionDefiner`).
 - [Stores](./docs/stores.md): `defineStore` / `definePlayerStore`, `StoreResult` error taxonomy, session locking, migrations, `createServerApp({ playerStore })` and `ctx.store`.
 - [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
+- [Testing](./docs/testing.md): `aruna test`, `aruna/testing` (`createTestServerApp`, `createTestPlayer`, `describe`/`it`/`expect`), what the game build does with specs.
 - [CLI](./docs/cli.md): `aruna build`/`check`/`init`/`doctor`/`inspect`/`contract`, flags, what each generates.
 - [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the dual runtime, binary codec.
 

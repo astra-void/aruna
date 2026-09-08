@@ -5,6 +5,113 @@ All notable changes to the `aruna` package are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+The testing release. A project could always exercise an action in-process — the
+runtime has had `app.dispatch` for that since 0.1 — but nothing shipped that a
+consumer could actually run: the harness lived in this repo's own `apps/`, the
+Lune loader with it, and a spec had to hand-build a context, a fake Players
+service, a recording publisher, and a store backend before it could assert
+anything. Meanwhile a spec file placed next to the code it tested was staged into
+the game build like any other module.
+
+### Added
+
+- **`aruna/testing` — the spec surface.** `createTestServerApp(options)` wraps a
+  real `ServerApp`, owning the transport, the publisher, and the players source
+  so a spec drives the shipping dispatch path — validation, rate limiting,
+  middleware, sessions, `ctx.store` — with no RemoteEvent, Players service, or
+  DataStore:
+
+  ```ts
+  import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";
+  import { purchaseItem } from "./actions";
+
+  describe("shop.purchaseItem", () => {
+    it("prices the order", async () => {
+      const harness = createTestServerApp({ actions: { "shop.purchaseItem": purchaseItem } });
+      const output = await harness.invoke(createTestPlayer(), "shop.purchaseItem", {
+        itemId: "sword",
+        quantity: 2,
+        currency: "coins",
+      });
+
+      expect(output.total).toBe(100);
+      harness.dispose();
+    });
+  });
+  ```
+
+  `join(player)` / `leave(player)` drive the player lifecycle; `published()` and
+  `takePublished()` record what the signal publisher would have put on the wire
+  (the shipping publisher over a recording remote, so an invalid payload still
+  fails); `client(player)` returns a client app wired to this server, subscriber
+  included, so a generated stub and the signal it triggers can both be asserted.
+  `createTestPlayer()` returns a player double typed as `Player`.
+
+- **The test framework, in both runtimes.** `describe`, `it`, `itSkip`,
+  `beforeEach`, `afterEach`, and `expect` (with `.not`, `toEqual`, `toThrow`, and
+  `expect(promise).rejects.toThrow`) ship from `aruna/testing`, because under
+  Lune there is no host runner to supply them. Rejections are read through one
+  helper in both runtimes, so a matcher works against an `Error` and against the
+  native runtime's plain table alike.
+
+- **`aruna test`.** Compiles the project *with* its specs and runs the compiled
+  Luau under [Lune](https://lune-org.github.io), streaming one line per test:
+
+  ```text
+  ✓ shop.purchaseItem > prices the order and reports success
+  ✓ shop.purchaseItem > enforces the action's rate limit
+
+  2 passed, 0 failed
+  ```
+
+  The runner ships with the package and loads roblox-ts's own `RuntimeLib`
+  against an Instance tree rebuilt from the compiled output, so imports resolve
+  with the same semantics the compiler emitted them for. `--filter <pattern>`
+  narrows by spec path. Lune is not an npm package: install it with
+  `rokit add lune-org/lune`.
+
+- **A `test` module kind.** `**/*.test.ts(x)` and `**/*.spec.ts(x)` (extend with
+  `conventions: { test: [...] }`) classify as tests **before** the
+  client/server/shared tiers are considered — a spec sits next to the code it
+  exercises, so `src/domains/shop/server/pricing.test.ts` matches `**/server/**`
+  too and would otherwise be reported as an ambiguous match. A spec may import
+  client, server, and shared modules alike.
+
+- **`aruna::305 test-module-imported`.** Game code importing a spec is an error,
+  not a style note: the game build does not compile specs, so the import would
+  not resolve in the place that ships.
+
+- **An injectable players source on the native `createServerApp`.**
+  `createServerApp({ players })` replaces the Players service as the source of
+  joins and leaves, mirroring the option the Node reference runtime already had.
+  Unset in a game, where the app connects to `Players` itself; set by the test
+  harness, which fires the handlers on demand.
+
+### Changed
+
+- **The game build leaves specs out entirely.** They are never staged, so nothing
+  in the place can reach one, and the vendored test framework
+  (`runtime/testing*.ts`) is skipped along with them rather than replicated to
+  every client. It is still written to disk, so `aruna/testing` resolves in an
+  editor and under `aruna check`.
+
+- **Discovery skips specs.** A `defineAction` / `defineSignal` / `defineStore` /
+  `defineRuntime` inside a spec is a fixture: it does not enter the manifest, the
+  generated registry, or the contract — and a duplicate id in a spec no longer
+  breaks the build it was only meant to test.
+
+### Fixed
+
+- **Extensionless imports of a dotted file name resolved to the wrong module.**
+  `import "./pricing.test"` resolved to `pricing.ts`, because the resolver tried
+  replacing the last dotted segment before appending an extension. Appending is
+  TypeScript's own rule and now comes first; the replacing form (for the
+  `./foo.js` shape an ESM-style import writes) still applies after it. Any file
+  with a dot in its name was affected, not just specs — and the boundary check
+  then ran against whichever module the specifier had silently landed on.
+
 ## [0.6.0] - 2026-08-16
 
 The domain-layout release. A domain was one file per concern — every action in

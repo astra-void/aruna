@@ -181,6 +181,7 @@ The built-in set is the Recommended Layout:
 | client | `**/client/**`, `**/ui.tsx` |
 | server | `**/server/**`, `**/actions.ts`, `**/runtime.ts` |
 | shared | `**/shared/**`, `<root>/app/**`, `**/schema.ts`, `**/model.ts`, `**/signals.ts`, `**/index.ts` |
+| test | `**/*.test.ts(x)`, `**/*.spec.ts(x)` |
 
 - Your globs **extend** this set rather than replacing it, so adding one pattern
   costs one line. `conventions: { defaults: false, ... }` opts out and makes your
@@ -204,6 +205,12 @@ The built-in set is the Recommended Layout:
 - `**/index.ts` is shared because a barrel is a surface other modules import
   through — a domain's `index.ts` is exactly its cross-domain public API. A barrel
   inside a partition folder keeps that folder's kind.
+- **Test conventions are applied before the other three**, not alongside them: a
+  spec sits next to the code it exercises, so `src/domains/shop/server/pricing.test.ts`
+  matches `**/server/**` too and would otherwise be an ambiguous match
+  (`aruna::203`) instead of the test it plainly is. A spec may import client,
+  server, and shared modules alike; nothing may import a spec (`aruna::305`),
+  because the game build never compiles one.
 
 ### Domain boundaries
 
@@ -506,6 +513,52 @@ const app = createServerApp({ actions, transport: robloxRemoteEvent(), playerSto
   `aruna inspect stores`.
 
 See [docs/stores.md](packages/aruna/docs/stores.md).
+
+## Testing (`aruna test`)
+
+Specs are TypeScript, live next to the code they exercise, and run against the runtime
+that ships. `aruna test` compiles the project *with* its specs and runs them under
+[Lune](https://lune-org.github.io) — a Node test runner would exercise a different
+runtime than the game does, which is the class of bug a test is meant to catch.
+
+```ts
+import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";
+import { purchaseItem } from "./actions";
+
+describe("shop.purchaseItem", () => {
+  it("prices the order", async () => {
+    const harness = createTestServerApp({ actions: { "shop.purchaseItem": purchaseItem } });
+    const output = await harness.invoke(createTestPlayer(), "shop.purchaseItem", {
+      itemId: "sword",
+      quantity: 2,
+      currency: "coins",
+    });
+
+    expect(output.total).toBe(100);
+    harness.dispose();
+  });
+});
+```
+
+- **The real dispatch path.** `harness.invoke` goes through input validation, rate
+  limiting, middleware, sessions, and output validation — no RemoteEvent, Players
+  service, or DataStore required. The signal publisher is the shipping one over a
+  recording remote, so `harness.published()` records what the wire would have carried and
+  an invalid payload fails in the spec exactly as it would in production.
+- **The whole lifecycle.** `harness.join(player)` / `leave(player)` create and drop
+  sessions, fire `onPlayerAdded` / `onPlayerRemoving`, and load and release an owned
+  player store. `harness.client(player)` gives a client app wired to this server, so a
+  spec can exercise a generated client stub and the signal that comes back.
+- **Specs never reach the place.** They are classified `test` wherever they live, the
+  game build never stages them (nor the test framework), and an action defined inside a
+  spec is a fixture: it does not enter the manifest, the generated registry, or the
+  contract. Game code importing a spec is `aruna::305`.
+- **The framework ships with it.** `describe` / `it` / `beforeEach` / `afterEach` /
+  `expect` come from `aruna/testing`, because under Lune there is no host runner to
+  supply them.
+
+Lune is not an npm package — install it with `rokit add lune-org/lune`.
+See [docs/testing.md](packages/aruna/docs/testing.md).
 
 ## Domain runtimes (server work that starts at boot)
 
