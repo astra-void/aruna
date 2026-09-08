@@ -1,0 +1,160 @@
+name: ci
+
+# Verifies every pull request and every push to main.
+#
+# Three jobs, split by what they need rather than by what they check:
+#
+#   rust                — the compiler core's own test suite. No Node toolchain,
+#                         so it starts (and fails) without waiting on pnpm.
+#   workspace           — install, build the native compiler, then lint,
+#                         typecheck, and test the whole graph. Runs on Linux and
+#                         Windows: the CLI spawns rbxtsc, rojo, and Lune as child
+#                         processes, and the Windows shim handling in
+#                         packages/aruna/src/cli/spawn.ts exists precisely because
+#                         that path breaks differently there.
+#   package-consumption — packs the whole graph and consumes it from a project
+#                         outside the workspace. Kept apart because it is the slow
+#                         one (a real pack + install), and because it is the only
+#                         job that would catch a public-surface break that every
+#                         in-repo import happily resolves around.
+#
+# Lune is installed from its pinned release rather than through rokit, so the
+# version comes from one place — rokit.toml — and no third-party action sits in
+# the supply chain. Without it the Luau execution suites skip themselves, which
+# would leave the native runtime compiled but never run.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test
+        run: cargo test --locked --all-targets
+
+  workspace:
+    name: workspace (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide the other's result.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      # The version is read out of rokit.toml so the toolchain pin lives in one
+      # file: a contributor running `rokit install` locally gets the same Lune CI
+      # does.
+      - name: Install Lune
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          version="$(sed -n 's/^lune = "lune-org\/lune@\(.*\)"$/\1/p' rokit.toml)"
+          if [ -z "$version" ]; then
+            echo "could not read the lune version from rokit.toml" >&2
+            exit 1
+          fi
+          echo "installing lune $version"
+          curl -fsSL -o /tmp/lune.zip \
+            "https://github.com/lune-org/lune/releases/download/v${version}/lune-${version}-linux-x86_64.zip"
+          mkdir -p "$HOME/.lune/bin"
+          unzip -q -o /tmp/lune.zip -d "$HOME/.lune/bin"
+          chmod +x "$HOME/.lune/bin/lune"
+          echo "$HOME/.lune/bin" >> "$GITHUB_PATH"
+
+      - name: Install Lune
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path rokit.toml -Pattern '^lune = "lune-org/lune@(.*)"$').Matches[0].Groups[1].Value
+          if (-not $version) {
+            Write-Error "could not read the lune version from rokit.toml"
+          }
+          Write-Host "installing lune $version"
+          $destination = Join-Path $env:USERPROFILE ".lune\bin"
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/lune-org/lune/releases/download/v$version/lune-$version-windows-x86_64.zip" -OutFile "$env:RUNNER_TEMP\lune.zip"
+          Expand-Archive -Path "$env:RUNNER_TEMP\lune.zip" -DestinationPath $destination -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $destination
+
+      - name: Verify Lune
+        run: lune --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Explicit, though the root scripts do it themselves: a failure here is a
+      # Rust build problem, not a lint or test one.
+      - name: Build the native compiler
+        run: pnpm build:native
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Builds every package, then runs the vitest suites, the Luau execution
+      # tests under Lune, and the harness specs through `aruna test`.
+      - name: Test
+        run: pnpm test
+
+  package-consumption:
+    name: package consumption
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Packs the graph and drives the CLI against a project outside the
+      # workspace: the public subpaths, the vendored runtime, the tsconfig
+      # aliases, and the Rojo layout are all checked as a consumer sees them.
+      - name: Verify package consumption
+        run: pnpm verify:package-consumption
