@@ -24,6 +24,8 @@ export const fixtureCases = [
   { name: "invalid-action-rate-limit", mode: "inspect" },
   { name: "client-imports-action-source", mode: "inspect" },
   { name: "store-basic", mode: "inspect" },
+  { name: "store-contract-incompatible", mode: "inspect" },
+  { name: "store-contract-compatible", mode: "inspect" },
   { name: "client-imports-store-source", mode: "inspect" },
   { name: "test-module-boundary", mode: "inspect" },
   { name: "virtual-generated-action-imports", mode: "inspect" },

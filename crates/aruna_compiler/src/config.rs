@@ -95,10 +95,20 @@ pub struct StrictConfig {
     // never asked for must not fail its build on the day it upgrades.
     #[serde(default)]
     pub domain_boundary: StrictSeverity,
+    // A store change, against the committed contract snapshot, that leaves the
+    // build unable to read records the previous build wrote (aruna::578). The
+    // CLI runs that comparison; the compiler only carries the setting. An error
+    // by default, unlike the others: what it guards is a player's save file.
+    #[serde(default = "default_store_compatibility")]
+    pub store_compatibility: StrictSeverity,
 }
 
 fn default_shared_safety() -> bool {
     true
+}
+
+fn default_store_compatibility() -> StrictSeverity {
+    StrictSeverity::Error
 }
 
 impl Default for StrictConfig {
@@ -108,6 +118,29 @@ impl Default for StrictConfig {
             raw_remote_usage: StrictSeverity::default(),
             unresolved_imports: StrictSeverity::default(),
             domain_boundary: StrictSeverity::default(),
+            store_compatibility: default_store_compatibility(),
+        }
+    }
+}
+
+// The committed contract snapshot `aruna check` / `aruna build` compare the
+// project against, relative to the project root. Read by the CLI's contract
+// gate, which runs only when the file exists.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractConfig {
+    #[serde(default = "default_contract_snapshot")]
+    pub snapshot: String,
+}
+
+fn default_contract_snapshot() -> String {
+    "aruna.contract.json".to_string()
+}
+
+impl Default for ContractConfig {
+    fn default() -> Self {
+        Self {
+            snapshot: default_contract_snapshot(),
         }
     }
 }
@@ -201,6 +234,8 @@ pub struct ArunaConfig {
     pub strict: StrictConfig,
     #[serde(default)]
     pub diagnostics: DiagnosticsConfig,
+    #[serde(default)]
+    pub contract: ContractConfig,
 }
 
 fn default_root() -> String {
@@ -229,6 +264,7 @@ impl Default for ArunaConfig {
             domains: DomainsConfig::default(),
             strict: StrictConfig::default(),
             diagnostics: DiagnosticsConfig::default(),
+            contract: ContractConfig::default(),
         }
     }
 }

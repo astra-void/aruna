@@ -28,8 +28,8 @@ pub use actions::{
     StoreDiscoveryResult,
 };
 pub use config::{
-    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig, DiagnosticsConfig,
-    DomainsConfig, EntriesMode, StrictConfig, StrictSeverity,
+    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ContractConfig, ConventionConfig,
+    DiagnosticsConfig, DomainsConfig, EntriesMode, StrictConfig, StrictSeverity,
 };
 pub use domains::{DomainIndex, DomainRef, PublicSurface};
 pub use diagnostics::{

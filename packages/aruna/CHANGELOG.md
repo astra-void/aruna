@@ -37,6 +37,30 @@ the game build like any other module.
   gains `forgetPlayer`. A server app now always subscribes to player removal
   (where it has a players source) so it can drop those keys.
 
+- **A store compatibility gate in `aruna check` and `aruna build`.** In
+  Roblox a client is replicated from the server it joined, so client/server
+  skew inside one server essentially cannot happen; the boundary that does
+  cross versions is the DataStore, where records the last build saved wait for
+  the next one to read them. The compiler already recorded each store's
+  schema and version, but `contract diff` ignored stores entirely. Now:
+
+  - `aruna inspect contract` includes stores (id, kind, version, scope,
+    `hasMigrate`, schema metadata and summary).
+  - `aruna contract diff` judges a store by whether the new code can read a
+    record the old code wrote at the same version: a new required field with
+    no `.default()`, a changed or narrowed type, a version that went down, a
+    bump with no `migrate`, or a changed scope or kind is breaking; a removed
+    field is a warning (a new `warning` severity, counted in `summary.warning`);
+    a bump with `migrate` is info.
+  - When a snapshot is committed — `contract: { snapshot }` in the config,
+    `aruna.contract.json` by default — `check` and `build` compare against it
+    with no flags, and a breaking store change is
+    `aruna::578 store-incompatible-change`, an error unless
+    `strict.storeCompatibility` says otherwise. `build` stops before vendoring
+    or compiling. An unreadable snapshot is `aruna::579 contract-snapshot-invalid`.
+  - `aruna contract update` writes the snapshot; `aruna contract diff` with no
+    arguments compares against it.
+
 - **`aruna/testing` — the spec surface.** `createTestServerApp(options)` wraps a
   real `ServerApp`, owning the transport, the publisher, and the players source
   so a spec drives the shipping dispatch path — validation, rate limiting,
@@ -266,6 +290,12 @@ the game build like any other module.
   load (no default document, no lock taken, nothing written). Kick from the
   player store's existing `onLoadFailed`, which the app's load reports
   through; `docs/stores.md` has the pattern.
+
+- **A contract snapshot read back from a file kept less than it was written
+  with.** The snapshot parser dropped union and tuple `members` and a number's
+  `numericFormat`, so `aruna contract diff --baseline` saw a committed tuple as
+  a length change against the same code, and could not tell `u8` from
+  `number`. Both now survive the round trip.
 
 ### Security
 

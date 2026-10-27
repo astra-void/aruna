@@ -17,10 +17,11 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |
 | `aruna inspect stores` | List discovered stores, their version, scope, and persisted shape. |
-| `aruna inspect contract` | Print a deterministic action contract snapshot. |
+| `aruna inspect contract` | Print a deterministic contract snapshot: actions, signals, and stores. |
 | `aruna inspect modules` | Print how each file is classified (client/server/shared). |
 | `aruna inspect graph` | Print the import graph. |
-| `aruna contract diff` | Compare contract snapshots — actions and signals (`--baseline`, `--from`, `--to`). |
+| `aruna contract diff` | Compare contract snapshots — actions, signals, and stores (`--baseline`, `--from`, `--to`; with none, the committed snapshot). |
+| `aruna contract update` | Write the current contract to the committed snapshot (`contract.snapshot`). |
 
 ## The check vs build distinction
 
@@ -34,6 +35,28 @@ stale generated artifact still on disk from a previous codegen layout, and `arun
 a tsconfig alias pointing at a path that no longer matches the current emit layout. Fix them
 with `aruna build` (prunes stale output) and `aruna doctor --fix --emit-runtime` (realigns
 aliases).
+
+## The store compatibility gate
+
+When the project commits a contract snapshot — `aruna.contract.json` by default,
+`contract.snapshot` in the config to move it — `aruna check` and `aruna build` compare the
+project's stores against it on every run, with no flags. A change that would leave
+records the previous build saved unreadable is `aruna::578 store-incompatible-change`, an
+error by default, and `build` stops before vendoring or compiling. `strict.storeCompatibility`
+lowers it to `"warning"` or turns it `"off"`. An unreadable snapshot file is
+`aruna::579 contract-snapshot-invalid`. Without a snapshot there is no gate.
+
+The rules are in [Stores](./stores.md#the-compatibility-gate). Once a change is
+intended — you gave the new field a default, or bumped the version and wrote a
+`migrate` — record it:
+
+```bash
+aruna contract update      # rewrites aruna.contract.json from the current code
+aruna contract diff        # what changed against the committed snapshot
+```
+
+`contract update` refuses to write from a project that does not compile. Commit the
+snapshot with the change, so the next build is gated against what this one ships.
 
 `aruna build` tracks the files it emits in a `.aruna-build.json` ledger inside `generatedDir`
 and **prunes stale artifacts** it no longer emits (e.g. flat `*.generated.ts` and a flat
@@ -145,9 +168,13 @@ export default defineConfig({
     rawRemoteUsage: "warning",                // aruna::507: "off" | "warning" | "error"
     unresolvedImports: "warning",             // aruna::105
     domainBoundary: "warning",                // aruna::304: imports past a domain's public surface
+    storeCompatibility: "error",              // aruna::578: a store change saved records can't survive
   },
   diagnostics: {
     ignore: [],                               // codes or names to drop, e.g. "raw-remote-usage"
+  },
+  contract: {
+    snapshot: "aruna.contract.json",          // the committed snapshot check/build gate stores against
   },
 });
 ```

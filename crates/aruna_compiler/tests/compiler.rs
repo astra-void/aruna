@@ -1135,3 +1135,79 @@ fn rejects_a_runtime_after_edge_that_names_no_runtime() {
     assert!(!output.ok);
     assert!(diagnostic_codes(&output).contains(&"aruna::582".to_string()));
 }
+
+#[test]
+fn defaults_the_contract_gate_settings() {
+    // The JS side always sends the normalized config, but a config without the
+    // section (an older CLI, direct crate use) must still mean "gate on, error".
+    let config: aruna_compiler::ArunaConfig = serde_json::from_str("{}").unwrap();
+
+    assert_eq!(config.contract.snapshot, "aruna.contract.json");
+    assert_eq!(config.strict.store_compatibility, StrictSeverity::Error);
+    // The other strict options keep their warning default.
+    assert_eq!(config.strict.domain_boundary, StrictSeverity::Warning);
+}
+
+#[test]
+fn reads_the_contract_gate_settings() {
+    let config: aruna_compiler::ArunaConfig = serde_json::from_str(
+        r#"{
+  "contract": { "snapshot": "contracts/shipped.json" },
+  "strict": { "storeCompatibility": "off" }
+}"#,
+    )
+    .unwrap();
+
+    assert_eq!(config.contract.snapshot, "contracts/shipped.json");
+    assert_eq!(config.strict.store_compatibility, StrictSeverity::Off);
+}
+
+#[test]
+fn allocates_the_contract_gate_diagnostic_codes() {
+    assert_eq!(
+        aruna_compiler::diagnostic_meta("aruna::578"),
+        Some(("store-incompatible-change", DiagnosticSeverity::Error))
+    );
+    assert_eq!(
+        aruna_compiler::diagnostic_meta("aruna::579"),
+        Some(("contract-snapshot-invalid", DiagnosticSeverity::Error))
+    );
+}
+
+#[test]
+fn records_store_schema_metadata_for_the_contract() {
+    // The gate compares exactly these fields, so the compiler must record the
+    // version, migrate presence, and numeric widths it compares on.
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/store.ts",
+        r#"
+import { definePlayerStore } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const profile = definePlayerStore({
+  id: "player.profile",
+  version: 3,
+  schema: schema.object({
+    coins: schema.u8(),
+    title: schema.string().default("rookie"),
+  }),
+  defaultValue: () => ({ coins: 0, title: "rookie" }),
+  migrate: (stored) => stored as never,
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok);
+    let store = &output.manifest.stores[0];
+    assert_eq!(store.version, 3);
+    assert!(store.has_migrate);
+    let schema = serde_json::to_value(store.schema.as_ref().unwrap()).unwrap();
+    assert_eq!(schema["properties"]["coins"]["numericFormat"], "u8");
+    assert_eq!(schema["properties"]["title"]["kind"], "optional");
+}

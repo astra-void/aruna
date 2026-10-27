@@ -7,6 +7,7 @@ import type {
   ActionsConfig,
   CompilerConfig,
   Config,
+  ContractConfig,
   ConventionConfig,
   DevConfig,
   Diagnostic,
@@ -71,6 +72,11 @@ type MutableStrictConfig = {
   rawRemoteUsage?: StrictConfig["rawRemoteUsage"];
   unresolvedImports?: StrictConfig["unresolvedImports"];
   domainBoundary?: StrictConfig["domainBoundary"];
+  storeCompatibility?: StrictConfig["storeCompatibility"];
+};
+
+type MutableContractConfig = {
+  snapshot?: string;
 };
 
 type MutableDiagnosticsConfig = {
@@ -90,6 +96,7 @@ type MutableConfig = {
   domains?: MutableDomainsConfig;
   strict?: MutableStrictConfig;
   diagnostics?: MutableDiagnosticsConfig;
+  contract?: MutableContractConfig;
   dev?: MutableDevConfig;
 };
 
@@ -359,6 +366,20 @@ function mergeDiagnosticsConfig(
   };
 }
 
+function mergeContractConfig(
+  base: ContractConfig | undefined,
+  override: ContractConfig | undefined,
+): ContractConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+  };
+}
+
 function mergePublicConfig(base: Config, override: Config): Config {
   return {
     root: override.root ?? base.root,
@@ -369,6 +390,7 @@ function mergePublicConfig(base: Config, override: Config): Config {
     domains: mergeDomainsConfig(base.domains, override.domains),
     strict: mergeStrictConfig(base.strict, override.strict),
     diagnostics: mergeDiagnosticsConfig(base.diagnostics, override.diagnostics),
+    contract: mergeContractConfig(base.contract, override.contract),
     dev: mergeDevConfig(base.dev, override.dev),
   };
 }
@@ -433,6 +455,7 @@ function normalizeConfigObject(value: unknown): {
     "domains",
     "strict",
     "diagnostics",
+    "contract",
     "dev",
   ] as const;
   validateUnsupportedKeys(candidateRecord, allowedTopLevel, diagnostics, "top-level config");
@@ -633,7 +656,13 @@ function normalizeConfigObject(value: unknown): {
     } else {
       validateUnsupportedKeys(
         strictValue,
-        ["sharedSafety", "rawRemoteUsage", "unresolvedImports", "domainBoundary"],
+        [
+          "sharedSafety",
+          "rawRemoteUsage",
+          "unresolvedImports",
+          "domainBoundary",
+          "storeCompatibility",
+        ],
         diagnostics,
         "strict",
       );
@@ -671,6 +700,16 @@ function normalizeConfigObject(value: unknown): {
         }
       }
 
+      if (strictValue["storeCompatibility"] !== undefined) {
+        if (!isStrictSeverity(strictValue["storeCompatibility"])) {
+          diagnostics.push(
+            'strict.storeCompatibility must be one of "off", "warning", or "error"',
+          );
+        } else {
+          strict.storeCompatibility = strictValue["storeCompatibility"];
+        }
+      }
+
       config.strict = strict;
     }
   }
@@ -690,6 +729,24 @@ function normalizeConfigObject(value: unknown): {
         }
       }
       config.diagnostics = diagnosticsConfig;
+    }
+  }
+
+  if (candidateRecord["contract"] !== undefined) {
+    const contractValue = candidateRecord["contract"];
+    if (!isRecord(contractValue)) {
+      diagnostics.push("contract must be an object");
+    } else {
+      validateUnsupportedKeys(contractValue, ["snapshot"], diagnostics, "contract");
+      const contract: MutableContractConfig = {};
+      if (contractValue["snapshot"] !== undefined) {
+        if (typeof contractValue["snapshot"] !== "string" || contractValue["snapshot"] === "") {
+          diagnostics.push("contract.snapshot must be a non-empty string");
+        } else {
+          contract.snapshot = contractValue["snapshot"];
+        }
+      }
+      config.contract = contract;
     }
   }
 
@@ -810,9 +867,13 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       rawRemoteUsage: config.strict?.rawRemoteUsage ?? "warning",
       unresolvedImports: config.strict?.unresolvedImports ?? "warning",
       domainBoundary: config.strict?.domainBoundary ?? "warning",
+      storeCompatibility: config.strict?.storeCompatibility ?? "error",
     },
     diagnostics: {
       ignore: [...(config.diagnostics?.ignore ?? [])],
+    },
+    contract: {
+      snapshot: config.contract?.snapshot ?? "aruna.contract.json",
     },
   };
 }

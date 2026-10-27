@@ -11,12 +11,17 @@ import {
   type ActionContractRecord,
   type ActionContractSnapshot,
   type SignalContractRecord,
+  type StoreContractRecord,
 } from "./action-contracts.js";
+import { contractSnapshotPath, readCommittedSnapshot } from "./contract-gate.js";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
 import { formatBrandTitle, formatError, formatMuted } from "./theme.js";
 import type { CliColorMode } from "./format.js";
 
-export type ContractDiffSeverity = "breaking" | "non-breaking" | "info";
+// `warning` marks a change that is not breaking but can quietly lose data: a
+// store field removed at the same version is still in every saved record, and
+// nothing reads it any more.
+export type ContractDiffSeverity = "breaking" | "warning" | "non-breaking" | "info";
 
 export type ContractDiffKind =
   | "action-added"
@@ -47,6 +52,19 @@ export type ContractDiffKind =
   | "signal-payload-field-added"
   | "signal-payload-field-removed"
   | "signal-payload-field-type-changed"
+  | "store-added"
+  | "store-removed"
+  | "store-source-changed"
+  | "store-kind-changed"
+  | "store-scope-changed"
+  | "store-version-bumped"
+  | "store-version-bumped-without-migrate"
+  | "store-version-decreased"
+  | "store-schema-changed"
+  | "store-field-added-required"
+  | "store-field-added-optional"
+  | "store-field-removed"
+  | "store-field-type-changed"
   | "metadata-changed";
 
 export type ContractDiffEntry = {
@@ -63,6 +81,7 @@ export type ContractDiffResult = {
   readonly version: 1;
   readonly summary: {
     readonly breaking: number;
+    readonly warning: number;
     readonly nonBreaking: number;
     readonly info: number;
   };
@@ -73,7 +92,8 @@ type ContractDiffCommandMode =
   | {
       readonly kind: "project";
       readonly project: string;
-      readonly baseline: string;
+      // Undefined: the project's committed snapshot (`contract.snapshot`).
+      readonly baseline: string | undefined;
     }
   | {
       readonly kind: "files";
@@ -107,9 +127,13 @@ type ParsedSignalContractRecord = SignalContractRecord & {
   };
 };
 
-type ParsedActionContractSnapshot = Omit<ActionContractSnapshot, "actions" | "signals"> & {
+type ParsedActionContractSnapshot = Omit<
+  ActionContractSnapshot,
+  "actions" | "signals" | "stores"
+> & {
   readonly actions: readonly ParsedActionContractRecord[];
   readonly signals?: readonly ParsedSignalContractRecord[];
+  readonly stores?: readonly StoreContractRecord[];
 };
 
 function compareStrings(left: string, right: string): number {
@@ -158,10 +182,12 @@ function severityRank(severity: ContractDiffSeverity): number {
   switch (severity) {
     case "breaking":
       return 0;
-    case "non-breaking":
+    case "warning":
       return 1;
-    case "info":
+    case "non-breaking":
       return 2;
+    case "info":
+      return 3;
   }
 }
 
@@ -238,6 +264,27 @@ function parseSchemaMetadata(value: unknown, location: string): ParsedSchema {
     parsed.values = value["values"].map((entry, index) =>
       parseLiteralMetadata(entry, `${location}.values[${index}]`),
     );
+  }
+
+  // Union and tuple members, and a number's width. Dropping them made a
+  // snapshot read back from disk compare unequal to (or, for widths, blind to)
+  // the schema it was written from.
+  if ("members" in value && value["members"] !== undefined) {
+    if (!Array.isArray(value["members"])) {
+      throw new Error(`${location}.members must be an array.`);
+    }
+
+    parsed.members = value["members"].map((entry, index) =>
+      parseSchemaMetadata(entry, `${location}.members[${index}]`),
+    );
+  }
+
+  if ("numericFormat" in value && value["numericFormat"] !== undefined) {
+    if (typeof value["numericFormat"] !== "string") {
+      throw new Error(`${location}.numericFormat must be a string.`);
+    }
+
+    parsed.numericFormat = value["numericFormat"];
   }
 
   return parsed;
@@ -431,6 +478,63 @@ function parseActionRecord(value: unknown, location: string): ParsedActionContra
   return parsed;
 }
 
+function parseStoreRecord(value: unknown, location: string): StoreContractRecord {
+  if (!isRecordLike(value)) {
+    throw new Error(`${location} must be an object.`);
+  }
+  if (typeof value["id"] !== "string") {
+    throw new Error(`${location}.id must be a string.`);
+  }
+  if (typeof value["source"] !== "string") {
+    throw new Error(`${location}.source must be a string.`);
+  }
+  if (value["kind"] !== "store" && value["kind"] !== "playerStore") {
+    throw new Error(`${location}.kind must be "store" or "playerStore".`);
+  }
+  if (typeof value["version"] !== "number" || !Number.isInteger(value["version"])) {
+    throw new Error(`${location}.version must be an integer.`);
+  }
+  if (value["scope"] !== null && typeof value["scope"] !== "string") {
+    throw new Error(`${location}.scope must be a string or null.`);
+  }
+  if (typeof value["hasMigrate"] !== "boolean") {
+    throw new Error(`${location}.hasMigrate must be a boolean.`);
+  }
+  if (!isRecordLike(value["schema"])) {
+    throw new Error(`${location}.schema must be an object.`);
+  }
+  if (typeof value["schema"]["summary"] !== "string") {
+    throw new Error(`${location}.schema.summary must be a string.`);
+  }
+  const warnings = value["warnings"];
+  if (!Array.isArray(warnings) || warnings.some((warning) => typeof warning !== "string")) {
+    throw new Error(`${location}.warnings must be an array of strings.`);
+  }
+
+  return {
+    id: value["id"],
+    source: normalizePath(value["source"]),
+    kind: value["kind"],
+    version: value["version"],
+    scope: value["scope"],
+    hasMigrate: value["hasMigrate"],
+    schema: {
+      summary: value["schema"]["summary"],
+      schema:
+        value["schema"]["schema"] === null || value["schema"]["schema"] === undefined
+          ? null
+          : parseSchemaMetadata(value["schema"]["schema"], `${location}.schema.schema`),
+    },
+    warnings: warnings as string[],
+  };
+}
+
+// A store is the DataStore it names: the same id under another scope is a
+// different set of records.
+function storeIdentity(store: StoreContractRecord): string {
+  return store.scope === null ? store.id : `${store.id}@${store.scope}`;
+}
+
 function parseSignalRecord(value: unknown, location: string): ParsedSignalContractRecord {
   if (!isRecordLike(value)) {
     throw new Error(`${location} must be an object.`);
@@ -550,6 +654,25 @@ function parseActionContractSnapshotJsonAtPath(
     }
   }
 
+  // `stores` is omitted from snapshots that predate stores in the contract.
+  let stores: StoreContractRecord[] | undefined;
+  if (value["stores"] !== undefined) {
+    if (!Array.isArray(value["stores"])) {
+      throw new Error(`${location}.stores must be an array.`);
+    }
+    stores = [];
+    const seenStores = new Set<string>();
+    for (const [index, store] of value["stores"].entries()) {
+      const parsed = parseStoreRecord(store, `${location}.stores[${index}]`);
+      const identity = storeIdentity(parsed);
+      if (seenStores.has(identity)) {
+        throw new Error(`${location}.stores contains a duplicate store: ${parsed.id}.`);
+      }
+      seenStores.add(identity);
+      stores.push(parsed);
+    }
+  }
+
   const diagnostics: Diagnostic[] = [];
   for (const [index, diagnostic] of value["diagnostics"].entries()) {
     diagnostics.push(parseDiagnostic(diagnostic, `${location}.diagnostics[${index}]`));
@@ -568,6 +691,7 @@ function parseActionContractSnapshotJsonAtPath(
     },
     actions,
     ...(signals !== undefined ? { signals } : {}),
+    ...(stores !== undefined ? { stores } : {}),
     diagnostics,
     generatedAt: null,
   };
@@ -1431,6 +1555,429 @@ function diffSignals(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Stores
+// ---------------------------------------------------------------------------
+//
+// The question for a store is not client/server but old code/new code: can
+// this build read a record the previous build wrote? At the same version
+// nothing converts the record on the way in, so the new schema has to accept
+// everything the old one did — input-compatibility semantics, with the old
+// schema as the writer and the new one as the reader. A version bump hands old
+// records to `migrate` instead, so the schemas are not compared across it.
+
+// The numbers each format accepts. Floats accept any finite number.
+const NUMERIC_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+  u8: [0, 255],
+  u16: [0, 65_535],
+  u32: [0, 4_294_967_295],
+  i8: [-128, 127],
+  i16: [-32_768, 32_767],
+  i32: [-2_147_483_648, 2_147_483_647],
+};
+
+// Whether a number schema of `reader` format accepts every value one of
+// `writer` format does.
+function numericFormatAccepts(writer: string | undefined, reader: string | undefined): boolean {
+  const readerRange = reader === undefined ? undefined : NUMERIC_RANGES[reader];
+  if (readerRange === undefined) {
+    return true;
+  }
+  const writerRange = writer === undefined ? undefined : NUMERIC_RANGES[writer];
+  if (writerRange === undefined) {
+    return false;
+  }
+  return writerRange[0] >= readerRange[0] && writerRange[1] <= readerRange[1];
+}
+
+function literalKind(literal: SchemaLiteralMetadata | undefined): string | undefined {
+  return literal?.kind;
+}
+
+// Structural equality that, unlike `schemaNodesEqual`, also tells number
+// formats apart: for a saved record, `u8` and `number` are not the same schema.
+function storeSchemaNodesEqual(
+  left: ParsedSchema | null | undefined,
+  right: ParsedSchema | null | undefined,
+): boolean {
+  const canonical = (value: unknown): string =>
+    JSON.stringify(value, (_key, entry: unknown) =>
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? Object.fromEntries(
+            Object.entries(entry as Record<string, unknown>).sort(([a], [b]) =>
+              compareStrings(a, b),
+            ),
+          )
+        : entry,
+    );
+  return canonical(left ?? null) === canonical(right ?? null);
+}
+
+// Whether a reader of one kind accepts every value a writer of another kind
+// can produce. Covers the widenings worth recognizing (a literal or enum read
+// as its primitive, a literal read through an enum or union that contains it);
+// anything else across kinds is a change.
+function crossKindAccepts(writer: ParsedSchema, reader: ParsedSchema): boolean {
+  if (writer.kind === "literal") {
+    const kind = literalKind(writer.literal);
+    if (reader.kind === "string" || reader.kind === "boolean") {
+      return kind === reader.kind;
+    }
+    if (reader.kind === "number") {
+      return kind === "number" && reader.numericFormat === undefined;
+    }
+    if (reader.kind === "enum" && writer.literal !== undefined) {
+      const literal = writer.literal;
+      return (reader.values ?? []).some((value) => compareLiteralValues(value, literal) === 0);
+    }
+  }
+  if (writer.kind === "enum" && (reader.kind === "string" || reader.kind === "number")) {
+    return (writer.values ?? []).every(
+      (value) => value.kind === reader.kind && reader.numericFormat === undefined,
+    );
+  }
+  if (reader.kind === "union") {
+    return (reader.members ?? []).some((member) => storeSchemaNodesEqual(writer, member));
+  }
+  return false;
+}
+
+function storeChange(
+  storeId: string,
+  severity: ContractDiffSeverity,
+  kind: ContractDiffKind,
+  path: string,
+  message: string,
+  before: ParsedSchema | null | undefined,
+  after: ParsedSchema | null | undefined,
+  entries: ContractDiffEntry[],
+): void {
+  makeEntry(
+    {
+      severity,
+      kind,
+      actionId: storeId,
+      path,
+      message,
+      ...(before !== undefined && before !== null ? { before: schemaSummary(before) } : {}),
+      ...(after !== undefined && after !== null ? { after: schemaSummary(after) } : {}),
+    },
+    entries,
+  );
+}
+
+// `writer` is the schema records were saved under, `reader` the one that will
+// read them now.
+function diffStoreSchema(
+  storeId: string,
+  writer: ParsedSchema | null | undefined,
+  reader: ParsedSchema | null | undefined,
+  entries: ContractDiffEntry[],
+  path: string,
+): void {
+  if (storeSchemaNodesEqual(writer, reader)) {
+    return;
+  }
+  const changeKind: ContractDiffKind =
+    path === "schema" ? "store-schema-changed" : "store-field-type-changed";
+  const breaking = (message: string): void => {
+    storeChange(storeId, "breaking", changeKind, path, message, writer, reader, entries);
+  };
+
+  if (!writer || !reader) {
+    breaking(`${storeId} ${path} schema metadata is unavailable on one side, so saved records cannot be checked.`);
+    return;
+  }
+
+  // Optionality first: an absent value the writer allowed must still read.
+  if (reader.kind === "optional") {
+    diffStoreSchema(storeId, unwrapOptional(writer), reader.inner ?? null, entries, path);
+    return;
+  }
+  if (writer.kind === "optional") {
+    breaking(`${storeId} ${path} is now required, but saved records may not have it.`);
+    return;
+  }
+
+  if (writer.kind !== reader.kind) {
+    if (!crossKindAccepts(writer, reader)) {
+      breaking(
+        `${storeId} ${path} changed from ${schemaSummary(writer)} to ${schemaSummary(reader)}; saved records no longer match.`,
+      );
+    }
+    return;
+  }
+
+  switch (reader.kind) {
+    case "number":
+      if (!numericFormatAccepts(writer.numericFormat, reader.numericFormat)) {
+        breaking(
+          `${storeId} ${path} narrowed from ${schemaSummary(writer)} to ${schemaSummary(reader)}; saved values may fall outside it.`,
+        );
+      }
+      return;
+    case "literal":
+      if (
+        writer.literal === undefined ||
+        reader.literal === undefined ||
+        compareLiteralValues(writer.literal, reader.literal) !== 0
+      ) {
+        breaking(`${storeId} ${path} changed from ${schemaSummary(writer)} to ${schemaSummary(reader)}.`);
+      }
+      return;
+    case "enum": {
+      const readerValues = reader.values ?? [];
+      const dropped = (writer.values ?? []).filter(
+        (value) => !readerValues.some((candidate) => compareLiteralValues(candidate, value) === 0),
+      );
+      if (dropped.length > 0) {
+        breaking(
+          `${storeId} ${path} narrowed from ${schemaSummary(writer)} to ${schemaSummary(reader)}; saved records may hold a removed value.`,
+        );
+      }
+      return;
+    }
+    case "union": {
+      const readerMembers = reader.members ?? [];
+      const unread = (writer.members ?? []).filter(
+        (member) => !readerMembers.some((candidate) => storeSchemaNodesEqual(member, candidate)),
+      );
+      if (unread.length > 0) {
+        breaking(
+          `${storeId} ${path} narrowed from ${schemaSummary(writer)} to ${schemaSummary(reader)}; saved records may hold a removed member.`,
+        );
+      }
+      return;
+    }
+    case "array":
+      diffStoreSchema(storeId, writer.items ?? null, reader.items ?? null, entries, `${path}[]`);
+      return;
+    case "record":
+      diffStoreSchema(storeId, writer.items ?? null, reader.items ?? null, entries, `${path}.value`);
+      return;
+    case "tuple": {
+      const writerMembers = writer.members ?? [];
+      const readerMembers = reader.members ?? [];
+      if (writerMembers.length !== readerMembers.length) {
+        breaking(`${storeId} ${path} changed from ${schemaSummary(writer)} to ${schemaSummary(reader)}.`);
+        return;
+      }
+      for (let index = 0; index < readerMembers.length; index += 1) {
+        diffStoreSchema(
+          storeId,
+          writerMembers[index] ?? null,
+          readerMembers[index] ?? null,
+          entries,
+          `${path}.${index}`,
+        );
+      }
+      return;
+    }
+    case "object": {
+      const writerFields = writer.properties ?? {};
+      const readerFields = reader.properties ?? {};
+      const keys = [
+        ...new Set([...Object.keys(writerFields), ...Object.keys(readerFields)]),
+      ].sort(compareStrings);
+      for (const key of keys) {
+        const fieldPath = `${path}.${key}`;
+        const written = writerFields[key];
+        const read = readerFields[key];
+        if (written === undefined && read !== undefined) {
+          if (hasOptionalWrapper(read)) {
+            storeChange(
+              storeId,
+              "non-breaking",
+              "store-field-added-optional",
+              fieldPath,
+              `${storeId} ${fieldPath} added as optional (or with a .default()); saved records read without it.`,
+              undefined,
+              unwrapOptional(read),
+              entries,
+            );
+          } else {
+            storeChange(
+              storeId,
+              "breaking",
+              "store-field-added-required",
+              fieldPath,
+              `${storeId} ${fieldPath} added as a required field with no .default(); every saved record lacks it and will fail to load. Add .default(...), or bump the version with a migrate.`,
+              undefined,
+              read,
+              entries,
+            );
+          }
+          continue;
+        }
+        if (written !== undefined && read === undefined) {
+          storeChange(
+            storeId,
+            "warning",
+            "store-field-removed",
+            fieldPath,
+            `${storeId} ${fieldPath} removed; saved records still hold it, and code that rebuilds the value will drop it on the next save.`,
+            unwrapOptional(written),
+            undefined,
+            entries,
+          );
+          continue;
+        }
+        diffStoreSchema(storeId, written ?? null, read ?? null, entries, fieldPath);
+      }
+      return;
+    }
+    default:
+      // string, boolean, and the Roblox value kinds carry nothing beyond the kind.
+      return;
+  }
+}
+
+function diffStores(
+  before: ActionContractSnapshot,
+  after: ActionContractSnapshot,
+  entries: ContractDiffEntry[],
+): void {
+  const beforeByIdentity = new Map(
+    (before.stores ?? []).map((store) => [storeIdentity(store), store] as const),
+  );
+  const afterByIdentity = new Map(
+    (after.stores ?? []).map((store) => [storeIdentity(store), store] as const),
+  );
+  const identities = [...new Set([...beforeByIdentity.keys(), ...afterByIdentity.keys()])].sort(
+    compareStrings,
+  );
+
+  for (const identity of identities) {
+    const previous = beforeByIdentity.get(identity);
+    const current = afterByIdentity.get(identity);
+
+    if (!previous && current) {
+      // Possibly the same store under a new scope: that is a different
+      // DataStore, so the old scope's records are no longer reachable.
+      const movedFrom = (before.stores ?? []).find(
+        (store) => store.id === current.id && !afterByIdentity.has(storeIdentity(store)),
+      );
+      makeEntry(
+        movedFrom !== undefined
+          ? {
+              severity: "breaking",
+              kind: "store-scope-changed",
+              actionId: current.id,
+              path: "scope",
+              message: `${current.id} moved from scope ${formatValue(movedFrom.scope)} to ${formatValue(current.scope)}; records saved under the old scope are no longer read.`,
+              before: movedFrom.scope,
+              after: current.scope,
+            }
+          : {
+              severity: "non-breaking",
+              kind: "store-added",
+              actionId: current.id,
+              message: `${current.id} store added.`,
+            },
+        entries,
+      );
+      continue;
+    }
+
+    if (previous && !current) {
+      // Reported once, as the scope change, when the store only moved.
+      if ((after.stores ?? []).some((store) => store.id === previous.id)) {
+        continue;
+      }
+      makeEntry(
+        {
+          severity: "non-breaking",
+          kind: "store-removed",
+          actionId: previous.id,
+          message: `${previous.id} store removed; its records stay in the DataStore, unread.`,
+        },
+        entries,
+      );
+      continue;
+    }
+
+    if (!previous || !current) {
+      continue;
+    }
+    const storeId = current.id;
+
+    if (previous.source !== current.source) {
+      makeEntry(
+        {
+          severity: "info",
+          kind: "store-source-changed",
+          actionId: storeId,
+          message: `${storeId} store source moved from ${previous.source} to ${current.source}.`,
+          before: previous.source,
+          after: current.source,
+        },
+        entries,
+      );
+    }
+
+    if (previous.kind !== current.kind) {
+      // A player store keys records by player and holds a session lock; a
+      // plain store does neither, so the two do not read each other's records.
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "store-kind-changed",
+          actionId: storeId,
+          path: "kind",
+          message: `${storeId} changed from ${previous.kind} to ${current.kind}.`,
+          before: previous.kind,
+          after: current.kind,
+        },
+        entries,
+      );
+    }
+
+    if (current.version < previous.version) {
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "store-version-decreased",
+          actionId: storeId,
+          path: "version",
+          message: `${storeId} version went down from ${previous.version} to ${current.version}; records saved at ${previous.version} are refused as newer than this build.`,
+          before: previous.version,
+          after: current.version,
+        },
+        entries,
+      );
+      continue;
+    }
+
+    if (current.version > previous.version) {
+      makeEntry(
+        current.hasMigrate
+          ? {
+              severity: "info",
+              kind: "store-version-bumped",
+              actionId: storeId,
+              path: "version",
+              message: `${storeId} version bumped from ${previous.version} to ${current.version}; migrate() converts older records.`,
+              before: previous.version,
+              after: current.version,
+            }
+          : {
+              severity: "breaking",
+              kind: "store-version-bumped-without-migrate",
+              actionId: storeId,
+              path: "version",
+              message: `${storeId} version bumped from ${previous.version} to ${current.version} with no migrate(); every saved record will fail to load.`,
+              before: previous.version,
+              after: current.version,
+            },
+        entries,
+      );
+      continue;
+    }
+
+    diffStoreSchema(storeId, previous.schema.schema, current.schema.schema, entries, "schema");
+  }
+}
+
 export function diffActionContractSnapshots(
   before: ActionContractSnapshot,
   after: ActionContractSnapshot,
@@ -1440,6 +1987,7 @@ export function diffActionContractSnapshots(
   diffProjectMetadata(before, after, entries);
   diffActions(before, after, entries);
   diffSignals(before, after, entries);
+  diffStores(before, after, entries);
 
   entries.sort(
     (left, right) =>
@@ -1452,6 +2000,7 @@ export function diffActionContractSnapshots(
 
   const summary = {
     breaking: entries.filter((entry) => entry.severity === "breaking").length,
+    warning: entries.filter((entry) => entry.severity === "warning").length,
     nonBreaking: entries.filter((entry) => entry.severity === "non-breaking").length,
     info: entries.filter((entry) => entry.severity === "info").length,
   };
@@ -1476,6 +2025,7 @@ function groupEntries(
 ): Map<ContractDiffSeverity, ContractDiffEntry[]> {
   const grouped = new Map<ContractDiffSeverity, ContractDiffEntry[]>([
     ["breaking", []],
+    ["warning", []],
     ["non-breaking", []],
     ["info", []],
   ]);
@@ -1523,6 +2073,9 @@ export function formatContractDiffReport(
   if (result.summary.breaking > 0) {
     summaryParts.push(pluralize(result.summary.breaking, "breaking change", "breaking changes"));
   }
+  if (result.summary.warning > 0) {
+    summaryParts.push(pluralize(result.summary.warning, "warning", "warnings"));
+  }
   if (result.summary.nonBreaking > 0) {
     summaryParts.push(
       pluralize(result.summary.nonBreaking, "non-breaking change", "non-breaking changes"),
@@ -1538,7 +2091,7 @@ export function formatContractDiffReport(
   lines.push("");
 
   const groupedEntries = groupEntries(result.entries);
-  for (const severity of ["breaking", "non-breaking", "info"] as const) {
+  for (const severity of ["breaking", "warning", "non-breaking", "info"] as const) {
     const grouped = groupedEntries.get(severity) ?? [];
     if (grouped.length === 0) {
       continue;
@@ -1642,9 +2195,6 @@ function validateCommandMode(
     if (options.project === undefined) {
       throw new Error("--baseline requires --project.");
     }
-    if (options.baseline === undefined) {
-      throw new Error("--project requires --baseline.");
-    }
     return {
       kind: "project",
       project: options.project,
@@ -1666,7 +2216,9 @@ function validateCommandMode(
     };
   }
 
-  throw new Error("Use either --project with --baseline, or --from with --to.");
+  // No flags: the project in the current directory against its committed
+  // snapshot.
+  return { kind: "project", project: ".", baseline: undefined };
 }
 
 export async function runContractDiffCommand(options: {
@@ -1718,8 +2270,12 @@ export async function runContractDiffCommand(options: {
     }
 
     const projectRoot = resolveWorkspacePath(mode.project);
-    const baseline = await readSnapshotFile(resolveWorkspacePath(mode.baseline));
+    const explicitBaseline =
+      mode.baseline === undefined
+        ? undefined
+        : await readSnapshotFile(resolveWorkspacePath(mode.baseline));
     const output = await options.inspectProject({ root: projectRoot });
+    const baselineLabel = mode.baseline ?? contractSnapshotPath(output).relative;
     if (!output.ok) {
       if (options.json) {
         return {
@@ -1735,13 +2291,27 @@ export async function runContractDiffCommand(options: {
           "unable to compare: current project has compiler errors.",
           {
             colors,
-            baselineLabel: normalizePath(mode.baseline),
+            baselineLabel: normalizePath(baselineLabel),
             currentLabel: normalizePath(mode.project),
           },
           output.diagnostics,
         )}\n`,
         stderr: "",
       };
+    }
+
+    let baseline = explicitBaseline;
+    if (baseline === undefined) {
+      const committed = await readCommittedSnapshot(output);
+      if (committed.kind === "missing") {
+        throw new Error(
+          `No --baseline given and no committed contract snapshot at ${baselineLabel}. Run \`aruna contract update\` to create one, or pass --baseline.`,
+        );
+      }
+      if (committed.kind === "invalid") {
+        throw new Error(`${baselineLabel}: ${committed.message}`);
+      }
+      baseline = committed.snapshot;
     }
 
     const current = buildActionContractSnapshot(output);
@@ -1758,7 +2328,7 @@ export async function runContractDiffCommand(options: {
       status: result.summary.breaking > 0 ? 1 : 0,
       stdout: `${formatContractDiffReport(result, {
         colors,
-        baselineLabel: normalizePath(mode.baseline),
+        baselineLabel: normalizePath(baselineLabel),
         currentLabel: normalizePath(mode.project),
       })}\n`,
       stderr: "",

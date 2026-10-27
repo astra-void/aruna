@@ -8,6 +8,7 @@ import {
   type ActionContractRecord,
   type ActionContractSnapshot,
   type SignalContractRecord,
+  type StoreContractRecord,
 } from "../src/cli/action-contracts.js";
 import {
   diffActionContractSnapshots,
@@ -108,6 +109,188 @@ function snapshot(
   };
 }
 
+function store(overrides: Partial<StoreContractRecord> = {}): StoreContractRecord {
+  return {
+    id: "player.profile",
+    source: "src/domains/economy/store.ts",
+    kind: "playerStore",
+    version: 1,
+    scope: null,
+    hasMigrate: false,
+    schema: {
+      summary: "object { coins: number, name: string }",
+      schema: objectSchema({ coins: { kind: "number" }, name: { kind: "string" } }),
+    },
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function storeSchema(properties: Record<string, unknown>): StoreContractRecord["schema"] {
+  return { summary: "object", schema: objectSchema(properties) };
+}
+
+function storeSnapshot(stores: readonly StoreContractRecord[]): ActionContractSnapshot {
+  return { ...snapshot([]), stores };
+}
+
+function diffStores(before: StoreContractRecord, after: StoreContractRecord) {
+  return diffActionContractSnapshots(storeSnapshot([before]), storeSnapshot([after]));
+}
+
+describe("contract diff for stores", () => {
+  it("reports nothing when the store is unchanged", () => {
+    expect(diffStores(store(), store()).entries).toEqual([]);
+  });
+
+  it("breaks on a required field added at the same version, not on an optional one", () => {
+    const required = diffStores(
+      store(),
+      store({ schema: storeSchema({ coins: { kind: "number" }, name: { kind: "string" }, gems: { kind: "number" } }) }),
+    );
+    const optional = diffStores(
+      store(),
+      store({
+        schema: storeSchema({
+          coins: { kind: "number" },
+          name: { kind: "string" },
+          gems: { kind: "optional", inner: { kind: "number" } },
+        }),
+      }),
+    );
+
+    expect(required.entries).toEqual([
+      expect.objectContaining({
+        severity: "breaking",
+        kind: "store-field-added-required",
+        actionId: "player.profile",
+        path: "schema.gems",
+      }),
+    ]);
+    expect(optional.entries).toEqual([
+      expect.objectContaining({ severity: "non-breaking", kind: "store-field-added-optional" }),
+    ]);
+  });
+
+  it("breaks on a field type changed or narrowed, and allows a widening", () => {
+    const changed = diffStores(
+      store(),
+      store({ schema: storeSchema({ coins: { kind: "string" }, name: { kind: "string" } }) }),
+    );
+    const narrowed = diffStores(
+      store(),
+      store({
+        schema: storeSchema({ coins: { kind: "number", numericFormat: "u8" }, name: { kind: "string" } }),
+      }),
+    );
+    const widened = diffStores(
+      store({
+        schema: storeSchema({ coins: { kind: "number", numericFormat: "u8" }, name: { kind: "string" } }),
+      }),
+      store({
+        schema: storeSchema({ coins: { kind: "number", numericFormat: "i16" }, name: { kind: "string" } }),
+      }),
+    );
+    const madeRequired = diffStores(
+      store({
+        schema: storeSchema({ coins: { kind: "optional", inner: { kind: "number" } }, name: { kind: "string" } }),
+      }),
+      store(),
+    );
+
+    expect(changed.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "store-field-type-changed", path: "schema.coins" }),
+    ]);
+    expect(narrowed.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "store-field-type-changed", path: "schema.coins" }),
+    ]);
+    expect(widened.entries).toEqual([]);
+    expect(madeRequired.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", path: "schema.coins" }),
+    ]);
+  });
+
+  it("breaks when an enum loses a value, not when it gains one", () => {
+    const rank = (values: string[]) =>
+      storeSchema({
+        rank: { kind: "enum", values: values.map((value) => ({ kind: "string", value })) },
+      });
+
+    expect(diffStores(store({ schema: rank(["a", "b"]) }), store({ schema: rank(["a"]) })).summary.breaking).toBe(1);
+    expect(diffStores(store({ schema: rank(["a"]) }), store({ schema: rank(["a", "b"]) })).entries).toEqual([]);
+  });
+
+  it("warns, without breaking, when a field is removed", () => {
+    const result = diffStores(
+      store(),
+      store({ schema: storeSchema({ coins: { kind: "number" } }) }),
+    );
+
+    expect(result.summary).toEqual({ breaking: 0, warning: 1, nonBreaking: 0, info: 0 });
+    expect(result.entries[0]).toMatchObject({ kind: "store-field-removed", path: "schema.name" });
+  });
+
+  it("treats a version bump as info with migrate and breaking without, and skips the schema", () => {
+    const reshaped = storeSchema({ total: { kind: "number" } });
+    const withMigrate = diffStores(store(), store({ version: 2, hasMigrate: true, schema: reshaped }));
+    const withoutMigrate = diffStores(store(), store({ version: 2, schema: reshaped }));
+
+    expect(withMigrate.entries).toEqual([
+      expect.objectContaining({ severity: "info", kind: "store-version-bumped", before: 1, after: 2 }),
+    ]);
+    expect(withoutMigrate.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "store-version-bumped-without-migrate" }),
+    ]);
+  });
+
+  it("breaks when the version goes down", () => {
+    const result = diffStores(store({ version: 3, hasMigrate: true }), store({ version: 2, hasMigrate: true }));
+
+    expect(result.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "store-version-decreased" }),
+    ]);
+  });
+
+  it("breaks when a store moves to another scope or changes kind", () => {
+    const moved = diffActionContractSnapshots(
+      storeSnapshot([store({ scope: "live" })]),
+      storeSnapshot([store({ scope: "live-v2" })]),
+    );
+    const rekinded = diffStores(store(), store({ kind: "store" }));
+
+    expect(moved.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "store-scope-changed", before: "live", after: "live-v2" }),
+    ]);
+    expect(rekinded.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "store-kind-changed" }),
+    ]);
+  });
+
+  it("does not break when a store is added or removed", () => {
+    expect(
+      diffActionContractSnapshots(storeSnapshot([]), storeSnapshot([store()])).entries,
+    ).toEqual([expect.objectContaining({ severity: "non-breaking", kind: "store-added" })]);
+    expect(
+      diffActionContractSnapshots(storeSnapshot([store()]), storeSnapshot([])).entries,
+    ).toEqual([expect.objectContaining({ severity: "non-breaking", kind: "store-removed" })]);
+  });
+
+  it("keeps stores, number widths, and union members when a snapshot round-trips through JSON", () => {
+    const original = storeSnapshot([
+      store({
+        schema: storeSchema({
+          coins: { kind: "number", numericFormat: "u8" },
+          tag: { kind: "union", members: [{ kind: "string" }, { kind: "number" }] },
+        }),
+      }),
+    ]);
+    const parsed = parseActionContractSnapshotJson(JSON.parse(JSON.stringify(original)));
+
+    expect(parsed.stores).toEqual(original.stores);
+    expect(diffActionContractSnapshots(parsed, original).entries).toEqual([]);
+  });
+});
+
 describe("contract diff", () => {
   it("reports identical snapshots as unchanged", () => {
     const before = snapshot([action()]);
@@ -119,6 +302,7 @@ describe("contract diff", () => {
       version: 1,
       summary: {
         breaking: 0,
+        warning: 0,
         nonBreaking: 0,
         info: 0,
       },
@@ -130,14 +314,14 @@ describe("contract diff", () => {
     const added = diffActionContractSnapshots(snapshot([]), snapshot([action()]));
     const removed = diffActionContractSnapshots(snapshot([action()]), snapshot([]));
 
-    expect(added.summary).toEqual({ breaking: 0, nonBreaking: 1, info: 0 });
+    expect(added.summary).toEqual({ breaking: 0, warning: 0, nonBreaking: 1, info: 0 });
     expect(added.entries[0]).toMatchObject({
       severity: "non-breaking",
       kind: "action-added",
       actionId: "shop.purchaseItem",
     });
 
-    expect(removed.summary).toEqual({ breaking: 1, nonBreaking: 0, info: 0 });
+    expect(removed.summary).toEqual({ breaking: 1, warning: 0, nonBreaking: 0, info: 0 });
     expect(removed.entries[0]).toMatchObject({
       severity: "breaking",
       kind: "action-removed",
@@ -415,7 +599,7 @@ describe("contract diff", () => {
     const after = { ...snapshot([action()]), signals: [signal()] };
 
     const added = diffActionContractSnapshots(before, after);
-    expect(added.summary).toEqual({ breaking: 0, nonBreaking: 1, info: 0 });
+    expect(added.summary).toEqual({ breaking: 0, warning: 0, nonBreaking: 1, info: 0 });
     expect(added.entries[0]).toMatchObject({
       severity: "non-breaking",
       kind: "signal-added",
@@ -423,7 +607,7 @@ describe("contract diff", () => {
     });
 
     const removed = diffActionContractSnapshots(after, before);
-    expect(removed.summary).toEqual({ breaking: 1, nonBreaking: 0, info: 0 });
+    expect(removed.summary).toEqual({ breaking: 1, warning: 0, nonBreaking: 0, info: 0 });
     expect(removed.entries[0]).toMatchObject({
       severity: "breaking",
       kind: "signal-removed",
@@ -452,7 +636,7 @@ describe("contract diff", () => {
     };
 
     const added = diffActionContractSnapshots(before, withExtraField);
-    expect(added.summary).toEqual({ breaking: 0, nonBreaking: 1, info: 0 });
+    expect(added.summary).toEqual({ breaking: 0, warning: 0, nonBreaking: 1, info: 0 });
     expect(added.entries[0]).toMatchObject({
       kind: "signal-payload-field-added",
       actionId: "combat.playerDamaged",
@@ -460,7 +644,7 @@ describe("contract diff", () => {
     });
 
     const removed = diffActionContractSnapshots(withExtraField, before);
-    expect(removed.summary).toEqual({ breaking: 1, nonBreaking: 0, info: 0 });
+    expect(removed.summary).toEqual({ breaking: 1, warning: 0, nonBreaking: 0, info: 0 });
     expect(removed.entries[0]).toMatchObject({
       severity: "breaking",
       kind: "signal-payload-field-removed",

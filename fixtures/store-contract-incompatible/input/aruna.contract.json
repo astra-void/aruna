@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "project": {
+    "root": ".",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "stores": [
+    {
+      "id": "player.profile",
+      "source": "src/domains/economy/store.ts",
+      "kind": "playerStore",
+      "version": 1,
+      "scope": null,
+      "hasMigrate": false,
+      "schema": {
+        "summary": "object { coins: number, name: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number"
+            },
+            "name": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "generatedAt": null
+}

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "project": {
+    "root": ".",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "stores": [
+    {
+      "id": "game.settings",
+      "source": "src/domains/economy/store.ts",
+      "kind": "store",
+      "version": 1,
+      "scope": null,
+      "hasMigrate": false,
+      "schema": {
+        "summary": "object { doubleCoins: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "doubleCoins": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "warnings": []
+    },
+    {
+      "id": "player.profile",
+      "source": "src/domains/economy/store.ts",
+      "kind": "playerStore",
+      "version": 1,
+      "scope": null,
+      "hasMigrate": false,
+      "schema": {
+        "summary": "object { coins: u16, rank: \"bronze\" | \"silver\" }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u16"
+            },
+            "rank": {
+              "kind": "enum",
+              "values": [
+                {
+                  "kind": "string",
+                  "value": "bronze"
+                },
+                {
+                  "kind": "string",
+                  "value": "silver"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "generatedAt": null
+}

@@ -96,6 +96,160 @@ describe("json output", () => {
   });
 });
 
+describe("store contract gate", () => {
+  function runCli(args: string[], cwd?: string): ReturnType<typeof spawnSync> {
+    expect(fs.existsSync(builtCliPath)).toBe(true);
+    const env = { ...process.env };
+    delete env.CI;
+    delete env.NO_COLOR;
+    delete env.INIT_CWD;
+    return spawnSync(process.execPath, [builtCliPath, ...args], {
+      encoding: "utf8",
+      env,
+      ...(cwd !== undefined ? { cwd } : {}),
+    });
+  }
+
+  function gateDiagnostics(stdout: string): Array<{ code: string; severity: string; message: string }> {
+    const parsed = JSON.parse(stdout) as {
+      diagnostics: Array<{ code: string; severity: string; message: string }>;
+    };
+    return parsed.diagnostics.filter((diagnostic) => diagnostic.code.startsWith("aruna::57"));
+  }
+
+  it("fails check when a store change leaves saved records unreadable", () => {
+    const result = runCli([
+      "check",
+      "--json",
+      "--project",
+      path.join(fixturesRoot, "store-contract-incompatible", "input"),
+    ]);
+
+    expect(result.status).toBe(1);
+    const diagnostics = gateDiagnostics(String(result.stdout));
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["aruna::578", "aruna::578"]);
+    expect(diagnostics.every((diagnostic) => diagnostic.severity === "error")).toBe(true);
+    const messages = diagnostics.map((diagnostic) => diagnostic.message).join("\n");
+    expect(messages).toContain("schema.coins narrowed");
+    expect(messages).toContain("schema.gems added as a required field with no .default()");
+  });
+
+  it("passes check when saved records still read", () => {
+    const result = runCli([
+      "check",
+      "--json",
+      "--project",
+      path.join(fixturesRoot, "store-contract-compatible", "input"),
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(gateDiagnostics(String(result.stdout))).toEqual([]);
+  });
+
+  it("stops the build before vendoring or compiling", () => {
+    const root = copyFixtureInput("store-contract-incompatible");
+    const result = runCli(["build", "--no-emit-luau", "--project", root]);
+
+    expect(result.status).toBe(1);
+    expect(String(result.stdout)).toContain("aruna::578");
+    expect(fs.existsSync(path.join(root, "src/.aruna/shared/runtime"))).toBe(false);
+  });
+
+  it("diffs against the committed snapshot when no baseline is given", () => {
+    const result = runCli(
+      ["contract", "diff", "--no-color"],
+      path.join(fixturesRoot, "store-contract-incompatible", "input"),
+    );
+
+    expect(result.status).toBe(1);
+    const stdout = String(result.stdout);
+    expect(stdout).toContain("baseline: aruna.contract.json");
+    expect(stdout).toContain("2 breaking changes");
+    expect(stdout).toContain("1 warning");
+    expect(stdout).toContain("schema.name removed");
+  });
+
+  it("reports the version-bump rules in the diff", () => {
+    const result = runCli(
+      ["contract", "diff", "--json"],
+      path.join(fixturesRoot, "store-contract-compatible", "input"),
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(String(result.stdout)) as {
+      summary: { breaking: number };
+      entries: Array<{ kind: string; severity: string }>;
+    };
+    expect(parsed.summary.breaking).toBe(0);
+    expect(parsed.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "store-version-bumped", severity: "info" }),
+        expect.objectContaining({ kind: "store-field-added-optional", severity: "non-breaking" }),
+      ]),
+    );
+  });
+
+  it("lowers the gate to a warning through strict.storeCompatibility", () => {
+    const root = copyFixtureInput("store-contract-incompatible");
+    writeProject(root, {
+      "aruna.config.ts":
+        'import { defineConfig } from "aruna";\n\nexport default defineConfig({ strict: { storeCompatibility: "warning" } });\n',
+    });
+    const result = runCli(["check", "--json", "--project", root]);
+
+    expect(result.status).toBe(0);
+    const diagnostics = gateDiagnostics(String(result.stdout));
+    expect(diagnostics).toHaveLength(2);
+    expect(diagnostics.every((diagnostic) => diagnostic.severity === "warning")).toBe(true);
+  });
+
+  it("reads the snapshot from contract.snapshot", () => {
+    const root = copyFixtureInput("store-contract-incompatible");
+    fs.mkdirSync(path.join(root, "contracts"));
+    fs.renameSync(path.join(root, "aruna.contract.json"), path.join(root, "contracts/shipped.json"));
+    // Without the config, there is no snapshot at the default path: no gate.
+    expect(runCli(["check", "--project", root]).status).toBe(0);
+
+    writeProject(root, {
+      "aruna.config.ts":
+        'import { defineConfig } from "aruna";\n\nexport default defineConfig({ contract: { snapshot: "contracts/shipped.json" } });\n',
+    });
+    expect(runCli(["check", "--project", root]).status).toBe(1);
+  });
+
+  it("reports an unreadable snapshot as aruna::579", () => {
+    const root = copyFixtureInput("store-contract-compatible");
+    fs.writeFileSync(path.join(root, "aruna.contract.json"), "{ not json", "utf8");
+    const result = runCli(["check", "--json", "--project", root]);
+
+    expect(result.status).toBe(1);
+    expect(gateDiagnostics(String(result.stdout)).map((diagnostic) => diagnostic.code)).toEqual([
+      "aruna::579",
+    ]);
+  });
+
+  it("rewrites the snapshot with contract update, after which check passes", () => {
+    const root = copyFixtureInput("store-contract-incompatible");
+    const update = runCli(["contract", "update", "--project", root]);
+
+    expect(update.status).toBe(0);
+    expect(String(update.stdout)).toContain("wrote aruna.contract.json");
+    const written = JSON.parse(fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8")) as {
+      stores: Array<{ id: string; schema: { summary: string } }>;
+    };
+    expect(written.stores[0]?.schema.summary).toBe("object { coins: u8, gems: number }");
+    expect(runCli(["check", "--project", root]).status).toBe(0);
+  });
+
+  it("refuses to write a snapshot from a project that does not compile", () => {
+    const root = copyFixtureInput("invalid-action-rate-limit");
+    const result = runCli(["contract", "update", "--project", root]);
+
+    expect(result.status).toBe(1);
+    expect(fs.existsSync(path.join(root, "aruna.contract.json"))).toBe(false);
+  });
+});
+
 describe("cli integration", () => {
   function runContractDiff(args: string[]): ReturnType<typeof spawnSync> {
     expect(fs.existsSync(builtCliPath)).toBe(true);
@@ -172,6 +326,7 @@ describe("cli integration", () => {
       version: 1,
       summary: {
         breaking: 0,
+        warning: 0,
         nonBreaking: 0,
         info: 0,
       },

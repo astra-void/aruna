@@ -100,6 +100,12 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::575" => Some(("invalid-store-version", DiagnosticSeverity::Error)),
         "aruna::576" => Some(("store-missing-default", DiagnosticSeverity::Error)),
         "aruna::577" => Some(("store-version-without-migrate", DiagnosticSeverity::Warning)),
+        // Emitted by the CLI's contract gate (`aruna check` / `aruna build`
+        // against the committed `contract.snapshot`), not by the compiler; kept
+        // here so the code is allocated in one place. 578's severity follows
+        // strict.storeCompatibility.
+        "aruna::578" => Some(("store-incompatible-change", DiagnosticSeverity::Error)),
+        "aruna::579" => Some(("contract-snapshot-invalid", DiagnosticSeverity::Error)),
         "aruna::580" => Some(("invalid-runtime-definition", DiagnosticSeverity::Error)),
         "aruna::581" => Some(("duplicate-runtime-id", DiagnosticSeverity::Error)),
         "aruna::582" => Some(("unresolved-runtime-order", DiagnosticSeverity::Error)),

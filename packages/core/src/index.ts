@@ -41,6 +41,9 @@ export type DiagnosticCode =
   | "aruna::565"
   | "aruna::566"
   | "aruna::568"
+  | "aruna::569"
+  | "aruna::578"
+  | "aruna::579"
   | "aruna::555"
   | "aruna::556"
   | "aruna::557"
@@ -240,6 +243,17 @@ export type StrictConfig = {
   readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
   // Imports that reach past another domain's public surface (aruna::304).
   readonly domainBoundary?: "off" | "warning" | "error" | undefined;
+  // A store change, against the committed contract snapshot, that leaves this
+  // build unable to read records the previous build wrote (aruna::578). An
+  // error by default: the cost of getting it wrong is a player's save file.
+  readonly storeCompatibility?: "off" | "warning" | "error" | undefined;
+};
+
+// The committed contract snapshot `aruna check` and `aruna build` compare the
+// project against. Relative to the project root. The gate only runs when the
+// file exists; `aruna contract update` writes it.
+export type ContractConfig = {
+  readonly snapshot?: string | undefined;
 };
 
 // Reporting controls. `ignore` lists diagnostic codes (`"aruna::507"`) or names
@@ -273,6 +287,7 @@ export type Config = {
   readonly domains?: DomainsConfig | undefined;
   readonly strict?: StrictConfig | undefined;
   readonly diagnostics?: DiagnosticsConfig | undefined;
+  readonly contract?: ContractConfig | undefined;
   readonly dev?: DevConfig | undefined;
 };
 
@@ -313,9 +328,13 @@ export type NormalizedConfig = {
     readonly rawRemoteUsage: "off" | "warning" | "error";
     readonly unresolvedImports: "off" | "warning" | "error";
     readonly domainBoundary: "off" | "warning" | "error";
+    readonly storeCompatibility: "off" | "warning" | "error";
   };
   readonly diagnostics: {
     readonly ignore: readonly string[];
+  };
+  readonly contract: {
+    readonly snapshot: string;
   };
 };
 
@@ -399,9 +418,13 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
     rawRemoteUsage: "warning",
     unresolvedImports: "warning",
     domainBoundary: "warning",
+    storeCompatibility: "error",
   },
   diagnostics: {
     ignore: [],
+  },
+  contract: {
+    snapshot: "aruna.contract.json",
   },
 };
 

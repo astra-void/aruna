@@ -29,6 +29,7 @@ import { buildStoreInspectionReport, formatStoreInspection } from "./inspect-sto
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
 import { runContractDiffCommand } from "./contract-diff.js";
+import { collectContractGateDiagnostics, writeContractSnapshot } from "./contract-gate.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
 import {
   compileTestPartition,
@@ -212,7 +213,9 @@ async function runCheck(options: CliOptions): Promise<CompilerOutput> {
     projectRoot: input.root,
     configPath: input.configPath,
   });
-  return withExtraDiagnostics(output, desync, options.warningsAsErrors);
+  // Stores against the committed contract snapshot, when there is one.
+  const gate = await collectContractGateDiagnostics(output);
+  return withExtraDiagnostics(output, [...desync, ...gate], options.warningsAsErrors);
 }
 
 async function runInspect(options: CliOptions): Promise<CompilerOutput> {
@@ -416,7 +419,16 @@ export type BuildRunResult = {
 
 async function runBuild(options: BuildCliOptions): Promise<BuildRunResult> {
   const input = compilerInput(options);
-  const output = await buildProject(input);
+  const compiled = await buildProject(input);
+  // A store change that would leave saved records unreadable stops the build
+  // before anything is vendored or compiled to Luau.
+  const output = compiled.ok
+    ? withExtraDiagnostics(
+        compiled,
+        await collectContractGateDiagnostics(compiled),
+        options.warningsAsErrors,
+      )
+    : compiled;
   if (!output.ok) {
     return { output, pruned: [] };
   }
@@ -1277,7 +1289,9 @@ export async function main(): Promise<number> {
     await runDoctorCli(options);
   });
 
-  const contract = program.command("contract").description("compare action contract snapshots");
+  const contract = program
+    .command("contract")
+    .description("compare and record contract snapshots");
   const contractDiff = contract
     .command("diff")
     .description("compare action contract snapshots")
@@ -1305,6 +1319,30 @@ export async function main(): Promise<number> {
         process.stderr.write(result.stderr);
       }
       process.exitCode = result.status;
+    });
+
+  contract
+    .command("update")
+    .description(
+      "write the current contract to the committed snapshot (contract.snapshot) that check and build compare stores against",
+    )
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const output = await inspectProject(compilerInput(options));
+      if (!output.ok) {
+        // A snapshot is the record of what shipped; one taken from a project
+        // that does not compile would record something that never could.
+        renderCompilerOutput(output, options, 0, "inspect");
+        process.exitCode = 1;
+        return;
+      }
+      const written = await writeContractSnapshot(output);
+      if (options.json) {
+        writeJson({ ok: true, snapshot: written });
+      } else if (!options.quiet) {
+        writeText(formatSuccess(`wrote ${written}`, resolveColorMode(options)));
+      }
+      process.exitCode = 0;
     });
 
   await program.parseAsync(process.argv);

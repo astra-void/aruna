@@ -278,6 +278,45 @@ aruna inspect stores
     schema: object { coins: u32, unlocked: string[] }
 ```
 
+## The compatibility gate
+
+A store's records outlive the code that wrote them. In Roblox, a client is replicated
+from the server it joined, so client and server code inside one server always match —
+but the DataStore is shared by every version of the game that has ever run. The real
+cross-version boundary is a saved record: the next build has to read what this one
+writes.
+
+Commit a contract snapshot and every `aruna check` and `aruna build` compares your stores
+against it:
+
+```bash
+aruna contract update      # writes aruna.contract.json; commit it
+```
+
+The question for each store is: *can the new code read a record the old code wrote at
+the same version?* At the same version nothing converts a record on the way in, so the
+new schema must accept everything the old one did.
+
+| Change | Verdict |
+| --- | --- |
+| Same version, a new required field with no `.default()` | **breaking** — every saved record lacks it |
+| Same version, a field's type changed, or narrowed (`number` → `u8`, an enum value or union member dropped, optional → required) | **breaking** |
+| Same version, a field removed | warning — saved records still hold it, and rebuilding the value drops it |
+| Same version, a new optional field, or one with `.default()`; a type widened | compatible |
+| Version bumped, `migrate` declared | info — old records go through `migrate`, so the schemas are not compared |
+| Version bumped, no `migrate` | **breaking** — every saved record fails to load |
+| Version decreased | **breaking** — saved records are now [ahead of this build](#mixed-version-servers) |
+| Scope changed, or `defineStore` ↔ `definePlayerStore` | **breaking** — the old records are no longer read |
+
+A breaking change fails the build as `aruna::578 store-incompatible-change`
+(`strict.storeCompatibility` sets its severity; `"error"` by default). `aruna contract diff`
+with no arguments shows the full comparison, warnings included. When the change is
+intended, make it safe — a `.default(...)`, or a version bump with a `migrate` — then
+run `aruna contract update` and commit the new snapshot alongside it.
+
+The snapshot path is `contract.snapshot` in `aruna.config.ts` (default
+`aruna.contract.json`, relative to the project root). Without the file, there is no gate.
+
 ## Diagnostics
 
 | Code | Name | Severity |
@@ -290,6 +329,8 @@ aruna inspect stores
 | `aruna::575` | `invalid-store-version` | error |
 | `aruna::576` | `store-missing-default` | error |
 | `aruna::577` | `store-version-without-migrate` | warning |
+| `aruna::578` | `store-incompatible-change` | error (`strict.storeCompatibility`) |
+| `aruna::579` | `contract-snapshot-invalid` | error |
 
 ## Limits the runtime enforces locally
 

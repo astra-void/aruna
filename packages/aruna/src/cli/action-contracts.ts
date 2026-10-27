@@ -6,6 +6,7 @@ import type {
   ModuleRecord,
   SchemaMetadata,
   SignalRecord,
+  StoreRecord,
 } from "@arunajs/core";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
 
@@ -60,6 +61,20 @@ export type SignalContractRecord = {
   readonly warnings: readonly string[];
 };
 
+// A persisted store. The contract that matters here is not client/server (a
+// store never crosses the wire) but old code/new code: records a previous build
+// wrote stay in the DataStore and the next build has to read them.
+export type StoreContractRecord = {
+  readonly id: string;
+  readonly source: string;
+  readonly kind: StoreRecord["kind"];
+  readonly version: number;
+  readonly scope: string | null;
+  readonly hasMigrate: boolean;
+  readonly schema: ActionContractSchema;
+  readonly warnings: readonly string[];
+};
+
 export type ActionContractSnapshot = {
   readonly version: 1;
   readonly project: ActionContractProjectMetadata;
@@ -67,6 +82,8 @@ export type ActionContractSnapshot = {
   // Omitted when the project declares no signals, keeping action-only snapshots
   // byte-stable with pre-signal baselines.
   readonly signals?: readonly SignalContractRecord[];
+  // Omitted when the project declares no stores, for the same reason.
+  readonly stores?: readonly StoreContractRecord[];
   readonly diagnostics: readonly Diagnostic[];
   readonly generatedAt: null;
 };
@@ -174,6 +191,24 @@ function summarizeSignal(
   };
 }
 
+function summarizeStore(store: StoreRecord): StoreContractRecord {
+  const schema = formatActionSchemaSummary(store.schema);
+
+  return {
+    id: store.id,
+    source: normalizePath(store.file),
+    kind: store.kind,
+    version: store.version,
+    scope: store.scope ?? null,
+    hasMigrate: store.hasMigrate === true,
+    schema: {
+      summary: schema.summary,
+      schema: store.schema ?? null,
+    },
+    warnings: sortWarnings(schema.warnings),
+  };
+}
+
 export function buildActionContractSnapshot(output: CompilerOutput): ActionContractSnapshot {
   const generatedDir = normalizePath(output.config.generatedDir);
   const actions = [...output.manifest.actions]
@@ -194,6 +229,15 @@ export function buildActionContractSnapshot(output: CompilerOutput): ActionContr
     )
     .map((signal) => summarizeSignal(output, signal));
 
+  const stores = [...(output.manifest.stores ?? [])]
+    .sort(
+      (left, right) =>
+        compareStrings(left.id, right.id) ||
+        compareStrings(left.scope ?? "", right.scope ?? "") ||
+        compareStrings(left.file, right.file),
+    )
+    .map((store) => summarizeStore(store));
+
   return {
     version: 1,
     project: {
@@ -203,6 +247,7 @@ export function buildActionContractSnapshot(output: CompilerOutput): ActionContr
     },
     actions,
     ...(signals.length > 0 ? { signals } : {}),
+    ...(stores.length > 0 ? { stores } : {}),
     diagnostics: sortDiagnostics(output.diagnostics),
     generatedAt: null,
   };
