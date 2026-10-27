@@ -134,14 +134,38 @@ function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload
 	}
 }
 
+// Roblox drops an unreliable message over this size without an error.
+export const UNRELIABLE_PAYLOAD_LIMIT_BYTES = 900;
+// What the `{ signalId, payload }` envelope costs on top of the payload and the
+// signal id's own bytes: the two key strings (15 bytes) plus 8 bytes for each
+// of the table's five values. Mirrors the compiler's
+// SIGNAL_ENVELOPE_OVERHEAD_BYTES (crates/aruna_compiler/src/actions.rs), which
+// documents the estimate.
+export const SIGNAL_ENVELOPE_OVERHEAD_BYTES = 55;
+
 // The payload as it goes on the wire: an `encodeBinary` buffer for a binary
 // signal, the value itself otherwise. Validated first, so the encoder only ever
-// sees a conforming value.
-function wirePayload(signal: SignalDefinition<Schema | undefined>, payload: unknown): unknown {
+// sees a conforming value. A binary frame's size is exact, so an unreliable one
+// that would be dropped for size is refused here, with the message aruna::511
+// uses at compile time; a frame can only get there when the schema leaves the
+// payload unbounded (aruna::510).
+function wirePayload(
+	signal: SignalDefinition<Schema | undefined>,
+	signalId: string,
+	payload: unknown,
+): unknown {
 	const payloadSchema = signal.payload;
-	return signal.wire === "binary" && payloadSchema !== undefined
-		? encodeBinary(payloadSchema, payload)
-		: payload;
+	if (signal.wire !== "binary" || payloadSchema === undefined) {
+		return payload;
+	}
+	const frame = encodeBinary(payloadSchema, payload);
+	if (signal.unreliable === true) {
+		const size = buffer.len(frame) + signalId.size() + SIGNAL_ENVELOPE_OVERHEAD_BYTES;
+		if (size > UNRELIABLE_PAYLOAD_LIMIT_BYTES) {
+			throw `Unreliable signal ${signalId} carries ${size} bytes, over Roblox's ${UNRELIABLE_PAYLOAD_LIMIT_BYTES}-byte unreliable limit; larger payloads are dropped without an error.`;
+		}
+	}
+	return frame;
 }
 
 // A binary signal's payload as its handlers receive it: decoded, or `ok` false
@@ -183,12 +207,12 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 		to: (player: TPlayer, signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			remoteFor(signal).FireClient(player, { signalId, payload: wirePayload(signal, payload) });
+			remoteFor(signal).FireClient(player, { signalId, payload: wirePayload(signal, signalId, payload) });
 		},
 		toMany: (players: ReadonlyArray<TPlayer>, signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			const message: RemoteSignalMessage = { signalId, payload: wirePayload(signal, payload) };
+			const message: RemoteSignalMessage = { signalId, payload: wirePayload(signal, signalId, payload) };
 			const wire = remoteFor(signal);
 			for (const player of players) {
 				wire.FireClient(player, message);
@@ -197,7 +221,7 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 		toAll: (signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			remoteFor(signal).FireAllClients({ signalId, payload: wirePayload(signal, payload) });
+			remoteFor(signal).FireAllClients({ signalId, payload: wirePayload(signal, signalId, payload) });
 		},
 		toBatched: (
 			player: TPlayer,
@@ -220,7 +244,7 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 						for (let itemIndex = 0; itemIndex < payloads.size(); itemIndex += 1) {
 							const payload = payloads[itemIndex];
 							assertPublishable(signal, payload);
-							wire.FireClient(player, { signalId, payload: wirePayload(signal, payload) });
+							wire.FireClient(player, { signalId, payload: wirePayload(signal, signalId, payload) });
 
 							const isChunkBoundary = (itemIndex + 1) % chunkSize === 0;
 							if (isChunkBoundary && itemIndex + 1 < payloads.size()) {

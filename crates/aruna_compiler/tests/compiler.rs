@@ -1291,8 +1291,10 @@ export const log = defineSignal({
 
 #[test]
 fn errors_when_an_unreliable_payload_can_exceed_the_limit() {
-    // 4 + 896 bytes: exactly the 900-byte limit as a table, but the binary
-    // frame adds its 4-byte header and goes over.
+    // The same 4 + 833-byte payload. As a table its floor plus the
+    // `{ signalId, payload }` envelope (8 + 55 for "fx.table") is exactly the
+    // 900-byte limit: not over, but too close to trust (aruna::513). The binary
+    // frame adds its 4-byte header, and with its envelope (9 + 55) goes over.
     let output = signal_output(
         r#"
 import { defineSignal } from "aruna/server";
@@ -1301,23 +1303,100 @@ import { schema } from "aruna/schema";
 export const table = defineSignal({
   id: "fx.table",
   unreliable: true,
-  payload: schema.array(schema.u8()).maxItems(896),
+  payload: schema.array(schema.u8()).maxItems(833),
 });
 
 export const binary = defineSignal({
   id: "fx.binary",
   unreliable: true,
   wire: "binary",
-  payload: schema.array(schema.u8()).maxItems(896),
+  payload: schema.array(schema.u8()).maxItems(833),
 });
 "#,
     );
 
-    let codes = diagnostic_codes(&output);
-    assert_eq!(codes, vec!["aruna::511".to_string()]);
-    assert!(output.diagnostics[0].message.contains("fx.binary"));
-    assert!(output.diagnostics[0].message.contains("904 bytes"));
+    let mut found: Vec<(String, String)> = output
+        .diagnostics
+        .iter()
+        .map(|diagnostic| (diagnostic.code.clone(), diagnostic.message.clone()))
+        .collect();
+    found.sort();
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert_eq!(found[0].0, "aruna::511");
+    assert!(found[0].1.contains("fx.binary"));
+    assert!(found[0].1.contains("905 bytes"));
+    assert_eq!(found[1].0, "aruna::513");
+    assert!(found[1].1.contains("fx.table"));
+    assert!(found[1].1.contains("at least 900 bytes"));
     assert!(!output.ok);
+}
+
+#[test]
+fn counts_the_signal_envelope_toward_the_unreliable_limit() {
+    // An 868-byte frame fits under 900 on its own; with "fx.burst" (8) and the
+    // 55-byte envelope allowance the message is 931 bytes.
+    let output = signal_output(
+        r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const burst = defineSignal({
+  id: "fx.burst",
+  unreliable: true,
+  wire: "binary",
+  payload: schema.array(schema.u8()).maxItems(860),
+});
+"#,
+    );
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::511".to_string()]);
+    let diagnostic = &output.diagnostics[0];
+    assert!(diagnostic.message.contains("931 bytes"), "{}", diagnostic.message);
+    let details = diagnostic.details.as_deref().unwrap_or_default();
+    assert!(details.contains("868 bytes"), "{details}");
+    assert!(details.contains("envelope (63 bytes)"), "{details}");
+    // The manifest still records the frame alone; the runtime adds the envelope.
+    assert_eq!(output.manifest.signals[0].max_encoded_bytes, Some(868));
+}
+
+#[test]
+fn recommends_binary_when_a_table_payload_nears_the_unreliable_limit() {
+    // Table floors, envelope included (7-byte ids + 55): 4 + 616 + 62 = 682 is
+    // over 75% of 900 (675); 4 + 600 + 62 = 666 is not. A binary frame of the
+    // same size is exact, so it is not warned about.
+    let output = signal_output(
+        r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const near = defineSignal({
+  id: "fx.near",
+  unreliable: true,
+  payload: schema.array(schema.u8()).maxItems(616),
+});
+
+export const under = defineSignal({
+  id: "fx.unde",
+  unreliable: true,
+  payload: schema.array(schema.u8()).maxItems(600),
+});
+
+export const exact = defineSignal({
+  id: "fx.exac",
+  unreliable: true,
+  wire: "binary",
+  payload: schema.array(schema.u8()).maxItems(612),
+});
+"#,
+    );
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::513".to_string()]);
+    let diagnostic = &output.diagnostics[0];
+    assert_eq!(diagnostic.name, "unreliable-signal-payload-near-limit");
+    assert!(diagnostic.message.contains("fx.near"));
+    assert!(diagnostic.message.contains("at least 682 bytes"));
+    assert!(diagnostic.suggestion.as_deref().unwrap_or_default().contains("wire: \"binary\""));
+    assert!(output.ok, "near the limit only warns");
 }
 
 #[test]

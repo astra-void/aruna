@@ -80,6 +80,9 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::510" => Some(("unreliable-signal-payload-unbounded", DiagnosticSeverity::Warning)),
         "aruna::511" => Some(("unreliable-signal-payload-too-large", DiagnosticSeverity::Error)),
         "aruna::512" => Some(("invalid-signal-wire", DiagnosticSeverity::Error)),
+        // A table-encoded unreliable signal whose size floor is close enough to
+        // the limit that its real size may be over it.
+        "aruna::513" => Some(("unreliable-signal-payload-near-limit", DiagnosticSeverity::Warning)),
         "aruna::550" => Some(("invalid-action-definition", DiagnosticSeverity::Error)),
         "aruna::551" => Some(("action-missing-run", DiagnosticSeverity::Error)),
         "aruna::552" => Some(("action-run-not-function", DiagnosticSeverity::Error)),

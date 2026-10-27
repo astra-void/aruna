@@ -501,6 +501,21 @@ the game build like any other module.
 
 ### Security
 
+- **Unreliable size checks count the `{ signalId, payload }` envelope.** The
+  message Roblox measures against its ~900-byte limit is the whole envelope,
+  but `aruna::511` compared only the payload, so a payload just under the limit
+  passed the check and was dropped in the game. The compared size now adds the
+  signal id's bytes and a 55-byte envelope allowance (the two key strings plus
+  8 bytes for each of the table's five values; the estimate is documented in
+  `docs/signals.md`). New warning `aruna::513
+  unreliable-signal-payload-near-limit`: a table-encoded unreliable signal
+  whose size floor plus envelope is over 75% of the limit, since its real size
+  is larger by an amount the compiler cannot know; it recommends
+  `wire: "binary"`. And at runtime the publisher measures a
+  binary unreliable frame plus the envelope before firing and throws (the
+  `aruna::511` message shape) instead of sending one that would be dropped —
+  the case the compiler cannot see, an unbounded schema (`aruna::510`).
+
 - **The wire-safety walk stays inside its node budget through unions.** To
   decide whether an Instance was allowed, the walk narrowed a union by calling
   each member's `validate` on the value — a full, unbudgeted walk of the

@@ -10,32 +10,58 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -61,6 +87,29 @@
       "serialization": {
         "policy": "plain-data-v1"
       },
+      "warnings": []
+    },
+    {
+      "id": "fx.burst",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "u8[]",
+        "schema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 860
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "wire": "binary",
+      "maxEncodedBytes": 868,
       "warnings": []
     },
     {
@@ -92,6 +141,28 @@
       },
       "wire": "binary",
       "maxEncodedBytes": 37,
+      "warnings": []
+    },
+    {
+      "id": "fx.near",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "u8[]",
+        "schema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 616
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "maxEncodedBytes": 624,
       "warnings": []
     },
     {
@@ -148,32 +219,58 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -189,32 +286,58 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -250,6 +373,29 @@
       "warnings": []
     },
     {
+      "id": "fx.burst",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "u8[]",
+        "schema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 860
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "wire": "binary",
+      "maxEncodedBytes": 868,
+      "warnings": []
+    },
+    {
       "id": "fx.hit",
       "source": "src/shared/signals.ts",
       "moduleKind": "shared",
@@ -278,6 +424,28 @@
       },
       "wire": "binary",
       "maxEncodedBytes": 37,
+      "warnings": []
+    },
+    {
+      "id": "fx.near",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "u8[]",
+        "schema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 616
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "maxEncodedBytes": 624,
       "warnings": []
     },
     {
@@ -334,23 +502,49 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 1244,
+        "start": 1196
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 966,
+        "start": 901
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "generatedAt": null
@@ -382,32 +576,58 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -436,32 +656,58 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -541,23 +787,49 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "manifest": {
@@ -571,23 +843,49 @@
         "name": "unreliable-signal-payload-unbounded",
         "severity": "warning",
         "span": {
-          "end": 601,
-          "start": 552
+          "end": 623,
+          "start": 574
         },
         "suggestion": "Bound the payload schema, or make the signal reliable."
       },
       {
         "code": "aruna::511",
-        "details": "Largest binary frame, 4-byte header included (export name: trail).",
+        "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
         "file": "src/shared/signals.ts",
-        "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+        "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
         "name": "unreliable-signal-payload-too-large",
         "severity": "error",
         "span": {
-          "end": 886,
-          "start": 821
+          "end": 966,
+          "start": 901
         },
         "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+      },
+      {
+        "code": "aruna::511",
+        "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+        "name": "unreliable-signal-payload-too-large",
+        "severity": "error",
+        "span": {
+          "end": 1244,
+          "start": 1196
+        },
+        "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+      },
+      {
+        "code": "aruna::513",
+        "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+        "name": "unreliable-signal-payload-near-limit",
+        "severity": "warning",
+        "span": {
+          "end": 1570,
+          "start": 1522
+        },
+        "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
       }
     ],
     "imports": [
@@ -640,6 +938,26 @@
         "unreliable": true
       },
       {
+        "exportName": "burst",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.burst",
+        "maxEncodedBytes": 868,
+        "payloadSchema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 860
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true,
+        "wire": "binary"
+      },
+      {
         "exportName": "hit",
         "file": "src/shared/signals.ts",
         "hasPayloadSchema": true,
@@ -666,6 +984,25 @@
         },
         "unreliable": true,
         "wire": "binary"
+      },
+      {
+        "exportName": "near",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.near",
+        "maxEncodedBytes": 624,
+        "payloadSchema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 616
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true
       },
       {
         "exportName": "trail",
@@ -711,12 +1048,12 @@
   "ok": false,
   "projectRoot": "<root>",
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -796,40 +1133,66 @@
       "name": "unreliable-signal-payload-unbounded",
       "severity": "warning",
       "span": {
-        "end": 601,
-        "start": 552
+        "end": 623,
+        "start": 574
       },
       "suggestion": "Bound the payload schema, or make the signal reliable."
     },
     {
       "code": "aruna::511",
-      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
       "file": "src/shared/signals.ts",
-      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
       "name": "unreliable-signal-payload-too-large",
       "severity": "error",
       "span": {
-        "end": 886,
-        "start": 821
+        "end": 966,
+        "start": 901
       },
       "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1244,
+        "start": 1196
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1570,
+        "start": 1522
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
     }
   ],
   "generatedFiles": [
     {
-      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"e620e9b67bd607cd\";\n",
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"f81da0dbafcded9e\";\n",
       "path": "src/.aruna/shared/actions.client.generated.ts"
     },
     {
-      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"e620e9b67bd607cd\";\n",
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"f81da0dbafcded9e\";\n",
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna signal manifest v1\n\nimport { chat as src_shared_signals_chat } from \"../../shared/signals\";\nimport { hit as src_shared_signals_hit } from \"../../shared/signals\";\nimport { trail as src_shared_signals_trail } from \"../../shared/signals\";\nimport { log as src_shared_signals_log } from \"../../shared/signals\";\n\nexport const signals = {\n  \"chat.bubble\": src_shared_signals_chat,\n  \"fx.hit\": src_shared_signals_hit,\n  \"fx.trail\": src_shared_signals_trail,\n  \"log.line\": src_shared_signals_log,\n} as const;\n\nexport type ChatPayload = { text: string; };\nexport type HitPayload = { at: Vector3; by: string; power: number; };\nexport type TrailPayload = string[];\nexport type LogPayload = { text: string; };\n",
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna signal manifest v1\n\nimport { chat as src_shared_signals_chat } from \"../../shared/signals\";\nimport { burst as src_shared_signals_burst } from \"../../shared/signals\";\nimport { hit as src_shared_signals_hit } from \"../../shared/signals\";\nimport { near as src_shared_signals_near } from \"../../shared/signals\";\nimport { trail as src_shared_signals_trail } from \"../../shared/signals\";\nimport { log as src_shared_signals_log } from \"../../shared/signals\";\n\nexport const signals = {\n  \"chat.bubble\": src_shared_signals_chat,\n  \"fx.burst\": src_shared_signals_burst,\n  \"fx.hit\": src_shared_signals_hit,\n  \"fx.near\": src_shared_signals_near,\n  \"fx.trail\": src_shared_signals_trail,\n  \"log.line\": src_shared_signals_log,\n} as const;\n\nexport type ChatPayload = { text: string; };\nexport type BurstPayload = number[];\nexport type HitPayload = { at: Vector3; by: string; power: number; };\nexport type NearPayload = number[];\nexport type TrailPayload = string[];\nexport type LogPayload = { text: string; };\n",
       "path": "src/.aruna/shared/signals.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/shared/signals.generated.ts\",\n      \"path\": \"src/.aruna/shared/signals.generated.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/signals module\"\n    },\n    {\n      \"id\": \"src/shared/signals.ts\",\n      \"path\": \"src/shared/signals.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/shared/signals.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/signals.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"signals\": [\n    {\n      \"id\": \"chat.bubble\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"chat\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"text\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"fx.hit\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"hit\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 37,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"at\": {\n            \"kind\": \"vector3\"\n          },\n          \"by\": {\n            \"kind\": \"string\",\n            \"maxLength\": 16\n          },\n          \"power\": {\n            \"kind\": \"number\",\n            \"numericFormat\": \"u8\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"fx.trail\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"trail\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 2312,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"array\",\n        \"items\": {\n          \"kind\": \"string\",\n          \"maxLength\": 32\n        },\n        \"maxItems\": 64\n      }\n    },\n    {\n      \"id\": \"log.line\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"log\",\n      \"hasPayloadSchema\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"text\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::510\",\n      \"name\": \"unreliable-signal-payload-unbounded\",\n      \"severity\": \"warning\",\n      \"message\": \"Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 552,\n        \"end\": 601\n      },\n      \"details\": \"A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).\",\n      \"suggestion\": \"Bound the payload schema, or make the signal reliable.\"\n    },\n    {\n      \"code\": \"aruna::511\",\n      \"name\": \"unreliable-signal-payload-too-large\",\n      \"severity\": \"error\",\n      \"message\": \"Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 821,\n        \"end\": 886\n      },\n      \"details\": \"Largest binary frame, 4-byte header included (export name: trail).\",\n      \"suggestion\": \"Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.\"\n    }\n  ]\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/shared/signals.generated.ts\",\n      \"path\": \"src/.aruna/shared/signals.generated.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/signals module\"\n    },\n    {\n      \"id\": \"src/shared/signals.ts\",\n      \"path\": \"src/shared/signals.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/shared/signals.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/signals.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"signals\": [\n    {\n      \"id\": \"chat.bubble\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"chat\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"text\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"fx.burst\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"burst\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 868,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"array\",\n        \"items\": {\n          \"kind\": \"number\",\n          \"numericFormat\": \"u8\"\n        },\n        \"maxItems\": 860\n      }\n    },\n    {\n      \"id\": \"fx.hit\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"hit\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 37,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"at\": {\n            \"kind\": \"vector3\"\n          },\n          \"by\": {\n            \"kind\": \"string\",\n            \"maxLength\": 16\n          },\n          \"power\": {\n            \"kind\": \"number\",\n            \"numericFormat\": \"u8\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"fx.near\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"near\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"maxEncodedBytes\": 624,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"array\",\n        \"items\": {\n          \"kind\": \"number\",\n          \"numericFormat\": \"u8\"\n        },\n        \"maxItems\": 616\n      }\n    },\n    {\n      \"id\": \"fx.trail\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"trail\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 2312,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"array\",\n        \"items\": {\n          \"kind\": \"string\",\n          \"maxLength\": 32\n        },\n        \"maxItems\": 64\n      }\n    },\n    {\n      \"id\": \"log.line\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"log\",\n      \"hasPayloadSchema\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"text\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::510\",\n      \"name\": \"unreliable-signal-payload-unbounded\",\n      \"severity\": \"warning\",\n      \"message\": \"Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 574,\n        \"end\": 623\n      },\n      \"details\": \"A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).\",\n      \"suggestion\": \"Bound the payload schema, or make the signal reliable.\"\n    },\n    {\n      \"code\": \"aruna::511\",\n      \"name\": \"unreliable-signal-payload-too-large\",\n      \"severity\": \"error\",\n      \"message\": \"Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 901,\n        \"end\": 966\n      },\n      \"details\": \"Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).\",\n      \"suggestion\": \"Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.\"\n    },\n    {\n      \"code\": \"aruna::511\",\n      \"name\": \"unreliable-signal-payload-too-large\",\n      \"severity\": \"error\",\n      \"message\": \"Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 1196,\n        \"end\": 1244\n      },\n      \"details\": \"Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).\",\n      \"suggestion\": \"Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.\"\n    },\n    {\n      \"code\": \"aruna::513\",\n      \"name\": \"unreliable-signal-payload-near-limit\",\n      \"severity\": \"warning\",\n      \"message\": \"Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 1522,\n        \"end\": 1570\n      },\n      \"details\": \"Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).\",\n      \"suggestion\": \"Set wire: \\\"binary\\\": its size is exact, and the publisher checks each frame against the limit before firing.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -844,23 +1207,49 @@
         "name": "unreliable-signal-payload-unbounded",
         "severity": "warning",
         "span": {
-          "end": 601,
-          "start": 552
+          "end": 623,
+          "start": 574
         },
         "suggestion": "Bound the payload schema, or make the signal reliable."
       },
       {
         "code": "aruna::511",
-        "details": "Largest binary frame, 4-byte header included (export name: trail).",
+        "details": "Largest binary frame (2312 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: trail).",
         "file": "src/shared/signals.ts",
-        "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+        "message": "Unreliable signal fx.trail can carry up to 2375 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
         "name": "unreliable-signal-payload-too-large",
         "severity": "error",
         "span": {
-          "end": 886,
-          "start": 821
+          "end": 966,
+          "start": 901
         },
         "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+      },
+      {
+        "code": "aruna::511",
+        "details": "Largest binary frame (868 bytes, 4-byte header included) plus the { signalId, payload } envelope (63 bytes) (export name: burst).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal fx.burst can carry up to 931 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+        "name": "unreliable-signal-payload-too-large",
+        "severity": "error",
+        "span": {
+          "end": 1244,
+          "start": 1196
+        },
+        "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+      },
+      {
+        "code": "aruna::513",
+        "details": "Largest payload by the binary layout (620 bytes) plus the { signalId, payload } envelope (62 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal fx.near is at least 682 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+        "name": "unreliable-signal-payload-near-limit",
+        "severity": "warning",
+        "span": {
+          "end": 1570,
+          "start": 1522
+        },
+        "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
       }
     ],
     "imports": [
@@ -913,6 +1302,26 @@
         "unreliable": true
       },
       {
+        "exportName": "burst",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.burst",
+        "maxEncodedBytes": 868,
+        "payloadSchema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 860
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true,
+        "wire": "binary"
+      },
+      {
         "exportName": "hit",
         "file": "src/shared/signals.ts",
         "hasPayloadSchema": true,
@@ -939,6 +1348,25 @@
         },
         "unreliable": true,
         "wire": "binary"
+      },
+      {
+        "exportName": "near",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.near",
+        "maxEncodedBytes": 624,
+        "payloadSchema": {
+          "items": {
+            "kind": "number",
+            "numericFormat": "u8"
+          },
+          "kind": "array",
+          "maxItems": 616
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true
       },
       {
         "exportName": "trail",
@@ -984,12 +1412,12 @@
   "ok": false,
   "projectRoot": "<root>",
   "summary": {
-    "errors": 1,
+    "errors": 2,
     "imports": 2,
     "infos": 0,
     "modules": 2,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -1002,7 +1430,7 @@ export const actions = {
 
 export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
 
-export const contractHash = "e620e9b67bd607cd";
+export const contractHash = "f81da0dbafcded9e";
 
 === file src/.aruna/shared/actions.client.generated.ts
 // Generated by Aruna. Do not edit by hand.
@@ -1010,26 +1438,32 @@ export const contractHash = "e620e9b67bd607cd";
 
 import { invokeAction } from "aruna/client";
 
-export const contractHash = "e620e9b67bd607cd";
+export const contractHash = "f81da0dbafcded9e";
 
 === file src/.aruna/shared/signals.generated.ts
 // Generated by Aruna. Do not edit by hand.
 // Source: Aruna signal manifest v1
 
 import { chat as src_shared_signals_chat } from "../../shared/signals";
+import { burst as src_shared_signals_burst } from "../../shared/signals";
 import { hit as src_shared_signals_hit } from "../../shared/signals";
+import { near as src_shared_signals_near } from "../../shared/signals";
 import { trail as src_shared_signals_trail } from "../../shared/signals";
 import { log as src_shared_signals_log } from "../../shared/signals";
 
 export const signals = {
   "chat.bubble": src_shared_signals_chat,
+  "fx.burst": src_shared_signals_burst,
   "fx.hit": src_shared_signals_hit,
+  "fx.near": src_shared_signals_near,
   "fx.trail": src_shared_signals_trail,
   "log.line": src_shared_signals_log,
 } as const;
 
 export type ChatPayload = { text: string; };
+export type BurstPayload = number[];
 export type HitPayload = { at: Vector3; by: string; power: number; };
+export type NearPayload = number[];
 export type TrailPayload = string[];
 export type LogPayload = { text: string; };
 

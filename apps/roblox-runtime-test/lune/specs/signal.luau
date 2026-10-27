@@ -381,5 +381,58 @@ return function(ctx)
 			t.eq(received.count, 0)
 			subscriber.dispose()
 		end)
+
+		-- An unbounded array, so only the runtime can catch an oversized frame.
+		-- Frame: 4-byte header + 4-byte count + 1 per u8. Envelope: "fx.burst"
+		-- (8) + SIGNAL_ENVELOPE_OVERHEAD_BYTES (55).
+		local function items(count)
+			local list = table.create(count, 1)
+			return list
+		end
+
+		t.it("refuses a binary unreliable frame that is over the limit with its envelope", function()
+			t.eq(signalRuntime.SIGNAL_ENVELOPE_OVERHEAD_BYTES, 55)
+			local signals = {
+				["fx.burst"] = defineSignal({
+					id = "fx.burst",
+					payload = schema.array(schema.u8()),
+					wire = "binary",
+					unreliable = true,
+				}),
+			}
+			local remote, sent = recordingRemote()
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals, remote)
+
+			-- 829 + 63 = 892 fits; 838 + 63 = 901 does not.
+			publisher.to({}, "fx.burst", items(821))
+			t.eq(#sent, 1)
+
+			local ok, err = pcall(publisher.to, {}, "fx.burst", items(830))
+			t.isFalse(ok)
+			-- Luau prefixes a thrown string with its position.
+			t.contains(
+				err,
+				"Unreliable signal fx.burst carries 901 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error."
+			)
+			t.isFalse((pcall(publisher.toAll, "fx.burst", items(830))))
+			t.isFalse((pcall(publisher.toMany, { {} }, "fx.burst", items(830))))
+			local settled, resolved, reason = t.await(publisher.toBatched({}, "fx.burst", { items(1), items(830) }))
+			t.isTrue(settled)
+			t.isFalse(resolved)
+			t.contains(tostring(reason), "fx.burst carries 901 bytes")
+			t.eq(#sent, 2, "the batch's first payload went out")
+		end)
+
+		t.it("leaves reliable and table-encoded signals alone", function()
+			local signals = {
+				["fx.burst"] = defineSignal({ id = "fx.burst", payload = schema.array(schema.u8()), wire = "binary" }),
+				["fx.table"] = defineSignal({ id = "fx.table", payload = schema.array(schema.u8()), unreliable = true }),
+			}
+			local remote, sent = recordingRemote()
+			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals, remote)
+			publisher.to({}, "fx.burst", items(2000))
+			publisher.to({}, "fx.table", items(2000))
+			t.eq(#sent, 2)
+		end)
 	end)
 end

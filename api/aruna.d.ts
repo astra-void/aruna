@@ -93,7 +93,7 @@ export type Diagnostic = {
     docsUrl?: string | undefined;
 };
 
-export type DiagnosticCode = "aruna::100" | "aruna::102" | "aruna::103" | "aruna::110" | "aruna::111" | "aruna::112" | "aruna::106" | "aruna::105" | "aruna::109" | "aruna::200" | "aruna::203" | "aruna::507" | "aruna::510" | "aruna::511" | "aruna::512" | "aruna::550" | "aruna::551" | "aruna::552" | "aruna::553" | "aruna::554" | "aruna::559" | "aruna::560" | "aruna::563" | "aruna::564" | "aruna::565" | "aruna::566" | "aruna::568" | "aruna::569" | "aruna::578" | "aruna::579" | "aruna::555" | "aruna::556" | "aruna::557" | "aruna::558" | "aruna::300" | "aruna::301" | "aruna::302" | "aruna::303" | "aruna::304" | "aruna::305" | "aruna::700" | "aruna::701" | "aruna::900";
+export type DiagnosticCode = "aruna::100" | "aruna::102" | "aruna::103" | "aruna::110" | "aruna::111" | "aruna::112" | "aruna::106" | "aruna::105" | "aruna::109" | "aruna::200" | "aruna::203" | "aruna::507" | "aruna::510" | "aruna::511" | "aruna::512" | "aruna::513" | "aruna::550" | "aruna::551" | "aruna::552" | "aruna::553" | "aruna::554" | "aruna::559" | "aruna::560" | "aruna::563" | "aruna::564" | "aruna::565" | "aruna::566" | "aruna::568" | "aruna::569" | "aruna::578" | "aruna::579" | "aruna::555" | "aruna::556" | "aruna::557" | "aruna::558" | "aruna::300" | "aruna::301" | "aruna::302" | "aruna::303" | "aruna::304" | "aruna::305" | "aruna::700" | "aruna::701" | "aruna::900";
 
 export type DiagnosticSeverity = "error" | "warning" | "info";
 
