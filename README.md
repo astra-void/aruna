@@ -437,7 +437,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - action input/output rejects function, class-instance, cyclic, non-finite (NaN, ±inf, also inside Roblox value types), and other non-plain values, in both runtimes; an `Instance` (a `Player` included) is accepted only where the schema declares `schema.instance()`, so an action without an input schema rejects one
 - client input is checked for wire safety before anything else reads it, and the walk stops at 2048 values as well as at depth 32
 - basic fixed-window action rate limiting now runs per action and player/key before `run()`
-- invalid input and serialization failures do not consume per-action quota; every envelope is charged to a per-player request budget (60 burst, 30 per second) before it is read, and a player's dispatches in flight are capped (32), so malformed payloads are not free
+- invalid input and serialization failures do not consume per-action quota; every envelope is charged to a per-player request budget (60 burst, 30 per second) before it is read, and a player's wire dispatches in flight are capped (32; in-process `app.dispatch` is exempt), so malformed payloads are not free
 - the default client retry retries a timeout only for an action declared `idempotent: true`, and every attempt of a call carries one idempotency key, so the server runs it once
 - manifest action records now include serialization policy metadata and optional `rateLimit` metadata
 - the contract snapshot foundation is implemented through `aruna inspect contract`; `aruna contract diff` is the compatibility gate for contract snapshots, and the committed snapshot gates stores in `check` and `build`

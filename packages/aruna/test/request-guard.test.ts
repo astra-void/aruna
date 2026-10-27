@@ -203,6 +203,50 @@ describe("request budget", () => {
   });
 });
 
+describe("in-process dispatch", () => {
+  it("is not held to the in-flight cap, while the transport still is", async () => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const harness = setup({ run: () => gate.then(() => "late") });
+    const ada = { UserId: 1 };
+
+    // 100 at once from trusted server code: none refused.
+    const local = Array.from({ length: 100 }, () =>
+      harness.app.dispatch("shop.buy", { player: ada }, undefined),
+    );
+    // The wire's 33rd concurrent call is refused (default maxInFlight 32). The
+    // in-process calls above took no slots from it.
+    const wire = Array.from({ length: 33 }, () => harness.send(ada));
+    await Promise.resolve();
+    expect(harness.responses).toEqual([
+      expect.objectContaining({
+        requestId: "r33",
+        ok: false,
+        error: expect.objectContaining({ name: "ActionRateLimitError" }),
+      }),
+    ]);
+    expect(harness.abuse).toEqual(["too-many-in-flight"]);
+
+    release?.();
+    await expect(Promise.all(local)).resolves.toEqual(Array.from({ length: 100 }, () => "late"));
+    await Promise.all(wire);
+    expect(harness.runs()).toBe(132);
+    harness.app.dispose();
+  });
+
+  it("still de-duplicates by idempotency key", async () => {
+    const harness = setup({});
+    const ada = { UserId: 1 };
+
+    await harness.app.dispatch("shop.buy", { player: ada }, undefined, { idempotencyKey: "k" });
+    await harness.app.dispatch("shop.buy", { player: ada }, undefined, { idempotencyKey: "k" });
+    expect(harness.runs()).toBe(1);
+    harness.app.dispose();
+  });
+});
+
 describe("after leave", () => {
   it("drops an envelope that arrives after the player left, and creates no state for it", async () => {
     const harness = setup({ requestBudget: { burst: 1, perSecond: 1 } });

@@ -201,9 +201,14 @@ createServerApp({
 });
 ```
 
-A player's budget and in-flight count are dropped when they leave. The budget is charged
-by the transport, so `app.dispatch` in-process (and the test harness's `invoke`) is not;
-the in-flight cap applies to every dispatch.
+A player's budget and in-flight count are dropped when they leave, and for 30 seconds after
+(or until they join again) an envelope that still arrives from them is dropped rather than
+starting that state over.
+
+Both limits are for a client's envelopes, so only the transport applies them. `app.dispatch`
+in-process (and the test harness's `invoke` and `client`) is trusted server code: it is
+never charged to the budget nor refused for having too many calls running. Validation, the
+per-action rate limit, middleware, and idempotency apply to it as on the wire.
 
 ## Errors the client sees
 

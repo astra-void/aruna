@@ -43,7 +43,9 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// Mirrors the Node reference runtime's `app.dispatch(actionId, ctx, input)`;
 	// this is the supported way to exercise actions from tests (e.g. under Lune).
 	// `options.idempotencyKey` de-duplicates the call the way a retried wire call
-	// is: the same key for the same player and action runs it once.
+	// is: the same key for the same player and action runs it once. Trusted
+	// server code, so not held to the in-flight cap (`requestBudget.maxInFlight`)
+	// a client's envelopes are.
 	readonly dispatch: (
 		actionId: string,
 		ctx: { readonly player: TPlayer },
@@ -335,7 +337,7 @@ export function createServerApp<
 		actions: options.actions,
 		dispatch: (actionId, ctx, input, dispatchOptions) =>
 			registry
-				.dispatch(
+				.dispatchInProcess(
 					ctx.player,
 					actionId,
 					input,

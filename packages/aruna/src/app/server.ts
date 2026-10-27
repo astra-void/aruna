@@ -37,7 +37,8 @@ export type ServerSignalPublisherFactory<
 // Context handed to a transport when `createServerApp` owns the binding. The
 // transport receives the registry plus the app's fully-resolved dispatch
 // options (rate limiter, key resolver, and — crucially — `defaultRateLimit`) so
-// every wire dispatch flows through the same throttling path as `app.dispatch`.
+// every wire dispatch flows through the same throttling path as `app.dispatch`,
+// plus the request guard, which only the wire is held to.
 export type ServerTransportContext<
   TPlayer = unknown,
   TActions extends ActionRegistry<TPlayer> = ActionRegistry<TPlayer>,
@@ -65,7 +66,9 @@ export type ServerApp<
 > = {
   readonly actions: TActions;
   // `options.idempotencyKey` de-duplicates the call the way a retried wire call
-  // is: the same key for the same player and action runs it once.
+  // is: the same key for the same player and action runs it once. Trusted
+  // server code, so not held to the in-flight cap (`requestBudget.maxInFlight`)
+  // a client's envelopes are; validation and rate limits apply as on the wire.
   readonly dispatch: (
     actionId: string,
     ctx: ActionRunContext<TPlayer>,
@@ -226,7 +229,7 @@ export function createServerApp<
   }
 
   // Resolved once and shared by `dispatch` and the owned `transport`, so both
-  // throttle identically and both expose the same `ctx.publisher`. The publisher
+  // rate-limit identically and both expose the same `ctx.publisher`. The publisher
   // is carried registry-erased here (the precise typing lives on the action ctx);
   // dispatch only forwards the object to `ctx.publisher`, never invokes it.
   const dispatchOptions = {
@@ -258,13 +261,20 @@ export function createServerApp<
       : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
     idempotency,
+  } satisfies DispatchActionOptions<TPlayer>;
+  // The transport's dispatch adds the request guard: its in-flight cap is for a
+  // client's envelopes. `app.dispatch` is trusted server code (other systems,
+  // specs) and leaves it out, so it is never refused for having too many calls
+  // running; idempotency and everything else are shared.
+  const transportDispatchOptions = {
+    ...dispatchOptions,
     requestGuard,
   } satisfies DispatchActionOptions<TPlayer>;
 
   let transportBinding: ServerBinding | undefined;
   if (options.transport !== undefined) {
     transportBinding = normalizeServerBinding(
-      options.transport({ registry: options.actions, dispatch: dispatchOptions }),
+      options.transport({ registry: options.actions, dispatch: transportDispatchOptions }),
     );
   }
 

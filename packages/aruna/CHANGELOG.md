@@ -380,6 +380,17 @@ the game build like any other module.
   weak key is not collected while its value (an in-flight call's closure) still
   references the player.
 
+- **`app.dispatch` is no longer refused by the in-flight cap.** The cap
+  (`requestBudget.maxInFlight`, 32) is for a client's envelopes, but
+  `app.dispatch` went through the same path, so trusted server code and specs
+  running more than 32 calls for one player at once got `ActionRateLimitError`.
+  Only the transport applies it now: in Node the transport gets the dispatch
+  options with the request guard and `app.dispatch` gets them without; the
+  native `ActionRegistry` gains `dispatchInProcess`, which `app.dispatch` uses,
+  while `dispatch` stays the transport's capped entry. Idempotency, validation,
+  rate limits, and middleware are unchanged for both. The test harness's
+  `invoke` and `client` go through `app.dispatch`, so they are exempt too.
+
 - **The Node RemoteEvent transport dropped middleware, `onError`, `ctx.session`,
   and `ctx.store`.** `bindRemoteEventActions` copied a hand-kept list of five
   dispatch options and silently left out the rest. An action dispatched over
