@@ -14,6 +14,9 @@ import {
 export type NativeCompiler = {
   checkProject: (input: unknown) => unknown;
   inspectProject: (input: unknown) => unknown;
+  // The compiler's registered primitives (crates/aruna_compiler/src/primitives).
+  // Optional so a binary built before it existed still loads.
+  primitiveDescriptors?: () => unknown;
 };
 
 const NATIVE_MODULE_SHAPE_ERROR =

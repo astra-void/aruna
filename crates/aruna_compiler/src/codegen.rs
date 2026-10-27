@@ -1,7 +1,5 @@
-use crate::actions::{
-    ArunaActionRecord, ArunaRuntimeRecord, ArunaSchemaLiteralMetadata, ArunaSchemaMetadata,
-    ArunaSignalRecord,
-};
+use crate::primitives::{ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord};
+use crate::schema_metadata::{ArunaSchemaLiteralMetadata, ArunaSchemaMetadata};
 use crate::config::ActionRateLimitConfig;
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic};
 use crate::files::normalize_path;
@@ -1168,7 +1166,7 @@ mod tests {
 
         // A rate-limit change is NOT wire-relevant, so the hash is unchanged.
         let mut with_rate_limit = base.clone();
-        with_rate_limit[0].rate_limit = Some(crate::actions::ArunaActionRateLimitMetadata {
+        with_rate_limit[0].rate_limit = Some(crate::primitives::ArunaActionRateLimitMetadata {
             key: "player".to_string(),
             window_ms: 1000,
             max: 5,

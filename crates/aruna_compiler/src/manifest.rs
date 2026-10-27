@@ -1,5 +1,5 @@
 use crate::diagnostics::{stable_sort_diagnostics, ArunaDiagnostic};
-use crate::actions::{ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord};
+use crate::primitives::{ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord};
 use crate::files::normalize_path;
 use crate::graph::ArunaImportEdge;
 use crate::module_kind::{ModuleKind, ModuleReason};

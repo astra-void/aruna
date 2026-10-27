@@ -1,5 +1,4 @@
 pub mod codegen;
-pub mod actions;
 pub mod compiler;
 pub mod config;
 pub mod diagnostics;
@@ -9,9 +8,14 @@ pub mod graph;
 pub mod manifest;
 pub mod module_kind;
 pub mod parser;
+pub mod payload_size;
+pub mod primitives;
 pub mod raw_remote;
 pub mod resolver;
 pub mod rules;
+pub mod schema_metadata;
+pub mod spans;
+pub mod static_literals;
 
 pub use compiler::{
     check_project, inspect_project, CompilerInput, CompilerOutput, CompilerSummary,
@@ -20,13 +24,14 @@ pub use codegen::{
     generate_action_files, generate_signal_files, GeneratedActionOutput, GeneratedFile,
     GeneratedSignalOutput,
 };
-pub use actions::{
+pub use primitives::{
     collect_action_definitions, collect_runtime_definitions, collect_signal_definitions,
     collect_store_definitions, resolve_runtime_order, ActionDiscoveryResult, ArunaActionRateLimitMetadata, ArunaActionRecord,
-    ArunaSchemaLiteralMetadata, ArunaSchemaMetadata, ArunaSignalRecord, ArunaStoreKind,
+    ArunaSignalRecord, ArunaStoreKind,
     ArunaRuntimeRecord, ArunaStoreRecord, RuntimeDiscoveryResult, SignalDiscoveryResult,
     StoreDiscoveryResult,
 };
+pub use schema_metadata::{ArunaSchemaLiteralMetadata, ArunaSchemaMetadata};
 pub use config::{
     ActionRateLimitConfig, ArunaConfig, CompilerConfig, ContractConfig, ConventionConfig,
     DiagnosticsConfig, DomainsConfig, EntriesMode, StrictConfig, StrictSeverity,

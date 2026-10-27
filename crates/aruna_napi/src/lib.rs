@@ -23,3 +23,22 @@ pub fn inspect_project(input: Value) -> Result<Value> {
     let input = parse_input(input)?;
     serialize_output(run_inspect_project(input))
 }
+
+// The compiler's registered primitives as a table, for tooling that must agree
+// with the registry (the CLI's own primitive list is checked against it).
+#[napi]
+pub fn primitive_descriptors() -> Value {
+    Value::Array(
+        aruna_compiler::primitives::DESCRIPTORS
+            .iter()
+            .map(|descriptor| {
+                serde_json::json!({
+                    "name": descriptor.name,
+                    "callees": descriptor.callees,
+                    "definingModuleKind": descriptor.defining_module.map(|module| module.kind),
+                    "inContract": descriptor.in_contract,
+                })
+            })
+            .collect(),
+    )
+}

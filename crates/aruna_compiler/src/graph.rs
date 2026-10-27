@@ -1,8 +1,8 @@
+use oxc_allocator::Allocator;
 use crate::config::{ArunaConfig, EntriesMode, StrictSeverity};
-use crate::actions::{
-    collect_action_definitions, collect_runtime_definitions, collect_signal_definitions,
-    collect_store_definitions, resolve_runtime_order,
-    ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord,
+use crate::primitives::{
+    parse_source, ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord,
+    FinalizeStage, ParsedFile, PrimitiveFiles, PrimitiveRecords,
 };
 use crate::codegen::{
     EntryHooks, HookModuleRecord, RECOGNIZED_CLIENT_HOOKS, RECOGNIZED_SERVER_HOOKS,
@@ -254,12 +254,8 @@ pub fn build_project_graph(
         module_records.push(record);
     }
 
-    let mut action_records = Vec::new();
-    let mut action_files = BTreeSet::new();
-    let mut signal_records = Vec::new();
-    let mut store_records = Vec::new();
-    let mut store_files = BTreeSet::new();
-    let mut runtime_records = Vec::new();
+    let mut primitives = PrimitiveRecords::default();
+    let mut primitive_files = PrimitiveFiles::default();
     let mut entry_hooks = EntryHooks::default();
 
     // Specs are excluded from every discovery pass below. A `defineAction` inside
@@ -321,14 +317,20 @@ pub fn build_project_graph(
             }
         }
 
-        match collect_action_definitions(project_root, absolute_path, &source_text) {
-            Ok(result) => {
-                action_records.extend(result.actions);
-                action_files.extend(result.action_files);
-                diagnostics.extend(result.diagnostics);
+        // Every registered primitive's discovery, over one parse of the file.
+        let relative_path = project_relative(project_root, absolute_path);
+        let allocator = Allocator::default();
+        match parse_source(&allocator, absolute_path, &source_text) {
+            Ok(program) => {
+                let parsed = ParsedFile::new(absolute_path, &program);
+                primitives.discover_file(
+                    &mut primitive_files,
+                    &relative_path,
+                    &parsed,
+                    &mut diagnostics,
+                );
             }
             Err(error) => {
-                let relative_path = project_relative(project_root, absolute_path);
                 push_parse_failed_diagnostic(
                     &mut diagnostics,
                     &mut parse_failed_files,
@@ -336,27 +338,6 @@ pub fn build_project_graph(
                     error,
                 );
             }
-        }
-
-        // Signal discovery shares the per-file parse pattern. A parse failure was
-        // already reported by the action pass above, so only the Ok case adds work.
-        if let Ok(result) = collect_signal_definitions(project_root, absolute_path, &source_text) {
-            signal_records.extend(result.signals);
-            diagnostics.extend(result.diagnostics);
-        }
-
-        // Store discovery, same pattern.
-        if let Ok(result) = collect_store_definitions(project_root, absolute_path, &source_text) {
-            store_records.extend(result.stores);
-            store_files.extend(result.store_files);
-            diagnostics.extend(result.diagnostics);
-        }
-
-        // Domain runtime discovery, same pattern. The boot order these declare
-        // is resolved once, after every file has been seen.
-        if let Ok(result) = collect_runtime_definitions(project_root, absolute_path, &source_text) {
-            runtime_records.extend(result.runtimes);
-            diagnostics.extend(result.diagnostics);
         }
 
         // Raw remote use (strict.rawRemoteUsage). Specs are skipped above, and
@@ -376,115 +357,24 @@ pub fn build_project_graph(
         }
     }
 
-    // A duplicated runtime id makes `after` ambiguous and the boot order
-    // unresolvable, so it is rejected before the order is computed.
-    let mut seen_runtime_ids = BTreeMap::new();
-    let mut duplicate_runtime_ids = BTreeSet::new();
-    for runtime in &runtime_records {
-        if let Some(previous_file) = seen_runtime_ids.insert(runtime.id.clone(), runtime.file.clone())
-        {
-            duplicate_runtime_ids.insert(runtime.id.clone());
-            diagnostics.push(create_diagnostic(
-                "aruna::581",
-                format!("Runtime id {} is defined more than once.", runtime.id),
-                Some(runtime.file.clone()),
-                None,
-                Some(format!(
-                    "First defined in {}, then again in {}. An after edge naming it could mean either.",
-                    previous_file, runtime.file
-                )),
-                Some("Use one defineRuntime per id, such as one per domain.".to_string()),
-            ));
-        }
-    }
-    runtime_records.retain(|runtime| !duplicate_runtime_ids.contains(&runtime.id));
+    // Whole-project checks: duplicate ids, the runtime boot order.
+    primitives.finalize(FinalizeStage::AfterDiscovery, &mut diagnostics);
 
-    // Resolved here rather than in codegen so `aruna check` reports a bad boot
-    // order without writing anything, and so the manifest records the order the
-    // generated entry will actually use.
-    let (runtime_records, runtime_order_diagnostics) = resolve_runtime_order(&runtime_records);
-    diagnostics.extend(runtime_order_diagnostics);
-
-    store_records.sort_by(|left, right| {
-        left.id
-            .cmp(&right.id)
-            .then_with(|| left.file.cmp(&right.file))
-            .then_with(|| left.export_name.cmp(&right.export_name))
-    });
-
-    // A duplicated store id is two definitions pointed at the same DataStore
-    // name, which is how two unrelated features end up overwriting each other's
-    // records.
-    let mut seen_store_ids = BTreeMap::new();
-    for store in &store_records {
-        if let Some(previous_file) = seen_store_ids.insert(store.id.clone(), store.file.clone()) {
-            diagnostics.push(create_diagnostic(
-                "aruna::573",
-                format!("Store id {} is defined more than once.", store.id),
-                Some(store.file.clone()),
-                None,
-                Some(format!(
-                    "First defined in {}, then again in {}. Both would read and write the same DataStore.",
-                    previous_file, store.file
-                )),
-                Some("Use globally unique store ids such as domain.storeName.".to_string()),
-            ));
-        }
-    }
-
-    action_records.sort_by(|left, right| {
-        left.id
-            .cmp(&right.id)
-            .then_with(|| left.file.cmp(&right.file))
-            .then_with(|| left.export_name.cmp(&right.export_name))
-    });
-
-    let mut seen_action_ids = BTreeMap::new();
-    for action in &action_records {
-        if let Some(previous_file) = seen_action_ids.insert(action.id.clone(), action.file.clone()) {
-            diagnostics.push(create_diagnostic(
-                "aruna::555",
-                format!("Server action id {} is defined more than once.", action.id),
-                Some(action.file.clone()),
-                None,
-                Some(format!(
-                    "First defined in {}, then again in {}.",
-                    previous_file, action.file
-                )),
-                Some("Use globally unique action ids such as domain.actionName.".to_string()),
-            ));
-        }
-    }
-
-    for module in &mut module_records {
-        if action_files.contains(&module.path) {
-            module.kind = ModuleKind::ServerAction;
+    // A file that defines a primitive takes that primitive's module kind. When
+    // it defines several, the earliest-registered one wins: an action file that
+    // also declares a store stays a ServerAction, which is the stricter
+    // classification for a client import.
+    for module in module_records.iter_mut().chain(module_map.values_mut()) {
+        if let Some(defining) = primitive_files.defining_module(&module.path) {
+            module.kind = defining.kind;
             module.reason = ModuleReason::Directive;
-            module.reason_detail = Some("defineAction(...) export detected".to_string());
-        } else if store_files.contains(&module.path) {
-            // Only when the file is not already an action module: an action file
-            // that also declares a store stays a ServerAction, which is the
-            // stricter classification for a client import.
-            module.kind = ModuleKind::ServerStore;
-            module.reason = ModuleReason::Directive;
-            module.reason_detail = Some("defineStore(...) export detected".to_string());
-        }
-    }
-    for module in module_map.values_mut() {
-        if action_files.contains(&module.path) {
-            module.kind = ModuleKind::ServerAction;
-            module.reason = ModuleReason::Directive;
-            module.reason_detail = Some("defineAction(...) export detected".to_string());
-        } else if store_files.contains(&module.path) {
-            module.kind = ModuleKind::ServerStore;
-            module.reason = ModuleReason::Directive;
-            module.reason_detail = Some("defineStore(...) export detected".to_string());
+            module.reason_detail = Some(defining.reason_detail.to_string());
         }
     }
 
     // Generated mode always emits (and imports) the action registry, even when
     // the project declares no actions yet — the generated server entry wires it.
-    if !action_records.is_empty() || config.entries == EntriesMode::Generated {
+    if !primitives.action.is_empty() || config.entries == EntriesMode::Generated {
         for virtual_module in [
             VirtualGeneratedActionModule::Client,
             VirtualGeneratedActionModule::Server,
@@ -506,7 +396,7 @@ pub fn build_project_graph(
         }
     }
 
-    if !signal_records.is_empty() {
+    if !primitives.signal.is_empty() {
         let record = virtual_generated_signal_module_record(
             project_root,
             &config.generated_dir,
@@ -624,37 +514,15 @@ pub fn build_project_graph(
             })
     });
 
-    signal_records.sort_by(|left, right| {
-        left.id
-            .cmp(&right.id)
-            .then_with(|| left.file.cmp(&right.file))
-            .then_with(|| left.export_name.cmp(&right.export_name))
-    });
-
-    let mut seen_signal_ids = BTreeMap::new();
-    for signal in &signal_records {
-        if let Some(previous_file) = seen_signal_ids.insert(signal.id.clone(), signal.file.clone()) {
-            diagnostics.push(create_diagnostic(
-                "aruna::563",
-                format!("Signal id {} is defined more than once.", signal.id),
-                Some(signal.file.clone()),
-                None,
-                Some(format!(
-                    "First defined in {}, then again in {}.",
-                    previous_file, signal.file
-                )),
-                Some("Use globally unique signal ids such as domain.signalName.".to_string()),
-            ));
-        }
-    }
+    primitives.finalize(FinalizeStage::AfterImports, &mut diagnostics);
 
     Ok(BuildGraphResult {
         modules: module_records,
         imports,
-        actions: action_records,
-        signals: signal_records,
-        stores: store_records,
-        runtimes: runtime_records,
+        actions: primitives.action,
+        signals: primitives.signal,
+        stores: primitives.store,
+        runtimes: primitives.runtime,
         module_map,
         hooks: entry_hooks,
         diagnostics,
