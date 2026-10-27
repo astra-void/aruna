@@ -1,4 +1,10 @@
-import { applyDefaults, assertSchema, type Infer, type Schema } from "../schema/index.js";
+import {
+  applyDefaults,
+  assertSchema,
+  SchemaValidationError,
+  type Infer,
+  type Schema,
+} from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
 // Type-only, so the store runtime is not pulled into the dispatch module's
 // require graph.
@@ -188,6 +194,29 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   readonly nowMs?: () => number;
 };
 
+// A schema failure at the action boundary (input or output). Subclasses
+// SchemaValidationError so `instanceof SchemaValidationError` keeps matching; the
+// distinct name is what crosses the wire, and is the one the native runtime sends.
+export class ActionValidationError extends SchemaValidationError {
+  override readonly name: string = "ActionValidationError";
+}
+
+function assertActionSchema(
+  schema: Schema,
+  value: unknown,
+  actionId: string,
+  role: "input" | "output",
+): void {
+  try {
+    assertSchema(schema, value, { actionId, role });
+  } catch (error) {
+    if (error instanceof SchemaValidationError) {
+      throw new ActionValidationError(error.message, { actionId, role, issues: error.issues });
+    }
+    throw error;
+  }
+}
+
 const defaultActionRateLimiter = createActionRateLimiter();
 
 export async function dispatchAction<TPlayer = unknown>(
@@ -213,7 +242,7 @@ export async function dispatchAction<TPlayer = unknown>(
   assertSerializableActionValue(input, "input", actionId);
 
   if (action.input !== undefined) {
-    assertSchema(action.input, input, { actionId, role: "input" });
+    assertActionSchema(action.input, input, actionId, "input");
   }
 
   // A per-action `rateLimit` always wins; otherwise fall back to the app-wide
@@ -281,7 +310,7 @@ export async function dispatchAction<TPlayer = unknown>(
     const output = await Promise.resolve(action.run(runCtx, input));
 
     if (action.output !== undefined) {
-      assertSchema(action.output, output, { actionId, role: "output" });
+      assertActionSchema(action.output, output, actionId, "output");
     }
 
     assertSerializableActionValue(output, "output", actionId);

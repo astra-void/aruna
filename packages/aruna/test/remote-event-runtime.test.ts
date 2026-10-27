@@ -984,7 +984,7 @@ describe("bindRemoteEventActions", () => {
       ok: false,
       error: {
         message: "Aruna action shop.purchaseItem input validation failed: itemId: expected string",
-        name: "SchemaValidationError",
+        name: "ActionValidationError",
       },
     });
   });
@@ -1055,7 +1055,7 @@ describe("bindRemoteEventActions", () => {
       ok: false,
       error: {
         message: "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
-        name: "SchemaValidationError",
+        name: "ActionValidationError",
       },
     });
   });

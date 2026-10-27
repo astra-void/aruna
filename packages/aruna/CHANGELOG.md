@@ -113,7 +113,27 @@ the game build like any other module.
   generated registry, or the contract — and a duplicate id in a spec no longer
   breaks the build it was only meant to test.
 
+- **Breaking: an action's schema failure is `ActionValidationError` in both
+  runtimes.** The Node runtime threw `SchemaValidationError` for a failing action
+  input or output, while the native runtime and the docs said
+  `ActionValidationError`. Dispatch now throws `ActionValidationError`, exported
+  from `aruna/server`, and that is the `name` a client sees. It subclasses
+  `SchemaValidationError`, so `instanceof SchemaValidationError` still matches. A
+  client that compared `err.name` with `"SchemaValidationError"` has to change.
+
+- **Native validation messages match the Node runtime's wording.** A failing input
+  reads `Aruna action shop.buy input validation failed: item: expected string`,
+  not `invalid action input: item: expected string`. A spec that matched the old
+  text has to change.
+
 ### Fixed
+
+- **The native runtime now validates action output.** It checked only that the
+  output could cross the wire, though the README and the testing docs both said
+  output was validated against `output`. It now checks the output schema and
+  then wire safety in the innermost step, where the Node runtime checks them.
+  Middleware therefore sees a failing output as a rejection, and the failure
+  reaches `onError`.
 
 - **Extensionless imports of a dotted file name resolved to the wrong module.**
   `import "./pricing.test"` resolved to `pricing.ts`, because the resolver tried

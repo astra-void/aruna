@@ -310,7 +310,8 @@ export type SchemaValidationResult =
   | { readonly ok: false; readonly issues: readonly SchemaValidationIssue[] };
 
 export class SchemaValidationError extends Error {
-  override readonly name = "SchemaValidationError";
+  // Widened to string so dispatch's ActionValidationError subclass can rename it.
+  override readonly name: string = "SchemaValidationError";
   readonly actionId?: string;
   readonly role?: "input" | "output";
   readonly issues: readonly SchemaValidationIssue[];

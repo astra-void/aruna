@@ -61,7 +61,7 @@ return function(ctx)
 				t.await(harness.invoke(testing.createTestPlayer(), "shop.buy", { item = 42 }))
 			t.isTrue(settled, "invoke settled")
 			t.isFalse(ok, "invalid input should reject")
-			t.contains(reason.message, "invalid action input")
+			t.contains(reason.message, "input validation failed")
 
 			harness.dispose()
 		end)

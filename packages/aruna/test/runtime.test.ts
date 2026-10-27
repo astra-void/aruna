@@ -3,7 +3,8 @@ import { clearActionInvoker, invokeAction, setActionInvoker } from "../src/clien
 import { createInMemoryActionInvoker } from "../src/runtime/memory.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
-import { dispatchAction, type ActionRegistry } from "../src/server.js";
+import { SchemaValidationError } from "../src/schema.js";
+import { ActionValidationError, dispatchAction, type ActionRegistry } from "../src/server.js";
 
 beforeEach(() => {
   clearActionInvoker();
@@ -203,6 +204,62 @@ describe("server runtime", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("passes output that matches the output schema", async () => {
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        output: schema.object({ ok: schema.boolean() }),
+        run() {
+          return { ok: true };
+        },
+      }),
+    };
+
+    await expect(
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, {}),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it("routes an output schema failure through middleware and onError", async () => {
+    const onError = vi.fn();
+    const seenByMiddleware: unknown[] = [];
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        output: schema.object({ ok: schema.boolean() }),
+        run() {
+          return { ok: "yes" };
+        },
+      }),
+    };
+
+    const failure = dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, {}, {
+      middleware: [
+        async (_info, next) => {
+          try {
+            return await next();
+          } catch (error) {
+            seenByMiddleware.push(error);
+            throw error;
+          }
+        },
+      ],
+      onError,
+    });
+
+    await expect(failure).rejects.toMatchObject({
+      name: "ActionValidationError",
+      actionId: "shop.purchaseItem",
+      role: "output",
+    });
+    const error = onError.mock.calls[0]?.[0];
+    expect(error).toBeInstanceOf(ActionValidationError);
+    // Existing `instanceof SchemaValidationError` checks keep matching.
+    expect(error).toBeInstanceOf(SchemaValidationError);
+    expect(onError).toHaveBeenCalledWith(error, { actionId: "shop.purchaseItem", player: "tester" });
+    expect(seenByMiddleware).toEqual([error]);
+  });
+
   it("includes the action id and role on validation errors", async () => {
     const registry: ActionRegistry = {
       "shop.purchaseItem": defineAction({
@@ -219,7 +276,7 @@ describe("server runtime", () => {
     await expect(
       dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: 123 }),
     ).rejects.toMatchObject({
-      name: "SchemaValidationError",
+      name: "ActionValidationError",
       actionId: "shop.purchaseItem",
       role: "input",
     });

@@ -153,7 +153,8 @@ return function(ctx)
 			})
 			local _, _, value = t.await(r.dispatch(player, "typed", { n = "not a number" }))
 			t.isFalse(value.ok)
-			t.contains(value.error, "invalid action input")
+			t.contains(value.error, "Aruna action typed input validation failed")
+			t.eq(value.errorName, "ActionValidationError")
 			-- The failure carries the first failing path + reason.
 			t.contains(value.error, "n: expected number")
 		end)
@@ -224,6 +225,56 @@ return function(ctx)
 			local _, _, value = t.await(r.dispatch(player, "leak", nil))
 			t.isFalse(value.ok)
 			t.contains(value.error, "non-serializable action output")
+			t.eq(value.errorName, "ActionSerializationError")
+		end)
+
+		t.it("passes output that matches the output schema", function()
+			local r = createActionRegistry({
+				typed = {
+					id = "typed",
+					output = schema.object({ ok = schema.boolean() }),
+					run = function()
+						return { ok = true }
+					end,
+				},
+			})
+			local _, _, value = t.await(r.dispatch(player, "typed", nil))
+			t.isTrue(value.ok)
+			t.eq(value.output.ok, true)
+		end)
+
+		t.it("routes an output schema failure through middleware and onError", function()
+			local seenByMiddleware, seenByOnError, sawActionId
+			local r = createActionRegistry({
+				typed = {
+					id = "typed",
+					output = schema.object({ ok = schema.boolean() }),
+					run = function()
+						return { ok = "yes" }
+					end,
+				},
+			}, {
+				middleware = {
+					function(_info, nextInvoke)
+						return nextInvoke():catch(function(reason)
+							seenByMiddleware = reason
+							error(reason)
+						end)
+					end,
+				},
+				onError = function(err, info)
+					seenByOnError = err
+					sawActionId = info.actionId
+				end,
+			})
+			local _, _, value = t.await(r.dispatch(player, "typed", nil))
+			t.isFalse(value.ok)
+			t.eq(value.errorName, "ActionValidationError")
+			t.contains(value.error, "Aruna action typed output validation failed")
+			t.contains(value.error, "ok: expected boolean")
+			t.eq(seenByMiddleware.name, "ActionValidationError", "middleware saw the failure")
+			t.eq(seenByOnError.name, "ActionValidationError", "onError saw the failure")
+			t.eq(sawActionId, "typed")
 		end)
 
 		t.it("accepts Roblox value-type output (Vector3) as wire-safe", function()

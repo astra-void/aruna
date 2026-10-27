@@ -37,8 +37,8 @@ type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema 
 export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinition<TPlayer> };
 
 // Around-run middleware. Runs after input validation and rate limiting (so a
-// throttled or malformed request never reaches it) and wraps the action's `run`.
-// Short-circuit by rejecting (or by not calling `next`); observe/transform by
+// throttled or malformed request never reaches it) and wraps the action's `run`
+// plus output validation. Short-circuit by rejecting (or by not calling `next`); observe/transform by
 // awaiting `next()`. Mirrors the Node reference runtime's ActionMiddleware.
 export type ActionMiddleware<TPlayer = unknown> = (
 	info: {
@@ -50,8 +50,8 @@ export type ActionMiddleware<TPlayer = unknown> = (
 ) => Promise<unknown>;
 
 // Observability hook for errors raised from the action execution chain
-// (middleware or `run`), called before dispatch converts the error into the
-// `{ ok: false }` wire result.
+// (middleware, `run`, output validation), called before dispatch converts the
+// error into the `{ ok: false }` wire result.
 export type ActionErrorHandler<TPlayer = unknown> = (
 	error: unknown,
 	info: {
@@ -85,6 +85,23 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// where os.clock() is the right answer; set by the test harness so a spec can
 	// step past a rate-limit window instead of waiting out a real one.
 	readonly nowMs?: () => number;
+}
+
+// A schema failure at the action boundary, in the Node runtime's message shape.
+// The boolean `validate` stays the cheap gate; this metadata walk runs only on
+// failure, to name the first failing path and reason.
+function validationFailure(
+	actionId: string,
+	role: "input" | "output",
+	schema: Schema,
+	value: unknown,
+): { readonly name: string; readonly message: string } {
+	const issue = firstSchemaIssue(schema, value);
+	const prefix = `Aruna action ${actionId} ${role} validation failed`;
+	return {
+		name: "ActionValidationError",
+		message: issue !== undefined ? `${prefix}: ${issue}` : prefix,
+	};
 }
 
 export function createActionRegistry<TPlayer>(
@@ -137,13 +154,8 @@ export function createActionRegistry<TPlayer>(
 				if (inputSchema !== undefined && !inputSchema.validate(input)) {
 					// The boolean validate stays the cheap gate; the metadata walk runs
 					// only on failure to attach the first failing path + reason.
-					const issue = firstSchemaIssue(inputSchema, input);
-					resolve({
-						ok: false,
-						error:
-							issue !== undefined ? `invalid action input: ${issue}` : "invalid action input",
-						errorName: "ActionValidationError",
-					});
+					const failure = validationFailure(actionId, "input", inputSchema, input);
+					resolve({ ok: false, error: failure.message, errorName: failure.name });
 					return;
 				}
 
@@ -195,12 +207,25 @@ export function createActionRegistry<TPlayer>(
 				// a result payload rather than rejecting the dispatch promise. A
 				// rejection would leave the transport's `.then` success handler
 				// unfired and the client waiting forever for a response.
+				//
+				// Output is checked here, in the innermost step, exactly where the
+				// Node runtime checks it: middleware sees a failing output as a
+				// rejection, and it reaches `onError` like any other run failure.
 				const runAction = (): Promise<unknown> => {
 					const [invoked, runResult] = pcall(() => definition.run(context, input as never));
 					if (!invoked) {
 						return Promise.reject(runResult);
 					}
-					return Promise.resolve(runResult);
+					return Promise.resolve(runResult).then((output) => {
+						const outputSchema = definition.output;
+						if (outputSchema !== undefined && !outputSchema.validate(output)) {
+							throw validationFailure(actionId, "output", outputSchema, output);
+						}
+						if (!isWireSafe(output)) {
+							throw { name: "ActionSerializationError", message: "non-serializable action output" };
+						}
+						return output;
+					});
 				};
 
 				// Compose middleware outermost-first around the run: middleware[0]
@@ -222,14 +247,6 @@ export function createActionRegistry<TPlayer>(
 
 				invoke().then(
 					(output) => {
-						if (!isWireSafe(output)) {
-							resolve({
-								ok: false,
-								error: "non-serializable action output",
-								errorName: "ActionSerializationError",
-							});
-							return;
-						}
 						resolve({ ok: true, output });
 					},
 					(reason) => {

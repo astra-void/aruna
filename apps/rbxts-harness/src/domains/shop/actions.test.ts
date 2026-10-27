@@ -49,7 +49,7 @@ describe("shop.purchaseItem", () => {
         quantity: 1,
         currency: "gems",
       }),
-    ).rejects.toThrow("invalid action input");
+    ).rejects.toThrow("input validation failed");
 
     harness.dispose();
   });
