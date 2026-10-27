@@ -54,6 +54,13 @@ impl ArunaDiagnostic {
     }
 }
 
+// Every diagnostic code Aruna has ever emitted, with its name. A code and its
+// name identify one condition forever (docs/stability.md): a retired code stays
+// in the list below and is never assigned again, a condition that changes
+// meaning gets a new code, and the ranges marked reserved in docs/init-spec.md
+// §12 are not allocated for anything else.
+//
+// Retired codes (never reuse): none yet.
 pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)> {
     match code {
         "aruna::100" => Some(("invalid-config", DiagnosticSeverity::Error)),
