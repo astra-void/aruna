@@ -6,6 +6,7 @@
     "build": "pnpm build:native && turbo run build",
     "check": "pnpm build:native && turbo run check",
     "test": "pnpm build:native && turbo run test",
+    "bench:compiler": "ARUNA_NATIVE_PROFILE=release pnpm build:native && tsx scripts/bench-compiler.ts",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint:fix",
     "typecheck": "pnpm build:native && turbo run typecheck",
