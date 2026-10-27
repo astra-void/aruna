@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Compared byte for byte against generated output, which is always LF: keep them
+# LF on every platform's checkout.
+/api/*.d.ts text eol=lf
+/packages/aruna/test/__golden__/** text eol=lf

@@ -132,6 +132,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Every change to an exported name or type must show up in review as a
+      # diff of api/*.d.ts (docs/stability.md). Fails when the committed report
+      # is out of date.
+      - name: Public API report
+        run: pnpm exec turbo run build --filter=@arunajs/aruna && pnpm api:check
+
   package-consumption:
     name: package consumption
     runs-on: ubuntu-latest
