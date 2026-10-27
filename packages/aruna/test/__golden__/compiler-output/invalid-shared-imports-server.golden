@@ -1,0 +1,497 @@
+=== inspect actions (exit 1)
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/server/secret.ts",
+      "kind": "server",
+      "path": "src/server/secret.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/shared/schema.ts",
+      "kind": "shared",
+      "path": "src/shared/schema.ts",
+      "reason": "path"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/shared/schema.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../server/secret",
+      "to": "src/server/secret.ts"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::303",
+        "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+        "file": "src/shared/schema.ts",
+        "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+        "name": "shared-imports-server",
+        "severity": "error",
+        "span": {
+          "end": 41,
+          "start": 23
+        },
+        "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/shared/schema.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../server/secret",
+        "to": "src/server/secret.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/server/secret.ts",
+        "kind": "server",
+        "path": "src/server/secret.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/shared/schema.ts",
+        "kind": "shared",
+        "path": "src/shared/schema.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+      "file": "src/shared/schema.ts",
+      "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 41,
+        "start": 23
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/server/secret.ts\",\n      \"path\": \"src/server/secret.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/shared/schema.ts\",\n      \"path\": \"src/shared/schema.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/shared/schema.ts\",\n      \"to\": \"src/server/secret.ts\",\n      \"specifier\": \"../server/secret\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::303\",\n      \"name\": \"shared-imports-server\",\n      \"severity\": \"error\",\n      \"message\": \"src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.\",\n      \"file\": \"src/shared/schema.ts\",\n      \"span\": {\n        \"start\": 23,\n        \"end\": 41\n      },\n      \"details\": \"importer: src/shared/schema.ts\\nimporter kind: shared\\nimported: src/server/secret.ts\\nimported kind: server\",\n      \"suggestion\": \"Keep shared modules free of server-only imports, or split server code into server/.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::303",
+        "details": "importer: src/shared/schema.ts\nimporter kind: shared\nimported: src/server/secret.ts\nimported kind: server",
+        "file": "src/shared/schema.ts",
+        "message": "src/shared/schema.ts is classified as shared. It imports src/server/secret.ts, which is classified as server.",
+        "name": "shared-imports-server",
+        "severity": "error",
+        "span": {
+          "end": 41,
+          "start": 23
+        },
+        "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/shared/schema.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../server/secret",
+        "to": "src/server/secret.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/server/secret.ts",
+        "kind": "server",
+        "path": "src/server/secret.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/shared/schema.ts",
+        "kind": "shared",
+        "path": "src/shared/schema.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+

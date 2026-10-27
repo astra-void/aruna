@@ -1,0 +1,693 @@
+=== inspect actions (exit 1)
+{
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/inventory/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "restockItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/inventory/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "restockItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/domains/inventory/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/inventory/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/domains/inventory/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "restockItem",
+        "file": "src/domains/inventory/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::555",
+        "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action id shop.purchaseItem is defined more than once.",
+        "name": "duplicate-action-id",
+        "severity": "error",
+        "suggestion": "Use globally unique action ids such as domain.actionName."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/domains/inventory/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/domains/inventory/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/inventory/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::555",
+      "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action id shop.purchaseItem is defined more than once.",
+      "name": "duplicate-action-id",
+      "severity": "error",
+      "suggestion": "Use globally unique action ids such as domain.actionName."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type RestockItemInput = unknown;\n\nexport type RestockItemOutput = void;\n\nexport const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {\n  return invokeAction(\"shop.purchaseItem\", input) as Promise<RestockItemOutput>;\n};\n\nexport type PurchaseItemInput = unknown;\n\nexport type PurchaseItemOutput = void;\n\nexport const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {\n  return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;\n};\n\nexport const contractHash = \"207ab4fceb6b718d\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { restockItem as src_domains_inventory_actions_restockItem } from \"../../domains/inventory/actions\";\nimport { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../../domains/shop/actions\";\n\nexport const actions = {\n  \"shop.purchaseItem\": src_domains_inventory_actions_restockItem,\n  \"shop.purchaseItem\": src_domains_shop_actions_purchaseItem,\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"207ab4fceb6b718d\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/domains/inventory/actions.ts\",\n      \"path\": \"src/domains/inventory/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/inventory/actions.ts\",\n      \"exportName\": \"restockItem\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::555\",\n      \"name\": \"duplicate-action-id\",\n      \"severity\": \"error\",\n      \"message\": \"Server action id shop.purchaseItem is defined more than once.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"details\": \"First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.\",\n      \"suggestion\": \"Use globally unique action ids such as domain.actionName.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "restockItem",
+        "file": "src/domains/inventory/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::555",
+        "details": "First defined in src/domains/inventory/actions.ts, then again in src/domains/shop/actions.ts.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action id shop.purchaseItem is defined more than once.",
+        "name": "duplicate-action-id",
+        "severity": "error",
+        "suggestion": "Use globally unique action ids such as domain.actionName."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/domains/inventory/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/domains/inventory/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/inventory/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 4,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { restockItem as src_domains_inventory_actions_restockItem } from "../../domains/inventory/actions";
+import { purchaseItem as src_domains_shop_actions_purchaseItem } from "../../domains/shop/actions";
+
+export const actions = {
+  "shop.purchaseItem": src_domains_inventory_actions_restockItem,
+  "shop.purchaseItem": src_domains_shop_actions_purchaseItem,
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "207ab4fceb6b718d";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export type RestockItemInput = unknown;
+
+export type RestockItemOutput = void;
+
+export const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {
+  return invokeAction("shop.purchaseItem", input) as Promise<RestockItemOutput>;
+};
+
+export type PurchaseItemInput = unknown;
+
+export type PurchaseItemOutput = void;
+
+export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
+  return invokeAction("shop.purchaseItem", input) as Promise<PurchaseItemOutput>;
+};
+
+export const contractHash = "207ab4fceb6b718d";
+

@@ -1,0 +1,1174 @@
+=== inspect actions (exit 1)
+{
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    },
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/app/client.ts",
+      "kind": "client",
+      "path": "src/app/client.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/app/server.ts",
+      "kind": "server",
+      "path": "src/app/server.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/client.ts",
+      "kind": "clientEntry",
+      "path": "src/client.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/app/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/server",
+      "to": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "from": "src/app/client.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "$aruna/not-real"
+    },
+    {
+      "from": "src/app/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/client",
+      "to": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "from": "src/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/client",
+      "to": "src/app/client.ts"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/server",
+      "to": "src/app/server.ts"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx",
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts",
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts",
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::556",
+        "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+        "file": "src/app/client.ts",
+        "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+        "name": "action-imported-from-invalid-environment",
+        "severity": "error",
+        "span": {
+          "end": 47,
+          "start": 24
+        },
+        "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+      },
+      {
+        "code": "aruna::105",
+        "details": "importer kind: client",
+        "file": "src/app/client.ts",
+        "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+        "name": "unresolved-import",
+        "severity": "warning",
+        "span": {
+          "end": 87,
+          "start": 70
+        },
+        "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      },
+      {
+        "code": "aruna::301",
+        "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+        "file": "src/app/server.ts",
+        "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+        "name": "server-imports-client",
+        "severity": "error",
+        "span": {
+          "end": 52,
+          "start": 29
+        },
+        "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/app/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/server",
+        "to": "src/.aruna/server/actions.server.generated.ts"
+      },
+      {
+        "from": "src/app/client.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "$aruna/not-real"
+      },
+      {
+        "from": "src/app/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/client",
+        "to": "src/.aruna/shared/actions.client.generated.ts"
+      },
+      {
+        "from": "src/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/client",
+        "to": "src/app/client.ts"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/server",
+        "to": "src/app/server.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/app/client.ts",
+        "kind": "client",
+        "path": "src/app/client.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/app/server.ts",
+        "kind": "server",
+        "path": "src/app/server.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/client.ts",
+        "kind": "clientEntry",
+        "path": "src/client.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx",
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts",
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts",
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type PurchaseItemInput = { itemId: string; };\n\nexport type PurchaseItemOutput = { ok: boolean; };\n\nexport const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {\n  return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;\n};\n\nexport const contractHash = \"fab86d7fd15fcd24\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../../domains/shop/actions\";\n\nexport const actions = {\n  \"shop.purchaseItem\": src_domains_shop_actions_purchaseItem,\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"fab86d7fd15fcd24\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/app/client.ts\",\n      \"path\": \"src/app/client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/app/server.ts\",\n      \"path\": \"src/app/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/client.ts\",\n      \"path\": \"src/client.ts\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/app/client.ts\",\n      \"to\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"specifier\": \"$aruna/actions/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/client.ts\",\n      \"specifier\": \"$aruna/not-real\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/server.ts\",\n      \"to\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"specifier\": \"$aruna/actions/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/client.ts\",\n      \"to\": \"src/app/client.ts\",\n      \"specifier\": \"./app/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/app/server.ts\",\n      \"specifier\": \"./app/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::556\",\n      \"name\": \"action-imported-from-invalid-environment\",\n      \"severity\": \"error\",\n      \"message\": \"src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.\",\n      \"file\": \"src/app/client.ts\",\n      \"span\": {\n        \"start\": 24,\n        \"end\": 47\n      },\n      \"details\": \"importer: src/app/client.ts\\nimporter kind: client\\nimported: $aruna/actions/server\\nimported kind: server action\",\n      \"suggestion\": \"Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.\"\n    },\n    {\n      \"code\": \"aruna::105\",\n      \"name\": \"unresolved-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.\",\n      \"file\": \"src/app/client.ts\",\n      \"span\": {\n        \"start\": 70,\n        \"end\": 87\n      },\n      \"details\": \"importer kind: client\",\n      \"suggestion\": \"Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file.\"\n    },\n    {\n      \"code\": \"aruna::301\",\n      \"name\": \"server-imports-client\",\n      \"severity\": \"error\",\n      \"message\": \"src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.\",\n      \"file\": \"src/app/server.ts\",\n      \"span\": {\n        \"start\": 29,\n        \"end\": 52\n      },\n      \"details\": \"importer: src/app/server.ts\\nimporter kind: server\\nimported: $aruna/actions/client\\nimported kind: client\",\n      \"suggestion\": \"Move shared logic into shared/, or pass data from the client into a server entrypoint later.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::556",
+        "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+        "file": "src/app/client.ts",
+        "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+        "name": "action-imported-from-invalid-environment",
+        "severity": "error",
+        "span": {
+          "end": 47,
+          "start": 24
+        },
+        "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+      },
+      {
+        "code": "aruna::105",
+        "details": "importer kind: client",
+        "file": "src/app/client.ts",
+        "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+        "name": "unresolved-import",
+        "severity": "warning",
+        "span": {
+          "end": 87,
+          "start": 70
+        },
+        "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      },
+      {
+        "code": "aruna::301",
+        "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+        "file": "src/app/server.ts",
+        "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+        "name": "server-imports-client",
+        "severity": "error",
+        "span": {
+          "end": 52,
+          "start": 29
+        },
+        "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/app/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/server",
+        "to": "src/.aruna/server/actions.server.generated.ts"
+      },
+      {
+        "from": "src/app/client.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "$aruna/not-real"
+      },
+      {
+        "from": "src/app/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/client",
+        "to": "src/.aruna/shared/actions.client.generated.ts"
+      },
+      {
+        "from": "src/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/client",
+        "to": "src/app/client.ts"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/server",
+        "to": "src/app/server.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/app/client.ts",
+        "kind": "client",
+        "path": "src/app/client.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/app/server.ts",
+        "kind": "server",
+        "path": "src/app/server.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/client.ts",
+        "kind": "clientEntry",
+        "path": "src/client.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 1
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { purchaseItem as src_domains_shop_actions_purchaseItem } from "../../domains/shop/actions";
+
+export const actions = {
+  "shop.purchaseItem": src_domains_shop_actions_purchaseItem,
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "fab86d7fd15fcd24";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export type PurchaseItemInput = { itemId: string; };
+
+export type PurchaseItemOutput = { ok: boolean; };
+
+export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
+  return invokeAction("shop.purchaseItem", input) as Promise<PurchaseItemOutput>;
+};
+
+export const contractHash = "fab86d7fd15fcd24";
+

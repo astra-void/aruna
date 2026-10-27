@@ -1,0 +1,384 @@
+=== inspect actions (exit 1)
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::100",
+        "file": "aruna.config.ts",
+        "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+        "name": "invalid-config",
+        "severity": "error",
+        "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      }
+    ],
+    "imports": [],
+    "modules": [],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "file": "aruna.config.ts",
+      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "name": "invalid-config",
+      "severity": "error",
+      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [],\n  \"imports\": [],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::100\",\n      \"name\": \"invalid-config\",\n      \"severity\": \"error\",\n      \"message\": \"Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).\",\n      \"file\": \"aruna.config.ts\",\n      \"suggestion\": \"import { defineConfig } from \\\"aruna\\\";\\n\\nexport default defineConfig({\\n  root: \\\"src\\\",\\n  compiler: {\\n    generatedDir: \\\"src/.aruna\\\",\\n    manifest: \\\"src/.aruna/manifest.json\\\",\\n    preserveGeneratedComments: true,\\n  },\\n  actions: {\\n    defaultRateLimit: {\\n      key: \\\"player\\\",\\n      windowMs: 1000,\\n      max: 20,\\n    },\\n  },\\n  // Only the globs the built-in conventions do not already cover.\\n  conventions: {\\n    shared: [\\\"src/domains/**/policy.ts\\\"],\\n  },\\n  strict: {\\n    sharedSafety: true,\\n    rawRemoteUsage: \\\"warning\\\",\\n    unresolvedImports: \\\"warning\\\",\\n  },\\n});\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::100",
+        "file": "aruna.config.ts",
+        "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+        "name": "invalid-config",
+        "severity": "error",
+        "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      }
+    ],
+    "imports": [],
+    "modules": [],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+

@@ -1,0 +1,2364 @@
+=== inspect actions (exit 1)
+{
+  "actions": [
+    {
+      "id": "shop.invalidKey",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "invalidKey",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.legacyLimit",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "legacyLimit",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.maxZero",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "maxZero",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.missingKey",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "missingKey",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.missingMax",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "missingMax",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.missingWindowMs",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "missingWindowMs",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.nonIntegerMax",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "nonIntegerMax",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.nonLiteralValue",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "nonLiteralValue",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.windowZero",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "windowZero",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [
+    {
+      "id": "shop.invalidKey",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "invalidKey",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.legacyLimit",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "legacyLimit",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.maxZero",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "maxZero",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.missingKey",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "missingKey",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.missingMax",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "missingMax",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.missingWindowMs",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "missingWindowMs",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.nonIntegerMax",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "nonIntegerMax",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.nonLiteralValue",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "nonLiteralValue",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.windowZero",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "windowZero",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "unknown (metadata unavailable)",
+        "schema": null
+      },
+      "output": {
+        "summary": "void",
+        "schema": null
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/client.tsx",
+      "kind": "clientEntry",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "invalidKey",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.invalidKey",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "legacyLimit",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.legacyLimit",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "maxZero",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.maxZero",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "missingKey",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.missingKey",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "missingMax",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.missingMax",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "missingWindowMs",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.missingWindowMs",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "nonIntegerMax",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.nonIntegerMax",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "nonLiteralValue",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.nonLiteralValue",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "windowZero",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.windowZero",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::560",
+        "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 193,
+          "start": 156
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 331,
+          "start": 322
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: missingMax\nMissing rateLimit.max.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 530,
+          "start": 486
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 693,
+          "start": 692
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 875,
+          "start": 872
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1044,
+          "start": 1008
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1198,
+          "start": 1197
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1393,
+          "start": 1378
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1595,
+          "start": 1587
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/client.tsx",
+        "kind": "clientEntry",
+        "path": "src/client.tsx",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type InvalidKeyInput = unknown;\n\nexport type InvalidKeyOutput = void;\n\nexport const invalidKey = (input: InvalidKeyInput): Promise<InvalidKeyOutput> => {\n  return invokeAction(\"shop.invalidKey\", input) as Promise<InvalidKeyOutput>;\n};\n\nexport type LegacyLimitInput = unknown;\n\nexport type LegacyLimitOutput = void;\n\nexport const legacyLimit = (input: LegacyLimitInput): Promise<LegacyLimitOutput> => {\n  return invokeAction(\"shop.legacyLimit\", input) as Promise<LegacyLimitOutput>;\n};\n\nexport type MaxZeroInput = unknown;\n\nexport type MaxZeroOutput = void;\n\nexport const maxZero = (input: MaxZeroInput): Promise<MaxZeroOutput> => {\n  return invokeAction(\"shop.maxZero\", input) as Promise<MaxZeroOutput>;\n};\n\nexport type MissingKeyInput = unknown;\n\nexport type MissingKeyOutput = void;\n\nexport const missingKey = (input: MissingKeyInput): Promise<MissingKeyOutput> => {\n  return invokeAction(\"shop.missingKey\", input) as Promise<MissingKeyOutput>;\n};\n\nexport type MissingMaxInput = unknown;\n\nexport type MissingMaxOutput = void;\n\nexport const missingMax = (input: MissingMaxInput): Promise<MissingMaxOutput> => {\n  return invokeAction(\"shop.missingMax\", input) as Promise<MissingMaxOutput>;\n};\n\nexport type MissingWindowMsInput = unknown;\n\nexport type MissingWindowMsOutput = void;\n\nexport const missingWindowMs = (input: MissingWindowMsInput): Promise<MissingWindowMsOutput> => {\n  return invokeAction(\"shop.missingWindowMs\", input) as Promise<MissingWindowMsOutput>;\n};\n\nexport type NonIntegerMaxInput = unknown;\n\nexport type NonIntegerMaxOutput = void;\n\nexport const nonIntegerMax = (input: NonIntegerMaxInput): Promise<NonIntegerMaxOutput> => {\n  return invokeAction(\"shop.nonIntegerMax\", input) as Promise<NonIntegerMaxOutput>;\n};\n\nexport type NonLiteralValueInput = unknown;\n\nexport type NonLiteralValueOutput = void;\n\nexport const nonLiteralValue = (input: NonLiteralValueInput): Promise<NonLiteralValueOutput> => {\n  return invokeAction(\"shop.nonLiteralValue\", input) as Promise<NonLiteralValueOutput>;\n};\n\nexport type WindowZeroInput = unknown;\n\nexport type WindowZeroOutput = void;\n\nexport const windowZero = (input: WindowZeroInput): Promise<WindowZeroOutput> => {\n  return invokeAction(\"shop.windowZero\", input) as Promise<WindowZeroOutput>;\n};\n\nexport const contractHash = \"d79e859a09119452\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invalidKey as src_domains_shop_actions_invalidKey } from \"../../domains/shop/actions\";\nimport { legacyLimit as src_domains_shop_actions_legacyLimit } from \"../../domains/shop/actions\";\nimport { maxZero as src_domains_shop_actions_maxZero } from \"../../domains/shop/actions\";\nimport { missingKey as src_domains_shop_actions_missingKey } from \"../../domains/shop/actions\";\nimport { missingMax as src_domains_shop_actions_missingMax } from \"../../domains/shop/actions\";\nimport { missingWindowMs as src_domains_shop_actions_missingWindowMs } from \"../../domains/shop/actions\";\nimport { nonIntegerMax as src_domains_shop_actions_nonIntegerMax } from \"../../domains/shop/actions\";\nimport { nonLiteralValue as src_domains_shop_actions_nonLiteralValue } from \"../../domains/shop/actions\";\nimport { windowZero as src_domains_shop_actions_windowZero } from \"../../domains/shop/actions\";\n\nexport const actions = {\n  \"shop.invalidKey\": src_domains_shop_actions_invalidKey,\n  \"shop.legacyLimit\": src_domains_shop_actions_legacyLimit,\n  \"shop.maxZero\": src_domains_shop_actions_maxZero,\n  \"shop.missingKey\": src_domains_shop_actions_missingKey,\n  \"shop.missingMax\": src_domains_shop_actions_missingMax,\n  \"shop.missingWindowMs\": src_domains_shop_actions_missingWindowMs,\n  \"shop.nonIntegerMax\": src_domains_shop_actions_nonIntegerMax,\n  \"shop.nonLiteralValue\": src_domains_shop_actions_nonLiteralValue,\n  \"shop.windowZero\": src_domains_shop_actions_windowZero,\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"d79e859a09119452\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.invalidKey\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"invalidKey\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.legacyLimit\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"legacyLimit\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.maxZero\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"maxZero\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.missingKey\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"missingKey\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.missingMax\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"missingMax\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.missingWindowMs\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"missingWindowMs\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.nonIntegerMax\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"nonIntegerMax\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.nonLiteralValue\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"nonLiteralValue\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    },\n    {\n      \"id\": \"shop.windowZero\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"windowZero\",\n      \"hasInputSchema\": false,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.missingKey has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 156,\n        \"end\": 193\n      },\n      \"details\": \"export name: missingKey\\nMissing rateLimit.key. Use \\\"player\\\", \\\"global\\\", or a key function.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.invalidKey has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 322,\n        \"end\": 331\n      },\n      \"details\": \"export name: invalidKey\\nrateLimit.key must be \\\"player\\\", \\\"global\\\", or a key function.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.missingMax has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 486,\n        \"end\": 530\n      },\n      \"details\": \"export name: missingMax\\nMissing rateLimit.max.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.maxZero has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 692,\n        \"end\": 693\n      },\n      \"details\": \"export name: maxZero\\nrateLimit.max must be a positive integer numeric literal.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.nonIntegerMax has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 872,\n        \"end\": 875\n      },\n      \"details\": \"export name: nonIntegerMax\\nrateLimit.max must be a positive integer numeric literal.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.missingWindowMs has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 1008,\n        \"end\": 1044\n      },\n      \"details\": \"export name: missingWindowMs\\nMissing rateLimit.windowMs.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.windowZero has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 1197,\n        \"end\": 1198\n      },\n      \"details\": \"export name: windowZero\\nrateLimit.windowMs must be a positive integer numeric literal.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.nonLiteralValue has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 1378,\n        \"end\": 1393\n      },\n      \"details\": \"export name: nonLiteralValue\\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    },\n    {\n      \"code\": \"aruna::560\",\n      \"name\": \"invalid-action-rate-limit\",\n      \"severity\": \"error\",\n      \"message\": \"Server action shop.legacyLimit has an invalid rateLimit declaration.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"span\": {\n        \"start\": 1587,\n        \"end\": 1595\n      },\n      \"details\": \"export name: legacyLimit\\nrateLimit.limit is not supported in the pre-public final API. Use max instead.\",\n      \"suggestion\": \"Use rateLimit: { key: \\\"player\\\", windowMs: 1000, max: 5 } with positive integer literals.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "invalidKey",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.invalidKey",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "legacyLimit",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.legacyLimit",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "maxZero",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.maxZero",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "missingKey",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.missingKey",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "missingMax",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.missingMax",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "missingWindowMs",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.missingWindowMs",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "nonIntegerMax",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.nonIntegerMax",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "nonLiteralValue",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.nonLiteralValue",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "windowZero",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": false,
+        "hasOutputSchema": false,
+        "hasRun": true,
+        "id": "shop.windowZero",
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::560",
+        "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 193,
+          "start": 156
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 331,
+          "start": 322
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: missingMax\nMissing rateLimit.max.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 530,
+          "start": 486
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 693,
+          "start": 692
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 875,
+          "start": 872
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1044,
+          "start": 1008
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1198,
+          "start": 1197
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1393,
+          "start": 1378
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      },
+      {
+        "code": "aruna::560",
+        "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+        "name": "invalid-action-rate-limit",
+        "severity": "error",
+        "span": {
+          "end": 1595,
+          "start": 1587
+        },
+        "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/client.tsx",
+        "kind": "clientEntry",
+        "path": "src/client.tsx",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invalidKey as src_domains_shop_actions_invalidKey } from "../../domains/shop/actions";
+import { legacyLimit as src_domains_shop_actions_legacyLimit } from "../../domains/shop/actions";
+import { maxZero as src_domains_shop_actions_maxZero } from "../../domains/shop/actions";
+import { missingKey as src_domains_shop_actions_missingKey } from "../../domains/shop/actions";
+import { missingMax as src_domains_shop_actions_missingMax } from "../../domains/shop/actions";
+import { missingWindowMs as src_domains_shop_actions_missingWindowMs } from "../../domains/shop/actions";
+import { nonIntegerMax as src_domains_shop_actions_nonIntegerMax } from "../../domains/shop/actions";
+import { nonLiteralValue as src_domains_shop_actions_nonLiteralValue } from "../../domains/shop/actions";
+import { windowZero as src_domains_shop_actions_windowZero } from "../../domains/shop/actions";
+
+export const actions = {
+  "shop.invalidKey": src_domains_shop_actions_invalidKey,
+  "shop.legacyLimit": src_domains_shop_actions_legacyLimit,
+  "shop.maxZero": src_domains_shop_actions_maxZero,
+  "shop.missingKey": src_domains_shop_actions_missingKey,
+  "shop.missingMax": src_domains_shop_actions_missingMax,
+  "shop.missingWindowMs": src_domains_shop_actions_missingWindowMs,
+  "shop.nonIntegerMax": src_domains_shop_actions_nonIntegerMax,
+  "shop.nonLiteralValue": src_domains_shop_actions_nonLiteralValue,
+  "shop.windowZero": src_domains_shop_actions_windowZero,
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "d79e859a09119452";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export type InvalidKeyInput = unknown;
+
+export type InvalidKeyOutput = void;
+
+export const invalidKey = (input: InvalidKeyInput): Promise<InvalidKeyOutput> => {
+  return invokeAction("shop.invalidKey", input) as Promise<InvalidKeyOutput>;
+};
+
+export type LegacyLimitInput = unknown;
+
+export type LegacyLimitOutput = void;
+
+export const legacyLimit = (input: LegacyLimitInput): Promise<LegacyLimitOutput> => {
+  return invokeAction("shop.legacyLimit", input) as Promise<LegacyLimitOutput>;
+};
+
+export type MaxZeroInput = unknown;
+
+export type MaxZeroOutput = void;
+
+export const maxZero = (input: MaxZeroInput): Promise<MaxZeroOutput> => {
+  return invokeAction("shop.maxZero", input) as Promise<MaxZeroOutput>;
+};
+
+export type MissingKeyInput = unknown;
+
+export type MissingKeyOutput = void;
+
+export const missingKey = (input: MissingKeyInput): Promise<MissingKeyOutput> => {
+  return invokeAction("shop.missingKey", input) as Promise<MissingKeyOutput>;
+};
+
+export type MissingMaxInput = unknown;
+
+export type MissingMaxOutput = void;
+
+export const missingMax = (input: MissingMaxInput): Promise<MissingMaxOutput> => {
+  return invokeAction("shop.missingMax", input) as Promise<MissingMaxOutput>;
+};
+
+export type MissingWindowMsInput = unknown;
+
+export type MissingWindowMsOutput = void;
+
+export const missingWindowMs = (input: MissingWindowMsInput): Promise<MissingWindowMsOutput> => {
+  return invokeAction("shop.missingWindowMs", input) as Promise<MissingWindowMsOutput>;
+};
+
+export type NonIntegerMaxInput = unknown;
+
+export type NonIntegerMaxOutput = void;
+
+export const nonIntegerMax = (input: NonIntegerMaxInput): Promise<NonIntegerMaxOutput> => {
+  return invokeAction("shop.nonIntegerMax", input) as Promise<NonIntegerMaxOutput>;
+};
+
+export type NonLiteralValueInput = unknown;
+
+export type NonLiteralValueOutput = void;
+
+export const nonLiteralValue = (input: NonLiteralValueInput): Promise<NonLiteralValueOutput> => {
+  return invokeAction("shop.nonLiteralValue", input) as Promise<NonLiteralValueOutput>;
+};
+
+export type WindowZeroInput = unknown;
+
+export type WindowZeroOutput = void;
+
+export const windowZero = (input: WindowZeroInput): Promise<WindowZeroOutput> => {
+  return invokeAction("shop.windowZero", input) as Promise<WindowZeroOutput>;
+};
+
+export const contractHash = "d79e859a09119452";
+

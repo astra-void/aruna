@@ -1,0 +1,1086 @@
+=== inspect actions (exit 0)
+{
+  "actions": [
+    {
+      "id": "inventory.restockItem",
+      "source": "src/domains/inventory/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "restockItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemIds: string[] }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemIds": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { warnings: string[] }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "warnings": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string, quantity: number }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            },
+            "quantity": {
+              "kind": "number"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 0)
+{
+  "signals": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 0)
+{
+  "stores": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 0)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [
+    {
+      "id": "inventory.restockItem",
+      "source": "src/domains/inventory/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "restockItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemIds: string[] }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemIds": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { warnings: string[] }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "warnings": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    },
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string, quantity: number }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            },
+            "quantity": {
+              "kind": "number"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 0)
+{
+  "modules": [
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/app/client.ts",
+      "kind": "client",
+      "path": "src/app/client.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/app/server.ts",
+      "kind": "server",
+      "path": "src/app/server.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/client.ts",
+      "kind": "clientEntry",
+      "path": "src/client.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/inventory/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/inventory/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 0)
+{
+  "imports": [
+    {
+      "from": "src/app/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/client",
+      "to": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "from": "src/app/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/actions/server",
+      "to": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "from": "src/client.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/client",
+      "to": "src/app/client.ts"
+    },
+    {
+      "from": "src/domains/inventory/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/inventory/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./app/server",
+      "to": "src/app/server.ts"
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== check (exit 0)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx",
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts",
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts",
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "restockItem",
+        "file": "src/domains/inventory/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "inventory.restockItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemIds": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "warnings": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            },
+            "quantity": {
+              "kind": "number"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "imports": [
+      {
+        "from": "src/app/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/client",
+        "to": "src/.aruna/shared/actions.client.generated.ts"
+      },
+      {
+        "from": "src/app/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/server",
+        "to": "src/.aruna/server/actions.server.generated.ts"
+      },
+      {
+        "from": "src/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/client",
+        "to": "src/app/client.ts"
+      },
+      {
+        "from": "src/domains/inventory/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/inventory/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/server",
+        "to": "src/app/server.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/app/client.ts",
+        "kind": "client",
+        "path": "src/app/client.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/app/server.ts",
+        "kind": "server",
+        "path": "src/app/server.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/client.ts",
+        "kind": "clientEntry",
+        "path": "src/client.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/inventory/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/inventory/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": true,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== build (exit 0)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx",
+        "src/client.ts",
+        "src/client.tsx",
+        "src/app/client.ts",
+        "src/app/client.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts",
+        "src/server.ts",
+        "src/server.tsx",
+        "src/app/server.ts",
+        "src/app/server.tsx"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts",
+        "src/shared/**",
+        "src/domains/**/model.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type RestockItemInput = { itemIds: string[]; };\n\nexport type RestockItemOutput = { warnings: string[]; };\n\nexport const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {\n  return invokeAction(\"inventory.restockItem\", input) as Promise<RestockItemOutput>;\n};\n\nexport type PurchaseItemInput = { itemId: string; quantity: number; };\n\nexport type PurchaseItemOutput = { ok: boolean; };\n\nexport const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {\n  return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;\n};\n\nexport const contractHash = \"b7a71cb48737daea\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { restockItem as src_domains_inventory_actions_restockItem } from \"../../domains/inventory/actions\";\nimport { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../../domains/shop/actions\";\n\nexport const actions = {\n  \"inventory.restockItem\": src_domains_inventory_actions_restockItem,\n  \"shop.purchaseItem\": src_domains_shop_actions_purchaseItem,\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"b7a71cb48737daea\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/app/client.ts\",\n      \"path\": \"src/app/client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/app/server.ts\",\n      \"path\": \"src/app/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/client.ts\",\n      \"path\": \"src/client.ts\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/inventory/actions.ts\",\n      \"path\": \"src/domains/inventory/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/app/client.ts\",\n      \"to\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"specifier\": \"$aruna/actions/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/server.ts\",\n      \"to\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"specifier\": \"$aruna/actions/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/client.ts\",\n      \"to\": \"src/app/client.ts\",\n      \"specifier\": \"./app/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/app/server.ts\",\n      \"specifier\": \"./app/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"inventory.restockItem\",\n      \"file\": \"src/domains/inventory/actions.ts\",\n      \"exportName\": \"restockItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemIds\": {\n            \"kind\": \"array\",\n            \"items\": {\n              \"kind\": \"string\"\n            }\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"warnings\": {\n            \"kind\": \"array\",\n            \"items\": {\n              \"kind\": \"string\"\n            }\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          },\n          \"quantity\": {\n            \"kind\": \"number\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": []\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "restockItem",
+        "file": "src/domains/inventory/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "inventory.restockItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemIds": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "warnings": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      },
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            },
+            "quantity": {
+              "kind": "number"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [],
+    "imports": [
+      {
+        "from": "src/app/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/client",
+        "to": "src/.aruna/shared/actions.client.generated.ts"
+      },
+      {
+        "from": "src/app/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "$aruna/actions/server",
+        "to": "src/.aruna/server/actions.server.generated.ts"
+      },
+      {
+        "from": "src/client.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/client",
+        "to": "src/app/client.ts"
+      },
+      {
+        "from": "src/domains/inventory/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/inventory/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./app/server",
+        "to": "src/app/server.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/app/client.ts",
+        "kind": "client",
+        "path": "src/app/client.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/app/server.ts",
+        "kind": "server",
+        "path": "src/app/server.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/client.ts",
+        "kind": "clientEntry",
+        "path": "src/client.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/inventory/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/inventory/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": true,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/.aruna-build.json
+{
+  "version": 1,
+  "layout": "split-tree",
+  "generated": [
+    "manifest.json",
+    "node_modules.project.json",
+    "server/actions.server.generated.ts",
+    "shared/actions.client.generated.ts",
+    "tsconfig.aruna.json"
+  ],
+  "runtime": []
+}
+
+=== file src/.aruna/node_modules.project.json
+{
+  "name": "node_modules",
+  "tree": {
+    "$className": "Folder"
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { restockItem as src_domains_inventory_actions_restockItem } from "../../domains/inventory/actions";
+import { purchaseItem as src_domains_shop_actions_purchaseItem } from "../../domains/shop/actions";
+
+export const actions = {
+  "inventory.restockItem": src_domains_inventory_actions_restockItem,
+  "shop.purchaseItem": src_domains_shop_actions_purchaseItem,
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "b7a71cb48737daea";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export type RestockItemInput = { itemIds: string[]; };
+
+export type RestockItemOutput = { warnings: string[]; };
+
+export const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {
+  return invokeAction("inventory.restockItem", input) as Promise<RestockItemOutput>;
+};
+
+export type PurchaseItemInput = { itemId: string; quantity: number; };
+
+export type PurchaseItemOutput = { ok: boolean; };
+
+export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
+  return invokeAction("shop.purchaseItem", input) as Promise<PurchaseItemOutput>;
+};
+
+export const contractHash = "b7a71cb48737daea";
+
+=== file src/.aruna/tsconfig.aruna.json
+{
+  // Generated by Aruna. Do not edit - `aruna build` rewrites this file.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "moduleDetection": "force",
+    "strict": true,
+    "noLib": true,
+    "skipLibCheck": true,
+    "rootDir": "../../src",
+    "outDir": "../../out",
+    "jsx": "preserve",
+    "declaration": false,
+    "downlevelIteration": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": false,
+    "typeRoots": [
+      "../../node_modules",
+      "../../node_modules/@rbxts"
+    ],
+    "types": [
+      "@rbxts/types",
+      "@rbxts/compiler-types"
+    ],
+    "baseUrl": "../..",
+    "paths": {
+      "$aruna/actions/client": [
+        "src/.aruna/shared/actions.client.generated.ts"
+      ],
+      "$aruna/actions/server": [
+        "src/.aruna/server/actions.server.generated.ts"
+      ],
+      "$aruna/signals": [
+        "src/.aruna/shared/signals.generated.ts"
+      ],
+      "aruna/client": [
+        "src/.aruna/shared/runtime/client.ts"
+      ],
+      "aruna/server": [
+        "src/.aruna/shared/runtime/server.ts"
+      ],
+      "aruna/roblox": [
+        "src/.aruna/shared/runtime/roblox.ts"
+      ],
+      "aruna/schema": [
+        "src/.aruna/shared/runtime/schema.ts"
+      ],
+      "aruna/testing": [
+        "src/.aruna/shared/runtime/testing.ts"
+      ]
+    }
+  },
+  "include": [
+    "../../src/**/*.ts",
+    "../../src/**/*.tsx",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "../../aruna.config.ts",
+    "../../out",
+    "../../node_modules"
+  ]
+}
+

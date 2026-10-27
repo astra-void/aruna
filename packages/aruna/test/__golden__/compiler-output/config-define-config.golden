@@ -1,0 +1,468 @@
+=== inspect actions (exit 0)
+{
+  "actions": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 0)
+{
+  "signals": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 0)
+{
+  "stores": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 0)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "diagnostics": [],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 0)
+{
+  "modules": [
+    {
+      "id": "src/client.ts",
+      "kind": "clientEntry",
+      "path": "src/client.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/shared/schema.ts",
+      "kind": "shared",
+      "path": "src/shared/schema.ts",
+      "reason": "path"
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 0)
+{
+  "imports": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== check (exit 0)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [
+        "src/client.ts"
+      ],
+      "server": [
+        "src/server.ts"
+      ],
+      "shared": [
+        "src/shared/**"
+      ],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx",
+        "src/client.ts"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts",
+        "src/server.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts",
+        "src/shared/**"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [],
+    "imports": [],
+    "modules": [
+      {
+        "id": "src/client.ts",
+        "kind": "clientEntry",
+        "path": "src/client.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/shared/schema.ts",
+        "kind": "shared",
+        "path": "src/shared/schema.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": true,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== build (exit 0)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [
+        "src/client.ts"
+      ],
+      "server": [
+        "src/server.ts"
+      ],
+      "shared": [
+        "src/shared/**"
+      ],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx",
+        "src/client.ts"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts",
+        "src/server.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts",
+        "src/shared/**"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/client.ts\",\n      \"path\": \"src/client.ts\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/shared/schema.ts\",\n      \"path\": \"src/shared/schema.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [],\n  \"actions\": [],\n  \"diagnostics\": []\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [],
+    "imports": [],
+    "modules": [
+      {
+        "id": "src/client.ts",
+        "kind": "clientEntry",
+        "path": "src/client.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/shared/schema.ts",
+        "kind": "shared",
+        "path": "src/shared/schema.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": true,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/.aruna-build.json
+{
+  "version": 1,
+  "layout": "split-tree",
+  "generated": [
+    "manifest.json",
+    "node_modules.project.json",
+    "server/actions.server.generated.ts",
+    "shared/actions.client.generated.ts",
+    "tsconfig.aruna.json"
+  ],
+  "runtime": []
+}
+
+=== file src/.aruna/node_modules.project.json
+{
+  "name": "node_modules",
+  "tree": {
+    "$className": "Folder"
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/tsconfig.aruna.json
+{
+  // Generated by Aruna. Do not edit - `aruna build` rewrites this file.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "moduleDetection": "force",
+    "strict": true,
+    "noLib": true,
+    "skipLibCheck": true,
+    "rootDir": "../../src",
+    "outDir": "../../out",
+    "jsx": "preserve",
+    "declaration": false,
+    "downlevelIteration": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": false,
+    "typeRoots": [
+      "../../node_modules",
+      "../../node_modules/@rbxts"
+    ],
+    "types": [
+      "@rbxts/types",
+      "@rbxts/compiler-types"
+    ],
+    "baseUrl": "../..",
+    "paths": {
+      "$aruna/actions/client": [
+        "src/.aruna/shared/actions.client.generated.ts"
+      ],
+      "$aruna/actions/server": [
+        "src/.aruna/server/actions.server.generated.ts"
+      ],
+      "$aruna/signals": [
+        "src/.aruna/shared/signals.generated.ts"
+      ],
+      "aruna/client": [
+        "src/.aruna/shared/runtime/client.ts"
+      ],
+      "aruna/server": [
+        "src/.aruna/shared/runtime/server.ts"
+      ],
+      "aruna/roblox": [
+        "src/.aruna/shared/runtime/roblox.ts"
+      ],
+      "aruna/schema": [
+        "src/.aruna/shared/runtime/schema.ts"
+      ],
+      "aruna/testing": [
+        "src/.aruna/shared/runtime/testing.ts"
+      ]
+    }
+  },
+  "include": [
+    "../../src/**/*.ts",
+    "../../src/**/*.tsx",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "../../aruna.config.ts",
+    "../../out",
+    "../../node_modules"
+  ]
+}
+

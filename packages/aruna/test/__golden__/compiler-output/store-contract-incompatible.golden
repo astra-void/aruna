@@ -1,0 +1,553 @@
+=== inspect actions (exit 0)
+{
+  "actions": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 0)
+{
+  "signals": [],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 0)
+{
+  "stores": [
+    {
+      "id": "player.profile",
+      "kind": "playerStore",
+      "source": "src/domains/economy/store.ts",
+      "exportName": "profile",
+      "version": 1,
+      "hasMigrate": false,
+      "schema": "object { coins: u8, gems: number }"
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 0)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "stores": [
+    {
+      "id": "player.profile",
+      "source": "src/domains/economy/store.ts",
+      "kind": "playerStore",
+      "version": 1,
+      "scope": null,
+      "hasMigrate": false,
+      "schema": {
+        "summary": "object { coins: u8, gems: number }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u8"
+            },
+            "gems": {
+              "kind": "number"
+            }
+          }
+        }
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 0)
+{
+  "modules": [
+    {
+      "id": "src/domains/economy/store.ts",
+      "kind": "serverStore",
+      "path": "src/domains/economy/store.ts",
+      "reason": "directive",
+      "reasonDetail": "defineStore(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 0)
+{
+  "imports": [
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./domains/economy/store",
+      "to": "src/domains/economy/store.ts"
+    }
+  ],
+  "diagnostics": [],
+  "summary": {
+    "errors": 0,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::578",
+      "name": "store-incompatible-change",
+      "severity": "error",
+      "message": "player.profile schema.gems added as a required field with no .default(); every saved record lacks it and will fail to load. Add .default(...), or bump the version with a migrate.",
+      "file": "src/domains/economy/store.ts",
+      "details": "compared against aruna.contract.json\nafter: \"number\"",
+      "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
+    },
+    {
+      "code": "aruna::578",
+      "name": "store-incompatible-change",
+      "severity": "error",
+      "message": "player.profile schema.coins narrowed from number to u8; saved values may fall outside it.",
+      "file": "src/domains/economy/store.ts",
+      "details": "compared against aruna.contract.json\nbefore: \"number\"\nafter: \"u8\"",
+      "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [],
+    "imports": [
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./domains/economy/store",
+        "to": "src/domains/economy/store.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/domains/economy/store.ts",
+        "kind": "serverStore",
+        "path": "src/domains/economy/store.ts",
+        "reason": "directive",
+        "reasonDetail": "defineStore(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "stores": [
+      {
+        "exportName": "profile",
+        "file": "src/domains/economy/store.ts",
+        "id": "player.profile",
+        "kind": "playerStore",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u8"
+            },
+            "gems": {
+              "kind": "number"
+            }
+          }
+        },
+        "version": 1
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 2,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== contract diff (exit 1)
+{
+  "version": 1,
+  "summary": {
+    "breaking": 2,
+    "warning": 1,
+    "nonBreaking": 0,
+    "info": 0
+  },
+  "entries": [
+    {
+      "severity": "breaking",
+      "kind": "store-field-added-required",
+      "actionId": "player.profile",
+      "path": "schema.gems",
+      "message": "player.profile schema.gems added as a required field with no .default(); every saved record lacks it and will fail to load. Add .default(...), or bump the version with a migrate.",
+      "after": "number"
+    },
+    {
+      "severity": "breaking",
+      "kind": "store-field-type-changed",
+      "actionId": "player.profile",
+      "path": "schema.coins",
+      "message": "player.profile schema.coins narrowed from number to u8; saved values may fall outside it.",
+      "before": "number",
+      "after": "u8"
+    },
+    {
+      "severity": "warning",
+      "kind": "store-field-removed",
+      "actionId": "player.profile",
+      "path": "schema.name",
+      "message": "player.profile schema.name removed; saved records still hold it, and code that rebuilds the value will drop it on the next save.",
+      "before": "string"
+    }
+  ]
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::578",
+      "name": "store-incompatible-change",
+      "severity": "error",
+      "message": "player.profile schema.gems added as a required field with no .default(); every saved record lacks it and will fail to load. Add .default(...), or bump the version with a migrate.",
+      "file": "src/domains/economy/store.ts",
+      "details": "compared against aruna.contract.json\nafter: \"number\"",
+      "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
+    },
+    {
+      "code": "aruna::578",
+      "name": "store-incompatible-change",
+      "severity": "error",
+      "message": "player.profile schema.coins narrowed from number to u8; saved values may fall outside it.",
+      "file": "src/domains/economy/store.ts",
+      "details": "compared against aruna.contract.json\nbefore: \"number\"\nafter: \"u8\"",
+      "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/domains/economy/store.ts\",\n      \"path\": \"src/domains/economy/store.ts\",\n      \"kind\": \"serverStore\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineStore(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"./domains/economy/store\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"stores\": [\n    {\n      \"id\": \"player.profile\",\n      \"file\": \"src/domains/economy/store.ts\",\n      \"exportName\": \"profile\",\n      \"kind\": \"playerStore\",\n      \"version\": 1,\n      \"schema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"coins\": {\n            \"kind\": \"number\",\n            \"numericFormat\": \"u8\"\n          },\n          \"gems\": {\n            \"kind\": \"number\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": []\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [],
+    "imports": [
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/server.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./domains/economy/store",
+        "to": "src/domains/economy/store.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/domains/economy/store.ts",
+        "kind": "serverStore",
+        "path": "src/domains/economy/store.ts",
+        "reason": "directive",
+        "reasonDetail": "defineStore(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "serverEntry",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      }
+    ],
+    "projectRoot": ".",
+    "stores": [
+      {
+        "exportName": "profile",
+        "file": "src/domains/economy/store.ts",
+        "id": "player.profile",
+        "kind": "playerStore",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u8"
+            },
+            "gems": {
+              "kind": "number"
+            }
+          }
+        },
+        "version": 1
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 2,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+

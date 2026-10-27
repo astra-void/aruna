@@ -1,0 +1,608 @@
+=== inspect actions (exit 1)
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [
+    {
+      "id": "player.profile",
+      "kind": "playerStore",
+      "source": "src/domains/economy/store.ts",
+      "exportName": "profile",
+      "version": 1,
+      "hasMigrate": false,
+      "schema": "object { coins: u32 }"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "stores": [
+    {
+      "id": "player.profile",
+      "source": "src/domains/economy/store.ts",
+      "kind": "playerStore",
+      "version": 1,
+      "scope": null,
+      "hasMigrate": false,
+      "schema": {
+        "summary": "object { coins: u32 }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u32"
+            }
+          }
+        }
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/client.tsx",
+      "kind": "clientEntry",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/economy/store.ts",
+      "kind": "serverStore",
+      "path": "src/domains/economy/store.ts",
+      "reason": "directive",
+      "reasonDetail": "defineStore(...) export detected"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/client.tsx",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./domains/economy/store",
+      "to": "src/domains/economy/store.ts"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::574",
+        "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+        "file": "src/client.tsx",
+        "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+        "name": "store-imported-from-client",
+        "severity": "error",
+        "span": {
+          "end": 49,
+          "start": 24
+        },
+        "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/client.tsx",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./domains/economy/store",
+        "to": "src/domains/economy/store.ts"
+      },
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/client.tsx",
+        "kind": "clientEntry",
+        "path": "src/client.tsx",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/economy/store.ts",
+        "kind": "serverStore",
+        "path": "src/domains/economy/store.ts",
+        "reason": "directive",
+        "reasonDetail": "defineStore(...) export detected"
+      }
+    ],
+    "projectRoot": ".",
+    "stores": [
+      {
+        "exportName": "profile",
+        "file": "src/domains/economy/store.ts",
+        "id": "player.profile",
+        "kind": "playerStore",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u32"
+            }
+          }
+        },
+        "version": 1
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/economy/store.ts\",\n      \"path\": \"src/domains/economy/store.ts\",\n      \"kind\": \"serverStore\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineStore(...) export detected\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/client.tsx\",\n      \"to\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"./domains/economy/store\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"stores\": [\n    {\n      \"id\": \"player.profile\",\n      \"file\": \"src/domains/economy/store.ts\",\n      \"exportName\": \"profile\",\n      \"kind\": \"playerStore\",\n      \"version\": 1,\n      \"schema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"coins\": {\n            \"kind\": \"number\",\n            \"numericFormat\": \"u32\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::574\",\n      \"name\": \"store-imported-from-client\",\n      \"severity\": \"error\",\n      \"message\": \"src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.\",\n      \"file\": \"src/client.tsx\",\n      \"span\": {\n        \"start\": 24,\n        \"end\": 49\n      },\n      \"details\": \"importer: src/client.tsx\\nimporter kind: client entry\\nimported: src/domains/economy/store.ts\\nimported kind: server store\",\n      \"suggestion\": \"Stores are server-only and have no client binding. Read the data on the server and return it through an action.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::574",
+        "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+        "file": "src/client.tsx",
+        "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+        "name": "store-imported-from-client",
+        "severity": "error",
+        "span": {
+          "end": 49,
+          "start": 24
+        },
+        "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/client.tsx",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./domains/economy/store",
+        "to": "src/domains/economy/store.ts"
+      },
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/economy/store.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/client.tsx",
+        "kind": "clientEntry",
+        "path": "src/client.tsx",
+        "reason": "path",
+        "reasonDetail": "matched recommended entry file"
+      },
+      {
+        "id": "src/domains/economy/store.ts",
+        "kind": "serverStore",
+        "path": "src/domains/economy/store.ts",
+        "reason": "directive",
+        "reasonDetail": "defineStore(...) export detected"
+      }
+    ],
+    "projectRoot": ".",
+    "stores": [
+      {
+        "exportName": "profile",
+        "file": "src/domains/economy/store.ts",
+        "id": "player.profile",
+        "kind": "playerStore",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "coins": {
+              "kind": "number",
+              "numericFormat": "u32"
+            }
+          }
+        },
+        "version": 1
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+

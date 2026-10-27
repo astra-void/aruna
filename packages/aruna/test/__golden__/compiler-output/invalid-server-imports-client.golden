@@ -1,0 +1,497 @@
+=== inspect actions (exit 1)
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/client/ui.ts",
+      "kind": "client",
+      "path": "src/client/ui.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/main.ts",
+      "kind": "server",
+      "path": "src/server/main.ts",
+      "reason": "path"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/server/main.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../client/ui",
+      "to": "src/client/ui.ts"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::301",
+        "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+        "file": "src/server/main.ts",
+        "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+        "name": "server-imports-client",
+        "severity": "error",
+        "span": {
+          "end": 33,
+          "start": 19
+        },
+        "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/server/main.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../client/ui",
+        "to": "src/client/ui.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/client/ui.ts",
+        "kind": "client",
+        "path": "src/client/ui.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/server/main.ts",
+        "kind": "server",
+        "path": "src/server/main.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::301",
+      "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+      "file": "src/server/main.ts",
+      "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 33,
+        "start": 19
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/client/ui.ts\",\n      \"path\": \"src/client/ui.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/server/main.ts\",\n      \"path\": \"src/server/main.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/server/main.ts\",\n      \"to\": \"src/client/ui.ts\",\n      \"specifier\": \"../client/ui\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::301\",\n      \"name\": \"server-imports-client\",\n      \"severity\": \"error\",\n      \"message\": \"src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.\",\n      \"file\": \"src/server/main.ts\",\n      \"span\": {\n        \"start\": 19,\n        \"end\": 33\n      },\n      \"details\": \"importer: src/server/main.ts\\nimporter kind: server\\nimported: src/client/ui.ts\\nimported kind: client\",\n      \"suggestion\": \"Move shared logic into shared/, or pass data from the client into a server entrypoint later.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::301",
+        "details": "importer: src/server/main.ts\nimporter kind: server\nimported: src/client/ui.ts\nimported kind: client",
+        "file": "src/server/main.ts",
+        "message": "src/server/main.ts is classified as server. It imports src/client/ui.ts, which is classified as client.",
+        "name": "server-imports-client",
+        "severity": "error",
+        "span": {
+          "end": 33,
+          "start": 19
+        },
+        "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/server/main.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../client/ui",
+        "to": "src/client/ui.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/client/ui.ts",
+        "kind": "client",
+        "path": "src/client/ui.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/server/main.ts",
+        "kind": "server",
+        "path": "src/server/main.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+

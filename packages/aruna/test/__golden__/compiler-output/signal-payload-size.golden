@@ -1,0 +1,1035 @@
+=== inspect actions (exit 1)
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [
+    {
+      "id": "chat.bubble",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { text: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "warnings": []
+    },
+    {
+      "id": "fx.hit",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { at: Vector3, by: string, power: u8 }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "at": {
+              "kind": "vector3"
+            },
+            "by": {
+              "kind": "string",
+              "maxLength": 16
+            },
+            "power": {
+              "kind": "number",
+              "numericFormat": "u8"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "wire": "binary",
+      "maxEncodedBytes": 37,
+      "warnings": []
+    },
+    {
+      "id": "fx.trail",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "string[]",
+        "schema": {
+          "items": {
+            "kind": "string",
+            "maxLength": 32
+          },
+          "kind": "array",
+          "maxItems": 64
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "wire": "binary",
+      "maxEncodedBytes": 2312,
+      "warnings": []
+    },
+    {
+      "id": "log.line",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { text: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "signals": [
+    {
+      "id": "chat.bubble",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { text: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "warnings": []
+    },
+    {
+      "id": "fx.hit",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { at: Vector3, by: string, power: u8 }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "at": {
+              "kind": "vector3"
+            },
+            "by": {
+              "kind": "string",
+              "maxLength": 16
+            },
+            "power": {
+              "kind": "number",
+              "numericFormat": "u8"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "wire": "binary",
+      "maxEncodedBytes": 37,
+      "warnings": []
+    },
+    {
+      "id": "fx.trail",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "string[]",
+        "schema": {
+          "items": {
+            "kind": "string",
+            "maxLength": 32
+          },
+          "kind": "array",
+          "maxItems": 64
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "wire": "binary",
+      "maxEncodedBytes": 2312,
+      "warnings": []
+    },
+    {
+      "id": "log.line",
+      "source": "src/shared/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { text: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/.aruna/shared/signals.generated.ts",
+      "kind": "shared",
+      "path": "src/.aruna/shared/signals.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/signals module"
+    },
+    {
+      "id": "src/shared/signals.ts",
+      "kind": "shared",
+      "path": "src/shared/signals.ts",
+      "reason": "path"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/shared/signals.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/shared/signals.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::510",
+        "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+        "name": "unreliable-signal-payload-unbounded",
+        "severity": "warning",
+        "span": {
+          "end": 601,
+          "start": 552
+        },
+        "suggestion": "Bound the payload schema, or make the signal reliable."
+      },
+      {
+        "code": "aruna::511",
+        "details": "Largest binary frame, 4-byte header included (export name: trail).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+        "name": "unreliable-signal-payload-too-large",
+        "severity": "error",
+        "span": {
+          "end": 886,
+          "start": 821
+        },
+        "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/shared/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/shared/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/shared/signals.generated.ts",
+        "kind": "shared",
+        "path": "src/.aruna/shared/signals.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/signals module"
+      },
+      {
+        "id": "src/shared/signals.ts",
+        "kind": "shared",
+        "path": "src/shared/signals.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "signals": [
+      {
+        "exportName": "chat",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "chat.bubble",
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true
+      },
+      {
+        "exportName": "hit",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.hit",
+        "maxEncodedBytes": 37,
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "at": {
+              "kind": "vector3"
+            },
+            "by": {
+              "kind": "string",
+              "maxLength": 16
+            },
+            "power": {
+              "kind": "number",
+              "numericFormat": "u8"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true,
+        "wire": "binary"
+      },
+      {
+        "exportName": "trail",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.trail",
+        "maxEncodedBytes": 2312,
+        "payloadSchema": {
+          "items": {
+            "kind": "string",
+            "maxLength": 32
+          },
+          "kind": "array",
+          "maxItems": 64
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true,
+        "wire": "binary"
+      },
+      {
+        "exportName": "log",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "log.line",
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 601,
+        "start": 552
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame, 4-byte header included (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 886,
+        "start": 821
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"e620e9b67bd607cd\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"e620e9b67bd607cd\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna signal manifest v1\n\nimport { chat as src_shared_signals_chat } from \"../../shared/signals\";\nimport { hit as src_shared_signals_hit } from \"../../shared/signals\";\nimport { trail as src_shared_signals_trail } from \"../../shared/signals\";\nimport { log as src_shared_signals_log } from \"../../shared/signals\";\n\nexport const signals = {\n  \"chat.bubble\": src_shared_signals_chat,\n  \"fx.hit\": src_shared_signals_hit,\n  \"fx.trail\": src_shared_signals_trail,\n  \"log.line\": src_shared_signals_log,\n} as const;\n\nexport type ChatPayload = { text: string; };\nexport type HitPayload = { at: Vector3; by: string; power: number; };\nexport type TrailPayload = string[];\nexport type LogPayload = { text: string; };\n",
+      "path": "src/.aruna/shared/signals.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/shared/signals.generated.ts\",\n      \"path\": \"src/.aruna/shared/signals.generated.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/signals module\"\n    },\n    {\n      \"id\": \"src/shared/signals.ts\",\n      \"path\": \"src/shared/signals.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/shared/signals.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/signals.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"signals\": [\n    {\n      \"id\": \"chat.bubble\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"chat\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"text\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"fx.hit\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"hit\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 37,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"at\": {\n            \"kind\": \"vector3\"\n          },\n          \"by\": {\n            \"kind\": \"string\",\n            \"maxLength\": 16\n          },\n          \"power\": {\n            \"kind\": \"number\",\n            \"numericFormat\": \"u8\"\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"fx.trail\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"trail\",\n      \"hasPayloadSchema\": true,\n      \"unreliable\": true,\n      \"wire\": \"binary\",\n      \"maxEncodedBytes\": 2312,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"array\",\n        \"items\": {\n          \"kind\": \"string\",\n          \"maxLength\": 32\n        },\n        \"maxItems\": 64\n      }\n    },\n    {\n      \"id\": \"log.line\",\n      \"file\": \"src/shared/signals.ts\",\n      \"exportName\": \"log\",\n      \"hasPayloadSchema\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"text\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::510\",\n      \"name\": \"unreliable-signal-payload-unbounded\",\n      \"severity\": \"warning\",\n      \"message\": \"Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 552,\n        \"end\": 601\n      },\n      \"details\": \"A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).\",\n      \"suggestion\": \"Bound the payload schema, or make the signal reliable.\"\n    },\n    {\n      \"code\": \"aruna::511\",\n      \"name\": \"unreliable-signal-payload-too-large\",\n      \"severity\": \"error\",\n      \"message\": \"Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.\",\n      \"file\": \"src/shared/signals.ts\",\n      \"span\": {\n        \"start\": 821,\n        \"end\": 886\n      },\n      \"details\": \"Largest binary frame, 4-byte header included (export name: trail).\",\n      \"suggestion\": \"Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::510",
+        "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+        "name": "unreliable-signal-payload-unbounded",
+        "severity": "warning",
+        "span": {
+          "end": 601,
+          "start": 552
+        },
+        "suggestion": "Bound the payload schema, or make the signal reliable."
+      },
+      {
+        "code": "aruna::511",
+        "details": "Largest binary frame, 4-byte header included (export name: trail).",
+        "file": "src/shared/signals.ts",
+        "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+        "name": "unreliable-signal-payload-too-large",
+        "severity": "error",
+        "span": {
+          "end": 886,
+          "start": 821
+        },
+        "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/shared/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/shared/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/shared/signals.generated.ts",
+        "kind": "shared",
+        "path": "src/.aruna/shared/signals.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/signals module"
+      },
+      {
+        "id": "src/shared/signals.ts",
+        "kind": "shared",
+        "path": "src/shared/signals.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "signals": [
+      {
+        "exportName": "chat",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "chat.bubble",
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true
+      },
+      {
+        "exportName": "hit",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.hit",
+        "maxEncodedBytes": 37,
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "at": {
+              "kind": "vector3"
+            },
+            "by": {
+              "kind": "string",
+              "maxLength": 16
+            },
+            "power": {
+              "kind": "number",
+              "numericFormat": "u8"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true,
+        "wire": "binary"
+      },
+      {
+        "exportName": "trail",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "fx.trail",
+        "maxEncodedBytes": 2312,
+        "payloadSchema": {
+          "items": {
+            "kind": "string",
+            "maxLength": 32
+          },
+          "kind": "array",
+          "maxItems": 64
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        },
+        "unreliable": true,
+        "wire": "binary"
+      },
+      {
+        "exportName": "log",
+        "file": "src/shared/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "log.line",
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "text": {
+              "kind": "string"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 1,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "e620e9b67bd607cd";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "e620e9b67bd607cd";
+
+=== file src/.aruna/shared/signals.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna signal manifest v1
+
+import { chat as src_shared_signals_chat } from "../../shared/signals";
+import { hit as src_shared_signals_hit } from "../../shared/signals";
+import { trail as src_shared_signals_trail } from "../../shared/signals";
+import { log as src_shared_signals_log } from "../../shared/signals";
+
+export const signals = {
+  "chat.bubble": src_shared_signals_chat,
+  "fx.hit": src_shared_signals_hit,
+  "fx.trail": src_shared_signals_trail,
+  "log.line": src_shared_signals_log,
+} as const;
+
+export type ChatPayload = { text: string; };
+export type HitPayload = { at: Vector3; by: string; power: number; };
+export type TrailPayload = string[];
+export type LogPayload = { text: string; };
+

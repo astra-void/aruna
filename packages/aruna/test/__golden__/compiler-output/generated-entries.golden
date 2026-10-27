@@ -1,0 +1,1053 @@
+=== inspect actions (exit 0)
+{
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect signals (exit 0)
+{
+  "signals": [
+    {
+      "id": "combat.damaged",
+      "source": "src/shared/combat/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { amount: number }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "amount": {
+              "kind": "number"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "maxEncodedBytes": 12,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect stores (exit 0)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect contract (exit 0)
+{
+  "version": 1,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [
+    {
+      "id": "shop.purchaseItem",
+      "source": "src/domains/shop/actions.ts",
+      "moduleKind": "serverAction",
+      "authority": {
+        "owner": "server",
+        "clientCallable": true
+      },
+      "generated": {
+        "clientExport": "purchaseItem",
+        "serverRegistry": true
+      },
+      "input": {
+        "summary": "object { itemId: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        }
+      },
+      "output": {
+        "summary": "object { ok: boolean }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "rateLimit": null,
+      "warnings": []
+    }
+  ],
+  "signals": [
+    {
+      "id": "combat.damaged",
+      "source": "src/shared/combat/signals.ts",
+      "moduleKind": "shared",
+      "direction": "server-to-client",
+      "payload": {
+        "summary": "object { amount: number }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "amount": {
+              "kind": "number"
+            }
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "maxEncodedBytes": 12,
+      "warnings": []
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 0)
+{
+  "modules": [
+    {
+      "id": "src/.aruna/client/main.client.ts",
+      "kind": "client",
+      "path": "src/.aruna/client/main.client.ts",
+      "reason": "directive",
+      "reasonDetail": "generated client entry (entries: generated)"
+    },
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/server/main.server.ts",
+      "kind": "server",
+      "path": "src/.aruna/server/main.server.ts",
+      "reason": "directive",
+      "reasonDetail": "generated server entry (entries: generated)"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/signals.generated.ts",
+      "kind": "shared",
+      "path": "src/.aruna/shared/signals.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/signals module"
+    },
+    {
+      "id": "src/client.tsx",
+      "kind": "client",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "client hook module (entries: generated)"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "server",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "server hook module (entries: generated)"
+    },
+    {
+      "id": "src/shared/combat/signals.ts",
+      "kind": "shared",
+      "path": "src/shared/combat/signals.ts",
+      "reason": "path"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== inspect graph (exit 0)
+{
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/shared/combat/signals.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/shared/combat/signals.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== check (exit 0)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "generated",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::568",
+        "details": "Recognized server hooks: configure, middleware, onError.",
+        "file": "src/server.ts",
+        "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+        "name": "unknown-hook-export",
+        "severity": "warning",
+        "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/shared/combat/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/shared/combat/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/client/main.client.ts",
+        "kind": "client",
+        "path": "src/.aruna/client/main.client.ts",
+        "reason": "directive",
+        "reasonDetail": "generated client entry (entries: generated)"
+      },
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/server/main.server.ts",
+        "kind": "server",
+        "path": "src/.aruna/server/main.server.ts",
+        "reason": "directive",
+        "reasonDetail": "generated server entry (entries: generated)"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/signals.generated.ts",
+        "kind": "shared",
+        "path": "src/.aruna/shared/signals.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/signals module"
+      },
+      {
+        "id": "src/client.tsx",
+        "kind": "client",
+        "path": "src/client.tsx",
+        "reason": "path",
+        "reasonDetail": "client hook module (entries: generated)"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "server",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "server hook module (entries: generated)"
+      },
+      {
+        "id": "src/shared/combat/signals.ts",
+        "kind": "shared",
+        "path": "src/shared/combat/signals.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "signals": [
+      {
+        "exportName": "damaged",
+        "file": "src/shared/combat/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "combat.damaged",
+        "maxEncodedBytes": 12,
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "amount": {
+              "kind": "number"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": true,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== build (exit 0)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "generated",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type PurchaseItemInput = { itemId: string; };\n\nexport type PurchaseItemOutput = { ok: boolean; };\n\nexport const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {\n  return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;\n};\n\nexport const contractHash = \"8a2045eaa07e1a19\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { purchaseItem as src_domains_shop_actions_purchaseItem } from \"../../domains/shop/actions\";\n\nexport const actions = {\n  \"shop.purchaseItem\": src_domains_shop_actions_purchaseItem,\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"8a2045eaa07e1a19\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna signal manifest v1\n\nimport { damaged as src_shared_combat_signals_damaged } from \"../../shared/combat/signals\";\n\nexport const signals = {\n  \"combat.damaged\": src_shared_combat_signals_damaged,\n} as const;\n\nexport type DamagedPayload = { amount: number; };\n",
+      "path": "src/.aruna/shared/signals.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna entry manifest v1\n\nimport { createServerApp } from \"aruna/server\";\nimport { createSignalPublisher, robloxRemoteEvent } from \"aruna/roblox\";\nimport { actions, defaultRateLimit } from \"$aruna/actions/server\";\nimport { signals } from \"$aruna/signals\";\nimport * as hooks from \"../../server\";\n\nconst app = createServerApp<Player>({\n  actions,\n  defaultRateLimit,\n  transport: robloxRemoteEvent(),\n  signals,\n  createPublisher: createSignalPublisher,\n  middleware: hooks.middleware,\n  onError: hooks.onError,\n});\n\nhooks.configure(app);\n",
+      "path": "src/.aruna/server/main.server.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna entry manifest v1\n\nimport { createClientApp } from \"aruna/client\";\nimport { createActionInvoker, createSignalSubscriber } from \"aruna/roblox\";\nimport { signals } from \"$aruna/signals\";\nimport * as hooks from \"../../client\";\n\nconst app = createClientApp({\n  transport: createActionInvoker({ createRequestId: hooks.createRequestId }),\n  signals,\n  createSubscriber: createSignalSubscriber,\n});\n\nhooks.onStart(app);\n",
+      "path": "src/.aruna/client/main.client.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/client/main.client.ts\",\n      \"path\": \"src/.aruna/client/main.client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"generated client entry (entries: generated)\"\n    },\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/server/main.server.ts\",\n      \"path\": \"src/.aruna/server/main.server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"generated server entry (entries: generated)\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/signals.generated.ts\",\n      \"path\": \"src/.aruna/shared/signals.generated.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/signals module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"client hook module (entries: generated)\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"server hook module (entries: generated)\"\n    },\n    {\n      \"id\": \"src/shared/combat/signals.ts\",\n      \"path\": \"src/shared/combat/signals.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/combat/signals.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/combat/signals.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"signals\": [\n    {\n      \"id\": \"combat.damaged\",\n      \"file\": \"src/shared/combat/signals.ts\",\n      \"exportName\": \"damaged\",\n      \"hasPayloadSchema\": true,\n      \"maxEncodedBytes\": 12,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"amount\": {\n            \"kind\": \"number\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::568\",\n      \"name\": \"unknown-hook-export\",\n      \"severity\": \"warning\",\n      \"message\": \"src/server.ts exports bootFlag, which is not a recognized server hook.\",\n      \"file\": \"src/server.ts\",\n      \"details\": \"Recognized server hooks: configure, middleware, onError.\",\n      \"suggestion\": \"The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module.\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [
+      {
+        "exportName": "purchaseItem",
+        "file": "src/domains/shop/actions.ts",
+        "hasInputSchema": true,
+        "hasOutputSchema": true,
+        "hasRun": true,
+        "id": "shop.purchaseItem",
+        "inputSchema": {
+          "kind": "object",
+          "properties": {
+            "itemId": {
+              "kind": "string"
+            }
+          }
+        },
+        "outputSchema": {
+          "kind": "object",
+          "properties": {
+            "ok": {
+              "kind": "boolean"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "aruna::568",
+        "details": "Recognized server hooks: configure, middleware, onError.",
+        "file": "src/server.ts",
+        "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+        "name": "unknown-hook-export",
+        "severity": "warning",
+        "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/domains/shop/actions.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      },
+      {
+        "from": "src/shared/combat/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/schema"
+      },
+      {
+        "from": "src/shared/combat/signals.ts",
+        "kind": "static",
+        "resolved": false,
+        "specifier": "aruna/server"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/.aruna/client/main.client.ts",
+        "kind": "client",
+        "path": "src/.aruna/client/main.client.ts",
+        "reason": "directive",
+        "reasonDetail": "generated client entry (entries: generated)"
+      },
+      {
+        "id": "src/.aruna/server/actions.server.generated.ts",
+        "kind": "serverAction",
+        "path": "src/.aruna/server/actions.server.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/server/main.server.ts",
+        "kind": "server",
+        "path": "src/.aruna/server/main.server.ts",
+        "reason": "directive",
+        "reasonDetail": "generated server entry (entries: generated)"
+      },
+      {
+        "id": "src/.aruna/shared/actions.client.generated.ts",
+        "kind": "client",
+        "path": "src/.aruna/shared/actions.client.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/actions module"
+      },
+      {
+        "id": "src/.aruna/shared/signals.generated.ts",
+        "kind": "shared",
+        "path": "src/.aruna/shared/signals.generated.ts",
+        "reason": "directive",
+        "reasonDetail": "virtual $aruna/signals module"
+      },
+      {
+        "id": "src/client.tsx",
+        "kind": "client",
+        "path": "src/client.tsx",
+        "reason": "path",
+        "reasonDetail": "client hook module (entries: generated)"
+      },
+      {
+        "id": "src/domains/shop/actions.ts",
+        "kind": "serverAction",
+        "path": "src/domains/shop/actions.ts",
+        "reason": "directive",
+        "reasonDetail": "defineAction(...) export detected"
+      },
+      {
+        "id": "src/server.ts",
+        "kind": "server",
+        "path": "src/server.ts",
+        "reason": "path",
+        "reasonDetail": "server hook module (entries: generated)"
+      },
+      {
+        "id": "src/shared/combat/signals.ts",
+        "kind": "shared",
+        "path": "src/shared/combat/signals.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "signals": [
+      {
+        "exportName": "damaged",
+        "file": "src/shared/combat/signals.ts",
+        "hasPayloadSchema": true,
+        "id": "combat.damaged",
+        "maxEncodedBytes": 12,
+        "payloadSchema": {
+          "kind": "object",
+          "properties": {
+            "amount": {
+              "kind": "number"
+            }
+          }
+        },
+        "serialization": {
+          "policy": "plain-data-v1"
+        }
+      }
+    ],
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": true,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
+=== file src/.aruna/.aruna-build.json
+{
+  "version": 1,
+  "layout": "split-tree",
+  "generated": [
+    "client/main.client.ts",
+    "manifest.json",
+    "node_modules.project.json",
+    "server/actions.server.generated.ts",
+    "server/main.server.ts",
+    "shared/actions.client.generated.ts",
+    "shared/signals.generated.ts",
+    "tsconfig.aruna.json"
+  ],
+  "runtime": []
+}
+
+=== file src/.aruna/client/main.client.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna entry manifest v1
+
+import { createClientApp } from "aruna/client";
+import { createActionInvoker, createSignalSubscriber } from "aruna/roblox";
+import { signals } from "$aruna/signals";
+import * as hooks from "../../client";
+
+const app = createClientApp({
+  transport: createActionInvoker({ createRequestId: hooks.createRequestId }),
+  signals,
+  createSubscriber: createSignalSubscriber,
+});
+
+hooks.onStart(app);
+
+=== file src/.aruna/node_modules.project.json
+{
+  "name": "node_modules",
+  "tree": {
+    "$className": "Folder"
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { purchaseItem as src_domains_shop_actions_purchaseItem } from "../../domains/shop/actions";
+
+export const actions = {
+  "shop.purchaseItem": src_domains_shop_actions_purchaseItem,
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "8a2045eaa07e1a19";
+
+=== file src/.aruna/server/main.server.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna entry manifest v1
+
+import { createServerApp } from "aruna/server";
+import { createSignalPublisher, robloxRemoteEvent } from "aruna/roblox";
+import { actions, defaultRateLimit } from "$aruna/actions/server";
+import { signals } from "$aruna/signals";
+import * as hooks from "../../server";
+
+const app = createServerApp<Player>({
+  actions,
+  defaultRateLimit,
+  transport: robloxRemoteEvent(),
+  signals,
+  createPublisher: createSignalPublisher,
+  middleware: hooks.middleware,
+  onError: hooks.onError,
+});
+
+hooks.configure(app);
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export type PurchaseItemInput = { itemId: string; };
+
+export type PurchaseItemOutput = { ok: boolean; };
+
+export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
+  return invokeAction("shop.purchaseItem", input) as Promise<PurchaseItemOutput>;
+};
+
+export const contractHash = "8a2045eaa07e1a19";
+
+=== file src/.aruna/shared/signals.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna signal manifest v1
+
+import { damaged as src_shared_combat_signals_damaged } from "../../shared/combat/signals";
+
+export const signals = {
+  "combat.damaged": src_shared_combat_signals_damaged,
+} as const;
+
+export type DamagedPayload = { amount: number; };
+
+=== file src/.aruna/tsconfig.aruna.json
+{
+  // Generated by Aruna. Do not edit - `aruna build` rewrites this file.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "moduleDetection": "force",
+    "strict": true,
+    "noLib": true,
+    "skipLibCheck": true,
+    "rootDir": "../../src",
+    "outDir": "../../out",
+    "jsx": "preserve",
+    "declaration": false,
+    "downlevelIteration": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": false,
+    "typeRoots": [
+      "../../node_modules",
+      "../../node_modules/@rbxts"
+    ],
+    "types": [
+      "@rbxts/types",
+      "@rbxts/compiler-types"
+    ],
+    "baseUrl": "../..",
+    "paths": {
+      "$aruna/actions/client": [
+        "src/.aruna/shared/actions.client.generated.ts"
+      ],
+      "$aruna/actions/server": [
+        "src/.aruna/server/actions.server.generated.ts"
+      ],
+      "$aruna/signals": [
+        "src/.aruna/shared/signals.generated.ts"
+      ],
+      "aruna/client": [
+        "src/.aruna/shared/runtime/client.ts"
+      ],
+      "aruna/server": [
+        "src/.aruna/shared/runtime/server.ts"
+      ],
+      "aruna/roblox": [
+        "src/.aruna/shared/runtime/roblox.ts"
+      ],
+      "aruna/schema": [
+        "src/.aruna/shared/runtime/schema.ts"
+      ],
+      "aruna/testing": [
+        "src/.aruna/shared/runtime/testing.ts"
+      ]
+    }
+  },
+  "include": [
+    "../../src/**/*.ts",
+    "../../src/**/*.tsx",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "../../aruna.config.ts",
+    "../../out",
+    "../../node_modules"
+  ]
+}
+
