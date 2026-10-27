@@ -410,6 +410,17 @@ the game build like any other module.
 
 ### Security
 
+- **The wire-safety walk stays inside its node budget through unions.** To
+  decide whether an Instance was allowed, the walk narrowed a union by calling
+  each member's `validate` on the value — a full, unbudgeted walk of the
+  subtree, repeated at every nested union, before the 2048-value budget or the
+  real validation ran. A client could send a union-typed field holding a huge
+  table and have it walked anyway, quadratically for nested unions. The walk now
+  carries the set of candidate schemas at each position (a union contributes all
+  its members; optional and default unwrap) and never validates. An Instance is
+  accepted where any candidate there is `schema.instance()`, and the validation
+  that follows still enforces the exact shape. Both runtimes.
+
 - **The native runtime now rejects NaN and infinities.** The Node runtime
   rejected them through `Number.isFinite`, and the README said plain-data-v1
   did, but the native runtime — the one that runs in the game — only checked

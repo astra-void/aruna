@@ -1,9 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { schema } from "../src/schema/index.js";
 import {
   ActionSerializationError,
   assertSerializableActionValue,
+  defineAction,
+  dispatchAction,
   validateSerializableActionValue,
 } from "../src/server.js";
+
+const fakeInstance = {
+  ClassName: "Part",
+  IsA(className: string) {
+    return className === "Instance" || className === "Part";
+  },
+};
 
 describe("serialization policy", () => {
   it("accepts wire-safe primitive and plain data values", () => {
@@ -261,5 +271,68 @@ describe("serialization policy", () => {
           "Action shop.purchaseItem input is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
       });
     }
+  });
+
+  it("keeps the walk inside the node budget when a field is a union", async () => {
+    // A refinement runs whenever a member is validated, so the spy sees any
+    // validation of the union's members that the wire walk does.
+    const spy = vi.fn(() => true);
+    const input = schema.object({
+      data: schema.union([schema.array(schema.number()).refine(spy, "never fails"), schema.string()]),
+    });
+    const value = { data: Array.from({ length: 5000 }, () => 0) };
+
+    const result = validateSerializableActionValue(value, { schema: input });
+    expect(result.ok).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+
+    const registry = {
+      "data.save": defineAction({ input, run: () => "ran" }),
+    };
+    await expect(
+      dispatchAction(registry, "data.save", { player: "tester" }, value),
+    ).rejects.toBeInstanceOf(ActionSerializationError);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not narrow nested unions by validating them", () => {
+    const spy = vi.fn(() => true);
+    let nested: ReturnType<typeof schema.union> = schema.union([
+      schema.array(schema.number()).refine(spy, "x"),
+      schema.string(),
+    ]);
+    for (let level = 0; level < 6; level += 1) {
+      nested = schema.union([schema.object({ next: nested }), schema.array(nested)]);
+    }
+    let value: unknown = Array.from({ length: 100 }, () => 0);
+    for (let level = 0; level < 6; level += 1) {
+      value = { next: value };
+    }
+
+    expect(validateSerializableActionValue(value, { schema: nested })).toEqual({ ok: true });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("accepts an Instance where any union member at that position is schema.instance()", () => {
+    const shape = schema.union([
+      schema.object({ kind: schema.literal("part"), target: schema.instance() }),
+      schema.object({ kind: schema.literal("name"), target: schema.string() }),
+    ]);
+    // The walk accepts it on either branch; validation then picks the member.
+    expect(
+      validateSerializableActionValue({ kind: "part", target: fakeInstance }, { schema: shape }).ok,
+    ).toBe(true);
+    expect(
+      validateSerializableActionValue({ kind: "name", target: fakeInstance }, { schema: shape }).ok,
+    ).toBe(true);
+    // A field no member declares still refuses it.
+    expect(
+      validateSerializableActionValue({ kind: "part", other: fakeInstance }, { schema: shape }).ok,
+    ).toBe(false);
+    expect(
+      validateSerializableActionValue(fakeInstance, {
+        schema: schema.union([schema.string(), schema.number()]),
+      }).ok,
+    ).toBe(false);
   });
 });

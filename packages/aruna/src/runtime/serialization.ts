@@ -1,4 +1,4 @@
-import { validateSchema, type Schema } from "../schema/index.js";
+import type { Schema } from "../schema/index.js";
 
 const DEFAULT_MAX_DEPTH = 32;
 const DEFAULT_MAX_VIOLATIONS = 20;
@@ -39,29 +39,47 @@ export type SerializationPolicyOptions = {
   readonly schema?: Schema;
 };
 
-// The schema a value is checked against once optional / default wrappers are
-// peeled, and a union narrowed to the member that accepts it. Mirrors the
-// native runtime.
-function resolveSchema(schema: Schema | undefined, value: unknown): Schema | undefined {
-  let current = schema;
-  while (current !== undefined) {
+// The schemas a value at one position may be checked against: optional and
+// default wrappers peeled, and every member of a union. A union is never
+// narrowed by validating the value against its members — that walks the
+// value's whole subtree outside the node budget, and over again for each
+// nested union — so all of them stay candidates, and the validation that runs
+// after this walk enforces the exact shape. Mirrors the native runtime.
+function expandCandidates(schemas: readonly Schema[]): Schema[] {
+  const expanded: Schema[] = [];
+  const visited = new Set<Schema>();
+  const pending = [...schemas];
+  for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
     if (current.kind === "optional" || current.kind === "default") {
-      current = current.inner;
+      pending.push(current.inner);
     } else if (current.kind === "union") {
-      current = current.members.find((member) => validateSchema(member, value).ok);
+      pending.push(...current.members);
     } else {
-      return current;
+      expanded.push(current);
     }
   }
-  return undefined;
+  return expanded;
 }
 
-// The schema for one entry of a container checked against `schema`. Undefined
-// for a key the schema does not declare, which is where an Instance is refused.
-function childSchema(schema: Schema | undefined, key: string | number): Schema | undefined {
-  if (schema === undefined) {
-    return undefined;
+// The schemas for one entry of a container, from every candidate that
+// declares it. Empty for a key none of them declares, which is where an
+// Instance is refused.
+function childCandidates(schemas: readonly Schema[], key: string | number): Schema[] {
+  const children: Schema[] = [];
+  for (const candidate of schemas) {
+    const child = childSchema(candidate, key);
+    if (child !== undefined) {
+      children.push(child);
+    }
   }
+  return children;
+}
+
+function childSchema(schema: Schema, key: string | number): Schema | undefined {
   switch (schema.kind) {
     case "object":
       return typeof key === "string" ? schema.shape[key] : undefined;
@@ -204,7 +222,7 @@ function sortObjectKeys(value: Record<string, unknown>): string[] {
 
 function validateValue(
   value: unknown,
-  schema: Schema | undefined,
+  schemas: readonly Schema[],
   path: string,
   state: {
     readonly maxDepth: number;
@@ -297,7 +315,6 @@ function validateValue(
   }
 
   if (Array.isArray(value)) {
-    const arraySchema = resolveSchema(schema, value);
     if (depth >= state.maxDepth) {
       addViolation(state.violations, state.maxViolations, path, "max depth exceeded", value);
       return;
@@ -309,10 +326,11 @@ function validateValue(
     }
 
     state.seen.add(value);
+    const arraySchemas = expandCandidates(schemas);
     for (let index = 0; index < value.length; index += 1) {
       validateValue(
         value[index],
-        childSchema(arraySchema, index),
+        childCandidates(arraySchemas, index),
         appendArrayPath(path, index),
         state,
         depth + 1,
@@ -327,7 +345,7 @@ function validateValue(
 
   if (typeof value === "object") {
     if (isRobloxInstanceLike(value)) {
-      if (resolveSchema(schema, value)?.kind === "instance") {
+      if (expandCandidates(schemas).some((candidate) => candidate.kind === "instance")) {
         return;
       }
       addViolation(
@@ -361,12 +379,12 @@ function validateValue(
       return;
     }
 
-    const objectSchema = resolveSchema(schema, value);
+    const objectSchemas = expandCandidates(schemas);
     state.seen.add(value);
     for (const key of sortObjectKeys(value)) {
       validateValue(
         value[key],
-        childSchema(objectSchema, key),
+        childCandidates(objectSchemas, key),
         appendObjectPath(path, key),
         state,
         depth + 1,
@@ -417,7 +435,7 @@ export function validateSerializableActionValue(
 
   validateValue(
     value,
-    options?.schema,
+    options?.schema !== undefined ? [options.schema] : [],
     "$",
     {
       maxDepth,
