@@ -31,10 +31,15 @@ local function makeLoader(runtimeDirs, promisePath, fakes)
 		end,
 	})
 
+	local requireRuntimeLib
+
 	local function baseEnv(scriptObj, ts)
 		globalTable[scriptObj] = ts
 		return {
 			script = scriptObj,
+			require = function(target)
+				return requireRuntimeLib(target)
+			end,
 			_G = globalTable,
 			task = task,
 			game = fakes.game,
@@ -79,6 +84,26 @@ local function makeLoader(runtimeDirs, promisePath, fakes)
 
 	local ts = { Promise = Promise }
 	local cache = {}
+
+	-- Compiled as a game, every module opens with
+	-- `require(ReplicatedStorage:WaitForChild("rbxts_include"):WaitForChild("RuntimeLib"))`.
+	-- Serve that one require with the shim above.
+	local runtimeLib = setmetatable({ Name = "RuntimeLib" }, {
+		__tostring = function()
+			return "ModuleScript(RuntimeLib)"
+		end,
+	})
+	fakes.game:GetService("ReplicatedStorage"):_addChild({
+		Name = "rbxts_include",
+		WaitForChild = function(_self, name)
+			assert(name == "RuntimeLib", `rbxts_include has no {name} under the test loader`)
+			return runtimeLib
+		end,
+	})
+	requireRuntimeLib = function(target)
+		assert(target == runtimeLib, `require is only served for RuntimeLib, got {tostring(target)}`)
+		return ts
+	end
 
 	local function findModulePath(name)
 		for _, dir in dirs do

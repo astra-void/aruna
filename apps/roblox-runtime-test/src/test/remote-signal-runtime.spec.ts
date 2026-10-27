@@ -1,79 +1,88 @@
-import { describe, expect, it, vi } from "vitest";
-import { schema } from "../src/schema.js";
-import { defineSignal } from "../src/server.js";
+// Port of packages/aruna/test/remote-signal-runtime.test.ts: the signal
+// publisher/subscriber over structural remotes, batching, and the unreliable
+// channel. The native `createRemoteSignalPublisher` / `createRemoteSignalSubscriber`
+// take the same structural remote shapes as the Node runtime, so the fake remote
+// below records exactly what reaches the wire.
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+import { describe, expect, it } from "aruna/testing";
 import {
   createRemoteSignalPublisher,
   createRemoteSignalSubscriber,
-  type RemoteSignalClientLike,
   type RemoteSignalMessage,
-  type RemoteSignalServerLike,
-} from "../src/roblox.js";
-import type { RemoteEventSignalLike } from "../src/roblox.js";
+  type SignalClientLike,
+  type SignalServerLike,
+} from "aruna/internal/signal-runtime";
 
-type FakeSignal<TArgs extends readonly unknown[]> = {
-  readonly signal: RemoteEventSignalLike<TArgs>;
-  readonly emit: (...args: TArgs) => void;
+interface FakeSignal {
+  readonly signal: SignalClientLike["OnClientEvent"];
+  readonly emit: (message: RemoteSignalMessage) => void;
   readonly listenerCount: () => number;
-};
+}
 
-function createFakeSignal<TArgs extends readonly unknown[]>(): FakeSignal<TArgs> {
-  const listeners = new Set<(...args: TArgs) => void>();
-
+function createFakeSignal(): FakeSignal {
+  const listeners = new Set<(message: RemoteSignalMessage) => void>();
   return {
     signal: {
-      Connect(callback) {
+      Connect: (callback) => {
         listeners.add(callback);
         let disconnected = false;
-
         return {
-          Disconnect() {
+          Disconnect: () => {
             if (disconnected) {
               return;
             }
-
             disconnected = true;
             listeners.delete(callback);
           },
         };
       },
     },
-    emit(...args) {
+    emit: (message) => {
+      const snapshot = new Array<(message: RemoteSignalMessage) => void>();
       for (const listener of listeners) {
-        listener(...args);
+        snapshot.push(listener);
+      }
+      for (const listener of snapshot) {
+        listener(message);
       }
     },
-    listenerCount() {
-      return listeners.size;
-    },
+    listenerCount: () => listeners.size(),
   };
 }
 
-type FakeRemote<TPlayer> = RemoteSignalServerLike<TPlayer> &
-  RemoteSignalClientLike & {
-    readonly clientSignal: FakeSignal<[RemoteSignalMessage]>;
-    readonly sent: Array<
-      { readonly target: "client"; readonly player: TPlayer; readonly message: RemoteSignalMessage }
-      | { readonly target: "all"; readonly message: RemoteSignalMessage }
-    >;
+interface SentEntry<TPlayer> {
+  readonly target: "client" | "all";
+  readonly player?: TPlayer;
+  readonly message: RemoteSignalMessage;
+}
+
+type FakeRemote<TPlayer> = SignalServerLike<TPlayer> &
+  SignalClientLike & {
+    readonly clientSignal: FakeSignal;
+    readonly sent: Array<SentEntry<TPlayer>>;
   };
 
 function createFakeRemote<TPlayer>(): FakeRemote<TPlayer> {
-  const clientSignal = createFakeSignal<[RemoteSignalMessage]>();
-  const sent: FakeRemote<TPlayer>["sent"] = [];
-
+  const clientSignal = createFakeSignal();
+  const sent = new Array<SentEntry<TPlayer>>();
   return {
     clientSignal,
     sent,
     OnClientEvent: clientSignal.signal,
-    FireClient(player, message) {
+    FireClient: (player, message) => {
       sent.push({ target: "client", player, message });
       clientSignal.emit(message);
     },
-    FireAllClients(message) {
+    FireAllClients: (message) => {
       sent.push({ target: "all", message });
       clientSignal.emit(message);
     },
   };
+}
+
+function signalIdsOf<TPlayer>(remote: FakeRemote<TPlayer>): Array<string> {
+  return remote.sent.map((entry) => entry.message.signalId);
 }
 
 const signals = {
@@ -92,37 +101,43 @@ const signals = {
   }),
 } as const;
 
+interface Named {
+  readonly name: string;
+}
+
 describe("unreliable signal routing", () => {
   it("routes unreliable signals over the unreliable remote when present", () => {
-    const reliable = createFakeRemote<{ name: string }>();
-    const unreliable = createFakeRemote<{ name: string }>();
+    const reliable = createFakeRemote<Named>();
+    const unreliable = createFakeRemote<Named>();
     const publisher = createRemoteSignalPublisher(reliable, signals, unreliable);
 
     publisher.toAll("combat.damaged", { amount: 1, source: "trap" });
     publisher.toAll("player.moved", { x: 1.5 });
 
-    expect(reliable.sent.map((entry) => entry.message.signalId)).toEqual(["combat.damaged"]);
-    expect(unreliable.sent.map((entry) => entry.message.signalId)).toEqual(["player.moved"]);
+    expect(signalIdsOf(reliable)).toEqual(["combat.damaged"]);
+    expect(signalIdsOf(unreliable)).toEqual(["player.moved"]);
   });
 
   it("falls back to the reliable remote when no unreliable remote is given", () => {
-    const reliable = createFakeRemote<{ name: string }>();
+    const reliable = createFakeRemote<Named>();
     const publisher = createRemoteSignalPublisher(reliable, signals);
 
     publisher.toAll("player.moved", { x: 1.5 });
 
-    expect(reliable.sent.map((entry) => entry.message.signalId)).toEqual(["player.moved"]);
+    expect(signalIdsOf(reliable)).toEqual(["player.moved"]);
   });
 
   it("delivers unreliable-channel messages through the subscriber", () => {
-    const reliable = createFakeRemote<{ name: string }>();
-    const unreliable = createFakeRemote<{ name: string }>();
+    const reliable = createFakeRemote<Named>();
+    const unreliable = createFakeRemote<Named>();
     const subscriber = createRemoteSignalSubscriber(reliable, signals, unreliable);
-    const handler = vi.fn();
-    subscriber.on("player.moved", handler);
+    const calls = new Array<{ x: number }>();
+    subscriber.on("player.moved", (payload) => {
+      calls.push(payload);
+    });
 
     unreliable.clientSignal.emit({ signalId: "player.moved", payload: { x: 2 } });
-    expect(handler).toHaveBeenCalledWith({ x: 2 });
+    expect(calls).toEqual([{ x: 2 }]);
 
     subscriber.dispose();
     expect(unreliable.clientSignal.listenerCount()).toBe(0);
@@ -131,7 +146,7 @@ describe("unreliable signal routing", () => {
 
 describe("createRemoteSignalPublisher", () => {
   it("validates and fires a payload to a single player", () => {
-    const remote = createFakeRemote<{ name: string }>();
+    const remote = createFakeRemote<Named>();
     const publisher = createRemoteSignalPublisher(remote, signals);
 
     publisher.to({ name: "Ada" }, "combat.damaged", { amount: 12, source: "trap" });
@@ -146,7 +161,7 @@ describe("createRemoteSignalPublisher", () => {
   });
 
   it("broadcasts to all clients", () => {
-    const remote = createFakeRemote<{ name: string }>();
+    const remote = createFakeRemote<Named>();
     const publisher = createRemoteSignalPublisher(remote, signals);
 
     publisher.toAll("world.tick", undefined);
@@ -163,6 +178,7 @@ describe("createRemoteSignalPublisher", () => {
     publisher.toMany(["Ada", "Lin"], "combat.damaged", { amount: 5, source: "fall" });
 
     expect(remote.sent.map((entry) => entry.target)).toEqual(["client", "client"]);
+    expect(remote.sent.map((entry) => entry.player)).toEqual(["Ada", "Lin"]);
   });
 
   it("throws on an unknown signal id", () => {
@@ -170,12 +186,12 @@ describe("createRemoteSignalPublisher", () => {
     const publisher = createRemoteSignalPublisher(remote, signals);
 
     expect(() =>
-      (publisher.to as (player: string, id: string, payload: unknown) => void)(
+      (publisher.to as unknown as (player: string, id: string, payload: unknown) => void)(
         "Ada",
         "combat.unknown",
         {},
       ),
-    ).toThrowError("Aruna signal not found: combat.unknown");
+    ).toThrow("Aruna signal not found: combat.unknown");
   });
 
   it("rejects a payload that violates the schema before it reaches the wire", () => {
@@ -187,7 +203,7 @@ describe("createRemoteSignalPublisher", () => {
         amount: "lots",
         source: "trap",
       } as unknown as { amount: number; source: string }),
-    ).toThrowError(/amount: expected finite number/);
+    ).toThrow("amount: expected finite number");
     expect(remote.sent).toEqual([]);
   });
 
@@ -195,34 +211,37 @@ describe("createRemoteSignalPublisher", () => {
     const remote = createFakeRemote<string>();
     const publisher = createRemoteSignalPublisher(remote, signals);
 
-    expect(() =>
-      publisher.to("Ada", "combat.damaged", {
-        amount: 1,
-        source: "trap",
-        // Roblox Instance-like value smuggled past the type.
-        culprit: {
-          ClassName: "Player",
-          IsA: () => true,
-        },
-      } as unknown as { amount: number; source: string }),
-    ).toThrowError(/not serializable/);
+    expect(
+      () =>
+        publisher.to("Ada", "combat.damaged", {
+          amount: 1,
+          source: "trap",
+          // Roblox Instance-like value smuggled past the type.
+          culprit: {
+            ClassName: "Player",
+            IsA: () => true,
+          },
+        } as unknown as { amount: number; source: string }),
+      // The Node runtime says "... is not serializable ..."; the native one
+      // says "non-serializable signal payload: <id>". Same reason, asserted on
+      // the native wording.
+    ).toThrow("non-serializable signal payload: combat.damaged");
     expect(remote.sent).toEqual([]);
   });
 
   it("toBatched sends every payload to one player, yielding between chunks", async () => {
     const remote = createFakeRemote<string>();
     const publisher = createRemoteSignalPublisher(remote, signals);
-    const payloads = Array.from({ length: 5 }, (_, index) => ({
-      amount: index,
-      source: "replay",
-    }));
+    const payloads = new Array<{ amount: number; source: string }>();
+    for (let index = 0; index < 5; index += 1) {
+      payloads.push({ amount: index, source: "replay" });
+    }
     let yields = 0;
 
     await publisher.toBatched("Ada", "combat.damaged", payloads, {
       chunkSize: 2,
       yield: () => {
         yields += 1;
-        return Promise.resolve();
       },
     });
 
@@ -242,7 +261,7 @@ describe("createRemoteSignalPublisher", () => {
         { amount: 1, source: "ok" },
         { amount: "nope", source: "bad" } as unknown as { amount: number; source: string },
       ]),
-    ).rejects.toThrowError(/amount: expected finite number/);
+    ).rejects.toThrow("amount: expected finite number");
     expect(remote.sent).toHaveLength(1);
   });
 });
@@ -251,7 +270,7 @@ describe("createRemoteSignalSubscriber", () => {
   it("delivers messages to dynamic .on() subscribers", () => {
     const remote = createFakeRemote<string>();
     const subscriber = createRemoteSignalSubscriber(remote, signals);
-    const received: Array<{ amount: number; source: string }> = [];
+    const received = new Array<{ amount: number; source: string }>();
 
     const connection = subscriber.on("combat.damaged", (payload) => {
       received.push(payload);
@@ -276,29 +295,34 @@ describe("createRemoteSignalSubscriber", () => {
 
   it("drops payloads that violate the declared schema", () => {
     const remote = createFakeRemote<string>();
-    const handler = vi.fn();
+    let calls = 0;
     const subscriber = createRemoteSignalSubscriber(remote, signals);
-    subscriber.on("combat.damaged", handler);
+    subscriber.on("combat.damaged", () => {
+      calls += 1;
+    });
 
     remote.clientSignal.emit({
       signalId: "combat.damaged",
       payload: { amount: "nope", source: "lava" },
     });
 
-    expect(handler).not.toHaveBeenCalled();
+    expect(calls).toBe(0);
     subscriber.dispose();
   });
 
   it("ignores malformed envelopes and signals with no handlers", () => {
     const remote = createFakeRemote<string>();
-    const handler = vi.fn();
+    let calls = 0;
     const subscriber = createRemoteSignalSubscriber(remote, signals);
-    subscriber.on("combat.damaged", handler);
+    subscriber.on("combat.damaged", () => {
+      calls += 1;
+    });
 
-    remote.clientSignal.emit(null as unknown as RemoteSignalMessage);
+    // Node passes `null`; nil is the Luau equivalent.
+    remote.clientSignal.emit(undefined as unknown as RemoteSignalMessage);
     remote.clientSignal.emit({ signalId: "world.tick", payload: undefined });
 
-    expect(handler).not.toHaveBeenCalled();
+    expect(calls).toBe(0);
     subscriber.dispose();
   });
 
@@ -312,14 +336,14 @@ describe("createRemoteSignalSubscriber", () => {
     subscriber.dispose();
 
     expect(remote.clientSignal.listenerCount()).toBe(0);
-    expect(() => subscriber.on("world.tick", () => {})).toThrowError("disposed");
+    expect(() => subscriber.on("world.tick", () => {})).toThrow("disposed");
   });
 
   it("round-trips publisher to subscriber over one remote", () => {
     const remote = createFakeRemote<string>();
     const publisher = createRemoteSignalPublisher(remote, signals);
     const subscriber = createRemoteSignalSubscriber(remote, signals);
-    const received: Array<{ amount: number; source: string }> = [];
+    const received = new Array<{ amount: number; source: string }>();
 
     subscriber.on("combat.damaged", (payload) => received.push(payload));
     publisher.toAll("combat.damaged", { amount: 42, source: "boss" });

@@ -6,7 +6,7 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/packages/aruna/roblox/**",
-        "$TURBO_ROOT$/packages/aruna/test/conformance/**"
+        "$TURBO_ROOT$/packages/aruna/lune/**"
       ]
     }
   }

@@ -193,8 +193,9 @@ return function(ctx)
 		end)
 
 		t.it("round trips BrickColor and refuses to encode an Instance", function()
-			-- DateTime is not constructible under Lune; its codec is covered by the
-			-- Node reference tests. BrickColor and Instance are.
+			-- The DateTime round trip runs in src/test/binary.spec.ts, against the
+			-- runner's DateTime stand-in: the codec reads UnixTimestampMillis,
+			-- which @lune/datetime spells differently.
 			local bc = roundTrip(schema.brickColor(), BrickColor.new(194))
 			t.eq(typeof(bc), "BrickColor")
 			t.eq(bc.Number, 194)
@@ -228,10 +229,10 @@ return function(ctx)
 			t.contains(tostring(err), "schema mismatch")
 		end)
 
-		t.it("computes the same fingerprint as the Node reference runtime", function()
-			-- Pinned expected value computed by the Node runtime for this exact
-			-- schema (see the matching case in packages/aruna/test/binary.test.ts).
-			-- If this changes on either side, the wire guard is broken.
+		t.it("computes the pinned fingerprint", function()
+			-- Pinned for this exact schema when the codec shipped (it matched the
+			-- retired Node implementation). If it changes, every frame a server on
+			-- the previous release sends stops decoding.
 			local s = schema.object({
 				hp = schema.u16(),
 				name = schema.string(),

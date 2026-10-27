@@ -209,8 +209,11 @@ return function(ctx)
 		end)
 
 		t.it("validates BrickColor and Instance userdata", function()
-			-- BrickColor and Instance are constructible under Lune; DateTime is not,
-			-- so its validation is covered by the Node reference tests + typecheck.
+			-- All three are constructible under Lune: BrickColor and Instance from
+			-- @lune/roblox, and a DateTime from @lune/datetime, whose typeof is
+			-- "DateTime" like the engine's.
+			t.isTrue(schema.dateTime().validate(require("@lune/datetime").now()))
+			t.isFalse(schema.dateTime().validate({ UnixTimestampMillis = 0 }))
 			t.isTrue(schema.brickColor().validate(roblox.BrickColor.new(194)))
 			t.isFalse(schema.brickColor().validate({ number = 194 }))
 			t.isTrue(schema.instance().validate(roblox.Instance.new("Part")))

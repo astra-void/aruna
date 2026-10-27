@@ -1,7 +1,6 @@
 --!nocheck
--- Runs the shared dispatch conformance table against the compiled native
--- runtime. The Node runtime runs the same table under vitest; the table and its
--- format live in packages/aruna/test/conformance/.
+-- Runs the dispatch conformance table against the compiled runtime. The table
+-- and its format live in apps/roblox-runtime-test/conformance/.
 --
 -- The wire payload is the `registry.dispatch` result, which the native binder
 -- fires as is, and nothing at all for a fireAndForget action.

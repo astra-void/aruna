@@ -1,19 +1,12 @@
 // Server-side de-duplication of retried calls. A retrying client sends one
 // idempotency key with every attempt of a call; the server must run the action
-// once and give every attempt the same result. The native runtime has the same
-// behavior, covered by apps/roblox-runtime-test/lune/specs/dispatch.luau.
-import { describe, expect, it } from "vitest";
-import { createServerApp, defineAction } from "../src/server.js";
-import { createTestPlayer, createTestServerApp, type TestPlayer } from "../src/testing.js";
-import {
-  bindRemoteEventActions,
-  type RemoteEventActionRequest,
-  type RemoteEventActionResponse,
-} from "../src/runtime/remote-event.js";
-import {
-  IDEMPOTENCY_MAX_ENTRIES_PER_PLAYER,
-  IDEMPOTENCY_TTL_MS,
-} from "../src/runtime/idempotency.js";
+// once and give every attempt the same result.
+import { defineAction } from "aruna/roblox";
+import { createServerApp } from "aruna/server";
+import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";
+import { IDEMPOTENCY_MAX_ENTRIES_PER_PLAYER, IDEMPOTENCY_TTL_MS } from "aruna/internal/idempotency";
+import { robloxRemoteEvent } from "aruna/roblox";
+import { rejectionOf, wireRemote } from "./support";
 
 function counterActions() {
   const calls = { count: 0 };
@@ -47,7 +40,9 @@ function counterActions() {
     releaseAll() {
       const pending = release;
       release = () => undefined;
-      pending?.();
+      if (pending !== undefined) {
+        pending();
+      }
     },
   };
 }
@@ -55,9 +50,7 @@ function counterActions() {
 describe("idempotency keys", () => {
   it("runs a duplicate key once and gives both callers the same result", async () => {
     const fixture = counterActions();
-    const harness = createTestServerApp<TestPlayer, typeof fixture.actions>({
-      actions: fixture.actions,
-    });
+    const harness = createTestServerApp({ actions: fixture.actions });
     const player = createTestPlayer();
 
     const first = harness.invoke(player, "shop.buy", undefined, { idempotencyKey: "k1" });
@@ -65,14 +58,14 @@ describe("idempotency keys", () => {
     const second = harness.invoke(player, "shop.buy", undefined, { idempotencyKey: "k1" });
     fixture.releaseAll();
 
-    const [firstOutput, secondOutput] = await Promise.all([first, second]);
+    const firstOutput = await first;
+    const secondOutput = await second;
     expect(fixture.calls.count).toBe(1);
     expect(secondOutput).toBe(firstOutput);
 
     // Arrives after it settled: gets the remembered result.
-    await expect(
-      harness.invoke(player, "shop.buy", undefined, { idempotencyKey: "k1" }),
-    ).resolves.toBe(firstOutput);
+    const third = await harness.invoke(player, "shop.buy", undefined, { idempotencyKey: "k1" });
+    expect(third).toBe(firstOutput);
     expect(fixture.calls.count).toBe(1);
     harness.dispose();
   });
@@ -80,9 +73,7 @@ describe("idempotency keys", () => {
   it("runs again once the remembered result expires", async () => {
     const fixture = counterActions();
     fixture.releaseAll();
-    const harness = createTestServerApp<TestPlayer, typeof fixture.actions>({
-      actions: fixture.actions,
-    });
+    const harness = createTestServerApp({ actions: fixture.actions });
     const player = createTestPlayer();
 
     await harness.invoke(player, "shop.buy", undefined, { idempotencyKey: "k1" });
@@ -96,11 +87,9 @@ describe("idempotency keys", () => {
   it("keeps keys apart per player and per action, and without a key", async () => {
     const fixture = counterActions();
     fixture.releaseAll();
-    const harness = createTestServerApp<TestPlayer, typeof fixture.actions>({
-      actions: fixture.actions,
-    });
-    const ada = createTestPlayer({ Name: "Ada", UserId: 1 });
-    const bo = createTestPlayer({ Name: "Bo", UserId: 2 });
+    const harness = createTestServerApp({ actions: fixture.actions });
+    const ada = createTestPlayer({ name: "Ada" });
+    const bo = createTestPlayer({ name: "Bo" });
 
     await harness.invoke(ada, "shop.buy", undefined, { idempotencyKey: "k1" });
     await harness.invoke(bo, "shop.buy", undefined, { idempotencyKey: "k1" });
@@ -114,20 +103,20 @@ describe("idempotency keys", () => {
 
   it("does not remember a call refused before it ran", async () => {
     const fixture = counterActions();
-    const harness = createTestServerApp<TestPlayer, typeof fixture.actions>({
-      actions: fixture.actions,
-    });
+    const harness = createTestServerApp({ actions: fixture.actions });
     const player = createTestPlayer();
 
     await harness.invoke(player, "shop.limited");
     // Rate limited: the action did not run, so the retry after the window must.
-    await expect(
+    const refused = await rejectionOf(
       harness.invoke(player, "shop.limited", undefined, { idempotencyKey: "k1" }),
-    ).rejects.toMatchObject({ name: "ActionRateLimitError" });
+    );
+    expect(refused.name).toBe("ActionRateLimitError");
     harness.advance(1000);
-    await expect(
-      harness.invoke(player, "shop.limited", undefined, { idempotencyKey: "k1" }),
-    ).resolves.toEqual({ order: 2 });
+    const output = await harness.invoke(player, "shop.limited", undefined, {
+      idempotencyKey: "k1",
+    });
+    expect(output).toEqual({ order: 2 });
     expect(fixture.calls.count).toBe(2);
     harness.dispose();
   });
@@ -135,9 +124,7 @@ describe("idempotency keys", () => {
   it("forgets a player's keys when they leave", async () => {
     const fixture = counterActions();
     fixture.releaseAll();
-    const harness = createTestServerApp<TestPlayer, typeof fixture.actions>({
-      actions: fixture.actions,
-    });
+    const harness = createTestServerApp({ actions: fixture.actions });
     const player = createTestPlayer();
     harness.join(player);
 
@@ -152,9 +139,7 @@ describe("idempotency keys", () => {
   it("evicts the oldest key past the per-player bound", async () => {
     const fixture = counterActions();
     fixture.releaseAll();
-    const harness = createTestServerApp<TestPlayer, typeof fixture.actions>({
-      actions: fixture.actions,
-    });
+    const harness = createTestServerApp({ actions: fixture.actions });
     const player = createTestPlayer();
 
     for (let index = 0; index <= IDEMPOTENCY_MAX_ENTRIES_PER_PLAYER; index += 1) {
@@ -174,52 +159,25 @@ describe("idempotency keys", () => {
   it("reads the key from the wire envelope and ignores an invalid one", async () => {
     const fixture = counterActions();
     fixture.releaseAll();
-    let listener: ((player: unknown, request: RemoteEventActionRequest) => unknown) | undefined;
-    const responses: RemoteEventActionResponse[] = [];
-    const app = createServerApp({
-      actions: fixture.actions,
-      transport: ({ registry, dispatch }) =>
-        bindRemoteEventActions(
-          {
-            FireClient(_player: unknown, response: RemoteEventActionResponse) {
-              responses.push(response);
-            },
-            OnServerEvent: {
-              Connect(callback: (player: unknown, request: RemoteEventActionRequest) => unknown) {
-                listener = callback;
-                return { Disconnect() {} };
-              },
-            },
-          },
-          registry,
-          dispatch,
-        ),
-    });
-    const player = { UserId: 1 };
-    const send = async (requestId: string, idempotencyKey: unknown) => {
-      await listener?.(player, {
-        requestId,
-        actionId: "shop.buy",
-        input: undefined,
-        idempotencyKey,
-      } as RemoteEventActionRequest);
-    };
+    const app = createServerApp({ actions: fixture.actions, transport: robloxRemoteEvent() });
+    const wire = wireRemote();
 
-    await send("r1", "k1");
-    await send("r2", "k1");
+    await wire.send("r1", "shop.buy", undefined, "k1");
+    await wire.send("r2", "shop.buy", undefined, "k1");
     expect(fixture.calls.count).toBe(1);
     // Each attempt is answered under its own request id, with the same output.
-    expect(responses).toEqual([
-      { requestId: "r1", ok: true, output: { order: 1 } },
-      { requestId: "r2", ok: true, output: { order: 1 } },
+    expect(wire.responses()).toEqual([
+      { requestId: "r1", result: { ok: true, output: { order: 1 } } },
+      { requestId: "r2", result: { ok: true, output: { order: 1 } } },
     ]);
 
     // Too long, or not a string: dispatched as if there were no key.
-    await send("r3", "x".repeat(65));
-    await send("r4", "x".repeat(65));
-    await send("r5", 42);
-    await send("r6", 42);
+    await wire.send("r3", "shop.buy", undefined, "x".rep(65));
+    await wire.send("r4", "shop.buy", undefined, "x".rep(65));
+    await wire.send("r5", "shop.buy", undefined, 42);
+    await wire.send("r6", "shop.buy", undefined, 42);
     expect(fixture.calls.count).toBe(5);
+    wire.dispose();
     app.dispose();
   });
 });

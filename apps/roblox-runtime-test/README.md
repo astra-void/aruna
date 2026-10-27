@@ -16,33 +16,52 @@ timeouts).
 pnpm --filter @arunajs/roblox-runtime-test test
 ```
 
-What happens:
+What happens, in a fresh temp directory per run (so runs never collide and nothing
+is written into this package):
 
-1. `packages/aruna/roblox/*.ts` is staged into `src/runtime/` (gitignored).
-2. `rbxtsc` compiles it to Luau in `out/runtime/`.
-3. Lune runs `lune/run.luau`, which loads the compiled modules and runs the specs.
+1. `packages/aruna/roblox/*.ts` is staged where a consumer's vendored runtime
+   lives (`src/shared/aruna/runtime/`), next to the TypeScript specs from
+   `src/test/`.
+2. `rbxtsc` compiles both to Luau.
+3. Lune runs `lune/run.luau`: the hand-written Luau specs in `lune/specs/`
+   against the compiled runtime, including `lune/specs/conformance.luau`, which
+   runs the dispatch case table in `conformance/dispatch.json`.
+4. Lune runs the TypeScript specs through `packages/aruna/lune/run.luau` — the
+   runner `aruna test` ships — so they execute the way a game project's specs do.
 
-`lune/specs/conformance.luau` runs the dispatch case table in
-`packages/aruna/test/conformance/dispatch.json`, the same table the Node
-runtime's vitest suite runs. A dispatch behavior both runtimes must share
-belongs there, not in a spec on one side only. This package's `turbo.json`
-lists the native runtime sources and that table as test inputs, because the
-package doesn't depend on `aruna` and turbo would otherwise replay a stale
-pass.
+There is one runtime, so this is where its behavior is tested. Specs in
+`src/test/*.spec.ts` import it the way a game does (`aruna/server`,
+`aruna/testing`, …; `aruna/internal/<module>` reaches a module no subpath
+exports) and use the `describe` / `it` / `expect` that `aruna/testing` ships.
+Most of them were ported from the retired Node runtime's vitest suites; the
+case-by-case mapping is in `docs/runtime-consolidation.md`.
+
+Flags: `--spec <text>` stages only the TypeScript specs whose file name contains
+`<text>` (repeatable), `--ts-only` skips the Luau specs, and `--keep` keeps the
+temp project and prints its path.
+
+This package's `turbo.json` lists the native runtime sources and the shipped
+Lune runner as test inputs, because the package doesn't depend on `aruna` and
+turbo would otherwise replay a stale pass.
 
 Lune is pinned in the repo-root `rokit.toml`; install it with `rokit install`.
-If Lune is not on `PATH`, the harness still compiles the runtime (proving it
-builds) and skips execution with a notice, so CI without the Roblox toolchain
-stays green.
+If Lune is not on `PATH`, the harness still compiles the runtime and specs
+(proving they build) and skips execution with a loud notice. Under CI (`CI`
+set) a missing Lune fails the run instead: a skip there would report a pass for
+tests that never ran.
 
 ## How the Lune loader works
 
-The real roblox-ts `RuntimeLib` resolves imports through the Roblox Instance tree
-(`require` on `ModuleScript`s), which Lune cannot do. Instead `lune/loader.luau`
-provides a minimal `TS` shim:
+This section is about the Luau specs' loader. (The TypeScript specs use the
+shipped `packages/aruna/lune/loader.luau`, which rebuilds the Instance tree and
+loads the real `RuntimeLib`.) The real roblox-ts `RuntimeLib` resolves imports
+through the Roblox Instance tree (`require` on `ModuleScript`s), which Lune
+cannot do. Instead `lune/loader.luau` provides a minimal `TS` shim:
 
 - `TS.import` resolves sibling modules by base name, searching one or more
   compiled output directories in order (see below).
+- The `require(ReplicatedStorage.rbxts_include.RuntimeLib)` every module opens
+  with is served by that shim.
 - `TS.Promise` is the real roblox-ts `Promise` library, loaded standalone.
 - Roblox globals the runtime touches (`task`, `typeIs`, `game`, `Instance`) are
   injected per module; `lune/fakes.luau` supplies an in-process `RemoteEvent` so

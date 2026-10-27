@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { schema } from "../src/schema.js";
-import { createPlayerStore, type PlayerStoreDefinition } from "../src/runtime/player-store.js";
+// The session-locked player document: lock acquisition inside the load, stale
+// takeover, staged writes, the heartbeat autosave, and shutdown. Port of
+// packages/aruna/test/player-store.test.ts against the native runtime's
+// in-memory backend.
+import { schema } from "aruna/schema";
 import {
   createMemoryStoreBackend,
+  createPlayerStore,
   type MemoryStoreBackend,
+  type PlayerStoreDefinition,
+  type StoreBackend,
   type StoreScheduler,
-} from "../src/runtime/store.js";
+} from "aruna/server";
+import { describe, expect, it } from "aruna/testing";
 
 const profileSchema = schema.object({
   coins: schema.number(),
@@ -14,11 +20,13 @@ const profileSchema = schema.object({
 
 type Profile = { readonly coins: number; readonly name: string };
 
-const player = { UserId: 42 };
+type FakePlayer = { readonly UserId: number };
+
+const player: FakePlayer = { UserId: 42 };
 
 function definition(
-  overrides?: Partial<PlayerStoreDefinition<typeof profileSchema, typeof player>>,
-): PlayerStoreDefinition<typeof profileSchema, typeof player> {
+  overrides?: Partial<PlayerStoreDefinition<typeof profileSchema, FakePlayer>>,
+): PlayerStoreDefinition<typeof profileSchema, FakePlayer> {
   return {
     id: "player.profile",
     schema: profileSchema,
@@ -34,29 +42,105 @@ function manualScheduler(): StoreScheduler & {
   readonly runAll: () => void;
   readonly pending: () => number;
 } {
-  let callbacks: (() => void)[] = [];
+  let callbacks = new Array<() => void>();
   return {
-    delay(_ms, callback) {
+    delay: (_ms, callback) => {
       callbacks.push(callback);
       return {
-        cancel() {
+        cancel: () => {
           callbacks = callbacks.filter((entry) => entry !== callback);
         },
       };
     },
-    runAll() {
+    runAll: () => {
       const queued = callbacks;
-      callbacks = [];
+      callbacks = new Array<() => void>();
       for (const callback of queued) {
         callback();
       }
     },
-    pending: () => callbacks.length,
+    pending: () => callbacks.size(),
   };
 }
 
+// For the cases the Node suite runs without a scheduler. The Node runtime arms
+// no heartbeat then; the native one falls back to a real `task.delay`, and a
+// live timer would both write behind the spec's back and keep Lune from
+// draining. So heartbeats (the 1s interval) are parked and never fire, while
+// the short lock-acquire retry delay still runs on a real timer.
+function parkedHeartbeats(): StoreScheduler {
+  return {
+    delay: (ms, callback) => {
+      if (ms >= 1_000) {
+        return { cancel: () => undefined };
+      }
+      const thread = task.delay(ms / 1000, callback);
+      return {
+        cancel: () => {
+          task.cancel(thread);
+        },
+      };
+    },
+  };
+}
+
+// Holds every UpdateAsync until `open()`, so a load is genuinely in flight
+// (the native memory backend otherwise settles synchronously).
+function gatedBackend(inner: MemoryStoreBackend): {
+  readonly backend: StoreBackend;
+  readonly open: () => void;
+} {
+  let isOpen = false;
+  const waiting = new Array<() => void>();
+  return {
+    backend: {
+      get: inner.get,
+      set: inner.set,
+      remove: inner.remove,
+      update: (key, transform, userIds) => {
+        if (isOpen) {
+          return inner.update(key, transform, userIds);
+        }
+        return new Promise<unknown>((resolve) => {
+          waiting.push(() => {
+            inner.update(key, transform, userIds).then((value) => resolve(value));
+          });
+        });
+      },
+    },
+    open: () => {
+      isOpen = true;
+      const queued = [...waiting];
+      waiting.clear();
+      for (const release of queued) {
+        release();
+      }
+    },
+  };
+}
+
+function entries(initial: Record<string, unknown>): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const [key, value] of pairs(initial)) {
+    map.set(key as string, value);
+  }
+  return map;
+}
+
 function storedLock(backend: MemoryStoreBackend, key = "player_42"): unknown {
-  return (backend.snapshot()[key] as { lock?: unknown } | undefined)?.lock;
+  const stored = backend.snapshot().get(key) as { lock?: unknown } | undefined;
+  return stored !== undefined ? stored.lock : undefined;
+}
+
+function storedCoins(backend: MemoryStoreBackend, key = "player_42"): number {
+  return (backend.snapshot().get(key) as { d: { coins: number } }).d.coins;
+}
+
+// One scheduler frame: the native counterpart of `setTimeout(resolve, 0)`.
+function nextFrame(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    task.defer(() => resolve());
+  });
 }
 
 describe("session locking", () => {
@@ -66,6 +150,7 @@ describe("session locking", () => {
       backend,
       owner: "server-a",
       nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
     });
 
     const loaded = await store.load(player);
@@ -79,6 +164,7 @@ describe("session locking", () => {
       backend,
       owner: "server-a",
       nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
     });
     await first.load(player);
 
@@ -87,6 +173,7 @@ describe("session locking", () => {
       owner: "server-b",
       // Well inside the 10s TTL.
       nowMs: () => 3_000,
+      scheduler: parkedHeartbeats(),
     });
     const blocked = await second.load(player);
 
@@ -100,6 +187,7 @@ describe("session locking", () => {
       backend,
       owner: "server-a",
       nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
     });
     await first.load(player);
 
@@ -108,6 +196,7 @@ describe("session locking", () => {
       owner: "server-b",
       // Past the 10s TTL: the previous holder is gone.
       nowMs: () => 20_000,
+      scheduler: parkedHeartbeats(),
     });
     const loaded = await second.load(player);
 
@@ -121,6 +210,7 @@ describe("session locking", () => {
       backend,
       owner: "server-a",
       nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
     });
     await first.load(player);
     await first.release(player);
@@ -131,18 +221,22 @@ describe("session locking", () => {
       backend,
       owner: "server-b",
       nowMs: () => 2_000,
+      scheduler: parkedHeartbeats(),
     });
     expect((await second.load(player)).ok).toBe(true);
   });
 
   it("reports a failed load instead of handing out a default document", async () => {
-    const backend = createMemoryStoreBackend({
-      player_42: { v: 1, t: 0, d: { coins: "junk" } },
-    });
-    const failures: string[] = [];
+    const backend = createMemoryStoreBackend(
+      entries({ player_42: { v: 1, t: 0, d: { coins: "junk" } } }),
+    );
+    const failures = new Array<string>();
     const store = createPlayerStore(definition(), {
       backend,
-      onLoadFailed: (_player, error) => failures.push(error.name),
+      scheduler: parkedHeartbeats(),
+      onLoadFailed: (_player, failure) => {
+        failures.push(failure.name);
+      },
     });
 
     const loaded = await store.load(player);
@@ -154,8 +248,8 @@ describe("session locking", () => {
   it("treats a record from a newer version as a failed load: no default, no lock, no write", async () => {
     // A player saved at v3 by an updated server joins an old v2 server.
     const newer = { v: 3, t: 0, d: { coins: 500, name: "ada" } };
-    const backend = createMemoryStoreBackend({ player_42: newer });
-    const failures: string[] = [];
+    const backend = createMemoryStoreBackend(entries({ player_42: newer }));
+    const failures = new Array<string>();
     let migrateCalls = 0;
     const store = createPlayerStore(
       definition({
@@ -165,7 +259,13 @@ describe("session locking", () => {
           return stored as Profile;
         },
       }),
-      { backend, onLoadFailed: (_player, error) => failures.push(error.name) },
+      {
+        backend,
+        scheduler: parkedHeartbeats(),
+        onLoadFailed: (_player, failure) => {
+          failures.push(failure.name);
+        },
+      },
     );
 
     const loaded = await store.load(player);
@@ -174,17 +274,21 @@ describe("session locking", () => {
     expect(store.get(player)).toBeUndefined();
     expect(migrateCalls).toBe(0);
     // Untouched: not even the session lock was written.
-    expect(backend.snapshot()["player_42"]).toEqual(newer);
+    expect(backend.snapshot().get("player_42")).toEqual(newer);
     expect(storedLock(backend)).toBeUndefined();
 
     await store.release(player);
-    expect(backend.snapshot()["player_42"]).toEqual(newer);
+    expect(backend.snapshot().get("player_42")).toEqual(newer);
   });
 
   it("returns the same document for a repeated load", async () => {
-    const store = createPlayerStore(definition(), { backend: createMemoryStoreBackend() });
+    const store = createPlayerStore(definition(), {
+      backend: createMemoryStoreBackend(),
+      scheduler: parkedHeartbeats(),
+    });
     const first = await store.load(player);
     const second = await store.load(player);
+    expect(first.ok && second.ok).toBe(true);
     expect(first.ok && second.ok && first.value).toBe(second.ok ? second.value : undefined);
   });
 
@@ -192,17 +296,26 @@ describe("session locking", () => {
     const backend = createMemoryStoreBackend();
     const store = createPlayerStore(definition({ key: (target) => `p:${target.UserId}` }), {
       backend,
+      scheduler: parkedHeartbeats(),
     });
 
     await store.load(player);
-    expect(Object.keys(backend.snapshot())).toEqual(["p:42"]);
+    const keys = new Array<string>();
+    for (const [key] of backend.snapshot()) {
+      keys.push(key);
+    }
+    expect(keys).toEqual(["p:42"]);
   });
 });
 
 describe("documents", () => {
   it("stages changes and flushes them on save", async () => {
     const backend = createMemoryStoreBackend();
-    const store = createPlayerStore(definition(), { backend, owner: "server-a" });
+    const store = createPlayerStore(definition(), {
+      backend,
+      owner: "server-a",
+      scheduler: parkedHeartbeats(),
+    });
 
     const loaded = await store.load(player);
     expect(loaded.ok).toBe(true);
@@ -217,17 +330,20 @@ describe("documents", () => {
 
     expect((await document.save()).ok).toBe(true);
     expect(document.isDirty()).toBe(false);
-    expect((backend.snapshot()["player_42"] as { d: unknown }).d).toEqual({
+    expect((backend.snapshot().get("player_42") as { d: unknown }).d).toEqual({
       coins: 5,
       name: "guest",
     });
   });
 
   it("rejects an invalid change without mutating the document", async () => {
-    const store = createPlayerStore(definition(), { backend: createMemoryStoreBackend() });
+    const store = createPlayerStore(definition(), {
+      backend: createMemoryStoreBackend(),
+      scheduler: parkedHeartbeats(),
+    });
     const loaded = await store.load(player);
     if (!loaded.ok) {
-      throw new Error("expected the load to succeed");
+      throw "expected the load to succeed";
     }
 
     const rejected = loaded.value.set({ coins: "lots", name: "ada" } as never);
@@ -236,10 +352,13 @@ describe("documents", () => {
   });
 
   it("closes the document on release so a late write cannot resurrect it", async () => {
-    const store = createPlayerStore(definition(), { backend: createMemoryStoreBackend() });
+    const store = createPlayerStore(definition(), {
+      backend: createMemoryStoreBackend(),
+      scheduler: parkedHeartbeats(),
+    });
     const loaded = await store.load(player);
     if (!loaded.ok) {
-      throw new Error("expected the load to succeed");
+      throw "expected the load to succeed";
     }
 
     await store.release(player);
@@ -256,11 +375,12 @@ describe("documents", () => {
       backend,
       owner: "server-a",
       nowMs: () => clock,
+      scheduler: parkedHeartbeats(),
     });
 
     const loaded = await first.load(player);
     if (!loaded.ok) {
-      throw new Error("expected the load to succeed");
+      throw "expected the load to succeed";
     }
 
     // The lock goes stale and a second server takes it over.
@@ -269,6 +389,7 @@ describe("documents", () => {
       backend,
       owner: "server-b",
       nowMs: () => clock,
+      scheduler: parkedHeartbeats(),
     });
     await second.load(player);
 
@@ -277,7 +398,7 @@ describe("documents", () => {
     const saved = await loaded.value.save();
 
     expect(saved.ok === false && saved.error.name).toBe("StoreLockedError");
-    expect((backend.snapshot()["player_42"] as { d: { coins: number } }).d.coins).toBe(0);
+    expect(storedCoins(backend)).toBe(0);
   });
 
   it("skips the write when nothing changed", async () => {
@@ -288,17 +409,18 @@ describe("documents", () => {
         get: inner.get,
         set: inner.set,
         remove: inner.remove,
-        update(key, transform, userIds) {
+        update: (key, transform, userIds) => {
           updates += 1;
           return inner.update(key, transform, userIds);
         },
       },
       owner: "server-a",
+      scheduler: parkedHeartbeats(),
     });
 
     const loaded = await store.load(player);
     if (!loaded.ok) {
-      throw new Error("expected the load to succeed");
+      throw "expected the load to succeed";
     }
 
     const afterLoad = updates;
@@ -321,17 +443,17 @@ describe("heartbeat", () => {
 
     const loaded = await store.load(player);
     if (!loaded.ok) {
-      throw new Error("expected the load to succeed");
+      throw "expected the load to succeed";
     }
     loaded.value.update((current: Profile) => ({ ...current, coins: 7 }));
 
     clock = 5_000;
     scheduler.runAll();
     // Let the queued write settle.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextFrame();
 
     expect(storedLock(backend)).toEqual({ owner: "server-a", heartbeatMs: 5_000 });
-    expect((backend.snapshot()["player_42"] as { d: { coins: number } }).d.coins).toBe(7);
+    expect(storedCoins(backend)).toBe(7);
     // The next interval is armed, so the lock keeps being refreshed.
     expect(scheduler.pending()).toBe(1);
   });
@@ -350,7 +472,7 @@ describe("heartbeat", () => {
     await store.load(player);
     clock = 6_000;
     scheduler.runAll();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await nextFrame();
 
     expect(storedLock(backend)).toEqual({ owner: "server-a", heartbeatMs: 6_000 });
   });
@@ -374,28 +496,40 @@ describe("heartbeat", () => {
 describe("shutdown", () => {
   it("flushes every held document on saveAll", async () => {
     const backend = createMemoryStoreBackend();
-    const store = createPlayerStore(definition(), { backend, owner: "server-a" });
-    const other = { UserId: 43 };
+    const store = createPlayerStore(definition(), {
+      backend,
+      owner: "server-a",
+      scheduler: parkedHeartbeats(),
+    });
+    const other: FakePlayer = { UserId: 43 };
 
     const first = await store.load(player);
     const second = await store.load(other);
     if (!first.ok || !second.ok) {
-      throw new Error("expected both loads to succeed");
+      throw "expected both loads to succeed";
     }
     first.value.update((current: Profile) => ({ ...current, coins: 1 }));
     second.value.update((current: Profile) => ({ ...current, coins: 2 }));
 
     const results = await store.saveAll();
+    expect(results.size()).toBe(2);
     expect(results.every((result) => result.ok)).toBe(true);
-    expect((backend.snapshot()["player_42"] as { d: { coins: number } }).d.coins).toBe(1);
-    expect((backend.snapshot()["player_43"] as { d: { coins: number } }).d.coins).toBe(2);
+    expect(storedCoins(backend, "player_42")).toBe(1);
+    expect(storedCoins(backend, "player_43")).toBe(2);
   });
 
   it("releases every lock on releaseAll", async () => {
     const backend = createMemoryStoreBackend();
-    const store = createPlayerStore(definition(), { backend, owner: "server-a" });
+    const store = createPlayerStore(definition(), {
+      backend,
+      owner: "server-a",
+      scheduler: parkedHeartbeats(),
+    });
     await store.load(player);
     await store.load({ UserId: 43 });
+    // Both locks are held before the release, so its effect is observable.
+    expect(storedLock(backend)).toBeDefined();
+    expect(storedLock(backend, "player_43")).toBeDefined();
 
     await store.releaseAll();
 
@@ -404,14 +538,24 @@ describe("shutdown", () => {
   });
 
   it("releases a player who left while the load was still in flight", async () => {
-    const backend = createMemoryStoreBackend();
-    const store = createPlayerStore(definition(), { backend, owner: "server-a" });
+    const inner = createMemoryStoreBackend();
+    const gate = gatedBackend(inner);
+    const store = createPlayerStore(definition(), {
+      backend: gate.backend,
+      owner: "server-a",
+      scheduler: parkedHeartbeats(),
+    });
 
     const loading = store.load(player);
     const released = store.release(player);
+    // The locked read has not landed yet: this is the mid-load leave.
+    expect(store.get(player)).toBeUndefined();
+    gate.open();
 
     await loading;
     expect((await released).ok).toBe(true);
-    expect(storedLock(backend)).toBeUndefined();
+    // The load did land (and wrote its lock); the release then cleared it.
+    expect(inner.snapshot().get("player_42")).toBeDefined();
+    expect(storedLock(inner)).toBeUndefined();
   });
 });

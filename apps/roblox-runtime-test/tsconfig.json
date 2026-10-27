@@ -9,12 +9,23 @@
     "declarationMap": false,
     "sourceMap": false,
     "noLib": true,
-    "outDir": "out",
-    "rootDir": "src",
+    "noEmit": true,
     "jsx": "preserve",
     "verbatimModuleSyntax": false,
     "typeRoots": ["./node_modules", "./node_modules/@rbxts"],
-    "types": ["@rbxts/types", "@rbxts/compiler-types"]
+    "types": ["@rbxts/types", "@rbxts/compiler-types"],
+    // The specs import the native runtime the way a consumer imports its vendored
+    // copy. These paths serve the editor and `pnpm typecheck`; the test script
+    // stages the runtime next to the specs and compiles from a generated
+    // tsconfig whose paths point at that copy.
+    "paths": {
+      "aruna/server": ["../../packages/aruna/roblox/server.ts"],
+      "aruna/client": ["../../packages/aruna/roblox/client.ts"],
+      "aruna/roblox": ["../../packages/aruna/roblox/roblox.ts"],
+      "aruna/schema": ["../../packages/aruna/roblox/schema.ts"],
+      "aruna/testing": ["../../packages/aruna/roblox/testing.ts"],
+      "aruna/internal/*": ["../../packages/aruna/roblox/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules", "out"]

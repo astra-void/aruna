@@ -1,22 +1,20 @@
 # Dispatch conformance cases
 
-`dispatch.json` is one table of dispatch cases that both runtimes run:
+`dispatch.json` is one table of dispatch cases, run against the compiled
+roblox-ts runtime by `lune/specs/conformance.luau` (Lune). It reads the
+`registry.dispatch` result, which the binder sends as is, and skips the
+response for a `fireAndForget` action. `binary-signals.json` holds the golden
+binary signal frames `lune/specs/signal.luau` checks.
 
-- Node: `test/conformance.test.ts` (vitest)
-- native: `apps/roblox-runtime-test/lune/specs/conformance.luau` (Lune, against the
-  compiled roblox-ts runtime)
-
-Each runner turns the table into its own runtime's calls and checks the
-payload that would go on the wire. Node goes through `createServerApp` with a
-loopback RemoteEvent transport. Native reads the `registry.dispatch` result,
-which its binder sends as is. Both skip the response for a `fireAndForget`
-action.
+The table predates the runtime consolidation, when a Node runner executed it
+too; it is kept as data because a dispatch behavior is easier to read, and to
+review, as a row than as a spec.
 
 ## Case
 
 | field        | meaning                                                                    |
 | ------------ | -------------------------------------------------------------------------- |
-| `name`       | the test name in both runners                                              |
+| `name`       | the test name                                                              |
 | `actions`    | action fixtures, below                                                     |
 | `middleware` | optional labels, outermost first; each records `label:before` / `label:after` |
 | `exposeInternalErrors` | optional; passed to the app (default off) |
@@ -31,8 +29,7 @@ or a dispatch:
 ```
 
 A dispatch step may add `"idempotencyKey": "..."`, which is sent the way a
-retrying client sends it (the request envelope's key in Node, the 4th argument
-of `registry.dispatch` natively).
+retrying client sends it (the 4th argument of `registry.dispatch`).
 
 `expect` fields (each one optional):
 
@@ -57,7 +54,7 @@ of `registry.dispatch` natively).
 | `echoInput`      | returns its input                            |                       |
 | `returnConstant` | returns `value`                              | `value`               |
 | `returnFunction` | returns `{ handler = <function> }`           |                       |
-| `throwError`     | throws the runtime's own error: `new Error(message)` / `error(message)` | `message` |
+| `throwError`     | throws the runtime's own error: `error(message)` | `message` |
 | `throwTable`     | throws a plain `{ name, message }` table     | `errorName`, `message` |
 | `throwActionError` | throws `actionError(errorName, message)`   | `errorName`, `message` |
 
@@ -71,7 +68,7 @@ add `"format": "f32"` for `schema.f32()`. A string descriptor can add
 points), chained in that order. Any of them can add `"default": value`.
 
 JSON has no functions and no non-finite numbers, so two sentinels stand in for
-them anywhere in an input value, and each runner swaps them before dispatch:
+them anywhere in an input value, and the runner swaps them before dispatch:
 
 - `{ "$function": true }` becomes a function
 - `{ "$number": "NaN" | "Infinity" | "-Infinity" }` becomes that number (`0/0`,

@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { schema } from "../src/schema.js";
+// The DataStore core: key and value checks, the versioned envelope, migrations,
+// the retry and budget policy, and the no-blind-overwrite write path. Port of
+// packages/aruna/test/store.test.ts against the native runtime's in-memory
+// backend (`createMemoryStoreBackend`).
+import { schema } from "aruna/schema";
 import {
   createMemoryStoreBackend,
   createStore,
@@ -12,12 +15,15 @@ import {
   type StoreBackend,
   type StoreDefinition,
   type StoreScheduler,
-} from "../src/runtime/store.js";
+} from "aruna/server";
+import { describe, expect, it } from "aruna/testing";
 
 const profileSchema = schema.object({
   coins: schema.number(),
   name: schema.string(),
 });
+
+type Profile = { coins: number; name: string };
 
 function profileStore(
   overrides?: Partial<StoreDefinition<typeof profileSchema>>,
@@ -33,7 +39,7 @@ function profileStore(
 // Runs every scheduled callback immediately, so retry backoff costs no real
 // time in tests while still exercising the delay path.
 const immediateScheduler: StoreScheduler = {
-  delay(_ms, callback) {
+  delay: (_ms, callback) => {
     callback();
     return { cancel: () => undefined };
   },
@@ -41,17 +47,17 @@ const immediateScheduler: StoreScheduler = {
 
 function failingBackend(
   failures: number,
-  error: unknown = "DataStoreService: 502 request failed",
+  failure: unknown = "DataStoreService: 502 request failed",
 ): StoreBackend & { readonly calls: () => number } {
   const inner = createMemoryStoreBackend();
   let calls = 0;
 
   return {
     calls: () => calls,
-    get(key) {
+    get: (key) => {
       calls += 1;
       if (calls <= failures) {
-        return Promise.reject(error);
+        return Promise.reject(failure);
       }
       return inner.get(key);
     },
@@ -61,20 +67,35 @@ function failingBackend(
   };
 }
 
+function entries(initial: Record<string, unknown>): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const [key, value] of pairs(initial)) {
+    map.set(key as string, value);
+  }
+  return map;
+}
+
 describe("store keys and values", () => {
   it("rejects keys the DataStore would reject", () => {
     expect(validateStoreKey("").ok).toBe(false);
-    expect(validateStoreKey("a".repeat(51)).ok).toBe(false);
+    expect(validateStoreKey("a".rep(51)).ok).toBe(false);
     expect(validateStoreKey("player_1").ok).toBe(true);
   });
 
   it("rejects values a DataStore cannot encode", () => {
     expect(findStoreValueViolation({ coins: 1 })).toBeUndefined();
-    expect(findStoreValueViolation({ coins: Number.NaN })).toContain("NaN");
     expect(findStoreValueViolation({ run: () => undefined })).toContain("function");
-    expect(
-      findStoreValueViolation({ part: { IsA: () => true, ClassName: "Part" } }),
-    ).toContain("Roblox Instance");
+    // The Node runtime recognises an Instance structurally ({ IsA, ClassName });
+    // the native one asks typeof, so this table is refused as what it really is,
+    // a table holding a function. A real Instance cannot be constructed from a
+    // roblox-ts spec under Lune (see the mapping note).
+    const duckPart = findStoreValueViolation({ part: { IsA: () => true, ClassName: "Part" } });
+    expect(duckPart).toBeDefined();
+    expect(duckPart).toContain("part");
+    // The retired Node runtime printed "NaN"; native spells it as Luau's tostring does.
+    const nanViolation = findStoreValueViolation({ coins: 0 / 0 });
+    expect(nanViolation).toContain("nan");
+    expect(nanViolation).toBe("coins is nan, which DataStores cannot encode");
   });
 
   it("accepts a value shared by two paths but rejects a cycle", () => {
@@ -104,9 +125,8 @@ describe("decoding", () => {
     const definition = profileStore({ defaultValue: () => ({ coins: 0, name: "guest" }) });
     const first = decodeStoreValue(definition, undefined);
     const second = decodeStoreValue(definition, undefined);
-    expect(first.ok && second.ok && first.value.value).not.toBe(
-      second.ok ? second.value.value : undefined,
-    );
+    expect(first.ok && second.ok).toBe(true);
+    expect(first.ok && first.value.value).not.toBe(second.ok ? second.value.value : undefined);
   });
 
   it("fails rather than resetting when the stored value is corrupt", () => {
@@ -130,29 +150,28 @@ describe("decoding", () => {
       version: 2,
       migrate: (stored) => {
         migrateCalls += 1;
-        return stored as { coins: number; name: string };
+        return stored as Profile;
       },
     });
 
     const decoded = decodeStoreValue(definition, { v: 3, t: 0, d: { coins: 5, name: "a" } });
-    expect(decoded.ok === false && decoded.error).toMatchObject({
-      name: "StoreVersionAheadError",
-      retryable: false,
-    });
+    expect(decoded.ok).toBe(false);
+    expect(decoded.ok === false && decoded.error.name).toBe("StoreVersionAheadError");
+    expect(decoded.ok === false && decoded.error.retryable).toBe(false);
     expect(decoded.ok === false && decoded.error.message).toContain("version 3");
     expect(migrateCalls).toBe(0);
   });
 
   it("never writes back over a record from a newer version", async () => {
     const newer = { v: 3, t: 0, d: { coins: 500, name: "from the future" } };
-    const backend = createMemoryStoreBackend({ ada: newer });
+    const backend = createMemoryStoreBackend(entries({ ada: newer }));
     let migrateCalls = 0;
     const store = createStore(
       profileStore({
         version: 2,
         migrate: (stored) => {
           migrateCalls += 1;
-          return stored as { coins: number; name: string };
+          return stored as Profile;
         },
       }),
       { backend },
@@ -166,7 +185,7 @@ describe("decoding", () => {
     expect(saved.ok === false && saved.error.name).toBe("StoreVersionAheadError");
     expect(updated.ok === false && updated.error.name).toBe("StoreVersionAheadError");
     expect(migrateCalls).toBe(0);
-    expect(backend.snapshot()["ada"]).toEqual(newer);
+    expect(backend.snapshot().get("ada")).toEqual(newer);
   });
 
   it("migrates an older record forward", () => {
@@ -201,7 +220,7 @@ describe("decoding", () => {
     const definition = profileStore({
       version: 2,
       migrate: () => {
-        throw new Error("bad migration");
+        throw "bad migration";
       },
     });
     const decoded = decodeStoreValue(definition, { v: 1, t: 0, d: {} });
@@ -246,7 +265,7 @@ describe("request policy", () => {
     let budget = 0;
     let gets = 0;
     const backend: StoreBackend = {
-      get(key) {
+      get: (key) => {
         gets += 1;
         return inner.get(key);
       },
@@ -268,11 +287,13 @@ describe("request policy", () => {
   });
 
   it("reports a failure once through onError", async () => {
-    const errors: string[] = [];
+    const errors = new Array<string>();
     const store = createStore(profileStore({ retry: { attempts: 1 } }), {
       backend: failingBackend(10),
       scheduler: immediateScheduler,
-      onError: (error, info) => errors.push(`${info.operation}:${error.name}`),
+      onError: (failure, info) => {
+        errors.push(`${info.operation}:${failure.name}`);
+      },
     });
 
     await store.load("player_1");
@@ -290,7 +311,9 @@ describe("request policy", () => {
   it("keeps jittered delays inside the band around the capped delay", () => {
     const retry = { baseDelayMs: 100, maxDelayMs: 1_000, jitter: 0.5 };
     expect(storeRetryDelayMs(1, retry, () => 0)).toBe(50);
-    expect(storeRetryDelayMs(1, retry, () => 0.999_999)).toBeCloseTo(150, 3);
+    // toBeCloseTo(150, 3): within 0.0005.
+    const high = storeRetryDelayMs(1, retry, () => 0.999_999);
+    expect(math.abs(high - 150) < 0.0005).toBe(true);
   });
 
   it("surfaces a non-retryable classification without spending attempts", async () => {
@@ -316,7 +339,7 @@ describe("writes", () => {
     const saved = await store.save("player_1", { coins: 10, name: "ada" });
     expect(saved.ok).toBe(true);
 
-    const stored = backend.snapshot()["player_1"] as { v: number; d: unknown };
+    const stored = backend.snapshot().get("player_1") as { v: number; d: unknown };
     expect(stored.v).toBe(3);
     expect(stored.d).toEqual({ coins: 10, name: "ada" });
 
@@ -343,7 +366,7 @@ describe("writes", () => {
       { backend: createMemoryStoreBackend() },
     );
 
-    const saved = await store.save("k", { blob: "x".repeat(4_200_000) });
+    const saved = await store.save("k", { blob: "x".rep(4_200_000) });
     expect(saved.ok === false && saved.error.name).toBe("StoreSerializationError");
   });
 
@@ -360,25 +383,34 @@ describe("writes", () => {
   });
 
   it("refuses to write over a record it could not decode", async () => {
-    const backend = createMemoryStoreBackend({ player_1: { v: 1, t: 0, d: { coins: "junk" } } });
+    const backend = createMemoryStoreBackend(
+      entries({ player_1: { v: 1, t: 0, d: { coins: "junk" } } }),
+    );
     const store = createStore(profileStore(), { backend });
 
     const saved = await store.save("player_1", { coins: 1, name: "ada" });
     expect(saved.ok === false && saved.error.name).toBe("StoreValidationError");
     // The corrupt record is still there: a human can inspect it instead of it
     // having been silently replaced.
-    expect(backend.snapshot()["player_1"]).toEqual({ v: 1, t: 0, d: { coins: "junk" } });
+    expect(backend.snapshot().get("player_1")).toEqual({ v: 1, t: 0, d: { coins: "junk" } });
   });
 
   it("carries an existing session lock through a save", async () => {
-    const backend = createMemoryStoreBackend({
-      player_1: { v: 1, t: 0, d: { coins: 1, name: "ada" }, lock: { owner: "s1", heartbeatMs: 5 } },
-    });
+    const backend = createMemoryStoreBackend(
+      entries({
+        player_1: {
+          v: 1,
+          t: 0,
+          d: { coins: 1, name: "ada" },
+          lock: { owner: "s1", heartbeatMs: 5 },
+        },
+      }),
+    );
     const store = createStore(profileStore(), { backend });
 
     await store.save("player_1", { coins: 2, name: "ada" });
 
-    const stored = backend.snapshot()["player_1"] as { lock?: unknown };
+    const stored = backend.snapshot().get("player_1") as { lock?: unknown };
     expect(stored.lock).toEqual({ owner: "s1", heartbeatMs: 5 });
   });
 
@@ -389,6 +421,6 @@ describe("writes", () => {
 
     const removed = await store.remove("player_1");
     expect(removed.ok).toBe(true);
-    expect(backend.snapshot()["player_1"]).toBeUndefined();
+    expect(backend.snapshot().get("player_1")).toBeUndefined();
   });
 });

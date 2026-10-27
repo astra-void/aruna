@@ -5,7 +5,7 @@
   "scripts": {
     "test": "tsx scripts/run-runtime-tests.ts",
     "test:keep": "tsx scripts/run-runtime-tests.ts --keep",
-    "rbxtsc": "rbxtsc --project tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "@rbxts/compiler-types": "3.0.0-types.0",

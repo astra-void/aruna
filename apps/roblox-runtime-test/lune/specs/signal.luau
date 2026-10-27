@@ -253,8 +253,8 @@ return function(ctx)
 		end)
 	end)
 
-	-- The shared golden table: the native frame must be byte-identical to the
-	-- Node runtime's (test/binary-signals.test.ts runs the same cases).
+	-- The golden table: the frame must stay byte-identical to the pinned bytes,
+	-- which is what a client on the previous release decodes.
 	local binaryTable = serde.decode(
 		"json",
 		fs.readFile((string.gsub(ctx.conformancePath, "dispatch%.json$", "binary-signals.json")))
@@ -354,7 +354,7 @@ return function(ctx)
 
 				t.eq(#sent, 1)
 				t.eq(typeof(sent[1].payload), "buffer", "a binary signal sends a buffer")
-				t.eq(toHex(sent[1].payload), case.bytes, "byte-identical to the Node frame")
+				t.eq(toHex(sent[1].payload), case.bytes, "byte-identical to the golden frame")
 				t.eq(#received, 1)
 				if not deepEq(received[1], case.value) then
 					t.fail(`decoded payload differs: {serde.encode("json", received[1])}`)

@@ -1,54 +1,53 @@
-// P2 coverage: the server app owns the signal publisher (so the signal remote is
-// ensured at boot without a hand-written plumbing module), and the client app
-// exposes an injection-friendly `invoke` that does not depend on global install
-// order.
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearActionInvoker, createClientApp } from "../src/client.js";
+// Port of packages/aruna/test/signal-app.test.ts: the server app owns the signal
+// publisher (so the signal remote is ensured at boot), the client app owns the
+// subscriber and exposes an injection-friendly `invoke`, and the app-owned
+// publisher reaches every action as `ctx.publisher` on both dispatch paths.
+import { clearActionInvoker, createClientApp } from "aruna/client";
 import {
   createActionDefiner,
-  createServerApp,
-  defineSignal,
-  type SignalRegistry,
-} from "../src/server.js";
+  createSignalPublisher,
+  createSignalSubscriber,
+  robloxRemoteEvent,
+  SIGNAL_REMOTE_NAME,
+} from "aruna/roblox";
+import { schema } from "aruna/schema";
+import { createServerApp, defineSignal } from "aruna/server";
+import { afterEach, describe, expect, it } from "aruna/testing";
 import {
   createRemoteSignalPublisher,
   createRemoteSignalSubscriber,
-  createSignalPublisher,
-  createSignalSubscriber,
-  ensureSignalRemote,
-  waitForSignalRemote,
-  type RemoteEventActionRequest,
-  type RemoteEventActionResponse,
-  type RemoteEventServerLike,
-  type RemoteSignalClientLike,
   type RemoteSignalMessage,
-  type RemoteSignalServerLike,
-} from "../src/roblox.js";
-import { bindRemoteEventActions } from "../src/runtime/remote-event.js";
-import { schema } from "../src/schema.js";
+  type SignalClientLike,
+  type SignalServerLike,
+} from "aruna/internal/signal-runtime";
+import { wireRemote } from "./support";
 
-type FakeSignalRemote = RemoteSignalServerLike<unknown> & RemoteSignalClientLike;
+type FakeSignalRemote = SignalServerLike<unknown> & SignalClientLike;
 
 function createFakeSignalRemote(): FakeSignalRemote {
   const listeners = new Set<(message: RemoteSignalMessage) => void>();
   const emit = (message: RemoteSignalMessage): void => {
+    const snapshot = new Array<(message: RemoteSignalMessage) => void>();
     for (const listener of listeners) {
+      snapshot.push(listener);
+    }
+    for (const listener of snapshot) {
       listener(message);
     }
   };
 
   return {
-    FireClient(_player, message) {
+    FireClient: (_player, message) => {
       emit(message);
     },
-    FireAllClients(message) {
+    FireAllClients: (message) => {
       emit(message);
     },
     OnClientEvent: {
-      Connect(callback: (message: RemoteSignalMessage) => void) {
+      Connect: (callback) => {
         listeners.add(callback);
         return {
-          Disconnect() {
+          Disconnect: () => {
             listeners.delete(callback);
           },
         };
@@ -62,13 +61,29 @@ const signals = {
     id: "scoreChanged",
     payload: schema.object({ score: schema.number() }),
   }),
-} satisfies SignalRegistry;
+};
 
-afterEach(() => {
-  clearActionInvoker();
-});
+// Everything a case created that holds a connection, disposed even when the
+// case fails part-way: the fake game is shared by every spec in the run.
+const cleanups = new Array<() => void>();
+function track(cleanup: () => void): void {
+  cleanups.push(cleanup);
+}
+
+// Hooks attach to a describe block; every block below calls this first.
+function disposeAfterEach(): void {
+  afterEach(() => {
+    for (const cleanup of cleanups) {
+      cleanup();
+    }
+    cleanups.clear();
+    clearActionInvoker();
+  });
+}
 
 describe("createServerApp signal publisher ownership", () => {
+  disposeAfterEach();
+
   it("builds the publisher at boot and routes payloads to subscribers", () => {
     const remote = createFakeSignalRemote();
     const serverApp = createServerApp({
@@ -76,10 +91,11 @@ describe("createServerApp signal publisher ownership", () => {
       signals,
       createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
+    track(() => serverApp.dispose());
 
     expect(serverApp.publisher).toBeDefined();
 
-    const received: Array<{ score: number }> = [];
+    const received = new Array<{ score: number }>();
     const subscriber = createRemoteSignalSubscriber(remote, signals);
     subscriber.on("scoreChanged", (payload) => received.push(payload));
 
@@ -91,11 +107,14 @@ describe("createServerApp signal publisher ownership", () => {
 
   it("omits the publisher when no createPublisher is supplied", () => {
     const serverApp = createServerApp({ actions: {}, signals });
+    track(() => serverApp.dispose());
     expect(serverApp.publisher).toBeUndefined();
   });
 });
 
 describe("createClientApp signal subscriber ownership", () => {
+  disposeAfterEach();
+
   it("builds the subscriber at boot and receives published payloads", () => {
     const remote = createFakeSignalRemote();
     const serverApp = createServerApp({
@@ -103,17 +122,18 @@ describe("createClientApp signal subscriber ownership", () => {
       signals,
       createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
+    track(() => serverApp.dispose());
 
-    const invoker = vi.fn(async () => undefined);
     const clientApp = createClientApp({
-      transport: invoker,
+      transport: async () => undefined,
       signals,
       createSubscriber: (registry) => createRemoteSignalSubscriber(remote, registry),
     });
+    track(() => clientApp.dispose());
 
     expect(clientApp.subscriber).toBeDefined();
 
-    const received: Array<{ score: number }> = [];
+    const received = new Array<{ score: number }>();
     const connection = clientApp.subscriber?.on("scoreChanged", (payload) =>
       received.push(payload),
     );
@@ -132,6 +152,7 @@ describe("createClientApp signal subscriber ownership", () => {
       signals,
       createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
+    track(() => serverApp.dispose());
 
     const clientApp = createClientApp({
       transport: async () => undefined,
@@ -139,7 +160,7 @@ describe("createClientApp signal subscriber ownership", () => {
       createSubscriber: (registry) => createRemoteSignalSubscriber(remote, registry),
     });
 
-    const received: Array<{ score: number }> = [];
+    const received = new Array<{ score: number }>();
     clientApp.subscriber?.on("scoreChanged", (payload) => received.push(payload));
     clientApp.dispose();
 
@@ -155,23 +176,36 @@ describe("createClientApp signal subscriber ownership", () => {
 });
 
 describe("createClientApp invoke injection", () => {
-  it("invokes through the app handle without relying on the global install", async () => {
-    const invoker = vi.fn(async (actionId: string, input: unknown) => ({ actionId, input }));
-    const app = createClientApp({ transport: invoker });
+  disposeAfterEach();
 
-    await expect(app.invoke("shop.buy", { itemId: "sword" })).resolves.toEqual({
+  it("invokes through the app handle without relying on the global install", async () => {
+    let invokerCalls = 0;
+    const app = createClientApp({
+      transport: async (actionId: string, input: unknown) => {
+        invokerCalls += 1;
+        return { actionId, input };
+      },
+    });
+
+    const output = await app.invoke("shop.buy", { itemId: "sword" });
+    expect(output).toEqual({
       actionId: "shop.buy",
       input: { itemId: "sword" },
     });
-    expect(invoker).toHaveBeenCalledTimes(1);
+    expect(invokerCalls).toBe(1);
 
     app.dispose();
-    await expect(app.invoke("shop.buy", {})).rejects.toThrowError(/disposed/);
+    await expect(app.invoke("shop.buy", {})).rejects.toThrow("disposed");
+    expect(invokerCalls).toBe(1);
   });
 });
 
 describe("action ctx.publisher injection", () => {
-  const defineAction = createActionDefiner<typeof signals, string>();
+  disposeAfterEach();
+
+  // The native definer defaults the player to `Player`; the wire case below
+  // dispatches as the fake game's LocalPlayer.
+  const defineAction = createActionDefiner<typeof signals, Player>();
 
   function bumpAction() {
     return defineAction({
@@ -188,72 +222,80 @@ describe("action ctx.publisher injection", () => {
 
   it("threads the app-owned publisher into an in-process dispatch", async () => {
     const remote = createFakeSignalRemote();
-    const received: Array<{ score: number }> = [];
+    const received = new Array<{ score: number }>();
     const subscriber = createRemoteSignalSubscriber(remote, signals);
+    track(() => subscriber.dispose());
     subscriber.on("scoreChanged", (payload) => received.push(payload));
 
-    const serverApp = createServerApp<string, { "score.bump": ReturnType<typeof bumpAction> }, typeof signals>({
+    const serverApp = createServerApp<Player, typeof signals>({
       actions: { "score.bump": bumpAction() },
       signals,
       createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
+    track(() => serverApp.dispose());
 
-    const output = await serverApp.dispatch("score.bump", { player: "p1" }, { score: 5 });
+    const player = game.GetService("Players").LocalPlayer;
+    const output = await serverApp.dispatch("score.bump", { player }, { score: 5 });
 
     expect(output).toEqual({ ok: true });
     expect(received).toEqual([{ score: 5 }]);
-    subscriber.dispose();
   });
 
   it("threads the publisher through the wire transport (createServerApp owns dispatch)", async () => {
     const signalRemote = createFakeSignalRemote();
-    const received: Array<{ score: number }> = [];
+    const received = new Array<{ score: number }>();
     const subscriber = createRemoteSignalSubscriber(signalRemote, signals);
+    track(() => subscriber.dispose());
     subscriber.on("scoreChanged", (payload) => received.push(payload));
 
-    // A minimal fake action remote so the transport can dispatch a wire request.
-    const serverListeners = new Set<(player: string, request: RemoteEventActionRequest) => void>();
-    const clientResponses: RemoteEventActionResponse[] = [];
-    const actionRemote: RemoteEventServerLike<string> = {
-      OnServerEvent: {
-        Connect(callback) {
-          serverListeners.add(callback);
-          return {
-            Disconnect() {
-              serverListeners.delete(callback);
-            },
-          };
-        },
-      },
-      FireClient(_player, response) {
-        clientResponses.push(response);
-      },
-    };
-
-    createServerApp<string, { "score.bump": ReturnType<typeof bumpAction> }, typeof signals>({
+    // The real action RemoteEvent the transport binds, driven with a raw
+    // envelope from the client end.
+    const serverApp = createServerApp<Player, typeof signals>({
       actions: { "score.bump": bumpAction() },
       signals,
       createPublisher: (registry) => createRemoteSignalPublisher(signalRemote, registry),
-      transport: ({ registry, dispatch }) => bindRemoteEventActions(actionRemote, registry, dispatch),
+      transport: robloxRemoteEvent(),
     });
+    track(() => serverApp.dispose());
+    const wire = wireRemote();
+    track(() => wire.dispose());
 
-    for (const listener of serverListeners) {
-      listener("p1", { requestId: "r1", actionId: "score.bump", input: { score: 9 } });
-    }
-    // Let the async dispatch settle.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await wire.send("r1", "score.bump", { score: 9 });
 
     expect(received).toEqual([{ score: 9 }]);
-    expect(clientResponses[0]).toMatchObject({ requestId: "r1", ok: true });
-    subscriber.dispose();
+    const first = wire.responses()[0];
+    expect(first).toBeDefined();
+    expect(first?.requestId).toBe("r1");
+    expect((first?.result as { ok: boolean } | undefined)?.ok).toBe(true);
   });
 });
 
 describe("turnkey signal helpers are part of the public surface", () => {
+  disposeAfterEach();
+
   it("exposes createSignalPublisher/createSignalSubscriber and the remote ensurers", () => {
-    expect(createSignalPublisher).toBeTypeOf("function");
-    expect(createSignalSubscriber).toBeTypeOf("function");
-    expect(ensureSignalRemote).toBeTypeOf("function");
-    expect(waitForSignalRemote).toBeTypeOf("function");
+    expect(typeIs(createSignalPublisher, "function")).toBe(true);
+    expect(typeIs(createSignalSubscriber, "function")).toBe(true);
+
+    // The native runtime has no exported `ensureSignalRemote` /
+    // `waitForSignalRemote`: `createSignalPublisher` ensures the signal remote
+    // itself, and `createSignalSubscriber` waits for it. Asserted as that
+    // behavior: the remote exists after the publisher is built, and a
+    // subscriber built from it receives what the publisher sends.
+    const publisher = createSignalPublisher(signals);
+    const remote = game.GetService("ReplicatedStorage").FindFirstChild(SIGNAL_REMOTE_NAME);
+    expect(remote).toBeDefined();
+    expect(remote !== undefined && remote.IsA("RemoteEvent")).toBe(true);
+
+    const subscriber = createSignalSubscriber(signals);
+    track(() => subscriber.dispose());
+    const received = new Array<{ score: number }>();
+    subscriber.on("scoreChanged", (payload) => received.push(payload));
+    publisher.toAll("scoreChanged", { score: 13 });
+    expect(received).toEqual([{ score: 13 }]);
+
+    // Built again, the publisher reuses the remote rather than adding one.
+    createSignalPublisher(signals);
+    expect(game.GetService("ReplicatedStorage").FindFirstChild(SIGNAL_REMOTE_NAME)).toBe(remote);
   });
 });

@@ -386,4 +386,15 @@ return function(ctx)
 			t.eq(late.error.name, "StoreClosedError", "error name")
 		end)
 	end)
+
+	t.describe("store values", function()
+		t.it("names a real Instance", function()
+			-- A TypeScript spec cannot build a real Instance under Lune; @lune/roblox
+			-- can, and `typeIs(value, "Instance")` is the branch this reaches.
+			local part = require("@lune/roblox").Instance.new("Part")
+			local message = storeModule.findStoreValueViolation({ part = part })
+			t.contains(message, "part")
+			t.contains(message, "is a Roblox Instance, which DataStores cannot encode")
+		end)
+	end)
 end
