@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { defineSignal } from "../src/server.js";
 import { schema, type Schema } from "../src/schema.js";
 import {
+  SIGNAL_ENVELOPE_OVERHEAD_BYTES,
   createRemoteSignalPublisher,
   createRemoteSignalSubscriber,
   type RemoteSignalMessage,
@@ -159,5 +160,62 @@ describe("binary signal wire (Node)", () => {
       createRemoteSignalPublisher(remote.server, signals).to({}, "fx.hit", { hp: 300 } as never),
     ).toThrow();
     expect(remote.sent).toEqual([]);
+  });
+
+  describe("unreliable size check", () => {
+    // An unbounded array, so only the runtime can catch an oversized frame.
+    // Frame: 4-byte header + 4-byte count + 1 per u8. Envelope: "fx.burst" (8)
+    // + SIGNAL_ENVELOPE_OVERHEAD_BYTES (55).
+    const payload = schema.array(schema.u8());
+    const frameOf = (items: number) => 8 + items;
+    const envelope = 8 + SIGNAL_ENVELOPE_OVERHEAD_BYTES;
+    const items = (count: number) => Array.from({ length: count }, () => 1);
+
+    it("refuses a binary unreliable frame that is over the limit with its envelope", () => {
+      const signals = {
+        "fx.burst": defineSignal({ id: "fx.burst", payload, wire: "binary", unreliable: true }),
+      };
+      const remote = loopback();
+      const publisher = createRemoteSignalPublisher(remote.server, signals, remote.server);
+
+      // 829 + 63 = 892 fits; 838 + 63 = 901 does not.
+      expect(frameOf(821) + envelope).toBe(892);
+      publisher.to({}, "fx.burst", items(821));
+      expect(remote.sent).toHaveLength(1);
+
+      expect(() => publisher.to({}, "fx.burst", items(830))).toThrowError(
+        "Unreliable signal fx.burst carries 901 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      );
+      expect(() => publisher.toAll("fx.burst", items(830))).toThrowError(/901 bytes/);
+      expect(() => publisher.toMany([{}], "fx.burst", items(830))).toThrowError(/901 bytes/);
+      expect(remote.sent).toHaveLength(1);
+    });
+
+    it("rejects toBatched with the same error", async () => {
+      const signals = {
+        "fx.burst": defineSignal({ id: "fx.burst", payload, wire: "binary", unreliable: true }),
+      };
+      const remote = loopback();
+      const publisher = createRemoteSignalPublisher(remote.server, signals, remote.server);
+
+      await expect(publisher.toBatched({}, "fx.burst", [items(1), items(830)])).rejects.toThrowError(
+        /fx\.burst carries 901 bytes/,
+      );
+      expect(remote.sent).toHaveLength(1);
+    });
+
+    it("leaves reliable and table-encoded signals alone", () => {
+      const signals = {
+        "fx.burst": defineSignal({ id: "fx.burst", payload, wire: "binary" }),
+        "fx.table": defineSignal({ id: "fx.table", payload, unreliable: true }),
+      };
+      const remote = loopback();
+      const publisher = createRemoteSignalPublisher(remote.server, signals, remote.server);
+
+      publisher.to({}, "fx.burst", items(2000));
+      // A table's size is not known at runtime; the compiler warns instead.
+      publisher.to({}, "fx.table", items(2000));
+      expect(remote.sent).toHaveLength(2);
+    });
   });
 });

@@ -136,6 +136,31 @@ pub const BINARY_FRAME_HEADER_BYTES: u64 = 4;
 // error on either side, so the compiler checks it instead.
 pub const UNRELIABLE_PAYLOAD_LIMIT_BYTES: u64 = 900;
 
+// What a signal message costs on top of its payload. The remote carries
+// `{ signalId, payload }`, so the limit applies to that table, not the payload
+// alone: the two key strings ("signalId" + "payload", 15 bytes), the signal id
+// itself (added per signal), and an allowance for each of the five values the
+// table holds (the table, two keys, two values). Roblox does not document its
+// remote encoding; a value there costs a type tag plus a length or count, and
+// 8 bytes each covers a tag and a length prefix of up to 7 bytes with room to
+// spare. Erring high only means warning a little early. Mirrored by the
+// runtimes' publishers (SIGNAL_ENVELOPE_OVERHEAD_BYTES), which check a binary
+// frame against the same total before firing it.
+pub const SIGNAL_ENVELOPE_KEY_BYTES: u64 = 15;
+pub const SIGNAL_ENVELOPE_VALUE_ALLOWANCE_BYTES: u64 = 8;
+pub const SIGNAL_ENVELOPE_VALUES: u64 = 5;
+pub const SIGNAL_ENVELOPE_OVERHEAD_BYTES: u64 =
+    SIGNAL_ENVELOPE_KEY_BYTES + SIGNAL_ENVELOPE_VALUES * SIGNAL_ENVELOPE_VALUE_ALLOWANCE_BYTES;
+
+// For the table encoding the compiler knows only a floor; past this share of the
+// limit, the real size is likely over it, so binary is recommended.
+pub const UNRELIABLE_TABLE_ENCODING_WARN_PERCENT: u64 = 75;
+
+// A signal message's size: the payload plus its `{ signalId, payload }` envelope.
+pub fn signal_message_bytes(signal_id: &str, payload_bytes: u64) -> u64 {
+    payload_bytes + signal_id.len() as u64 + SIGNAL_ENVELOPE_OVERHEAD_BYTES
+}
+
 // The largest payload `encodeBinary` can produce for a schema, frame header
 // excluded, or None when nothing bounds it. Follows the codec's layout
 // (src/runtime/binary.ts): a string needs `.maxLength` or `.maxChars`, an
@@ -2556,11 +2581,14 @@ fn check_unreliable_payload_size(
 
     // The table encoding has no frame header, and its true size is larger than
     // the binary layout, so the binary size without the header is a floor.
-    let compared = if binary {
+    // Either way the envelope around the payload counts toward the limit.
+    let payload = if binary {
         encoded
     } else {
         encoded - BINARY_FRAME_HEADER_BYTES
     };
+    let compared = signal_message_bytes(signal_id, payload);
+    let envelope = compared - payload;
     if compared > UNRELIABLE_PAYLOAD_LIMIT_BYTES {
         diagnostics.push(create_diagnostic(
             "aruna::511",
@@ -2570,13 +2598,34 @@ fn check_unreliable_payload_size(
             Some(file.to_string()),
             Some(span),
             Some(if binary {
-                format!("Largest binary frame, 4-byte header included (export name: {export_name}).")
+                format!(
+                    "Largest binary frame ({payload} bytes, 4-byte header included) plus the {{ signalId, payload }} envelope ({envelope} bytes) (export name: {export_name})."
+                )
             } else {
                 format!(
-                    "Largest payload by the binary layout; the table encoding is larger still (export name: {export_name})."
+                    "Largest payload by the binary layout ({payload} bytes) plus the {{ signalId, payload }} envelope ({envelope} bytes); the table encoding is larger still (export name: {export_name})."
                 )
             }),
             Some("Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.".to_string()),
+        ));
+        return;
+    }
+
+    // Under the limit by the floor, but the table encoding adds type tags and
+    // keys the floor does not count, so close to it is not safe either.
+    let warn_at = UNRELIABLE_PAYLOAD_LIMIT_BYTES * UNRELIABLE_TABLE_ENCODING_WARN_PERCENT / 100;
+    if !binary && compared > warn_at {
+        diagnostics.push(create_diagnostic(
+            "aruna::513",
+            format!(
+                "Unreliable signal {signal_id} is at least {compared} bytes with the table encoding, over {UNRELIABLE_TABLE_ENCODING_WARN_PERCENT}% of Roblox's {UNRELIABLE_PAYLOAD_LIMIT_BYTES}-byte unreliable limit; its real size is larger and may be over it."
+            ),
+            Some(file.to_string()),
+            Some(span),
+            Some(format!(
+                "Largest payload by the binary layout ({payload} bytes) plus the {{ signalId, payload }} envelope ({envelope} bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: {export_name})."
+            )),
+            Some("Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing.".to_string()),
         ));
     }
 }

@@ -73,13 +73,42 @@ export type RemoteSignalPublisher<TSignals extends SignalRegistry, TPlayer = unk
   ) => Promise<void>;
 };
 
+// Roblox drops an unreliable message over this size without an error.
+export const UNRELIABLE_PAYLOAD_LIMIT_BYTES = 900;
+// What the `{ signalId, payload }` envelope costs on top of the payload and the
+// signal id's own bytes: the two key strings (15 bytes) plus 8 bytes for each
+// of the table's five values. Mirrors the compiler's
+// SIGNAL_ENVELOPE_OVERHEAD_BYTES (crates/aruna_compiler/src/actions.rs), which
+// documents the estimate.
+export const SIGNAL_ENVELOPE_OVERHEAD_BYTES = 55;
+
+const utf8Encoder = new TextEncoder();
+
 // The payload as it goes on the wire: an `encodeBinary` buffer for a binary
 // signal, the value itself otherwise. Validated first, so the encoder only ever
-// sees a conforming value.
-function wirePayload(signal: SignalDefinition<Schema | undefined>, payload: unknown): unknown {
-  return signal.wire === "binary" && signal.payload !== undefined
-    ? encodeBinary(signal.payload, payload)
-    : payload;
+// sees a conforming value. A binary frame's size is exact, so an unreliable one
+// that would be dropped for size is refused here, with the message aruna::511
+// uses at compile time; a frame can only get there when the schema leaves the
+// payload unbounded (aruna::510).
+function wirePayload(
+  signal: SignalDefinition<Schema | undefined>,
+  signalId: string,
+  payload: unknown,
+): unknown {
+  if (signal.wire !== "binary" || signal.payload === undefined) {
+    return payload;
+  }
+  const frame = encodeBinary(signal.payload, payload);
+  if (signal.unreliable === true) {
+    const size =
+      frame.byteLength + utf8Encoder.encode(signalId).byteLength + SIGNAL_ENVELOPE_OVERHEAD_BYTES;
+    if (size > UNRELIABLE_PAYLOAD_LIMIT_BYTES) {
+      throw new Error(
+        `Unreliable signal ${signalId} carries ${size} bytes, over Roblox's ${UNRELIABLE_PAYLOAD_LIMIT_BYTES}-byte unreliable limit; larger payloads are dropped without an error.`,
+      );
+    }
+  }
+  return frame;
 }
 
 // The payload a binary signal's handlers receive, or `dropped` when the bytes
@@ -138,12 +167,12 @@ export function createRemoteSignalPublisher<
     to(player: TPlayer, signalId: string, payload: unknown): void {
       const signal = resolveSignal(signals, signalId);
       assertPublishableSignalPayload(signal, payload);
-      remoteFor(signal).FireClient(player, { signalId, payload: wirePayload(signal, payload) });
+      remoteFor(signal).FireClient(player, { signalId, payload: wirePayload(signal, signalId, payload) });
     },
     toMany(players: readonly TPlayer[], signalId: string, payload: unknown): void {
       const signal = resolveSignal(signals, signalId);
       assertPublishableSignalPayload(signal, payload);
-      const message: RemoteSignalMessage = { signalId, payload: wirePayload(signal, payload) };
+      const message: RemoteSignalMessage = { signalId, payload: wirePayload(signal, signalId, payload) };
       const wire = remoteFor(signal);
 
       for (const player of players) {
@@ -153,7 +182,7 @@ export function createRemoteSignalPublisher<
     toAll(signalId: string, payload: unknown): void {
       const signal = resolveSignal(signals, signalId);
       assertPublishableSignalPayload(signal, payload);
-      remoteFor(signal).FireAllClients({ signalId, payload: wirePayload(signal, payload) });
+      remoteFor(signal).FireAllClients({ signalId, payload: wirePayload(signal, signalId, payload) });
     },
     async toBatched(
       player: TPlayer,
@@ -169,7 +198,7 @@ export function createRemoteSignalPublisher<
       for (let index = 0; index < payloads.length; index += 1) {
         const payload = payloads[index];
         assertPublishableSignalPayload(signal, payload);
-        wire.FireClient(player, { signalId, payload: wirePayload(signal, payload) });
+        wire.FireClient(player, { signalId, payload: wirePayload(signal, signalId, payload) });
 
         const isChunkBoundary = (index + 1) % chunkSize === 0;
         if (isChunkBoundary && index + 1 < payloads.length) {
