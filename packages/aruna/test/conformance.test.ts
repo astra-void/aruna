@@ -1,0 +1,232 @@
+// Runs the shared dispatch conformance table (test/conformance/dispatch.json)
+// against the Node reference runtime. The native runtime runs the same table
+// under Lune; see test/conformance/README.md for the format.
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { createServerApp } from "../src/app/server.js";
+import {
+  bindRemoteEventActions,
+  type RemoteEventActionRequest,
+  type RemoteEventActionResponse,
+} from "../src/runtime/remote-event.js";
+import { schema, type Schema } from "../src/schema.js";
+import { defineAction, type ActionMiddleware, type ActionRegistry } from "../src/server.js";
+
+type SchemaDescriptor = {
+  readonly type: "string" | "number" | "boolean" | "object";
+  readonly fields?: Readonly<Record<string, SchemaDescriptor>>;
+  readonly default?: unknown;
+};
+
+type ActionFixture = {
+  readonly id: string;
+  readonly behavior: "echoInput" | "returnConstant" | "returnFunction" | "throwError" | "throwTable";
+  readonly value?: unknown;
+  readonly message?: string;
+  readonly errorName?: string;
+  readonly input?: SchemaDescriptor;
+  readonly output?: SchemaDescriptor;
+  readonly rateLimit?: { readonly windowMs: number; readonly max: number };
+  readonly fireAndForget?: boolean;
+};
+
+type Expectation = {
+  readonly ok?: boolean;
+  readonly output?: unknown;
+  readonly errorName?: string;
+  readonly messageContains?: string;
+  readonly noResponse?: boolean;
+};
+
+type Step =
+  | { readonly advanceMs: number }
+  | { readonly dispatch: string; readonly input?: unknown; readonly expect: Expectation };
+
+type ConformanceCase = {
+  readonly name: string;
+  readonly actions: readonly ActionFixture[];
+  readonly middleware?: readonly string[];
+  readonly steps: readonly Step[];
+  readonly trace: readonly string[];
+};
+
+const table = JSON.parse(
+  readFileSync(new URL("./conformance/dispatch.json", import.meta.url), "utf8"),
+) as { readonly cases: readonly ConformanceCase[] };
+
+function toSchema(descriptor: SchemaDescriptor): Schema {
+  const base = (() => {
+    switch (descriptor.type) {
+      case "string":
+        return schema.string();
+      case "number":
+        return schema.number();
+      case "boolean":
+        return schema.boolean();
+      case "object":
+        return schema.object(
+          Object.fromEntries(
+            Object.entries(descriptor.fields ?? {}).map(([key, field]) => [key, toSchema(field)]),
+          ),
+        );
+    }
+  })();
+  if (descriptor.default === undefined) {
+    return base;
+  }
+  return (base as unknown as { default(value: unknown): Schema }).default(descriptor.default);
+}
+
+// `{ "$function": true }` stands in for a function, which JSON cannot carry.
+function materialize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(materialize);
+  }
+  if (typeof value === "object" && value !== null) {
+    if ((value as { $function?: unknown }).$function === true) {
+      return () => undefined;
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, materialize(entry)]),
+    );
+  }
+  return value;
+}
+
+function behaviorOf(fixture: ActionFixture): (input: unknown) => unknown {
+  switch (fixture.behavior) {
+    case "echoInput":
+      return (input) => input;
+    case "returnConstant":
+      return () => fixture.value;
+    case "returnFunction":
+      return () => ({ handler: () => undefined });
+    case "throwError":
+      return () => {
+        throw new Error(fixture.message);
+      };
+    case "throwTable":
+      return () => {
+        // The plain-table throw is the point of this fixture.
+        // oxlint-disable-next-line no-throw-literal
+        throw { name: fixture.errorName, message: fixture.message };
+      };
+  }
+}
+
+// A loopback RemoteEvent: `send` fires a request at the bound server and returns
+// the response it fired back, or undefined when it sent none.
+function createLoopbackRemote() {
+  let listener: ((player: unknown, request: RemoteEventActionRequest) => unknown) | undefined;
+  const responses: RemoteEventActionResponse[] = [];
+  return {
+    remote: {
+      FireClient(_player: unknown, response: RemoteEventActionResponse) {
+        responses.push(response);
+      },
+      OnServerEvent: {
+        Connect(callback: (player: unknown, request: RemoteEventActionRequest) => unknown) {
+          listener = callback;
+          return {
+            Disconnect() {
+              listener = undefined;
+            },
+          };
+        },
+      },
+    },
+    async send(player: unknown, request: RemoteEventActionRequest) {
+      await listener?.(player, request);
+      return responses.shift();
+    },
+  };
+}
+
+describe("dispatch conformance (Node)", () => {
+  for (const testCase of table.cases) {
+    it(testCase.name, async () => {
+      const trace: string[] = [];
+      const actions: ActionRegistry = {};
+      for (const fixture of testCase.actions) {
+        const behave = behaviorOf(fixture);
+        actions[fixture.id] = defineAction({
+          id: fixture.id,
+          ...(fixture.input !== undefined ? { input: toSchema(fixture.input) } : {}),
+          ...(fixture.output !== undefined ? { output: toSchema(fixture.output) } : {}),
+          ...(fixture.rateLimit !== undefined ? { rateLimit: fixture.rateLimit } : {}),
+          ...(fixture.fireAndForget === true ? { fireAndForget: true } : {}),
+          run(_ctx, input) {
+            trace.push("run");
+            return behave(input);
+          },
+        });
+      }
+
+      const middleware = (testCase.middleware ?? []).map(
+        (label): ActionMiddleware => async (_info, next) => {
+          trace.push(`${label}:before`);
+          const output = await next();
+          trace.push(`${label}:after`);
+          return output;
+        },
+      );
+
+      let clockMs = 0;
+      const loopback = createLoopbackRemote();
+      const app = createServerApp({
+        actions,
+        middleware,
+        onError() {
+          trace.push("onError");
+        },
+        nowMs: () => clockMs,
+        transport: ({ registry, dispatch }) =>
+          bindRemoteEventActions(loopback.remote, registry, dispatch),
+      });
+
+      const player = { UserId: 1, Name: "Conformance" };
+      let requestCount = 0;
+      for (const step of testCase.steps) {
+        if ("advanceMs" in step) {
+          clockMs += step.advanceMs;
+          continue;
+        }
+
+        requestCount += 1;
+        const response = await loopback.send(player, {
+          requestId: `conformance:${requestCount}`,
+          actionId: step.dispatch,
+          input: materialize(step.input),
+        });
+        const expected = step.expect;
+
+        if (expected.noResponse === true) {
+          expect(response).toBeUndefined();
+          continue;
+        }
+        expect(response).toBeDefined();
+        if (response === undefined) {
+          continue;
+        }
+        if (expected.ok !== undefined) {
+          expect(response.ok).toBe(expected.ok);
+        }
+        if (response.ok) {
+          if ("output" in expected) {
+            expect(response.output).toEqual(expected.output);
+          }
+        } else {
+          if (expected.errorName !== undefined) {
+            expect(response.error.name).toBe(expected.errorName);
+          }
+          if (expected.messageContains !== undefined) {
+            expect(response.error.message).toContain(expected.messageContains);
+          }
+        }
+      }
+
+      expect(trace).toEqual(testCase.trace);
+      app.dispose();
+    });
+  }
+});

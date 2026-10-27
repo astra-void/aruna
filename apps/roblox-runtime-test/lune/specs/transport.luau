@@ -41,7 +41,8 @@ return function(ctx)
 			t.isTrue(settled, "round trip settled")
 			t.isFalse(ok, "invoker rejected")
 			-- Rejections are structured: message + optional name/retryAfterMs.
-			t.contains(value.message, "unknown action")
+			t.contains(value.message, "Aruna action not found")
+			t.eq(value.name, "ActionNotFoundError")
 		end)
 
 		t.it("fire-and-forget resolves immediately with no value", function()

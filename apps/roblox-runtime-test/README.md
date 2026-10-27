@@ -22,6 +22,14 @@ What happens:
 2. `rbxtsc` compiles it to Luau in `out/runtime/`.
 3. Lune runs `lune/run.luau`, which loads the compiled modules and runs the specs.
 
+`lune/specs/conformance.luau` runs the dispatch case table in
+`packages/aruna/test/conformance/dispatch.json`, the same table the Node
+runtime's vitest suite runs. A dispatch behavior both runtimes must share
+belongs there, not in a spec on one side only. This package's `turbo.json`
+lists the native runtime sources and that table as test inputs, because the
+package doesn't depend on `aruna` and turbo would otherwise replay a stale
+pass.
+
 Lune is pinned in the repo-root `rokit.toml`; install it with `rokit install`.
 If Lune is not on `PATH`, the harness still compiles the runtime (proving it
 builds) and skips execution with a notice, so CI without the Roblox toolchain

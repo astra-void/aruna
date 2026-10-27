@@ -121,12 +121,27 @@ the game build like any other module.
   `SchemaValidationError`, so `instanceof SchemaValidationError` still matches. A
   client that compared `err.name` with `"SchemaValidationError"` has to change.
 
+- **An unknown action id is `ActionNotFoundError` in both runtimes.** Both
+  reply `Aruna action not found: <id>` with that name. Before this, Node threw
+  a plain `Error` and the native runtime replied `unknown action: <id>` with no
+  name. Node exports the class from `aruna/server`.
+
 - **Native validation messages match the Node runtime's wording.** A failing input
   reads `Aruna action shop.buy input validation failed: item: expected string`,
   not `invalid action input: item: expected string`. A spec that matched the old
   text has to change.
 
 ### Fixed
+
+- **The Node RemoteEvent transport dropped middleware, `onError`, `ctx.session`,
+  and `ctx.store`.** `bindRemoteEventActions` copied a hand-kept list of five
+  dispatch options and silently left out the rest. An action dispatched over
+  `createServerApp({ transport: robloxRemoteEvent() })` therefore skipped the
+  app's middleware (an auth check included), never reached `onError`, and saw
+  no session or store document. `app.dispatch` was unaffected. The binder now
+  forwards every dispatch option, and `BindActionsOptions` is
+  `DispatchActionOptions` plus `createContext`. The native runtime never had
+  this gap.
 
 - **The native runtime now validates action output.** It checked only that the
   output could cross the wire, though the README and the testing docs both said

@@ -1,0 +1,207 @@
+{
+  "description": "Dispatch conformance cases, run by both runtimes: test/conformance.test.ts (Node) and apps/roblox-runtime-test/lune/specs/conformance.luau (native). Data only; the format is documented in test/conformance/README.md.",
+  "cases": [
+    {
+      "name": "unknown action",
+      "actions": [],
+      "steps": [
+        {
+          "dispatch": "missing",
+          "input": {},
+          "expect": {
+            "ok": false,
+            "errorName": "ActionNotFoundError",
+            "messageContains": "Aruna action not found: missing"
+          }
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "input defaults fill before the handler runs",
+      "actions": [
+        {
+          "id": "echo",
+          "behavior": "echoInput",
+          "input": {
+            "type": "object",
+            "fields": {
+              "label": { "type": "string" },
+              "count": { "type": "number", "default": 3 }
+            }
+          }
+        }
+      ],
+      "steps": [
+        {
+          "dispatch": "echo",
+          "input": { "label": "a" },
+          "expect": { "ok": true, "output": { "label": "a", "count": 3 } }
+        }
+      ],
+      "trace": ["run"]
+    },
+    {
+      "name": "non-wire-safe input is rejected before the handler",
+      "actions": [{ "id": "echo", "behavior": "echoInput" }],
+      "steps": [
+        {
+          "dispatch": "echo",
+          "input": { "callback": { "$function": true } },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "invalid input is rejected before the handler and not reported",
+      "actions": [
+        {
+          "id": "typed",
+          "behavior": "echoInput",
+          "input": { "type": "object", "fields": { "n": { "type": "number" } } }
+        }
+      ],
+      "steps": [
+        {
+          "dispatch": "typed",
+          "input": { "n": "x" },
+          "expect": {
+            "ok": false,
+            "errorName": "ActionValidationError",
+            "messageContains": "Aruna action typed input validation failed"
+          }
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "rate limit hits, then resets when the frozen clock crosses the window",
+      "actions": [
+        {
+          "id": "limited",
+          "behavior": "returnConstant",
+          "value": "done",
+          "rateLimit": { "windowMs": 1000, "max": 1 }
+        }
+      ],
+      "steps": [
+        { "dispatch": "limited", "expect": { "ok": true, "output": "done" } },
+        {
+          "dispatch": "limited",
+          "expect": {
+            "ok": false,
+            "errorName": "ActionRateLimitError",
+            "messageContains": "rate limited"
+          }
+        },
+        { "advanceMs": 1000 },
+        { "dispatch": "limited", "expect": { "ok": true, "output": "done" } }
+      ],
+      "trace": ["run", "run"]
+    },
+    {
+      "name": "a synchronous throw fails the call and reaches onError",
+      "actions": [{ "id": "boom", "behavior": "throwError", "message": "explosion" }],
+      "steps": [
+        {
+          "dispatch": "boom",
+          "expect": { "ok": false, "messageContains": "explosion" }
+        }
+      ],
+      "trace": ["run", "onError"]
+    },
+    {
+      "name": "a thrown { name, message } table fails the call and reaches onError",
+      "actions": [
+        {
+          "id": "soldOut",
+          "behavior": "throwTable",
+          "errorName": "OutOfStock",
+          "message": "Item is sold out"
+        }
+      ],
+      "steps": [{ "dispatch": "soldOut", "expect": { "ok": false } }],
+      "trace": ["run", "onError"]
+    },
+    {
+      "name": "invalid output fails the call and reaches onError",
+      "actions": [
+        {
+          "id": "typed",
+          "behavior": "returnConstant",
+          "value": { "ok": "yes" },
+          "output": { "type": "object", "fields": { "ok": { "type": "boolean" } } }
+        }
+      ],
+      "steps": [
+        {
+          "dispatch": "typed",
+          "expect": {
+            "ok": false,
+            "errorName": "ActionValidationError",
+            "messageContains": "Aruna action typed output validation failed"
+          }
+        }
+      ],
+      "trace": ["run", "onError"]
+    },
+    {
+      "name": "non-wire-safe output fails the call and reaches onError",
+      "actions": [{ "id": "leak", "behavior": "returnFunction" }],
+      "steps": [
+        {
+          "dispatch": "leak",
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": ["run", "onError"]
+    },
+    {
+      "name": "middleware runs outermost-first around the handler",
+      "actions": [{ "id": "echo", "behavior": "echoInput" }],
+      "middleware": ["outer", "inner"],
+      "steps": [
+        {
+          "dispatch": "echo",
+          "input": { "value": 7 },
+          "expect": { "ok": true, "output": { "value": 7 } }
+        }
+      ],
+      "trace": ["outer:before", "inner:before", "run", "inner:after", "outer:after"]
+    },
+    {
+      "name": "middleware sees an output failure as a rejection",
+      "actions": [
+        {
+          "id": "typed",
+          "behavior": "returnConstant",
+          "value": { "ok": "yes" },
+          "output": { "type": "object", "fields": { "ok": { "type": "boolean" } } }
+        }
+      ],
+      "middleware": ["outer"],
+      "steps": [
+        {
+          "dispatch": "typed",
+          "expect": { "ok": false, "errorName": "ActionValidationError" }
+        }
+      ],
+      "trace": ["outer:before", "run", "onError"]
+    },
+    {
+      "name": "fireAndForget runs the handler and sends no response",
+      "actions": [{ "id": "fire", "behavior": "echoInput", "fireAndForget": true }],
+      "steps": [{ "dispatch": "fire", "input": { "n": 1 }, "expect": { "noResponse": true } }],
+      "trace": ["run"]
+    },
+    {
+      "name": "a failing fireAndForget action still sends no response",
+      "actions": [
+        { "id": "fire", "behavior": "throwError", "message": "explosion", "fireAndForget": true }
+      ],
+      "steps": [{ "dispatch": "fire", "expect": { "noResponse": true } }],
+      "trace": ["run", "onError"]
+    }
+  ]
+}

@@ -31,6 +31,8 @@ const rbxtscEntry = join(
   "cli.js",
 );
 const runScript = join(packageDir, "lune", "run.luau");
+// The dispatch case table the Node runtime's vitest suite runs too.
+const conformanceTable = join(repoRoot, "packages", "aruna", "test", "conformance", "dispatch.json");
 
 const keepArtifacts = process.argv.includes("--keep");
 
@@ -81,7 +83,7 @@ if (luneProbe.status !== 0) {
 }
 
 step("Executing runtime under Lune");
-const run = spawnSync("lune", ["run", runScript, compiledOutput, promisePath], {
+const run = spawnSync("lune", ["run", runScript, compiledOutput, promisePath, conformanceTable], {
   cwd: packageDir,
   stdio: "inherit",
 });

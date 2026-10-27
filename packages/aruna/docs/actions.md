@@ -163,7 +163,7 @@ a limit is exceeded the dispatcher throws `ActionRateLimitError` (`retryAfterMs`
 
 **Failures are typed across the wire.** A rejected invoke carries a structured error —
 `err.message` plus `err.name` (`"ActionRateLimitError"`, `"ActionValidationError"`,
-`"ActionSerializationError"`, `"ActionTimeoutError"`) — and rate-limit rejections also
+`"ActionSerializationError"`, `"ActionNotFoundError"`, `"ActionTimeoutError"`) — and rate-limit rejections also
 carry `err.retryAfterMs` / `err.resetAtMs`, so clients can back off precisely instead of
 string-matching messages.
 

@@ -949,7 +949,7 @@ describe("bindRemoteEventActions", () => {
           ok: false,
           error: {
             message: "Aruna action not found: shop.purchaseItem",
-            name: "Error",
+            name: "ActionNotFoundError",
           },
         },
       },

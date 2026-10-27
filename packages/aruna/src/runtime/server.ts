@@ -201,6 +201,18 @@ export class ActionValidationError extends SchemaValidationError {
   override readonly name: string = "ActionValidationError";
 }
 
+// A dispatch for an action id the registry does not hold. Public on the wire,
+// like the other framework errors, and named the same in the native runtime.
+export class ActionNotFoundError extends Error {
+  override readonly name = "ActionNotFoundError";
+  readonly actionId: string;
+
+  constructor(actionId: string) {
+    super(`Aruna action not found: ${actionId}`);
+    this.actionId = actionId;
+  }
+}
+
 function assertActionSchema(
   schema: Schema,
   value: unknown,
@@ -229,7 +241,7 @@ export async function dispatchAction<TPlayer = unknown>(
   const action = registry[actionId];
 
   if (action === undefined) {
-    throw new Error(`Aruna action not found: ${actionId}`);
+    throw new ActionNotFoundError(actionId);
   }
 
   // Fill `.default(...)` values before validation and before the handler runs,

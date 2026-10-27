@@ -14,7 +14,7 @@ export interface ActionDispatchResult {
 	// Structured error metadata alongside the message, so the client can
 	// discriminate failures (and back off on rate limits) instead of string
 	// matching: "ActionRateLimitError" | "ActionValidationError" |
-	// "ActionSerializationError" | a thrown table's own `name`.
+	// "ActionSerializationError" | "ActionNotFoundError" | a thrown table's own `name`.
 	readonly errorName?: string;
 	readonly retryAfterMs?: number;
 	readonly resetAtMs?: number;
@@ -130,7 +130,11 @@ export function createActionRegistry<TPlayer>(
 			return new Promise<ActionDispatchResult>((resolve) => {
 				const definition = actionsById.get(actionId);
 				if (definition === undefined) {
-					resolve({ ok: false, error: `unknown action: ${actionId}` });
+					resolve({
+						ok: false,
+						error: `Aruna action not found: ${actionId}`,
+						errorName: "ActionNotFoundError",
+					});
 					return;
 				}
 

@@ -9,12 +9,9 @@ import {
 } from "./client.js";
 import {
   dispatchAction,
-  type ActionRateLimitOptions,
-  type ActionRateLimiter,
   type ActionRegistry,
   type ActionRunContext,
   type DispatchActionOptions,
-  type RateLimitKeyResolver,
 } from "./server.js";
 
 export type RemoteEventActionRequest = {
@@ -145,20 +142,12 @@ export type ActionContextFactory<TPlayer = unknown> = (
   player: TPlayer,
 ) => ActionRunContext<TPlayer>;
 
-export type BindActionsOptions<TPlayer = unknown> = {
+// The context factory plus every dispatch option, forwarded to dispatch as is:
+// `createServerApp` passes its resolved options (rate limiting, the default
+// rate limit, publisher, session and store lookups, middleware, onError, clock)
+// so the wire runs an action exactly as `app.dispatch` does.
+export type BindActionsOptions<TPlayer = unknown> = DispatchActionOptions<TPlayer> & {
   readonly createContext?: ActionContextFactory<TPlayer>;
-  readonly rateLimiter?: ActionRateLimiter;
-  readonly rateLimitKey?: RateLimitKeyResolver<TPlayer>;
-  // Applied to any action that does not declare its own `rateLimit`. A
-  // per-action `rateLimit` always takes precedence over this fallback. Forwarded
-  // straight into the dispatch options so a config-level `defaultRateLimit`
-  // actually throttles the wire, not just the in-process `dispatch` helper.
-  readonly defaultRateLimit?: ActionRateLimitOptions;
-  // The app-owned signal publisher, forwarded into dispatch so a wire-dispatched
-  // action's `ctx.publisher` is the same one `app.dispatch` injects. Set by
-  // `createServerApp` via the transport's dispatch options.
-  readonly publisher?: DispatchActionOptions<TPlayer>["publisher"];
-  readonly nowMs?: () => number;
 };
 
 let nextRequestId = 0;
@@ -395,6 +384,12 @@ export function bindRemoteEventActions<TPlayer = unknown>(
   registry: ActionRegistry<TPlayer>,
   options?: BindActionsOptions<TPlayer>,
 ): ServerBinding {
+  // Everything but `createContext` is a dispatch option. Forwarded whole rather
+  // than field by field: a hand-kept list here once dropped `middleware`,
+  // `onError`, `getSession`, and `getStore`, so the wire ran actions without the
+  // middleware `app.dispatch` applied.
+  const { createContext, ...dispatchOptions } = options ?? {};
+
   const connection = remote.OnServerEvent.Connect(async (player, request) => {
     // Clients can fire arbitrary payloads. Reject malformed envelopes before
     // touching the registry: respond with an error when there is a usable
@@ -416,7 +411,7 @@ export function bindRemoteEventActions<TPlayer = unknown>(
       return;
     }
 
-    const context = options?.createContext?.(player) ?? ({ player } as ActionRunContext<TPlayer>);
+    const context = createContext?.(player) ?? ({ player } as ActionRunContext<TPlayer>);
 
     // Fire-and-forget actions are one-way: dispatch still runs (for its side
     // effects and rate limiting), but no response — success or error — is sent
@@ -424,18 +419,6 @@ export function bindRemoteEventActions<TPlayer = unknown>(
     const fireAndForget = registry[request.actionId]?.fireAndForget === true;
 
     try {
-      const dispatchOptions =
-        options === undefined
-          ? undefined
-          : ({
-              ...(options.rateLimiter !== undefined ? { rateLimiter: options.rateLimiter } : {}),
-              ...(options.rateLimitKey !== undefined ? { rateLimitKey: options.rateLimitKey } : {}),
-              ...(options.defaultRateLimit !== undefined
-                ? { defaultRateLimit: options.defaultRateLimit }
-                : {}),
-              ...(options.publisher !== undefined ? { publisher: options.publisher } : {}),
-              ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
-            } satisfies DispatchActionOptions<TPlayer>);
       const output = await dispatchAction(
         registry,
         request.actionId,

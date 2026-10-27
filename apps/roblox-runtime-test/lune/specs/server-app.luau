@@ -61,7 +61,7 @@ return function(ctx)
 			local settledMissing, okMissing, missingReason = t.await(app.dispatch("missing", { player = player }, nil))
 			t.isTrue(settledMissing, "missing-action dispatch settled")
 			t.isFalse(okMissing, "missing action should reject")
-			t.contains(missingReason.message, "unknown action")
+			t.contains(missingReason.message, "Aruna action not found")
 			app.dispose()
 		end)
 
