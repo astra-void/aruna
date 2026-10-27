@@ -60,9 +60,14 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::102" => Some(("missing-tsconfig", DiagnosticSeverity::Warning)),
         "aruna::103" => Some(("invalid-tsconfig", DiagnosticSeverity::Error)),
         "aruna::106" => Some(("parse-failed", DiagnosticSeverity::Error)),
+        // A strict option that is parsed but has no check behind it yet, set to
+        // something other than its default.
+        "aruna::109" => Some(("strict-option-not-enforced", DiagnosticSeverity::Warning)),
         "aruna::105" => Some(("unresolved-import", DiagnosticSeverity::Warning)),
         "aruna::200" => Some(("unknown-module-kind", DiagnosticSeverity::Warning)),
         "aruna::203" => Some(("ambiguous-convention-match", DiagnosticSeverity::Warning)),
+        // Severity follows strict.rawRemoteUsage; this is the default.
+        "aruna::507" => Some(("raw-remote-usage", DiagnosticSeverity::Warning)),
         "aruna::550" => Some(("invalid-action-definition", DiagnosticSeverity::Error)),
         "aruna::551" => Some(("action-missing-run", DiagnosticSeverity::Error)),
         "aruna::552" => Some(("action-run-not-function", DiagnosticSeverity::Error)),

@@ -10,6 +10,7 @@ import type {
   ConventionConfig,
   DevConfig,
   Diagnostic,
+  DiagnosticsConfig,
   DomainsConfig,
   EntriesMode,
   StrictConfig,
@@ -72,6 +73,10 @@ type MutableStrictConfig = {
   domainBoundary?: StrictConfig["domainBoundary"];
 };
 
+type MutableDiagnosticsConfig = {
+  ignore?: string[];
+};
+
 type MutableDevConfig = {
   rojo?: boolean | { port?: number };
 };
@@ -84,6 +89,7 @@ type MutableConfig = {
   conventions?: MutableConventionConfig;
   domains?: MutableDomainsConfig;
   strict?: MutableStrictConfig;
+  diagnostics?: MutableDiagnosticsConfig;
   dev?: MutableDevConfig;
 };
 
@@ -338,6 +344,21 @@ function mergeDevConfig(
   };
 }
 
+function mergeDiagnosticsConfig(
+  base: DiagnosticsConfig | undefined,
+  override: DiagnosticsConfig | undefined,
+): DiagnosticsConfig | undefined {
+  if (base === undefined && override === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...base,
+    ...override,
+    ignore: mergeStringArray(base?.ignore, override?.ignore),
+  };
+}
+
 function mergePublicConfig(base: Config, override: Config): Config {
   return {
     root: override.root ?? base.root,
@@ -347,6 +368,7 @@ function mergePublicConfig(base: Config, override: Config): Config {
     conventions: mergeConventionConfig(base.conventions, override.conventions),
     domains: mergeDomainsConfig(base.domains, override.domains),
     strict: mergeStrictConfig(base.strict, override.strict),
+    diagnostics: mergeDiagnosticsConfig(base.diagnostics, override.diagnostics),
     dev: mergeDevConfig(base.dev, override.dev),
   };
 }
@@ -383,11 +405,13 @@ function normalizeConfigObject(value: unknown): {
   }
 
   const candidateRecord = candidate as RawConfigObject;
+  // `diagnostics` was a flat-shape field too, but it is a nested section again
+  // (`diagnostics: { ignore }`), so it no longer marks a flat config. A flat
+  // config still trips on the fields it always carried alongside it.
   if (
     candidateRecord["generatedDir"] !== undefined ||
     candidateRecord["manifest"] !== undefined ||
     candidateRecord["source"] !== undefined ||
-    candidateRecord["diagnostics"] !== undefined ||
     candidateRecord["security"] !== undefined ||
     candidateRecord["tsconfig"] !== undefined
   ) {
@@ -408,6 +432,7 @@ function normalizeConfigObject(value: unknown): {
     "conventions",
     "domains",
     "strict",
+    "diagnostics",
     "dev",
   ] as const;
   validateUnsupportedKeys(candidateRecord, allowedTopLevel, diagnostics, "top-level config");
@@ -650,6 +675,24 @@ function normalizeConfigObject(value: unknown): {
     }
   }
 
+  if (candidateRecord["diagnostics"] !== undefined) {
+    const diagnosticsValue = candidateRecord["diagnostics"];
+    if (!isRecord(diagnosticsValue)) {
+      diagnostics.push("diagnostics must be an object");
+    } else {
+      validateUnsupportedKeys(diagnosticsValue, ["ignore"], diagnostics, "diagnostics");
+      const diagnosticsConfig: MutableDiagnosticsConfig = {};
+      if (diagnosticsValue["ignore"] !== undefined) {
+        if (!isStringArray(diagnosticsValue["ignore"])) {
+          diagnostics.push("diagnostics.ignore must be an array of strings");
+        } else {
+          diagnosticsConfig.ignore = [...diagnosticsValue["ignore"]];
+        }
+      }
+      config.diagnostics = diagnosticsConfig;
+    }
+  }
+
   if (candidateRecord["dev"] !== undefined) {
     const devValue = candidateRecord["dev"];
     if (!isRecord(devValue)) {
@@ -767,6 +810,9 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       rawRemoteUsage: config.strict?.rawRemoteUsage ?? "warning",
       unresolvedImports: config.strict?.unresolvedImports ?? "warning",
       domainBoundary: config.strict?.domainBoundary ?? "warning",
+    },
+    diagnostics: {
+      ignore: [...(config.diagnostics?.ignore ?? [])],
     },
   };
 }

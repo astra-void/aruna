@@ -195,8 +195,12 @@ fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnosti
     ))
 }
 
-fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnostic> {
+fn create_unresolved_import_diagnostic(
+    edge: &GraphImportRecord,
+    severity: &StrictSeverity,
+) -> Option<ArunaDiagnostic> {
     if edge.edge.resolved
+        || matches!(severity, StrictSeverity::Off)
         || matches!(edge.importer_kind, ModuleKind::Unknown)
         || Path::new(&edge.edge.specifier).is_absolute()
     {
@@ -240,7 +244,7 @@ fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<Aruna
         )
     };
 
-    Some(create_diagnostic(
+    let mut diagnostic = create_diagnostic(
         "aruna::105",
         message,
         Some(edge.importer_path.clone()),
@@ -250,6 +254,33 @@ fn create_unresolved_import_diagnostic(edge: &GraphImportRecord) -> Option<Aruna
             module_kind_label(edge.importer_kind)
         )),
         Some(suggestion),
+    );
+    diagnostic.severity = match severity {
+        StrictSeverity::Error => DiagnosticSeverity::Error,
+        _ => DiagnosticSeverity::Warning,
+    };
+    Some(diagnostic)
+}
+
+// `strict.sharedSafety` is parsed but nothing checks it yet: the shared-module
+// rules in the spec (no GUI or DataStore access, no hidden environment side
+// effects) are not defined precisely enough to detect. Turning it off would look
+// like it changed something, so say plainly that it did not.
+fn create_shared_safety_diagnostic(config: &ArunaConfig) -> Option<ArunaDiagnostic> {
+    if config.strict.shared_safety {
+        return None;
+    }
+
+    Some(create_diagnostic(
+        "aruna::109",
+        "strict.sharedSafety is not enforced yet, so setting it to false has no effect.",
+        None,
+        None,
+        Some(
+            "No shared-module safety check exists yet: shared modules are checked only by the import boundary rules (aruna::302, aruna::303), whatever this option says."
+                .to_string(),
+        ),
+        Some("Remove strict.sharedSafety from the config.".to_string()),
     ))
 }
 
@@ -363,6 +394,7 @@ fn build_diagnostics(
 ) -> Vec<ArunaDiagnostic> {
     let mut diagnostics = Vec::new();
     diagnostics.extend(config_diagnostics.iter().cloned());
+    diagnostics.extend(create_shared_safety_diagnostic(config));
     diagnostics.extend(graph_diagnostics.iter().cloned());
 
     let domains = DomainIndex::new(config, modules.iter().map(|module| module.path.as_str()));
@@ -370,7 +402,9 @@ fn build_diagnostics(
     let mut touched_unknown_kinds = BTreeSet::new();
     for edge in imports {
         if !edge.edge.resolved {
-            if let Some(unresolved) = create_unresolved_import_diagnostic(edge) {
+            if let Some(unresolved) =
+                create_unresolved_import_diagnostic(edge, &config.strict.unresolved_imports)
+            {
                 diagnostics.push(unresolved);
             }
             continue;
@@ -456,14 +490,14 @@ fn run_project_inner(
         &input.tsconfig_options,
     )?;
 
-    let ignore: Vec<String> = Vec::new();
+    let ignore = &input.config.diagnostics.ignore;
     let diagnostics = build_diagnostics(
         &graph.diagnostics,
         &graph.imports,
         &graph.modules,
         &input.config,
         &input.config_diagnostics,
-        &ignore,
+        ignore,
     );
     let resolved_imports = graph
         .imports
@@ -483,7 +517,7 @@ fn run_project_inner(
         );
         mutable_diagnostics.extend(strip_ignored_diagnostics(
             &generated.diagnostics,
-            &ignore,
+            ignore,
         ));
 
         let mut files = generated.files;
@@ -495,7 +529,7 @@ fn run_project_inner(
             );
             mutable_diagnostics.extend(strip_ignored_diagnostics(
                 &generated_signals.diagnostics,
-                &ignore,
+                ignore,
             ));
             files.extend(generated_signals.files);
         }

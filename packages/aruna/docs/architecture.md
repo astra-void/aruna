@@ -11,10 +11,11 @@ convention (default globs `**/client/**`, `**/server/**`, `**/shared/**`, plus w
 entry filenames like `server.ts` and `client.tsx`). Classification drives two things:
 
 1. **Where generated code and compiled output go** (the partition, below).
-2. **What may import what.** With `strict.sharedSafety` on (default), shared and client
-   code may not pull in server-only modules. Putting `createServerApp`, `bindActions`, or
-   an action's `run` body somewhere client-reachable is a boundary violation the compiler
-   reports — it would otherwise replicate server logic to every player.
+2. **What may import what.** Shared and client code may not pull in server-only
+   modules. This boundary is always checked; no `strict` option turns it off. Putting
+   `createServerApp`, `bindActions`, or an action's `run` body somewhere client-reachable
+   is a boundary violation the compiler reports — it would otherwise replicate server
+   logic to every player.
 
 Rule: action `run` implementations and server registration live in server-classified
 files. Schemas and pure helpers live in `shared`. UI and `invokeAction` calls live in

@@ -163,6 +163,15 @@ pub struct DomainsConfig {
     pub roots: Vec<String>,
 }
 
+// Reporting controls. `ignore` drops every diagnostic whose code
+// (`aruna::507`) or name (`raw-remote-usage`) it lists, project-wide.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsConfig {
+    #[serde(default)]
+    pub ignore: Vec<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArunaConfig {
@@ -190,6 +199,8 @@ pub struct ArunaConfig {
     pub domains: DomainsConfig,
     #[serde(default)]
     pub strict: StrictConfig,
+    #[serde(default)]
+    pub diagnostics: DiagnosticsConfig,
 }
 
 fn default_root() -> String {
@@ -217,6 +228,7 @@ impl Default for ArunaConfig {
             convention_overrides: ConventionConfig::default(),
             domains: DomainsConfig::default(),
             strict: StrictConfig::default(),
+            diagnostics: DiagnosticsConfig::default(),
         }
     }
 }

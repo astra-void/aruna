@@ -1,4 +1,4 @@
-use crate::config::{ArunaConfig, EntriesMode};
+use crate::config::{ArunaConfig, EntriesMode, StrictSeverity};
 use crate::actions::{
     collect_action_definitions, collect_runtime_definitions, collect_signal_definitions,
     collect_store_definitions, resolve_runtime_order,
@@ -12,6 +12,7 @@ use crate::files::{normalize_path, project_absolute, project_relative};
 use crate::manifest::ArunaModuleRecord;
 use crate::module_kind::{classify_module, entry_side_for_path, EntrySide, ModuleKind, ModuleReason};
 use crate::parser::{collect_module_exports, collect_static_imports};
+use crate::raw_remote::{collect_raw_remote_usages, create_raw_remote_usage_diagnostic};
 use crate::resolver::{
     resolve_import_specifier, TsconfigResolverOptions, VirtualGeneratedActionModule,
     VirtualGeneratedSignalModule, GENERATED_CLIENT_ENTRY_FILE, GENERATED_SERVER_ENTRY_FILE,
@@ -356,6 +357,22 @@ pub fn build_project_graph(
         if let Ok(result) = collect_runtime_definitions(project_root, absolute_path, &source_text) {
             runtime_records.extend(result.runtimes);
             diagnostics.extend(result.diagnostics);
+        }
+
+        // Raw remote use (strict.rawRemoteUsage). Specs are skipped above, and
+        // the generated dir, vendored runtime included, is never discovered, so
+        // only the project's own code is checked.
+        if !matches!(config.strict.raw_remote_usage, StrictSeverity::Off) {
+            if let Ok(usages) = collect_raw_remote_usages(absolute_path, &source_text) {
+                let relative_path = project_relative(project_root, absolute_path);
+                diagnostics.extend(usages.iter().filter_map(|usage| {
+                    create_raw_remote_usage_diagnostic(
+                        &relative_path,
+                        usage,
+                        &config.strict.raw_remote_usage,
+                    )
+                }));
+            }
         }
     }
 

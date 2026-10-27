@@ -158,6 +158,9 @@ export default defineConfig({
     unresolvedImports: "warning",
     domainBoundary: "warning",
   },
+  diagnostics: {
+    ignore: [],
+  },
 });
 ```
 
@@ -168,7 +171,26 @@ export default defineConfig({
 - `domains.roots` are globs matching a domain *directory* (`src/domains/*` matches
   `src/domains/shop`), and `strict.domainBoundary` sets the severity of a
   cross-domain private import.
-- `strict` is accepted and normalized; the current implementation does not fully enforce every strict behavior yet.
+- `strict` sets how loudly each check reports. The severities are `"off"`, `"warning"`,
+  and `"error"`; an error fails `aruna check` and `aruna build`.
+  - `strict.unresolvedImports` (default `"warning"`): the severity of `aruna::105
+    unresolved-import`, an import Aruna could not resolve. `"off"` stops reporting it.
+  - `strict.rawRemoteUsage` (default `"warning"`): the severity of `aruna::507
+    raw-remote-usage`, reported for `new Instance("RemoteEvent" | "RemoteFunction" |
+    "UnreliableRemoteEvent")` and for any access to `FireServer`, `FireClient`,
+    `FireAllClients`, `InvokeServer`, `OnServerEvent`, `OnClientEvent`, or
+    `OnServerInvoke`. The check is by name, so a type of your own with a `FireServer`
+    member is reported too. Specs and the generated dir (the vendored runtime included)
+    are never checked.
+  - `strict.domainBoundary` (default `"warning"`): the severity of `aruna::304
+    cross-domain-private-import`. See [Domain boundaries](#domain-boundaries).
+  - `strict.sharedSafety` (default `true`): **not enforced yet.** No shared-module
+    safety check exists. Shared modules are checked only by the import boundary rules
+    (`aruna::302`, `aruna::303`), which always run. Setting it to `false` reports
+    `aruna::109 strict-option-not-enforced` so the setting is not mistaken for a
+    working one.
+- `diagnostics.ignore` lists diagnostic codes (`"aruna::507"`) or names
+  (`"raw-remote-usage"`) to drop from every report, project-wide.
 - The legacy flat `generatedDir` / `manifest.output` config shape is no longer supported.
 - `domains/` remains recommended, not required.
 

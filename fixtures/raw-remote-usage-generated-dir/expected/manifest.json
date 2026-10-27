@@ -1,0 +1,15 @@
+{
+  "actions": [],
+  "diagnostics": [],
+  "imports": [],
+  "modules": [
+    {
+      "id": "src/server/main.ts",
+      "kind": "server",
+      "path": "src/server/main.ts",
+      "reason": "path"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

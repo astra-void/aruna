@@ -141,10 +141,13 @@ export default defineConfig({
     roots: ["src/features/*"],                // added to the built-in src/domains/*
   },
   strict: {
-    sharedSafety: true,                       // forbid shared → server leaks
-    rawRemoteUsage: "warning",                // "off" | "warning" | "error"
-    unresolvedImports: "warning",
-    domainBoundary: "warning",                // imports past a domain's public surface
+    sharedSafety: true,                       // not enforced yet; false reports aruna::109
+    rawRemoteUsage: "warning",                // aruna::507: "off" | "warning" | "error"
+    unresolvedImports: "warning",             // aruna::105
+    domainBoundary: "warning",                // aruna::304: imports past a domain's public surface
+  },
+  diagnostics: {
+    ignore: [],                               // codes or names to drop, e.g. "raw-remote-usage"
   },
 });
 ```

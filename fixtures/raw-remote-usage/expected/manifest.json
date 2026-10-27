@@ -1,0 +1,80 @@
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/client/net.ts",
+      "message": "src/client/net.ts uses a raw remote (.FireServer) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 75
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    },
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/server/net.ts",
+      "message": "src/server/net.ts uses a raw remote (new Instance(\"RemoteEvent\")) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 131,
+        "start": 104
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    },
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/server/net.ts",
+      "message": "src/server/net.ts uses a raw remote (.OnServerEvent) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 154,
+        "start": 141
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    },
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/server/net.ts",
+      "message": "src/server/net.ts uses a raw remote (.FireAllClients) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 208,
+        "start": 194
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    }
+  ],
+  "imports": [],
+  "modules": [
+    {
+      "id": "src/client/net.ts",
+      "kind": "client",
+      "path": "src/client/net.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/net.test.ts",
+      "kind": "test",
+      "path": "src/server/net.test.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/net.ts",
+      "kind": "server",
+      "path": "src/server/net.ts",
+      "reason": "path"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

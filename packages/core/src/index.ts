@@ -25,8 +25,10 @@ export type DiagnosticCode =
   | "aruna::112"
   | "aruna::106"
   | "aruna::105"
+  | "aruna::109"
   | "aruna::200"
   | "aruna::203"
+  | "aruna::507"
   | "aruna::550"
   | "aruna::551"
   | "aruna::552"
@@ -226,11 +228,21 @@ export type DomainsConfig = {
 };
 
 export type StrictConfig = {
+  // Not enforced yet: no shared-module safety check exists. Setting it to
+  // `false` reports aruna::109 rather than silently doing nothing.
   readonly sharedSafety?: boolean | undefined;
+  // Raw RemoteEvent / RemoteFunction use in project code (aruna::507).
   readonly rawRemoteUsage?: "off" | "warning" | "error" | undefined;
+  // Imports Aruna could not resolve (aruna::105).
   readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
   // Imports that reach past another domain's public surface (aruna::304).
   readonly domainBoundary?: "off" | "warning" | "error" | undefined;
+};
+
+// Reporting controls. `ignore` lists diagnostic codes (`"aruna::507"`) or names
+// (`"raw-remote-usage"`) to drop from every report, project-wide.
+export type DiagnosticsConfig = {
+  readonly ignore?: readonly string[] | undefined;
 };
 
 // `aruna dev` process options. `rojo: true` (the default) spawns `rojo serve`
@@ -257,6 +269,7 @@ export type Config = {
   readonly conventions?: ConventionConfig | undefined;
   readonly domains?: DomainsConfig | undefined;
   readonly strict?: StrictConfig | undefined;
+  readonly diagnostics?: DiagnosticsConfig | undefined;
   readonly dev?: DevConfig | undefined;
 };
 
@@ -297,6 +310,9 @@ export type NormalizedConfig = {
     readonly rawRemoteUsage: "off" | "warning" | "error";
     readonly unresolvedImports: "off" | "warning" | "error";
     readonly domainBoundary: "off" | "warning" | "error";
+  };
+  readonly diagnostics: {
+    readonly ignore: readonly string[];
   };
 };
 
@@ -380,6 +396,9 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
     rawRemoteUsage: "warning",
     unresolvedImports: "warning",
     domainBoundary: "warning",
+  },
+  diagnostics: {
+    ignore: [],
   },
 };
 

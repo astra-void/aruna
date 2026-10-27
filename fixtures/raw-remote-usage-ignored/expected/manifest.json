@@ -1,0 +1,27 @@
+{
+  "actions": [],
+  "diagnostics": [],
+  "imports": [],
+  "modules": [
+    {
+      "id": "src/client/net.ts",
+      "kind": "client",
+      "path": "src/client/net.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/net.test.ts",
+      "kind": "test",
+      "path": "src/server/net.test.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/net.ts",
+      "kind": "server",
+      "path": "src/server/net.ts",
+      "reason": "path"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

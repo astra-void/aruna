@@ -15,6 +15,7 @@ oxc_ast = "0.131.0"
 oxc_parser = "0.131.0"
 oxc_span = "0.131.0"
 walkdir = "2"
+oxc_ast_visit = "0.131.0"
 
 [dev-dependencies]
 tempfile = "3"

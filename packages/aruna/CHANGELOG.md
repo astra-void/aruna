@@ -96,7 +96,32 @@ the game build like any other module.
   Unset in a game, where the app connects to `Players` itself; set by the test
   harness, which fires the handlers on demand.
 
+- **`aruna::507 raw-remote-usage`, driven by `strict.rawRemoteUsage`.** The
+  option was parsed but did nothing. It now reports project code that builds a
+  remote (`new Instance("RemoteEvent" | "RemoteFunction" |
+  "UnreliableRemoteEvent")`) or touches one of its send/receive members
+  (`FireServer`, `FireClient`, `FireAllClients`, `InvokeServer`,
+  `OnServerEvent`, `OnClientEvent`, `OnServerInvoke`). Traffic over such a
+  remote skips the validation, rate limiting, and middleware an action gets. A
+  warning by default; `"error"` fails the build, `"off"` turns it off. Specs
+  and the generated dir (the vendored runtime included) are not checked.
+
+- **`diagnostics.ignore`.** A list of diagnostic codes (`"aruna::507"`) or
+  names (`"raw-remote-usage"`) to drop from every report, project-wide. A
+  top-level `diagnostics` key used to be rejected as the retired flat config
+  shape. It is now a nested section again, with `ignore` as its only field.
+
 ### Changed
+
+- **`strict.unresolvedImports` now sets the severity of `aruna::105`.** It was
+  parsed and ignored, so the warning stayed a warning whatever it said. `"error"`
+  now fails the build, and `"off"` stops reporting it.
+
+- **`strict.sharedSafety: false` reports `aruna::109 strict-option-not-enforced`.**
+  No shared-module safety check exists, so the option has never done anything.
+  Setting it to its non-default value now says so instead of passing silently.
+  The docs that said it guarded the shared → server import boundary were wrong:
+  that boundary is always checked.
 
 - **Breaking: internal error messages no longer reach the client.** Before
   this, the native runtime sent `tostring(reason)` for anything an action

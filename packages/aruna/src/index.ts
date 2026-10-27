@@ -10,6 +10,7 @@ export {
   type ActionsConfig,
   type ConventionConfig,
   type StrictConfig,
+  type DiagnosticsConfig,
   type ActionRecord,
   type Diagnostic,
   type DiagnosticCode,

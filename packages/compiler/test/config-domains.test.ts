@@ -125,3 +125,84 @@ describe("domain boundary severity", () => {
     expect(output.ok).toBe(true);
   });
 });
+
+// The strict options other than domainBoundary, and the ignore list, through
+// the same config path a project uses.
+describe("strict options and diagnostics.ignore", () => {
+  const rawRemoteRoot = path.join(fixturesRoot, "raw-remote-usage", "input");
+  const unresolvedRoot = path.join(fixturesRoot, "unresolved-import", "input");
+
+  it("raises raw remote use to an error when configured", async () => {
+    const output = await inspectProject({
+      root: rawRemoteRoot,
+      config: { strict: { rawRemoteUsage: "error" } },
+    });
+
+    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "aruna::507",
+      "aruna::507",
+      "aruna::507",
+      "aruna::507",
+    ]);
+    expect(output.diagnostics.every((diagnostic) => diagnostic.severity === "error")).toBe(true);
+    expect(output.ok).toBe(false);
+  });
+
+  it("applies strict.unresolvedImports to aruna::105", async () => {
+    const asError = await inspectProject({
+      root: unresolvedRoot,
+      config: { strict: { unresolvedImports: "error" } },
+    });
+    expect(asError.diagnostics.map((diagnostic) => diagnostic.severity)).toEqual(["error"]);
+    expect(asError.ok).toBe(false);
+
+    const off = await inspectProject({
+      root: unresolvedRoot,
+      config: { strict: { unresolvedImports: "off" } },
+    });
+    expect(off.diagnostics).toEqual([]);
+  });
+
+  it("warns that strict.sharedSafety: false does nothing yet", async () => {
+    const output = await inspectProject({
+      root: unresolvedRoot,
+      config: { strict: { sharedSafety: false, unresolvedImports: "off" } },
+    });
+    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["aruna::109"]);
+    expect(output.ok).toBe(true);
+  });
+
+  it("drops diagnostics listed in diagnostics.ignore, by code or by name", async () => {
+    const byCode = await inspectProject({
+      root: unresolvedRoot,
+      config: { diagnostics: { ignore: ["aruna::105"] } },
+    });
+    expect(byCode.diagnostics).toEqual([]);
+
+    const byName = await inspectProject({
+      root: rawRemoteRoot,
+      config: { diagnostics: { ignore: ["raw-remote-usage"] } },
+    });
+    expect(byName.diagnostics).toEqual([]);
+  });
+
+  it("rejects a diagnostics.ignore that is not a list of strings", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-config-ignore-"));
+    try {
+      fs.writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions: {} }));
+      fs.writeFileSync(
+        path.join(dir, "aruna.config.ts"),
+        `import { defineConfig } from "aruna";
+export default defineConfig({ diagnostics: { ignore: "raw-remote-usage" } });
+`,
+      );
+      const loaded = loadProjectConfig(dir);
+      expect(loaded.diagnostics[0]?.code).toBe("aruna::100");
+      expect(loaded.diagnostics[0]?.details).toContain(
+        "diagnostics.ignore must be an array of strings",
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

@@ -9,6 +9,7 @@ pub mod graph;
 pub mod manifest;
 pub mod module_kind;
 pub mod parser;
+pub mod raw_remote;
 pub mod resolver;
 pub mod rules;
 
@@ -27,8 +28,8 @@ pub use actions::{
     StoreDiscoveryResult,
 };
 pub use config::{
-    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig, DomainsConfig,
-    EntriesMode, StrictConfig, StrictSeverity,
+    ActionRateLimitConfig, ArunaConfig, CompilerConfig, ConventionConfig, DiagnosticsConfig,
+    DomainsConfig, EntriesMode, StrictConfig, StrictSeverity,
 };
 pub use domains::{DomainIndex, DomainRef, PublicSurface};
 pub use diagnostics::{

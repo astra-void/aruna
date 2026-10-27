@@ -1,6 +1,6 @@
 use aruna_compiler::{
-    check_project, classify_relative_path, CompilerInput, ConventionSet, ModuleKind,
-    TsconfigResolverOptions,
+    check_project, classify_relative_path, CompilerInput, ConventionSet, DiagnosticSeverity,
+    ModuleKind, StrictSeverity, TsconfigResolverOptions,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -160,6 +160,116 @@ export const main = { schema, missing };
             ("@shared/schema".to_string(), true)
         ]
     );
+}
+
+fn unresolved_import_project(root: &Path) {
+    write_file(
+        root,
+        "src/client/main.ts",
+        "import { missing } from \"../shared/missing\";\nexport const main = missing;\n",
+    );
+}
+
+#[test]
+fn applies_strict_unresolved_imports_severity() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    unresolved_import_project(root);
+
+    let mut as_error = compiler_input(root);
+    as_error.config.strict.unresolved_imports = StrictSeverity::Error;
+    let output = check_project(as_error);
+    assert!(!output.ok);
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::105".to_string()]);
+    assert_eq!(output.diagnostics[0].severity, DiagnosticSeverity::Error);
+
+    let mut off = compiler_input(root);
+    off.config.strict.unresolved_imports = StrictSeverity::Off;
+    let output = check_project(off);
+    assert!(output.ok);
+    assert!(output.diagnostics.is_empty());
+}
+
+fn raw_remote_project(root: &Path) {
+    write_file(
+        root,
+        "src/server/net.ts",
+        "export const remote = new Instance(\"RemoteEvent\");\nremote.FireAllClients(1);\n",
+    );
+    // Specs are not game code, so a raw remote in one is never reported.
+    write_file(
+        root,
+        "src/server/net.test.ts",
+        "const remote = new Instance(\"RemoteEvent\");\nremote.FireServer(1);\n",
+    );
+}
+
+#[test]
+fn reports_raw_remote_usage_at_the_configured_severity() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    raw_remote_project(root);
+
+    let output = check_project(compiler_input(root));
+    assert!(output.ok);
+    assert_eq!(
+        diagnostic_codes(&output),
+        vec!["aruna::507".to_string(), "aruna::507".to_string()]
+    );
+    assert!(output
+        .diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic.file.as_deref() == Some("src/server/net.ts")
+            && diagnostic.severity == DiagnosticSeverity::Warning));
+
+    let mut as_error = compiler_input(root);
+    as_error.config.strict.raw_remote_usage = StrictSeverity::Error;
+    let output = check_project(as_error);
+    assert!(!output.ok);
+    assert!(output
+        .diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error));
+
+    let mut off = compiler_input(root);
+    off.config.strict.raw_remote_usage = StrictSeverity::Off;
+    assert!(check_project(off).diagnostics.is_empty());
+}
+
+#[test]
+fn drops_diagnostics_listed_in_diagnostics_ignore_by_code_or_name() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    raw_remote_project(root);
+    unresolved_import_project(root);
+
+    let mut by_name = compiler_input(root);
+    by_name.config.diagnostics.ignore = vec!["raw-remote-usage".to_string()];
+    assert_eq!(
+        diagnostic_codes(&check_project(by_name)),
+        vec!["aruna::105".to_string()]
+    );
+
+    let mut by_code = compiler_input(root);
+    by_code.config.diagnostics.ignore = vec!["aruna::105".to_string(), "aruna::507".to_string()];
+    assert!(check_project(by_code).diagnostics.is_empty());
+}
+
+#[test]
+fn warns_that_strict_shared_safety_is_not_enforced_when_turned_off() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(root, "src/shared/schema.ts", "export const schema = 1;\n");
+
+    assert!(check_project(compiler_input(root)).diagnostics.is_empty());
+
+    let mut off = compiler_input(root);
+    off.config.strict.shared_safety = false;
+    let output = check_project(off);
+    assert!(output.ok);
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::109".to_string()]);
+    assert_eq!(output.diagnostics[0].name, "strict-option-not-enforced");
+    assert_eq!(output.diagnostics[0].severity, DiagnosticSeverity::Warning);
 }
 
 #[test]
