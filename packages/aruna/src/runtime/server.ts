@@ -330,14 +330,24 @@ export async function dispatchAction<TPlayer = unknown>(
         }
       : ctx;
 
+  // An output that fails its schema or cannot cross the wire is a server bug,
+  // not something the client did. The errors those checks raise are public
+  // types (so middleware and `onError` see the real failure), but this
+  // dispatch remembers them and masks them like any other internal error.
+  const outputFailures = new Set<unknown>();
   const runAction = async (): Promise<unknown> => {
     const output = await Promise.resolve(action.run(runCtx, input));
 
-    if (action.output !== undefined) {
-      assertActionSchema(action.output, output, actionId, "output");
-    }
+    try {
+      if (action.output !== undefined) {
+        assertActionSchema(action.output, output, actionId, "output");
+      }
 
-    assertSerializableActionValue(output, "output", actionId);
+      assertSerializableActionValue(output, "output", actionId);
+    } catch (error) {
+      outputFailures.add(error);
+      throw error;
+    }
 
     return output;
   };
@@ -361,7 +371,7 @@ export async function dispatchAction<TPlayer = unknown>(
   try {
     return await invoke();
   } catch (error) {
-    if (isPublicActionError(error)) {
+    if (isPublicActionError(error) && !outputFailures.has(error)) {
       options?.onError?.(error, { actionId, player: runCtx.player });
       throw error;
     }

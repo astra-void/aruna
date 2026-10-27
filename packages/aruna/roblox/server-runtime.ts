@@ -124,12 +124,14 @@ function validationFailure(
 
 // The response for a rejection from the execution chain. A public error keeps
 // its name and message; anything else is masked unless `exposeInternalErrors`.
+// `isPublic` is false for a public-typed output failure (see `runAction`).
 function rejectionResult(
 	reason: unknown,
+	isPublic: boolean,
 	exposeInternalErrors: boolean,
 	errorId: string | undefined,
 ): ActionDispatchResult {
-	if (isPublicActionError(reason)) {
+	if (isPublic && isPublicActionError(reason)) {
 		return { ok: false, error: reason.message, errorName: reason.name };
 	}
 	if (!exposeInternalErrors) {
@@ -265,6 +267,12 @@ export function createActionRegistry<TPlayer>(
 				// Output is checked here, in the innermost step, exactly where the
 				// Node runtime checks it: middleware sees a failing output as a
 				// rejection, and it reaches `onError` like any other run failure.
+				//
+				// A failing output is a server bug, not something the client did:
+				// the errors raised here are public types (middleware and `onError`
+				// see the real failure), but this dispatch remembers them and masks
+				// them like any other internal error.
+				const outputFailures = new Set<unknown>();
 				const runAction = (): Promise<unknown> => {
 					const [invoked, runResult] = pcall(() => definition.run(context, input as never));
 					if (!invoked) {
@@ -273,10 +281,14 @@ export function createActionRegistry<TPlayer>(
 					return Promise.resolve(runResult).then((output) => {
 						const outputSchema = definition.output;
 						if (outputSchema !== undefined && !outputSchema.validate(output)) {
-							throw validationFailure(actionId, "output", outputSchema, output);
+							const failure = validationFailure(actionId, "output", outputSchema, output);
+							outputFailures.add(failure);
+							throw failure;
 						}
 						if (!isWireSafe(output)) {
-							throw actionError("ActionSerializationError", "non-serializable action output");
+							const failure = actionError("ActionSerializationError", "non-serializable action output");
+							outputFailures.add(failure);
+							throw failure;
 						}
 						return output;
 					});
@@ -306,11 +318,12 @@ export function createActionRegistry<TPlayer>(
 					(reason) => {
 						// Every non-public failure gets an id for `onError`; the client
 						// is sent it only when the failure is masked.
-						const errorId = isPublicActionError(reason) ? undefined : createErrorId();
+						const isPublic = isPublicActionError(reason) && !outputFailures.has(reason);
+						const errorId = isPublic ? undefined : createErrorId();
 						if (onError !== undefined) {
 							onError(reason, errorId !== undefined ? { actionId, player, errorId } : { actionId, player });
 						}
-						resolve(rejectionResult(reason, exposeInternalErrors, errorId));
+						resolve(rejectionResult(reason, isPublic, exposeInternalErrors, errorId));
 					},
 				);
 			});

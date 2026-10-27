@@ -144,11 +144,13 @@ return function(ctx)
 
 				local clockMs = 0
 				local lastErrorId = nil
+				local lastErrorName = nil
 				local registry = createActionRegistry(actions, {
 					middleware = middleware,
-					onError = function(_err, info)
+					onError = function(err, info)
 						table.insert(trace, "onError")
 						lastErrorId = info.errorId
+						lastErrorName = if type(err) == "table" then err.name else nil
 					end,
 					exposeInternalErrors = case.exposeInternalErrors,
 					nowMs = function()
@@ -163,6 +165,7 @@ return function(ctx)
 					end
 
 					lastErrorId = nil
+					lastErrorName = nil
 					local settled, ok, result =
 						t.await(registry.dispatch(player, step.dispatch, materialize(step.input)))
 					t.isTrue(settled, "dispatch settled")
@@ -202,6 +205,9 @@ return function(ctx)
 							t.eq(response.errorId, lastErrorId, `{step.dispatch} errorId matches onError`)
 						elseif expected.errorId == false then
 							t.eq(response.errorId, nil, `{step.dispatch} carries no errorId`)
+						end
+						if expected.onErrorName ~= nil then
+							t.eq(lastErrorName, expected.onErrorName, `{step.dispatch} onError error name`)
 						end
 					end
 				end

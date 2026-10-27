@@ -48,6 +48,7 @@ type Expectation = {
   readonly message?: string;
   readonly messageContains?: string;
   readonly errorId?: boolean;
+  readonly onErrorName?: string;
   readonly noResponse?: boolean;
 };
 
@@ -191,13 +192,15 @@ describe("dispatch conformance (Node)", () => {
 
       let clockMs = 0;
       let lastErrorId: string | undefined;
+      let lastErrorName: string | undefined;
       const loopback = createLoopbackRemote();
       const app = createServerApp({
         actions,
         middleware,
-        onError(_error, info) {
+        onError(error, info) {
           trace.push("onError");
           lastErrorId = info.errorId;
+          lastErrorName = error instanceof Error ? error.name : undefined;
         },
         ...(testCase.exposeInternalErrors !== undefined
           ? { exposeInternalErrors: testCase.exposeInternalErrors }
@@ -217,6 +220,7 @@ describe("dispatch conformance (Node)", () => {
 
         requestCount += 1;
         lastErrorId = undefined;
+        lastErrorName = undefined;
         const response = await loopback.send(player, {
           requestId: `conformance:${requestCount}`,
           actionId: step.dispatch,
@@ -254,6 +258,9 @@ describe("dispatch conformance (Node)", () => {
             expect(response.error.errorId).toBe(lastErrorId);
           } else if (expected.errorId === false) {
             expect(response.error.errorId).toBeUndefined();
+          }
+          if (expected.onErrorName !== undefined) {
+            expect(lastErrorName).toBe(expected.onErrorName);
           }
         }
       }

@@ -4,7 +4,12 @@ import { createInMemoryActionInvoker } from "../src/runtime/memory.js";
 import { schema } from "../src/schema.js";
 import { defineAction } from "../src/server.js";
 import { SchemaValidationError } from "../src/schema.js";
-import { ActionValidationError, dispatchAction, type ActionRegistry } from "../src/server.js";
+import {
+  ActionInternalError,
+  ActionValidationError,
+  dispatchAction,
+  type ActionRegistry,
+} from "../src/server.js";
 
 beforeEach(() => {
   clearActionInvoker();
@@ -165,8 +170,37 @@ describe("server runtime", () => {
       }),
     };
 
+    // An invalid output is a server bug: dispatch rejects with the masked
+    // error, and the validation failure (with its message) is its cause.
+    const failure = dispatchAction(
+      registry,
+      "shop.purchaseItem",
+      { player: "tester" },
+      { itemId: "sword" },
+    );
+    await expect(failure).rejects.toBeInstanceOf(ActionInternalError);
+    const error = await failure.catch((reason: unknown) => reason);
+    expect((error as ActionInternalError).cause).toBeInstanceOf(ActionValidationError);
+    expect(((error as ActionInternalError).cause as Error).message).toBe(
+      "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
+    );
+  });
+
+  it("rethrows an output failure as is when internal errors are exposed", async () => {
+    const registry: ActionRegistry = {
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        output: schema.object({ ok: schema.boolean() }),
+        run() {
+          return { ok: "yes" };
+        },
+      }),
+    };
+
     await expect(
-      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: "sword" }),
+      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, {}, {
+        exposeInternalErrors: true,
+      }),
     ).rejects.toThrowError(
       "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
     );
@@ -191,14 +225,21 @@ describe("server runtime", () => {
       }),
     };
 
-    await expect(
-      dispatchAction(registry, "shop.purchaseItem", { player: "tester" }, { itemId: "sword" }),
-    ).rejects.toMatchObject({
-      name: "ActionSerializationError",
-      actionId: "shop.purchaseItem",
-      role: "output",
-      message:
-        "Action shop.purchaseItem output is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+    const failure = dispatchAction(
+      registry,
+      "shop.purchaseItem",
+      { player: "tester" },
+      { itemId: "sword" },
+    );
+    await expect(failure).rejects.toMatchObject({
+      name: "ActionInternalError",
+      cause: {
+        name: "ActionSerializationError",
+        actionId: "shop.purchaseItem",
+        role: "output",
+        message:
+          "Action shop.purchaseItem output is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
+      },
     });
 
     expect(run).toHaveBeenCalledTimes(1);
@@ -247,16 +288,21 @@ describe("server runtime", () => {
       onError,
     });
 
-    await expect(failure).rejects.toMatchObject({
-      name: "ActionValidationError",
-      actionId: "shop.purchaseItem",
-      role: "output",
-    });
+    // Middleware and onError see the validation failure itself; the caller
+    // gets the masked error with the same errorId.
+    const rejected = await failure.catch((reason: unknown) => reason);
+    expect(rejected).toBeInstanceOf(ActionInternalError);
     const error = onError.mock.calls[0]?.[0];
     expect(error).toBeInstanceOf(ActionValidationError);
+    expect(error).toMatchObject({ actionId: "shop.purchaseItem", role: "output" });
     // Existing `instanceof SchemaValidationError` checks keep matching.
     expect(error).toBeInstanceOf(SchemaValidationError);
-    expect(onError).toHaveBeenCalledWith(error, { actionId: "shop.purchaseItem", player: "tester" });
+    expect(onError).toHaveBeenCalledWith(error, {
+      actionId: "shop.purchaseItem",
+      player: "tester",
+      errorId: (rejected as ActionInternalError).errorId,
+    });
+    expect((rejected as ActionInternalError).cause).toBe(error);
     expect(seenByMiddleware).toEqual([error]);
   });
 

@@ -216,7 +216,8 @@ return function(ctx)
 			t.isFalse(third.ok)
 		end)
 
-		t.it("rejects non-serializable output", function()
+		t.it("rejects non-serializable output as an internal error", function()
+			local seenByOnError, seenErrorId
 			local r = createActionRegistry({
 				leak = {
 					id = "leak",
@@ -224,11 +225,37 @@ return function(ctx)
 						return { handler = function() end }
 					end,
 				},
+			}, {
+				onError = function(err, info)
+					seenByOnError = err
+					seenErrorId = info.errorId
+				end,
 			})
 			local _, _, value = t.await(r.dispatch(player, "leak", nil))
 			t.isFalse(value.ok)
-			t.contains(value.error, "non-serializable action output")
+			-- A non-wire-safe output is a server bug: the client is told only that
+			-- something failed, and onError gets the real failure.
+			t.eq(value.errorName, "ActionInternalError")
+			t.eq(value.error, "internal error")
+			t.eq(value.errorId, seenErrorId)
+			t.eq(seenByOnError.name, "ActionSerializationError")
+			t.contains(seenByOnError.message, "non-serializable action output")
+		end)
+
+		t.it("sends a non-serializable output failure as is when internal errors are exposed", function()
+			local r = createActionRegistry({
+				leak = {
+					id = "leak",
+					run = function()
+						return { handler = function() end }
+					end,
+				},
+			}, { exposeInternalErrors = true })
+			local _, _, value = t.await(r.dispatch(player, "leak", nil))
+			t.isFalse(value.ok)
 			t.eq(value.errorName, "ActionSerializationError")
+			t.contains(value.error, "non-serializable action output")
+			t.eq(value.errorId, nil)
 		end)
 
 		t.it("passes output that matches the output schema", function()
@@ -272,11 +299,15 @@ return function(ctx)
 			})
 			local _, _, value = t.await(r.dispatch(player, "typed", nil))
 			t.isFalse(value.ok)
-			t.eq(value.errorName, "ActionValidationError")
-			t.contains(value.error, "Aruna action typed output validation failed")
-			t.contains(value.error, "ok: expected boolean")
+			-- The schema's message (which a `.refine()` may have written) stays on
+			-- the server: the client gets the masked error.
+			t.eq(value.errorName, "ActionInternalError")
+			t.eq(value.error, "internal error")
+			t.isTrue(type(value.errorId) == "string", "the masked error carries an errorId")
 			t.eq(seenByMiddleware.name, "ActionValidationError", "middleware saw the failure")
 			t.eq(seenByOnError.name, "ActionValidationError", "onError saw the failure")
+			t.contains(seenByOnError.message, "Aruna action typed output validation failed")
+			t.contains(seenByOnError.message, "ok: expected boolean")
 			t.eq(sawActionId, "typed")
 		end)
 

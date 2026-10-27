@@ -40,6 +40,8 @@ or a dispatch:
 - `errorId`: `true` when the response must carry an 8-hex-digit `errorId`,
   the same one `onError` received for that call. `false` when it must carry
   none.
+- `onErrorName`: the `name` of the error `onError` received for that call
+  (the original error, before any masking)
 - `noResponse`: `true` when no response is sent at all
 
 ## Action fixture

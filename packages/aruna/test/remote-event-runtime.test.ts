@@ -1050,12 +1050,15 @@ describe("bindRemoteEventActions", () => {
 
     await flushMicrotasks();
 
+    // The schema's message stays on the server: the client gets the masked
+    // error and its id.
     expect(remote.responses[0]?.response).toEqual({
       requestId: "request-1",
       ok: false,
       error: {
-        message: "Aruna action shop.purchaseItem output validation failed: ok: expected boolean",
-        name: "ActionValidationError",
+        message: "internal error",
+        name: "ActionInternalError",
+        errorId: expect.stringMatching(/^[0-9a-f]{8}$/),
       },
     });
   });
@@ -1092,9 +1095,9 @@ describe("bindRemoteEventActions", () => {
       requestId: "request-1",
       ok: false,
       error: {
-        message:
-          "Action shop.purchaseItem output is not serializable across the Aruna action boundary. $.player: Roblox Instance-like values cannot cross action boundaries",
-        name: "ActionSerializationError",
+        message: "internal error",
+        name: "ActionInternalError",
+        errorId: expect.stringMatching(/^[0-9a-f]{8}$/),
       },
     });
   });

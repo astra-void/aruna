@@ -206,9 +206,10 @@
           "dispatch": "typed",
           "expect": {
             "ok": false,
-            "errorName": "ActionValidationError",
-            "messageContains": "Aruna action typed output validation failed",
-            "errorId": false
+            "errorName": "ActionInternalError",
+            "message": "internal error",
+            "errorId": true,
+            "onErrorName": "ActionValidationError"
           }
         }
       ],
@@ -220,10 +221,51 @@
       "steps": [
         {
           "dispatch": "leak",
-          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+          "expect": {
+            "ok": false,
+            "errorName": "ActionInternalError",
+            "message": "internal error",
+            "errorId": true,
+            "onErrorName": "ActionSerializationError"
+          }
         }
       ],
       "trace": ["run", "onError"]
+    },
+    {
+      "name": "exposeInternalErrors sends an output failure's own name and message",
+      "exposeInternalErrors": true,
+      "actions": [
+        {
+          "id": "typed",
+          "behavior": "returnConstant",
+          "value": { "ok": "yes" },
+          "output": { "type": "object", "fields": { "ok": { "type": "boolean" } } }
+        },
+        { "id": "leak", "behavior": "returnFunction" }
+      ],
+      "steps": [
+        {
+          "dispatch": "typed",
+          "expect": {
+            "ok": false,
+            "errorName": "ActionValidationError",
+            "messageContains": "Aruna action typed output validation failed",
+            "errorId": false,
+            "onErrorName": "ActionValidationError"
+          }
+        },
+        {
+          "dispatch": "leak",
+          "expect": {
+            "ok": false,
+            "errorName": "ActionSerializationError",
+            "errorId": false,
+            "onErrorName": "ActionSerializationError"
+          }
+        }
+      ],
+      "trace": ["run", "onError", "run", "onError"]
     },
     {
       "name": "middleware runs outermost-first around the handler",
@@ -252,7 +294,12 @@
       "steps": [
         {
           "dispatch": "typed",
-          "expect": { "ok": false, "errorName": "ActionValidationError" }
+          "expect": {
+            "ok": false,
+            "errorName": "ActionInternalError",
+            "errorId": true,
+            "onErrorName": "ActionValidationError"
+          }
         }
       ],
       "trace": ["outer:before", "run", "onError"]

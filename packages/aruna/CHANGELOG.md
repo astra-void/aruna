@@ -129,11 +129,20 @@ the game build like any other module.
   carries the server script's path and line
   (`ServerScriptService.domains.shop.actions:42: attempt to index nil`). Now
   only public errors keep their `name` and `message` on the wire: the
-  framework's own failures (`ActionValidationError`,
-  `ActionSerializationError`, `ActionRateLimitError`, `ActionNotFoundError`,
-  `ActionTimeoutError`) and errors made with the new `actionError` helper.
-  Everything else reaches the client as
+  framework's own failures about the client's request (`ActionValidationError`
+  and `ActionSerializationError` for the input, `ActionRateLimitError`,
+  `ActionNotFoundError`, `ActionTimeoutError`) and errors made with the new
+  `actionError` helper. Everything else reaches the client as
   `{ name: "ActionInternalError", message: "internal error", errorId }`.
+
+  That includes an action's output failing its schema
+  (`ActionValidationError`) or not being wire-safe
+  (`ActionSerializationError`): a bad output is a server bug, and a schema's
+  message — which a `.refine()` may have written — is server-authored. Such a
+  failure is still the real `ActionValidationError` /
+  `ActionSerializationError` for middleware (a rejection of `next`) and for
+  `onError` (with full detail, plus the `errorId`); only the client sees
+  `ActionInternalError`, unless `exposeInternalErrors` is set.
 
   ```ts
   import { actionError } from "aruna/server"; // or "aruna/roblox"

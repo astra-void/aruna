@@ -172,8 +172,11 @@ string-matching messages.
 ## Errors the client sees
 
 An error reaches the client with its own `name` and `message` only when it is public.
-Public means one of the framework's own failures listed above, or an error your action
-throws through `actionError`:
+Public means one of the framework's own failures about the request listed above, or an
+error your action throws through `actionError`. An action's *output* failing its schema
+or not being wire-safe is a server bug, not a client error: middleware and `onError` see
+the real `ActionValidationError` / `ActionSerializationError`, and the client gets
+`ActionInternalError` with an `errorId` (unless `exposeInternalErrors` is set).
 
 ```ts
 import { actionError, defineAction } from "aruna/server";
