@@ -13,7 +13,14 @@ import {
   type ActionRegistry,
 } from "aruna/server";
 import { afterEach, createTestPlayer, describe, expect, it } from "aruna/testing";
-import type { RequestAbuseReason, RequestBudgetOptions } from "aruna/internal/request-guard";
+import { createIdempotencyCache } from "aruna/internal/idempotency";
+import {
+  DEPARTED_PLAYER_TTL_MS,
+  createDepartedPlayers,
+  createRequestGuard,
+  type RequestAbuseReason,
+  type RequestBudgetOptions,
+} from "aruna/internal/request-guard";
 import { DEFAULT_MAX_WIRE_NODES, isWireSafe } from "aruna/internal/serialization";
 import { waitUntil, wireRemote } from "./support";
 
@@ -21,8 +28,19 @@ const Players = game.GetService("Players");
 
 function createFakePlayers() {
   const removing = new Set<(player: Player) => void>();
+  const added = new Set<(player: Player) => void>();
   return {
     source: {
+      PlayerAdded: {
+        Connect: (callback: (player: Player) => void) => {
+          added.add(callback);
+          return {
+            Disconnect: () => {
+              added.delete(callback);
+            },
+          };
+        },
+      },
       PlayerRemoving: {
         Connect: (callback: (player: Player) => void) => {
           removing.add(callback);
@@ -37,6 +55,17 @@ function createFakePlayers() {
     leave(player: Player) {
       const snapshot = new Array<(player: Player) => void>();
       for (const callback of removing) {
+        snapshot.push(callback);
+      }
+      for (const callback of snapshot) {
+        callback(player);
+      }
+    },
+    // Rejoining clears the departed mark leave set, which would otherwise drop
+    // the player's envelopes.
+    join(player: Player) {
+      const snapshot = new Array<(player: Player) => void>();
+      for (const callback of added) {
         snapshot.push(callback);
       }
       for (const callback of snapshot) {
@@ -172,6 +201,7 @@ describe("request budget", () => {
 
     // A fresh budget after leaving and coming back.
     harness.players.leave(ada);
+    harness.players.join(ada);
     await harness.send();
     expect(harness.runs()).toBe(3);
     harness.dispose();
@@ -215,6 +245,7 @@ describe("request budget", () => {
     void harness.send();
     await Promise.resolve();
     harness.players.leave(Players.LocalPlayer);
+    harness.players.join(Players.LocalPlayer);
     void harness.send();
     await Promise.resolve();
     expect(harness.runs()).toBe(2);
@@ -282,5 +313,41 @@ describe("wire node budget", () => {
     const output = await app.dispatch("board.top", { player: { UserId: 1 } }, undefined);
     expect(output).toHaveLength(5000);
     app.dispose();
+  });
+});
+
+describe("after leave", () => {
+  // The rest of this block's cases (a late envelope creates no state, a late
+  // key is not remembered, the mark's TTL, rejoin) run over the wire in
+  // lune/specs/transport.luau and server-app.luau.
+  it("sweeps expired departures when another player leaves", () => {
+    let clockMs = 0;
+    const departed = createDepartedPlayers<string>(() => clockMs);
+    const guard = createRequestGuard<string>({ departed, nowMs: () => clockMs });
+    const cache = createIdempotencyCache<string, string>(() => clockMs, departed);
+    const remembered = new Array<string>();
+
+    departed.add("ada");
+    expect(guard.admit("ada")).toBe(false);
+    expect(guard.begin("ada")).toBe(true);
+    void cache.run("ada", "shop.buy", "k", (progress) => {
+      progress.ran = true;
+      remembered.push("ran");
+      return Promise.resolve("ok");
+    });
+    void cache.run("ada", "shop.buy", "k", (progress) => {
+      progress.ran = true;
+      remembered.push("ran");
+      return Promise.resolve("ok");
+    });
+    // Not de-duplicated: nothing was remembered for a departed player.
+    expect(remembered).toEqual(["ran", "ran"]);
+
+    clockMs = DEPARTED_PLAYER_TTL_MS + 1;
+    departed.add("bo");
+    expect(departed.has("ada")).toBe(false);
+    expect(departed.has("bo")).toBe(true);
+    departed.remove("bo");
+    expect(departed.has("bo")).toBe(false);
   });
 });

@@ -28,6 +28,65 @@ export const IN_FLIGHT_RETRY_AFTER_MS = 100;
 export const MAX_REQUEST_ID_LENGTH = 64;
 export const MAX_ACTION_ID_LENGTH = 128;
 
+// How long a player who left is remembered as gone. Long enough to cover an
+// envelope Roblox delivered after PlayerRemoving (a few frames, in practice),
+// short enough that the entry — which holds the Player — does not pin it.
+export const DEPARTED_PLAYER_TTL_MS = 30_000;
+
+// Players who left recently. An envelope that arrives after PlayerRemoving
+// would otherwise recreate the per-player state leave just dropped, and nothing
+// would ever drop it again: it would hold the Player forever. The guard and the
+// idempotency cache consult this before creating state, and the transport
+// drops such an envelope. An entry is cleared when the player joins again, or
+// once it is older than DEPARTED_PLAYER_TTL_MS.
+export interface DepartedPlayers<TPlayer = unknown> {
+	// Marks a player as gone. Called on leave.
+	readonly add: (player: TPlayer) => void;
+	readonly has: (player: TPlayer) => boolean;
+	// Unmarks a player who joined again.
+	readonly remove: (player: TPlayer) => void;
+	readonly clear: () => void;
+}
+
+export function createDepartedPlayers<TPlayer>(nowMs?: () => number): DepartedPlayers<TPlayer> {
+	const readNow = nowMs !== undefined ? nowMs : () => os.clock() * 1000;
+	const departedAt = new Map<TPlayer, number>();
+	// Expired entries are swept whenever the set changes, so none outlives the
+	// next join or leave by much.
+	const sweep = (): void => {
+		const at = readNow();
+		for (const [player, leftAt] of departedAt) {
+			if (at - leftAt > DEPARTED_PLAYER_TTL_MS) {
+				departedAt.delete(player);
+			}
+		}
+	};
+	return {
+		add: (player) => {
+			sweep();
+			departedAt.set(player, readNow());
+		},
+		has: (player) => {
+			const leftAt = departedAt.get(player);
+			if (leftAt === undefined) {
+				return false;
+			}
+			if (readNow() - leftAt > DEPARTED_PLAYER_TTL_MS) {
+				departedAt.delete(player);
+				return false;
+			}
+			return true;
+		},
+		remove: (player) => {
+			departedAt.delete(player);
+			sweep();
+		},
+		clear: () => {
+			departedAt.clear();
+		},
+	};
+}
+
 export type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight";
 
 export type RequestAbuseHandler<TPlayer = unknown> = (
@@ -45,6 +104,9 @@ export interface RequestGuard<TPlayer = unknown> {
 	readonly report: RequestAbuseHandler<TPlayer>;
 	// Drops a player's budget and in-flight count. Called on leave.
 	readonly forget: (player: TPlayer) => void;
+	// True for a player who left (see DepartedPlayers): their envelopes are
+	// dropped, and no state is created for them.
+	readonly hasDeparted: (player: TPlayer) => boolean;
 }
 
 interface PlayerBudget {
@@ -61,6 +123,7 @@ export function createRequestGuard<TPlayer>(options?: {
 	readonly budget?: RequestBudgetOptions;
 	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 	readonly nowMs?: () => number;
+	readonly departed?: DepartedPlayers<TPlayer>;
 }): RequestGuard<TPlayer> {
 	const budget = options !== undefined ? options.budget : undefined;
 	const burst = positiveOr(budget !== undefined ? budget.burst : undefined, DEFAULT_REQUEST_BURST);
@@ -75,7 +138,9 @@ export function createRequestGuard<TPlayer>(options?: {
 	const injectedNow = options !== undefined ? options.nowMs : undefined;
 	const readNow = injectedNow !== undefined ? injectedNow : () => os.clock() * 1000;
 	const onAbuse = options !== undefined ? options.onAbuse : undefined;
+	const departed = options !== undefined ? options.departed : undefined;
 	const players = new Map<TPlayer, PlayerBudget>();
+	const hasDeparted = (player: TPlayer): boolean => departed !== undefined && departed.has(player);
 
 	const stateFor = (player: TPlayer): PlayerBudget => {
 		let state = players.get(player);
@@ -88,6 +153,9 @@ export function createRequestGuard<TPlayer>(options?: {
 
 	return {
 		admit: (player) => {
+			if (hasDeparted(player)) {
+				return false;
+			}
 			const state = stateFor(player);
 			const at = readNow();
 			const elapsedMs = math.max(0, at - state.refilledAtMs);
@@ -100,6 +168,10 @@ export function createRequestGuard<TPlayer>(options?: {
 			return true;
 		},
 		begin: (player) => {
+			// Nothing to cap for a player who is gone, and no state to create.
+			if (hasDeparted(player)) {
+				return true;
+			}
 			const state = stateFor(player);
 			if (state.inFlight >= maxInFlight) {
 				return false;
@@ -123,6 +195,7 @@ export function createRequestGuard<TPlayer>(options?: {
 		forget: (player) => {
 			players.delete(player);
 		},
+		hasDeparted,
 	};
 }
 
@@ -139,13 +212,18 @@ export function isValidEnvelopeIds(requestId: unknown, actionId: unknown): boole
 // The transport's gate, before it reads anything else from an envelope: the
 // envelope check, then the budget. A malformed envelope is charged too — the
 // budget counts every envelope, valid or not — and both are dropped without a
-// response. True when the envelope may go on to dispatch.
+// response. An envelope from a player who already left is dropped first, and
+// not reported: it is late, not abusive. True when the envelope may go on to
+// dispatch.
 export function admitEnvelope<TPlayer>(
 	guard: RequestGuard<TPlayer>,
 	player: TPlayer,
 	requestId: unknown,
 	actionId: unknown,
 ): boolean {
+	if (guard.hasDeparted(player)) {
+		return false;
+	}
 	if (!isValidEnvelopeIds(requestId, actionId)) {
 		guard.admit(player);
 		guard.report(player, { reason: "malformed-envelope" });

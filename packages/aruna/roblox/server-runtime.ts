@@ -9,6 +9,7 @@ import { isWireSafe } from "./serialization";
 import { createIdempotencyCache, isIdempotencyKey } from "./idempotency";
 import {
 	admitEnvelope,
+	createDepartedPlayers,
 	createRequestGuard,
 	IN_FLIGHT_RETRY_AFTER_MS,
 	type RequestAbuseHandler,
@@ -56,7 +57,13 @@ export interface ActionRegistry<TPlayer = unknown> {
 	readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
 	// Drops what the registry remembers about a player: idempotency keys, the
 	// request budget, the in-flight count. `createServerApp` calls it on leave.
+	// The player is then marked departed for a short while
+	// (DEPARTED_PLAYER_TTL_MS), so an envelope that arrives after the leave is
+	// dropped instead of creating that state again.
 	readonly forgetPlayer: (player: TPlayer) => void;
+	// Clears the departed mark for a player who joined again. `createServerApp`
+	// calls it on join.
+	readonly readmitPlayer: (player: TPlayer) => void;
 	// True when the action is declared `fireAndForget` (one-way). The transport
 	// binder uses this to decide whether to send a response back to the client.
 	// Unknown action ids return false.
@@ -198,11 +205,15 @@ export function createActionRegistry<TPlayer>(
 	const exposeInternalErrors = options?.exposeInternalErrors === true;
 	const rateLimiter = createActionRateLimiter();
 	const nowMs = options?.nowMs;
-	const idempotency = createIdempotencyCache<TPlayer, ActionDispatchResult>(nowMs);
+	// Players who just left. forgetPlayer drops their keys and budget; this
+	// keeps a late envelope from creating them again (and holding the player).
+	const departed = createDepartedPlayers<TPlayer>(nowMs);
+	const idempotency = createIdempotencyCache<TPlayer, ActionDispatchResult>(nowMs, departed);
 	const guard = createRequestGuard<TPlayer>({
 		...(options?.requestBudget !== undefined ? { budget: options.requestBudget } : {}),
 		...(options?.onAbuse !== undefined ? { onAbuse: options.onAbuse } : {}),
 		...(nowMs !== undefined ? { nowMs } : {}),
+		departed,
 	});
 
 	// Everything after the action lookup and the in-flight cap, in the order that
@@ -413,6 +424,10 @@ export function createActionRegistry<TPlayer>(
 		forgetPlayer: (player) => {
 			idempotency.forget(player);
 			guard.forget(player);
+			departed.add(player);
+		},
+		readmitPlayer: (player) => {
+			departed.remove(player);
 		},
 	};
 }

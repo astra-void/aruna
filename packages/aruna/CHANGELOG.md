@@ -453,6 +453,24 @@ the game build like any other module.
 
 ### Fixed
 
+- **A late envelope no longer brings a departed player's state back.** Leave
+  dropped the player's request budget and idempotency keys, but an envelope
+  Roblox delivered after `PlayerRemoving` created them again, and nothing
+  dropped them a second time: the state, and the Player it was keyed by, stayed
+  for the life of the server. Leave now also marks the player departed. While
+  marked, the transport drops their envelopes (silently, without `onAbuse`: a
+  late envelope is not abuse), the guard creates no budget or in-flight count,
+  and the idempotency cache runs a call without remembering it. The mark is
+  cleared when the player joins again or after 30 seconds
+  (`DEPARTED_PLAYER_TTL_MS`), and expired marks are swept on every join and
+  leave, so the set itself never pins a player for long. A server app with a
+  players source now always subscribes to `PlayerAdded` to clear it, and the
+  native `ActionRegistry` gains `readmitPlayer`, which `createServerApp` calls on
+  join. A departed set was chosen over weak-keyed tables: a Luau weak key is not
+  collected while its value (an in-flight call's closure) still references the
+  player, and weak keys would only bound how long the state lasts, not stop it
+  coming back.
+
 - **The Node RemoteEvent transport dropped middleware, `onError`, `ctx.session`,
   and `ctx.store`.** `bindRemoteEventActions` copied a hand-kept list of five
   dispatch options and silently left out the rest. An action dispatched over
