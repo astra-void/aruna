@@ -50,9 +50,12 @@ src/
     result.ts
 
   .aruna/
-    actions.client.generated.ts
-    actions.server.generated.ts
     manifest.json
+    server/
+      actions.server.generated.ts
+    shared/
+      actions.client.generated.ts
+      runtime/           # the vendored native runtime
 ```
 
 A domain outgrows one file per concern quickly. Every concern also has a folder
@@ -417,7 +420,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - `aruna contract diff` compares two action contract snapshots or a snapshot file against the current project and reports breaking, non-breaking, and info-level changes
 - generated action files are snapshot-tested in the fixture suite
 - application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
-- `aruna build` writes deterministic `src/.aruna/actions.client.generated.ts` and `src/.aruna/actions.server.generated.ts`
+- `aruna build` writes deterministic `src/.aruna/shared/actions.client.generated.ts` and `src/.aruna/server/actions.server.generated.ts`
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
 - `createServerApp(...).dispatch` is the in-process action path for non-Roblox tests (both runtimes; the old in-memory invoker is internal)
@@ -435,8 +438,8 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - invalid input and serialization failures do not consume quota
 - manifest action records now include serialization policy metadata and optional `rateLimit` metadata
 - the contract snapshot foundation is implemented through `aruna inspect contract`, and `aruna contract diff` now serves as the compatibility gate for action contract snapshots
-- the MVP schema helpers support string, number, boolean, and undefined literal values, plus array, object, optional, and enum validation
-- the schema DSL now has TypeScript inference for primitives, literals, arrays, objects, optionals, and enums
+- the schema helpers cover strings, numbers (with `u8`..`i32`/`f32` width hints), booleans, literals, arrays, objects, optionals, records, tuples, enums, unions, discriminated unions, `.default(...)`, constraint chains and `refine`, and the Roblox value types (`vector3`, `vector2`, `color3`, `cframe`, `udim`, `udim2`, `dateTime`, `brickColor`, `instance`); see [docs/schema.md](packages/aruna/docs/schema.md)
+- the schema DSL has TypeScript inference for all of them
 - the generated files are safe to delete and regenerate
 - structural runtime remoting exists only as a foundation; default Roblox action remote binding exists; this is not production Studio validation
 
@@ -652,12 +655,12 @@ const value = decodeBinary(hit, bytes); // { amount: 12, source: "trap" }
 
 ## Spec Cutline
 
-Serialization boundary, fixed-window rate limits, the contract snapshot, contract diff, and package-consumption validation are all implemented. The next cutline stays on stabilization and a create-app starter contract, not more transport expansion or a policy/capability system:
+Serialization boundary, fixed-window rate limits, the contract snapshot, contract diff, and package-consumption validation are all implemented. The cutline stays on stabilization, not more transport expansion or a policy/capability system:
 
-1. Stabilize current compiler, action, runtime, and package-consumption behavior.
-2. Add runtime execution tests for the roblox-ts-native runtime, preferably through a Lune/Luau harness (today the native runtime is compiled but not executed in CI).
+1. Stabilize current compiler, action, runtime, and package-consumption behavior. (Ongoing.)
+2. Done: runtime execution tests for the roblox-ts-native runtime. CI compiles it and runs it under Lune (`apps/roblox-runtime-test`), and one dispatch conformance table (`packages/aruna/test/conformance/`) runs against both runtimes.
 3. Refine thin authority inspection without adding a full policy/capability system.
-4. Write the create-app RFC / starter contract.
+4. Done: the starter contract. `create-aruna-app` scaffolds the starter (since 0.2.0); [docs/create-app-plan.md](docs/create-app-plan.md) is its plan.
 5. Design resources and invalidation after the starter contract is stable.
 6. Implement resources later.
 
@@ -666,12 +669,12 @@ Serialization boundary, fixed-window rate limits, the contract snapshot, contrac
 `apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
 It imports `defineConfig` from the root package for config only, and uses the runtime-safe public subpaths `aruna/server`, `aruna/client`, `aruna/roblox`, and `aruna/schema` for Roblox-facing code.
 It validates `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build --emit-runtime`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
-It does not implement `create-app`.
+It is not `create-aruna-app` output.
 
 Package consumption uses a vendored-runtime model rather than direct `node_modules` imports of Roblox-facing code:
 
 - The roblox-ts-native runtime lives at `packages/aruna/roblox/` and ships in the package via `files` (it is separate from the Node reference runtime under `packages/aruna/src`).
-- `aruna build --emit-runtime` vendors that native runtime into the consumer as project source under `src/.aruna/runtime/`.
+- `aruna build --emit-runtime` vendors that native runtime into the consumer as project source under `src/.aruna/shared/runtime/`.
 - `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig path aliases that pair with `build --emit-runtime`.
 - `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer — including the vendored runtime — to Luau without the "modules directly under node_modules" rejection.
 
@@ -743,12 +746,12 @@ every build step exits 0 and the require fails at runtime.
 
 `apps/rbxts-harness` is a private roblox-ts-style app harness.
 It intentionally mirrors Recommended Layout v0 closely enough to act as the realistic app/starter reference while still remaining a harness rather than create-app output.
-Its whole build is a single turnkey command — `"build": "aruna build"` — exactly as a real consumer would run it: the bare `aruna build` generates the action (and signal) stubs, vendors the Roblox runtime into `src/.aruna/runtime/`, partitions the project by module classification, and drives `rbxtsc` to compile to Luau. There is no separate typecheck/rbxtsc/layout step.
+Its whole build is a single turnkey command — `"build": "aruna build"` — exactly as a real consumer would run it: the bare `aruna build` generates the action (and signal) stubs, vendors the Roblox runtime into `src/.aruna/shared/runtime/`, partitions the project by module classification, and drives `rbxtsc` to compile to Luau. There is no separate typecheck/rbxtsc/layout step.
 The source consumes Aruna through the vendored runtime via subpath imports (`aruna/server`, `aruna/schema`, `$aruna/actions/*`, `$aruna/signals`).
 Because the source uses the `domains/` recommended layout (classification is by convention, not by physical folders), `aruna build` stages the source into `out/client`, `out/server`, and `out/shared` and `default.project.json` maps each onto the Roblox DataModel — server code into `ServerScriptService` (never replicated to clients), client into `StarterPlayerScripts`, shared (plus the vendored runtime and client-callable stubs) into `ReplicatedStorage`.
 The harness covers generated action files, app bootstrap, schema inference (including optional fields), domain-local UI files, and public Aruna runtime imports.
 The runtime entries live under `src/client.tsx` and `src/server.ts`; `src/app/bootstrap.ts` and `src/app/providers.ts` stay shared-safe app composition helpers rather than hidden runtime entry files.
-It is not create-app, Rojo generation, generated Roblox Instance creation, or full Studio validation yet.
+It is not `create-aruna-app` output, generated Roblox Instance creation, or full Studio validation.
 
 ## Post-MVP
 
@@ -756,22 +759,24 @@ These stay out of the next cutline:
 
 - resources and resource invalidation
 - policies and capabilities
-- player sessions
-- Studio overlay and Studio runner flow
-- generated Roblox Instance creation and Rojo integration
-- create-app scaffolding
+- Studio overlay and Studio runner flow (`aruna test` runs specs under Lune, not Studio)
+- generated Roblox Instance creation
 - full production Studio validation
 - LSP and editor extensions
+
+Already shipped, and so no longer on this list: player sessions
+(`createServerApp({ createSession })`, `ctx.session`), `create-aruna-app` scaffolding
+(0.2.0), and Rojo integration as far as Aruna needs it: project verification in
+`aruna init` and `aruna doctor`, plus `aruna init --force` (0.3.0), generated
+`node_modules` mounts (0.4.0), and `rojo serve` under `aruna dev` (0.2.0).
 
 ## Intentionally not implemented
 
 - production Studio validation for remoting
 - full schema compiler
-- advanced remote/action codegen beyond action stubs
-- generated Roblox Instance creation and Rojo integration
+- remote/action codegen beyond action stubs, the signal registry, and generated entry scripts
+- generated Roblox Instance creation
 - LSP
 - VSCode extension
-- create-app scaffolding
 - plugin API
 - custom Luau emitter
-- full roblox-ts build orchestration
