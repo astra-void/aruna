@@ -134,6 +134,8 @@ export function createTestServerApp<
 
   const app = createServerApp<TPlayer, TActions, TSignals, TSession>({
     ...options,
+    // A spec wants the real failure, not the masked one a client would get.
+    exposeInternalErrors: options.exposeInternalErrors ?? true,
     ...(ownsClock ? { nowMs: () => clockMs } : {}),
     ...(options.signals !== undefined
       ? { createPublisher: (signals: TSignals) => createRemoteSignalPublisher(recordingRemote, signals) }

@@ -6,6 +6,7 @@ import {
   type Schema,
 } from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
+import { ActionInternalError, createErrorId, isPublicActionError } from "./action-error.js";
 // Type-only, so the store runtime is not pulled into the dispatch module's
 // require graph.
 import type { StoreDocument } from "./player-store.js";
@@ -160,12 +161,15 @@ export type ActionMiddleware<TPlayer = unknown> = (
 // Observability hook for errors thrown from the action execution chain
 // (middleware, `run`, output validation). Called before the error propagates to
 // the transport; rate-limit and input-validation rejections are not routed here.
-// The info shape is `{ actionId, player }`, matching the native runtime.
+// `error` is the original value, never the masked one. `errorId` is set for
+// every non-public error: it is the id a masked `ActionInternalError` carries
+// to the client. The info shape matches the native runtime.
 export type ActionErrorHandler<TPlayer = unknown> = (
   error: unknown,
   info: {
     readonly actionId: string;
     readonly player: TPlayer;
+    readonly errorId?: string;
   },
 ) => void;
 
@@ -191,6 +195,10 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   // Applied outermost-first around every action's execution.
   readonly middleware?: readonly ActionMiddleware<TPlayer>[];
   readonly onError?: ActionErrorHandler<TPlayer>;
+  // Rethrows a non-public error as is instead of `ActionInternalError`, so its
+  // own name and message reach the client. Off by default. Errors made with
+  // `actionError`, and the framework's own failures, are public either way.
+  readonly exposeInternalErrors?: boolean;
   readonly nowMs?: () => number;
 };
 
@@ -199,12 +207,16 @@ export type DispatchActionOptions<TPlayer = unknown> = {
 // distinct name is what crosses the wire, and is the one the native runtime sends.
 export class ActionValidationError extends SchemaValidationError {
   override readonly name: string = "ActionValidationError";
+  // Marks a framework error as public: its name and message reach the client.
+  readonly __arunaActionError = true as const;
 }
 
 // A dispatch for an action id the registry does not hold. Public on the wire,
 // like the other framework errors, and named the same in the native runtime.
 export class ActionNotFoundError extends Error {
   override readonly name = "ActionNotFoundError";
+  // Marks a framework error as public: its name and message reach the client.
+  readonly __arunaActionError = true as const;
   readonly actionId: string;
 
   constructor(actionId: string) {
@@ -349,7 +361,15 @@ export async function dispatchAction<TPlayer = unknown>(
   try {
     return await invoke();
   } catch (error) {
-    options?.onError?.(error, { actionId, player: runCtx.player });
-    throw error;
+    if (isPublicActionError(error)) {
+      options?.onError?.(error, { actionId, player: runCtx.player });
+      throw error;
+    }
+    const errorId = createErrorId();
+    options?.onError?.(error, { actionId, player: runCtx.player, errorId });
+    if (options?.exposeInternalErrors === true) {
+      throw error;
+    }
+    throw new ActionInternalError(errorId, error);
   }
 }

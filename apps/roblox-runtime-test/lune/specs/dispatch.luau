@@ -91,7 +91,9 @@ return function(ctx)
 			})
 			local _, _, value = t.await(r.dispatch(player, "guarded", nil))
 			t.isFalse(value.ok)
-			t.contains(value.error, "not authorized")
+			-- The client gets the masked error; onError gets the original.
+			t.eq(value.errorName, "ActionInternalError")
+			t.eq(value.error, "internal error")
 			t.isFalse(ran, "handler never ran")
 			t.contains(sawError, "not authorized")
 			t.eq(sawActionId, "guarded")
@@ -305,7 +307,26 @@ return function(ctx)
 			t.isTrue(settled, "dispatch settled")
 			t.isTrue(ok, "dispatch resolves rather than rejecting on a thrown handler")
 			t.isFalse(value.ok)
+			-- A Luau error names the script and line it came from, so the
+			-- client only sees that something failed, and an id to report.
+			t.eq(value.errorName, "ActionInternalError")
+			t.eq(value.error, "internal error")
+			t.isTrue(type(value.errorId) == "string", "masked error carries an errorId")
+		end)
+
+		t.it("sends the real message when exposeInternalErrors is set", function()
+			local r = createActionRegistry({
+				boom = {
+					id = "boom",
+					run = function()
+						error("explosion")
+					end,
+				},
+			}, { exposeInternalErrors = true })
+			local _, _, value = t.await(r.dispatch(player, "boom", nil))
+			t.isFalse(value.ok)
 			t.contains(value.error, "explosion")
+			t.eq(value.errorId, nil, "an exposed error is not masked, so carries no id")
 		end)
 
 		t.it("captures asynchronous rejections from run", function()
@@ -316,7 +337,7 @@ return function(ctx)
 						return Promise.reject("async explosion")
 					end,
 				},
-			})
+			}, { exposeInternalErrors = true })
 			local _, _, value = t.await(r.dispatch(player, "asyncBoom", nil))
 			t.isFalse(value.ok)
 			t.contains(value.error, "async explosion")

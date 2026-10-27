@@ -33,6 +33,10 @@ export { createActionDefiner } from "./server";
 // Store definitions are identical on both surfaces; `definePlayerStore` already
 // defaults its player to `Player`.
 export { defineStore, definePlayerStore } from "./define-store";
+// Also on `aruna/server`: the error an action throws when the client should see
+// its name and message.
+export { actionError } from "./action-error";
+export type { PublicActionError } from "./action-error";
 // The DataStoreService adapter. Roblox-only by nature — the reference runtime
 // has no DataStore to talk to — so it lives on this entry rather than
 // `aruna/server`, alongside the RemoteEvent transport.
@@ -63,17 +67,21 @@ interface ActionResponsePayload {
 	readonly errorName?: string;
 	readonly retryAfterMs?: number;
 	readonly resetAtMs?: number;
+	readonly errorId?: string;
 }
 
 // The structured rejection every failed invoke carries: `message` is always
 // present; `name` discriminates the failure ("ActionRateLimitError",
 // "ActionValidationError", "ActionTimeoutError", ...) and rate limits carry
 // `retryAfterMs`/`resetAtMs` so callers can back off instead of string-matching.
+// An `ActionInternalError` carries `errorId`, which the server's `onError` got
+// for the same failure.
 export interface ActionError {
 	readonly message: string;
 	readonly name?: string;
 	readonly retryAfterMs?: number;
 	readonly resetAtMs?: number;
+	readonly errorId?: string;
 }
 
 function toActionError(payload: ActionResponsePayload): ActionError {
@@ -82,6 +90,7 @@ function toActionError(payload: ActionResponsePayload): ActionError {
 		...(payload.errorName !== undefined ? { name: payload.errorName } : {}),
 		...(payload.retryAfterMs !== undefined ? { retryAfterMs: payload.retryAfterMs } : {}),
 		...(payload.resetAtMs !== undefined ? { resetAtMs: payload.resetAtMs } : {}),
+		...(payload.errorId !== undefined ? { errorId: payload.errorId } : {}),
 	};
 }
 

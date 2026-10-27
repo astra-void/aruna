@@ -10,7 +10,12 @@ import {
   type RemoteEventActionResponse,
 } from "../src/runtime/remote-event.js";
 import { schema, type Schema } from "../src/schema.js";
-import { defineAction, type ActionMiddleware, type ActionRegistry } from "../src/server.js";
+import {
+  actionError,
+  defineAction,
+  type ActionMiddleware,
+  type ActionRegistry,
+} from "../src/server.js";
 
 type SchemaDescriptor = {
   readonly type: "string" | "number" | "boolean" | "object";
@@ -20,7 +25,13 @@ type SchemaDescriptor = {
 
 type ActionFixture = {
   readonly id: string;
-  readonly behavior: "echoInput" | "returnConstant" | "returnFunction" | "throwError" | "throwTable";
+  readonly behavior:
+    | "echoInput"
+    | "returnConstant"
+    | "returnFunction"
+    | "throwError"
+    | "throwTable"
+    | "throwActionError";
   readonly value?: unknown;
   readonly message?: string;
   readonly errorName?: string;
@@ -34,7 +45,9 @@ type Expectation = {
   readonly ok?: boolean;
   readonly output?: unknown;
   readonly errorName?: string;
+  readonly message?: string;
   readonly messageContains?: string;
+  readonly errorId?: boolean;
   readonly noResponse?: boolean;
 };
 
@@ -46,6 +59,7 @@ type ConformanceCase = {
   readonly name: string;
   readonly actions: readonly ActionFixture[];
   readonly middleware?: readonly string[];
+  readonly exposeInternalErrors?: boolean;
   readonly steps: readonly Step[];
   readonly trace: readonly string[];
 };
@@ -111,6 +125,10 @@ function behaviorOf(fixture: ActionFixture): (input: unknown) => unknown {
         // oxlint-disable-next-line no-throw-literal
         throw { name: fixture.errorName, message: fixture.message };
       };
+    case "throwActionError":
+      return () => {
+        throw actionError(fixture.errorName ?? "", fixture.message ?? "");
+      };
   }
 }
 
@@ -172,13 +190,18 @@ describe("dispatch conformance (Node)", () => {
       );
 
       let clockMs = 0;
+      let lastErrorId: string | undefined;
       const loopback = createLoopbackRemote();
       const app = createServerApp({
         actions,
         middleware,
-        onError() {
+        onError(_error, info) {
           trace.push("onError");
+          lastErrorId = info.errorId;
         },
+        ...(testCase.exposeInternalErrors !== undefined
+          ? { exposeInternalErrors: testCase.exposeInternalErrors }
+          : {}),
         nowMs: () => clockMs,
         transport: ({ registry, dispatch }) =>
           bindRemoteEventActions(loopback.remote, registry, dispatch),
@@ -193,6 +216,7 @@ describe("dispatch conformance (Node)", () => {
         }
 
         requestCount += 1;
+        lastErrorId = undefined;
         const response = await loopback.send(player, {
           requestId: `conformance:${requestCount}`,
           actionId: step.dispatch,
@@ -219,8 +243,17 @@ describe("dispatch conformance (Node)", () => {
           if (expected.errorName !== undefined) {
             expect(response.error.name).toBe(expected.errorName);
           }
+          if (expected.message !== undefined) {
+            expect(response.error.message).toBe(expected.message);
+          }
           if (expected.messageContains !== undefined) {
             expect(response.error.message).toContain(expected.messageContains);
+          }
+          if (expected.errorId === true) {
+            expect(response.error.errorId).toMatch(/^[0-9a-f]{8}$/);
+            expect(response.error.errorId).toBe(lastErrorId);
+          } else if (expected.errorId === false) {
+            expect(response.error.errorId).toBeUndefined();
           }
         }
       }

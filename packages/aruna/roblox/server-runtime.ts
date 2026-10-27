@@ -6,6 +6,14 @@ import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
+import {
+	ACTION_INTERNAL_ERROR_MESSAGE,
+	ACTION_INTERNAL_ERROR_NAME,
+	actionError,
+	createErrorId,
+	isPublicActionError,
+	type PublicActionError,
+} from "./action-error";
 
 export interface ActionDispatchResult {
 	readonly ok: boolean;
@@ -14,10 +22,14 @@ export interface ActionDispatchResult {
 	// Structured error metadata alongside the message, so the client can
 	// discriminate failures (and back off on rate limits) instead of string
 	// matching: "ActionRateLimitError" | "ActionValidationError" |
-	// "ActionSerializationError" | "ActionNotFoundError" | a thrown table's own `name`.
+	// "ActionSerializationError" | "ActionNotFoundError" | the name given to
+	// `actionError` | "ActionInternalError".
 	readonly errorName?: string;
 	readonly retryAfterMs?: number;
 	readonly resetAtMs?: number;
+	// Present on an `ActionInternalError`: the id `onError` was given for the
+	// same failure, so a client report can be matched to the server log.
+	readonly errorId?: string;
 }
 
 export interface ActionRegistry<TPlayer = unknown> {
@@ -38,8 +50,9 @@ export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinit
 
 // Around-run middleware. Runs after input validation and rate limiting (so a
 // throttled or malformed request never reaches it) and wraps the action's `run`
-// plus output validation. Short-circuit by rejecting (or by not calling `next`); observe/transform by
-// awaiting `next()`. Mirrors the Node reference runtime's ActionMiddleware.
+// plus output validation. Short-circuit by rejecting (or by not calling `next`);
+// observe/transform by awaiting `next()`. Mirrors the Node reference runtime's
+// ActionMiddleware.
 export type ActionMiddleware<TPlayer = unknown> = (
 	info: {
 		readonly actionId: string;
@@ -51,12 +64,15 @@ export type ActionMiddleware<TPlayer = unknown> = (
 
 // Observability hook for errors raised from the action execution chain
 // (middleware, `run`, output validation), called before dispatch converts the
-// error into the `{ ok: false }` wire result.
+// error into the `{ ok: false }` wire result. `error` is the original value,
+// never the masked one. `errorId` is set when the client is sent
+// `ActionInternalError`, and is the id that response carries.
 export type ActionErrorHandler<TPlayer = unknown> = (
 	error: unknown,
 	info: {
 		readonly actionId: string;
 		readonly player: TPlayer;
+		readonly errorId?: string;
 	},
 ) => void;
 
@@ -81,6 +97,11 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Around-run middleware, applied outermost-first to every action.
 	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
 	readonly onError?: ActionErrorHandler<TPlayer>;
+	// Sends a non-public error's own name and message instead of
+	// `ActionInternalError`. Off by default, because a Luau runtime error names
+	// the server script and line it came from. `createTestServerApp` turns it on
+	// so a spec sees the real failure.
+	readonly exposeInternalErrors?: boolean;
 	// The clock the rate limiter reads, in milliseconds. Left unset in a game,
 	// where os.clock() is the right answer; set by the test harness so a spec can
 	// step past a rate-limit window instead of waiting out a real one.
@@ -95,12 +116,40 @@ function validationFailure(
 	role: "input" | "output",
 	schema: Schema,
 	value: unknown,
-): { readonly name: string; readonly message: string } {
+): PublicActionError {
 	const issue = firstSchemaIssue(schema, value);
 	const prefix = `Aruna action ${actionId} ${role} validation failed`;
+	return actionError("ActionValidationError", issue !== undefined ? `${prefix}: ${issue}` : prefix);
+}
+
+// The response for a rejection from the execution chain. A public error keeps
+// its name and message; anything else is masked unless `exposeInternalErrors`.
+function rejectionResult(
+	reason: unknown,
+	exposeInternalErrors: boolean,
+	errorId: string | undefined,
+): ActionDispatchResult {
+	if (isPublicActionError(reason)) {
+		return { ok: false, error: reason.message, errorName: reason.name };
+	}
+	if (!exposeInternalErrors) {
+		return {
+			ok: false,
+			error: ACTION_INTERNAL_ERROR_MESSAGE,
+			errorName: ACTION_INTERNAL_ERROR_NAME,
+			...(errorId !== undefined ? { errorId } : {}),
+		};
+	}
+	// A thrown table with `name`/`message` string fields keeps its identity;
+	// anything else is stringified.
+	const asRecord = typeIs(reason, "table") ? (reason as { name?: unknown; message?: unknown }) : undefined;
+	const reasonName = asRecord !== undefined && typeIs(asRecord.name, "string") ? asRecord.name : undefined;
+	const reasonMessage =
+		asRecord !== undefined && typeIs(asRecord.message, "string") ? asRecord.message : tostring(reason);
 	return {
-		name: "ActionValidationError",
-		message: issue !== undefined ? `${prefix}: ${issue}` : prefix,
+		ok: false,
+		error: reasonMessage,
+		...(reasonName !== undefined ? { errorName: reasonName } : {}),
 	};
 }
 
@@ -121,6 +170,7 @@ export function createActionRegistry<TPlayer>(
 	const getStore = options?.getStore;
 	const middleware = options?.middleware;
 	const onError = options?.onError;
+	const exposeInternalErrors = options?.exposeInternalErrors === true;
 	const rateLimiter = createActionRateLimiter();
 	const nowMs = options?.nowMs;
 
@@ -226,7 +276,7 @@ export function createActionRegistry<TPlayer>(
 							throw validationFailure(actionId, "output", outputSchema, output);
 						}
 						if (!isWireSafe(output)) {
-							throw { name: "ActionSerializationError", message: "non-serializable action output" };
+							throw actionError("ActionSerializationError", "non-serializable action output");
 						}
 						return output;
 					});
@@ -254,27 +304,13 @@ export function createActionRegistry<TPlayer>(
 						resolve({ ok: true, output });
 					},
 					(reason) => {
+						// Every non-public failure gets an id for `onError`; the client
+						// is sent it only when the failure is masked.
+						const errorId = isPublicActionError(reason) ? undefined : createErrorId();
 						if (onError !== undefined) {
-							onError(reason, { actionId, player });
+							onError(reason, errorId !== undefined ? { actionId, player, errorId } : { actionId, player });
 						}
-						// A thrown table with `name`/`message` string fields keeps its
-						// identity across the wire; anything else is stringified.
-						const asRecord = typeIs(reason, "table")
-							? (reason as { name?: unknown; message?: unknown })
-							: undefined;
-						const reasonName =
-							asRecord !== undefined && typeIs(asRecord.name, "string")
-								? asRecord.name
-								: undefined;
-						const reasonMessage =
-							asRecord !== undefined && typeIs(asRecord.message, "string")
-								? asRecord.message
-								: tostring(reason);
-						resolve({
-							ok: false,
-							error: reasonMessage,
-							...(reasonName !== undefined ? { errorName: reasonName } : {}),
-						});
+						resolve(rejectionResult(reason, exposeInternalErrors, errorId));
 					},
 				);
 			});

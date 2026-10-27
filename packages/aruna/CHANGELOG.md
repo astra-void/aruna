@@ -98,6 +98,36 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: internal error messages no longer reach the client.** Before
+  this, the native runtime sent `tostring(reason)` for anything an action
+  threw, and the Node transport sent `error.message`. A Luau runtime error
+  carries the server script's path and line
+  (`ServerScriptService.domains.shop.actions:42: attempt to index nil`). Now
+  only public errors keep their `name` and `message` on the wire: the
+  framework's own failures (`ActionValidationError`,
+  `ActionSerializationError`, `ActionRateLimitError`, `ActionNotFoundError`,
+  `ActionTimeoutError`) and errors made with the new `actionError` helper.
+  Everything else reaches the client as
+  `{ name: "ActionInternalError", message: "internal error", errorId }`.
+
+  ```ts
+  import { actionError } from "aruna/server"; // or "aruna/roblox"
+
+  throw actionError("OutOfStock", "Item is sold out");
+  ```
+
+  `onError` gets the original error, plus the same `errorId` in its info, so
+  a player's report can be matched to the server log. A thrown plain table
+  with `name` and `message` used to cross the wire as is in the native
+  runtime. It no longer does unless it was made with `actionError`. `app.dispatch`
+  follows the same rule. In the Node runtime it rejects with an
+  `ActionInternalError` whose `cause` is the original error.
+
+- **`createServerApp({ exposeInternalErrors })`.** Defaults to `false`. When
+  set, a non-public error is sent with its own name and message, as before.
+  `createTestServerApp` defaults it to `true`, so a spec still sees the real
+  failure.
+
 - **`aruna add domain` scaffolds a spec.** A new domain now starts with
   `actions.test.ts` next to its starter action — already passing, and already
   exercising validation — instead of an empty habit to remember.

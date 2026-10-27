@@ -2,7 +2,13 @@
 // middleware chain (outermost-first, inside rate limiting and input validation)
 // and the error observability hook.
 import { describe, expect, it, vi } from "vitest";
-import { createServerApp, defineAction, type ActionMiddleware } from "../src/server.js";
+import {
+  ActionInternalError,
+  actionError,
+  createServerApp,
+  defineAction,
+  type ActionMiddleware,
+} from "../src/server.js";
 import { schema } from "../src/schema.js";
 
 const buy = defineAction({
@@ -45,9 +51,13 @@ describe("createServerApp middleware", () => {
     };
 
     const app = createServerApp({ actions: { "shop.guarded": guarded }, middleware: [reject] });
-    await expect(app.dispatch("shop.guarded", {}, undefined)).rejects.toThrowError(
-      "not authorized",
-    );
+    // A plain Error is internal: the caller gets the masked error, with the
+    // original kept as its cause.
+    await expect(app.dispatch("shop.guarded", {}, undefined)).rejects.toMatchObject({
+      name: "ActionInternalError",
+      message: "internal error",
+      cause: new Error("not authorized"),
+    });
     expect(run).not.toHaveBeenCalled();
   });
 
@@ -81,11 +91,51 @@ describe("createServerApp onError", () => {
     const onError = vi.fn();
 
     const app = createServerApp({ actions: { "shop.boom": boom }, onError });
-    await expect(app.dispatch("shop.boom", {}, undefined)).rejects.toThrowError("kaboom");
+    const rejection: unknown = await app.dispatch("shop.boom", {}, undefined).catch((error: unknown) => error);
+    expect(rejection).toBeInstanceOf(ActionInternalError);
     expect(onError).toHaveBeenCalledTimes(1);
-    const [error, info] = onError.mock.calls[0] as [unknown, { actionId: string }];
+    const [error, info] = onError.mock.calls[0] as [unknown, { actionId: string; errorId?: string }];
+    // onError gets the original, and the id the masked error carries.
     expect((error as Error).message).toBe("kaboom");
     expect(info.actionId).toBe("shop.boom");
+    expect(info.errorId).toMatch(/^[0-9a-f]{8}$/);
+    expect((rejection as ActionInternalError).errorId).toBe(info.errorId);
+  });
+
+  it("passes an actionError through with its own name and message", async () => {
+    const soldOut = defineAction({
+      id: "shop.soldOut",
+      run: () => {
+        throw actionError("OutOfStock", "Item is sold out");
+      },
+    });
+    const onError = vi.fn();
+
+    const app = createServerApp({ actions: { "shop.soldOut": soldOut }, onError });
+    await expect(app.dispatch("shop.soldOut", {}, undefined)).rejects.toMatchObject({
+      name: "OutOfStock",
+      message: "Item is sold out",
+    });
+    // A public error needs no id to be matched up: the client already has it.
+    expect(onError.mock.calls[0]?.[1]).toEqual({ actionId: "shop.soldOut", player: undefined });
+  });
+
+  it("rethrows the original error when exposeInternalErrors is set", async () => {
+    const boom = defineAction({
+      id: "shop.boom",
+      run: () => {
+        throw new Error("kaboom");
+      },
+    });
+    const onError = vi.fn();
+
+    const app = createServerApp({
+      actions: { "shop.boom": boom },
+      onError,
+      exposeInternalErrors: true,
+    });
+    await expect(app.dispatch("shop.boom", {}, undefined)).rejects.toThrowError("kaboom");
+    expect(onError.mock.calls[0]?.[1]).toMatchObject({ errorId: expect.any(String) });
   });
 
   it("is not called for input validation failures", async () => {

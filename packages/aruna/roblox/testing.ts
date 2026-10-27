@@ -153,6 +153,8 @@ export function createTestServerApp<
 	const signals = options.signals;
 	const app = createServerApp<TPlayer, TSignals, TSession>({
 		...options,
+		// A spec wants the real failure, not the masked one a client would get.
+		exposeInternalErrors: options.exposeInternalErrors ?? true,
 		...(ownsClock ? { nowMs: () => clockMs } : {}),
 		...(signals !== undefined
 			? {

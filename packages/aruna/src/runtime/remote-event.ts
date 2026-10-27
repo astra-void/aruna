@@ -1,3 +1,4 @@
+import { ActionInternalError } from "./action-error.js";
 import { createServerBinding, type ServerBinding } from "./binding.js";
 import { ActionRateLimitError } from "./rate-limit.js";
 import {
@@ -27,6 +28,9 @@ export type RemoteEventActionErrorPayload = {
   // instead of string-matching the message.
   readonly retryAfterMs?: number;
   readonly resetAtMs?: number;
+  // Present on an `ActionInternalError`: the id the server's `onError` got for
+  // the same failure.
+  readonly errorId?: string;
 };
 
 export type RemoteEventActionResponse =
@@ -79,6 +83,8 @@ export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
 export class TimeoutError extends Error {
   override readonly name = "ActionTimeoutError";
+  // Marks a framework error as public: its name and message reach the client.
+  readonly __arunaActionError = true as const;
   readonly actionId: string;
   readonly timeoutMs: number;
 
@@ -179,7 +185,14 @@ function isValidRequestEnvelope(value: unknown): value is RemoteEventActionReque
   return isString(candidate.requestId) && isString(candidate.actionId);
 }
 
+// Dispatch has already decided what is public: it rethrows a public error, and
+// replaces anything else with `ActionInternalError` unless internal errors are
+// exposed. This only shapes the payload.
 function toRemoteEventErrorPayload(error: unknown): RemoteEventActionErrorPayload {
+  if (error instanceof ActionInternalError) {
+    return { message: error.message, name: error.name, errorId: error.errorId };
+  }
+
   if (error instanceof ActionRateLimitError) {
     return {
       message: error.message,
@@ -200,6 +213,17 @@ function toRemoteEventErrorPayload(error: unknown): RemoteEventActionErrorPayloa
     return {
       message: error.message,
     };
+  }
+
+  // A thrown plain `{ name, message }` table, which `actionError` values from
+  // the native runtime are and an exposed error may be.
+  if (typeof error === "object" && error !== null) {
+    const record = error as { readonly name?: unknown; readonly message?: unknown };
+    if (isString(record.message)) {
+      return isString(record.name)
+        ? { message: record.message, name: record.name }
+        : { message: record.message };
+    }
   }
 
   return {
@@ -263,6 +287,10 @@ export function createRemoteEventActionInvoker(
         configurable: true,
         value: response.error.name,
       });
+    }
+
+    if (isString(response.error.errorId)) {
+      Object.assign(error, { errorId: response.error.errorId });
     }
 
     // Rate-limit metadata survives the wire so callers can back off precisely.

@@ -183,6 +183,8 @@ const app = createServerApp({
 ```
 
 ```ts
+import { actionError, defineAction } from "aruna/server";
+
 export const buy = defineAction({
   id: "shop.buy",
   run(ctx) {
@@ -191,7 +193,7 @@ export const buy = defineAction({
     // that the next save would write over a real record.
     const document = ctx.store;
     if (document === undefined) {
-      throw { name: "ProfileNotReady", message: "Your data is still loading." };
+      throw actionError("ProfileNotReady", "Your data is still loading.");
     }
     document.update((current) => ({ ...current, coins: current.coins - 10 }));
     return { ok: true };

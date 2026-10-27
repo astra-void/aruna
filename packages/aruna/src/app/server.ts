@@ -107,6 +107,11 @@ export type CreateServerAppOptions<
   // Observability hook for errors thrown from the action execution chain,
   // called before the error propagates to the transport.
   readonly onError?: ActionErrorHandler<TPlayer>;
+  // Sends a thrown error's own name and message to the client instead of
+  // `ActionInternalError`. Off by default, because an internal message can
+  // carry server detail. Errors made with `actionError`, and the framework's
+  // own failures, are public either way.
+  readonly exposeInternalErrors?: boolean;
   // Builds the per-player session injected into every action ctx as
   // `ctx.session`. Runs once per player on join (and, at boot, for players
   // already present via `players.GetPlayers`) before `onPlayerAdded`, and the
@@ -208,6 +213,9 @@ export function createServerApp<
       : {}),
     ...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
     ...(options.onError !== undefined ? { onError: options.onError } : {}),
+    ...(options.exposeInternalErrors !== undefined
+      ? { exposeInternalErrors: options.exposeInternalErrors }
+      : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
   } satisfies DispatchActionOptions<TPlayer>;
 

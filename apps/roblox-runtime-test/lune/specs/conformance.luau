@@ -12,6 +12,7 @@ return function(ctx)
 	local t = ctx.t
 	local schema = ctx.load("schema").schema
 	local createActionRegistry = ctx.load("server-runtime").createActionRegistry
+	local actionError = ctx.load("action-error").actionError
 
 	local conformance = serde.decode("json", fs.readFile(ctx.conformancePath))
 
@@ -74,6 +75,10 @@ return function(ctx)
 		elseif behavior == "throwTable" then
 			return function()
 				error({ name = fixture.errorName, message = fixture.message })
+			end
+		elseif behavior == "throwActionError" then
+			return function()
+				error(actionError(fixture.errorName, fixture.message))
 			end
 		end
 		error(`unknown behavior: {tostring(behavior)}`)
@@ -138,11 +143,14 @@ return function(ctx)
 				end
 
 				local clockMs = 0
+				local lastErrorId = nil
 				local registry = createActionRegistry(actions, {
 					middleware = middleware,
-					onError = function()
+					onError = function(_err, info)
 						table.insert(trace, "onError")
+						lastErrorId = info.errorId
 					end,
+					exposeInternalErrors = case.exposeInternalErrors,
 					nowMs = function()
 						return clockMs
 					end,
@@ -154,6 +162,7 @@ return function(ctx)
 						continue
 					end
 
+					lastErrorId = nil
 					local settled, ok, result =
 						t.await(registry.dispatch(player, step.dispatch, materialize(step.input)))
 					t.isTrue(settled, "dispatch settled")
@@ -179,8 +188,20 @@ return function(ctx)
 						if expected.errorName ~= nil then
 							t.eq(response.errorName, expected.errorName, `{step.dispatch} errorName`)
 						end
+						if expected.message ~= nil then
+							t.eq(response.error, expected.message, `{step.dispatch} message`)
+						end
 						if expected.messageContains ~= nil then
 							t.contains(response.error, expected.messageContains, `{step.dispatch} message`)
+						end
+						if expected.errorId == true then
+							t.isTrue(
+								type(response.errorId) == "string" and string.match(response.errorId, "^%x%x%x%x%x%x%x%x$") ~= nil,
+								`{step.dispatch} errorId is 8 hex digits: {tostring(response.errorId)}`
+							)
+							t.eq(response.errorId, lastErrorId, `{step.dispatch} errorId matches onError`)
+						elseif expected.errorId == false then
+							t.eq(response.errorId, nil, `{step.dispatch} carries no errorId`)
 						end
 					end
 				end

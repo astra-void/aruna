@@ -81,7 +81,7 @@ never compiles specs. That import is `aruna::305 test-module-imported`.
 
 | Member | What it does |
 | --- | --- |
-| `invoke(player, actionId, input)` | Dispatches as that player, through validation, rate limiting, and middleware. Resolves with the action's output; rejects the way the wire does. |
+| `invoke(player, actionId, input)` | Dispatches as that player, through validation, rate limiting, and middleware. Resolves with the action's output; rejects the way the wire does, except that a thrown error keeps its own message: the harness defaults `exposeInternalErrors` to `true` so a spec sees the real failure. Pass `exposeInternalErrors: false` to assert what a client would get. |
 | `join(player)` / `leave(player)` | Drives the lifecycle: sessions are created and dropped, `onPlayerAdded`/`onPlayerRemoving` fire, an owned player store loads and releases. |
 | `players()` | Who is currently "in the server". |
 | `published()` | Every signal emit so far — `{ signalId, payload, player? }`, no player for a broadcast. |

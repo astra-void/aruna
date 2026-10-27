@@ -101,18 +101,23 @@
       "trace": ["run", "run"]
     },
     {
-      "name": "a synchronous throw fails the call and reaches onError",
+      "name": "a thrown error is masked as ActionInternalError with the id onError got",
       "actions": [{ "id": "boom", "behavior": "throwError", "message": "explosion" }],
       "steps": [
         {
           "dispatch": "boom",
-          "expect": { "ok": false, "messageContains": "explosion" }
+          "expect": {
+            "ok": false,
+            "errorName": "ActionInternalError",
+            "message": "internal error",
+            "errorId": true
+          }
         }
       ],
       "trace": ["run", "onError"]
     },
     {
-      "name": "a thrown { name, message } table fails the call and reaches onError",
+      "name": "a thrown { name, message } table without the brand is masked too",
       "actions": [
         {
           "id": "soldOut",
@@ -121,8 +126,70 @@
           "message": "Item is sold out"
         }
       ],
-      "steps": [{ "dispatch": "soldOut", "expect": { "ok": false } }],
+      "steps": [
+        {
+          "dispatch": "soldOut",
+          "expect": {
+            "ok": false,
+            "errorName": "ActionInternalError",
+            "message": "internal error",
+            "errorId": true
+          }
+        }
+      ],
       "trace": ["run", "onError"]
+    },
+    {
+      "name": "an actionError keeps its name and message",
+      "actions": [
+        {
+          "id": "soldOut",
+          "behavior": "throwActionError",
+          "errorName": "OutOfStock",
+          "message": "Item is sold out"
+        }
+      ],
+      "steps": [
+        {
+          "dispatch": "soldOut",
+          "expect": {
+            "ok": false,
+            "errorName": "OutOfStock",
+            "message": "Item is sold out",
+            "errorId": false
+          }
+        }
+      ],
+      "trace": ["run", "onError"]
+    },
+    {
+      "name": "exposeInternalErrors sends a thrown error's own name and message",
+      "exposeInternalErrors": true,
+      "actions": [
+        {
+          "id": "soldOut",
+          "behavior": "throwTable",
+          "errorName": "OutOfStock",
+          "message": "Item is sold out"
+        },
+        { "id": "boom", "behavior": "throwError", "message": "explosion" }
+      ],
+      "steps": [
+        {
+          "dispatch": "soldOut",
+          "expect": {
+            "ok": false,
+            "errorName": "OutOfStock",
+            "message": "Item is sold out",
+            "errorId": false
+          }
+        },
+        {
+          "dispatch": "boom",
+          "expect": { "ok": false, "messageContains": "explosion", "errorId": false }
+        }
+      ],
+      "trace": ["run", "onError", "run", "onError"]
     },
     {
       "name": "invalid output fails the call and reaches onError",
@@ -140,7 +207,8 @@
           "expect": {
             "ok": false,
             "errorName": "ActionValidationError",
-            "messageContains": "Aruna action typed output validation failed"
+            "messageContains": "Aruna action typed output validation failed",
+            "errorId": false
           }
         }
       ],

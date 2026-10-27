@@ -29,6 +29,8 @@ export type SerializationPolicyOptions = {
 
 export class ActionSerializationError extends Error {
   override readonly name = "ActionSerializationError";
+  // Marks a framework error as public: its name and message reach the client.
+  readonly __arunaActionError = true as const;
   readonly actionId: string;
   readonly role: "input" | "output";
   readonly violations: readonly SerializationPolicyViolation[];

@@ -25,6 +25,9 @@ export {
   type RemoteEventSignalLike,
 } from "./runtime/remote-event.js";
 export * from "./runtime/remote-signal.js";
+// Also on `aruna/server`: the error an action throws when the client should see
+// its name and message.
+export { PublicActionError, actionError } from "./runtime/action-error.js";
 
 import type { ActionDefinition, PublishingActionDefinition } from "./actions/define-action.js";
 import type { SignalRegistry } from "./runtime/signal.js";

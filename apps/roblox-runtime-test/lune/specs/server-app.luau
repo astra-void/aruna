@@ -42,7 +42,7 @@ return function(ctx)
 			app.dispose()
 		end)
 
-		t.it("dispatch rejects with the error string on failure", function()
+		t.it("dispatch rejects with the masked error on failure", function()
 			local app = serverApp.createServerApp({
 				actions = {
 					boom = {
@@ -56,7 +56,9 @@ return function(ctx)
 			local settled, ok, reason = t.await(app.dispatch("boom", { player = player }, nil))
 			t.isTrue(settled, "dispatch settled")
 			t.isFalse(ok, "dispatch should reject on action error")
-			t.contains(reason.message, "kaboom")
+			t.eq(reason.name, "ActionInternalError")
+			t.eq(reason.message, "internal error")
+			t.isTrue(type(reason.errorId) == "string", "rejection carries the errorId")
 
 			local settledMissing, okMissing, missingReason = t.await(app.dispatch("missing", { player = player }, nil))
 			t.isTrue(settledMissing, "missing-action dispatch settled")

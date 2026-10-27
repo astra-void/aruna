@@ -49,6 +49,8 @@ const CONTRACT: Record<keyof typeof ENTRIES, readonly string[]> = {
     "ServerSignalPublisherFactory",
     "ActionMiddleware",
     "ActionErrorHandler",
+    "actionError",
+    "PublicActionError",
     "SignalDefinition",
     "InferInput",
     "InferOutput",
@@ -97,6 +99,7 @@ const CONTRACT: Record<keyof typeof ENTRIES, readonly string[]> = {
   "aruna/roblox": [
     "defineAction",
     "defineSignal",
+    "actionError",
     "bindActions",
     "createActionInvoker",
     "robloxRemoteEvent",

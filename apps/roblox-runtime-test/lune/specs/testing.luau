@@ -66,6 +66,25 @@ return function(ctx)
 			harness.dispose()
 		end)
 
+		t.it("shows a spec the real failure rather than the masked one", function()
+			local harness = testing.createTestServerApp({
+				actions = {
+					["shop.boom"] = {
+						id = "shop.boom",
+						run = function()
+							error("kaboom")
+						end,
+					},
+				},
+			})
+			local settled, ok, reason = t.await(harness.invoke(testing.createTestPlayer(), "shop.boom", nil))
+			t.isTrue(settled, "invoke settled")
+			t.isFalse(ok, "a throwing action rejects")
+			t.contains(reason.message, "kaboom")
+
+			harness.dispose()
+		end)
+
 		t.it("records every published signal with its recipient", function()
 			local harness = testing.createTestServerApp({
 				actions = { ["shop.buy"] = buyAction() },

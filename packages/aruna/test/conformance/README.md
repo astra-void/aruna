@@ -19,6 +19,7 @@ action.
 | `name`       | the test name in both runners                                              |
 | `actions`    | action fixtures, below                                                     |
 | `middleware` | optional labels, outermost first; each records `label:before` / `label:after` |
+| `exposeInternalErrors` | optional; passed to the app (default off) |
 | `steps`      | run in order                                                               |
 | `trace`      | everything recorded across the case: `run` for each handler call, the middleware labels, `onError` |
 
@@ -34,7 +35,11 @@ or a dispatch:
 - `ok`: the response's `ok`
 - `output`: deep-equal to the response's output
 - `errorName`: equal to the response's error name
+- `message`: equal to the response's error message
 - `messageContains`: a substring of the response's error message
+- `errorId`: `true` when the response must carry an 8-hex-digit `errorId`,
+  the same one `onError` received for that call. `false` when it must carry
+  none.
 - `noResponse`: `true` when no response is sent at all
 
 ## Action fixture
@@ -48,6 +53,7 @@ or a dispatch:
 | `returnFunction` | returns `{ handler = <function> }`           |                       |
 | `throwError`     | throws the runtime's own error: `new Error(message)` / `error(message)` | `message` |
 | `throwTable`     | throws a plain `{ name, message }` table     | `errorName`, `message` |
+| `throwActionError` | throws `actionError(errorName, message)`   | `errorName`, `message` |
 
 Optional: `input` and `output` schema descriptors, `rateLimit`
 (`{ windowMs, max }`), `fireAndForget`.

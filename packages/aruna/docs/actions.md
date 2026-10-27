@@ -101,6 +101,7 @@ const serverApp = createServerApp<Player>({
   signals?: SignalRegistry;                         // + createPublisher: app-owned publisher
   middleware?: ActionMiddleware[];
   onError?: (err, info) => void;                    // see below
+  exposeInternalErrors?: boolean;                   // default false; see "Errors the client sees"
   onPlayerRemoving?: (player) => void;              // per-player cleanup; app owns the connection
 }
 ```
@@ -161,22 +162,63 @@ shared `"anonymous"` bucket. Override with `rateLimitKey` if you need finer buck
 a limit is exceeded the dispatcher throws `ActionRateLimitError` (`retryAfterMs`,
 `resetAtMs`, `max`, `windowMs`).
 
-**Failures are typed across the wire.** A rejected invoke carries a structured error —
+**Failures are typed across the wire.** A rejected invoke carries a structured error:
 `err.message` plus `err.name` (`"ActionRateLimitError"`, `"ActionValidationError"`,
-`"ActionSerializationError"`, `"ActionNotFoundError"`, `"ActionTimeoutError"`) — and rate-limit rejections also
-carry `err.retryAfterMs` / `err.resetAtMs`, so clients can back off precisely instead of
+`"ActionSerializationError"`, `"ActionNotFoundError"`, `"ActionTimeoutError"`,
+`"ActionInternalError"`, or a name your action chose). Rate-limit rejections also carry
+`err.retryAfterMs` / `err.resetAtMs`, so clients can back off precisely instead of
 string-matching messages.
+
+## Errors the client sees
+
+An error reaches the client with its own `name` and `message` only when it is public.
+Public means one of the framework's own failures listed above, or an error your action
+throws through `actionError`:
+
+```ts
+import { actionError, defineAction } from "aruna/server";
+
+export const buy = defineAction({
+  id: "shop.buy",
+  run(ctx, input) {
+    if (stock(input.itemId) === 0) {
+      throw actionError("OutOfStock", "Item is sold out"); // err.name === "OutOfStock"
+    }
+    // ...
+  },
+});
+```
+
+Anything else is masked: a bug, a failed lookup, `throw new Error(...)`, even a plain
+`{ name, message }` table. The client gets
+`{ name: "ActionInternalError", message: "internal error", errorId }`. A Luau runtime
+error names the server script and line it came from
+(`ServerScriptService.domains.shop.actions:42: attempt to index nil`), and that is not
+the client's to see. `onError` gets the original error and the same `errorId`, so a
+player's bug report can be matched to the server log:
+
+```ts
+createServerApp({
+  actions,
+  onError: (err, info) => warn(`[${info.errorId ?? "-"}] ${info.actionId}`, err),
+});
+```
+
+`createServerApp({ exposeInternalErrors: true })` sends a masked error's own name and
+message instead, which is useful while developing. `createTestServerApp` turns it on by
+default so a spec sees the real failure. `app.dispatch` follows the same rule. In the
+Node runtime the masked error is an `ActionInternalError` with the original as `cause`.
 
 ## Middleware & error observability
 
 `createServerApp({ middleware, onError })` wraps every action on every dispatch path:
 
 ```ts
-import { createServerApp, type ActionMiddleware } from "aruna/server";
+import { actionError, createServerApp, type ActionMiddleware } from "aruna/server";
 
 const requireAdmin: ActionMiddleware<Player> = async (info, proceed) => {
   if (info.actionId.startsWith("admin.") && !isAdmin(info.ctx.player)) {
-    throw new Error("not authorized");
+    throw actionError("NotAuthorized", "not authorized");
   }
   return proceed(); // continue to the next layer / the action's run
 };
@@ -189,8 +231,9 @@ createServerApp<Player>({
 });
 ```
 
-`onError` receives `(err, { actionId, player })` — the failing action's id and the
-calling player (when the dispatch had one).
+`onError` receives `(err, { actionId, player, errorId })`: the original error, the
+failing action's id, the calling player (when the dispatch had one), and, for an error
+that is not public, the `errorId` the client was sent.
 
 > roblox-ts reserves the identifiers `next` and `error` for compiler-internal use, so
 > name parameters something else (`proceed` and `err` above) in any middleware or error
@@ -198,9 +241,10 @@ calling player (when the dispatch had one).
 
 Middleware is applied **outermost-first** and runs **inside rate limiting and input
 validation** — a throttled or malformed request never reaches it, and `info.input` is
-already validated. Short-circuit by throwing (the client gets the error response);
+already validated. Short-circuit by throwing (the client gets the error response, masked
+unless it is an `actionError`);
 observe or transform by awaiting `proceed()`. `onError` fires for errors raised from the
-execution chain (middleware and `run`) before they propagate to the transport;
+execution chain (middleware, `run`, and output validation) before they propagate to the transport;
 rate-limit and input-validation rejections are not routed through it.
 
 ## Fire-and-forget

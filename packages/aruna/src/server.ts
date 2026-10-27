@@ -8,6 +8,13 @@ export * from "./runtimes/define-runtime.js";
 export * from "./app/server.js";
 export * from "./runtime/server.js";
 export * from "./runtime/serialization.js";
+// The error an action throws when the client should see its name and message,
+// and the one a client sees for anything else.
+export {
+  ActionInternalError,
+  PublicActionError,
+  actionError,
+} from "./runtime/action-error.js";
 // The boot sequence for domain runtimes, in the order the compiler resolved.
 export * from "./runtime/domain-runtime.js";
 // Persistence: the safe DataStore core and the session-locked player document.

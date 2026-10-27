@@ -58,6 +58,23 @@ describe("createTestServerApp", () => {
     harness.dispose();
   });
 
+  it("shows a spec the real failure rather than the masked one", async () => {
+    const harness = createTestServerApp({
+      actions: {
+        "shop.boom": defineAction({
+          id: "shop.boom",
+          run() {
+            throw new Error("kaboom");
+          },
+        }),
+      },
+    });
+
+    await expect(harness.invoke(createTestPlayer(), "shop.boom")).rejects.toThrow("kaboom");
+
+    harness.dispose();
+  });
+
   it("records every signal the action publishes, with its recipient", async () => {
     const harness = createTestServerApp<TestPlayer, typeof actions, typeof signals>({
       actions,

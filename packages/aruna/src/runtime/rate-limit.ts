@@ -121,6 +121,8 @@ function createBucketKey(actionId: string, key: string): string {
 
 export class ActionRateLimitError extends Error {
   override readonly name = "ActionRateLimitError";
+  // Marks a framework error as public: its name and message reach the client.
+  readonly __arunaActionError = true as const;
   readonly actionId: string;
   readonly max: number;
   readonly windowMs: number;

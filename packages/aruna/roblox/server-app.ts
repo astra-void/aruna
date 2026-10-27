@@ -103,6 +103,11 @@ export interface CreateServerAppOptions<
 	// Observability hook for errors raised from the action execution chain,
 	// called before dispatch converts the error into the wire result.
 	readonly onError?: ActionErrorHandler<TPlayer>;
+	// Sends a thrown error's own name and message to the client instead of
+	// `ActionInternalError`. Off by default: a Luau runtime error names the
+	// server script and line it came from. Errors made with `actionError`, and
+	// the framework's own failures, are public either way.
+	readonly exposeInternalErrors?: boolean;
 	// Builds the per-player session injected into every action ctx as
 	// `ctx.session`. Runs once per player on join (and, at boot, for players
 	// already present) before `onPlayerAdded`, and the session is dropped after
@@ -184,6 +189,9 @@ export function createServerApp<
 			: {}),
 		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
 		...(options.onError !== undefined ? { onError: options.onError } : {}),
+		...(options.exposeInternalErrors !== undefined
+			? { exposeInternalErrors: options.exposeInternalErrors }
+			: {}),
 		...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
 	};
 	const registry = createActionRegistry<TPlayer>(options.actions, registryOptions);
@@ -318,6 +326,7 @@ export function createServerApp<
 					...(result.errorName !== undefined ? { name: result.errorName } : {}),
 					...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
 					...(result.resetAtMs !== undefined ? { resetAtMs: result.resetAtMs } : {}),
+					...(result.errorId !== undefined ? { errorId: result.errorId } : {}),
 				};
 			}),
 		...(binding !== undefined ? { binding } : {}),

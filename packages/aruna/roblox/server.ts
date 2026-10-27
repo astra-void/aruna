@@ -164,6 +164,9 @@ export function createActionDefiner<
 // no cycle.
 export * from "./server-runtime";
 export * from "./server-app";
+// The error an action throws when the client should see its name and message.
+export { actionError } from "./action-error";
+export type { PublicActionError } from "./action-error";
 // Domain runtimes: the boot sequence the compiler resolves from `after` edges.
 export * from "./define-runtime";
 export * from "./domain-runtime";
