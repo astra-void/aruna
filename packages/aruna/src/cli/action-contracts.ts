@@ -9,6 +9,7 @@ import type {
   StoreRecord,
 } from "@arunajs/core";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
+import { contractPrimitives } from "./primitives.js";
 
 export type ActionContractProjectMetadata = {
   readonly root: string;
@@ -217,9 +218,10 @@ function summarizeStore(store: StoreRecord): StoreContractRecord {
   };
 }
 
-export function buildActionContractSnapshot(output: CompilerOutput): ActionContractSnapshot {
-  const generatedDir = normalizePath(output.config.generatedDir);
-  const actions = [...output.manifest.actions]
+// Each contract primitive's records, in snapshot order. Registered in
+// ./primitives.ts.
+export function summarizeActions(output: CompilerOutput): ActionContractRecord[] {
+  return [...output.manifest.actions]
     .sort(
       (left, right) =>
         compareStrings(left.id, right.id) ||
@@ -227,8 +229,10 @@ export function buildActionContractSnapshot(output: CompilerOutput): ActionContr
         compareStrings(left.exportName, right.exportName),
     )
     .map((action) => summarizeAction(output, action));
+}
 
-  const signals = [...(output.manifest.signals ?? [])]
+export function summarizeSignals(output: CompilerOutput): SignalContractRecord[] {
+  return [...(output.manifest.signals ?? [])]
     .sort(
       (left, right) =>
         compareStrings(left.id, right.id) ||
@@ -236,8 +240,10 @@ export function buildActionContractSnapshot(output: CompilerOutput): ActionContr
         compareStrings(left.exportName, right.exportName),
     )
     .map((signal) => summarizeSignal(output, signal));
+}
 
-  const stores = [...(output.manifest.stores ?? [])]
+export function summarizeStores(output: CompilerOutput): StoreContractRecord[] {
+  return [...(output.manifest.stores ?? [])]
     .sort(
       (left, right) =>
         compareStrings(left.id, right.id) ||
@@ -245,18 +251,24 @@ export function buildActionContractSnapshot(output: CompilerOutput): ActionContr
         compareStrings(left.file, right.file),
     )
     .map((store) => summarizeStore(store));
+}
 
-  return {
+export function buildActionContractSnapshot(output: CompilerOutput): ActionContractSnapshot {
+  const snapshot: Record<string, unknown> = {
     version: 1,
     project: {
       root: normalizePath(path.relative(process.cwd(), output.projectRoot)) || ".",
-      generatedDir,
+      generatedDir: normalizePath(output.config.generatedDir),
       manifest: normalizePath(output.config.manifestOutput),
     },
-    actions,
-    ...(signals.length > 0 ? { signals } : {}),
-    ...(stores.length > 0 ? { stores } : {}),
-    diagnostics: sortDiagnostics(output.diagnostics),
-    generatedAt: null,
   };
+  for (const primitive of contractPrimitives()) {
+    const records = primitive.summarize(output);
+    if (primitive.required || records.length > 0) {
+      snapshot[primitive.key] = records;
+    }
+  }
+  snapshot["diagnostics"] = sortDiagnostics(output.diagnostics);
+  snapshot["generatedAt"] = null;
+  return snapshot as ActionContractSnapshot;
 }

@@ -14,6 +14,7 @@ import {
   type StoreContractRecord,
 } from "./action-contracts.js";
 import { contractSnapshotPath, readCommittedSnapshot } from "./contract-gate.js";
+import { contractPrimitives } from "./primitives.js";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
 import { formatBrandTitle, formatError, formatMuted } from "./theme.js";
 import type { CliColorMode } from "./format.js";
@@ -392,7 +393,7 @@ function parseRateLimit(value: unknown, location: string): ParsedActionContractR
   };
 }
 
-function parseActionRecord(value: unknown, location: string): ParsedActionContractRecord {
+export function parseActionRecord(value: unknown, location: string): ParsedActionContractRecord {
   if (!isRecordLike(value)) {
     throw new Error(`${location} must be an object.`);
   }
@@ -497,7 +498,7 @@ function parseActionRecord(value: unknown, location: string): ParsedActionContra
   return parsed;
 }
 
-function parseStoreRecord(value: unknown, location: string): StoreContractRecord {
+export function parseStoreRecord(value: unknown, location: string): StoreContractRecord {
   if (!isRecordLike(value)) {
     throw new Error(`${location} must be an object.`);
   }
@@ -550,11 +551,11 @@ function parseStoreRecord(value: unknown, location: string): StoreContractRecord
 
 // A store is the DataStore it names: the same id under another scope is a
 // different set of records.
-function storeIdentity(store: StoreContractRecord): string {
+export function storeIdentity(store: StoreContractRecord): string {
   return store.scope === null ? store.id : `${store.id}@${store.scope}`;
 }
 
-function parseSignalRecord(value: unknown, location: string): ParsedSignalContractRecord {
+export function parseSignalRecord(value: unknown, location: string): ParsedSignalContractRecord {
   if (!isRecordLike(value)) {
     throw new Error(`${location} must be an object.`);
   }
@@ -640,60 +641,39 @@ function parseActionContractSnapshotJsonAtPath(
   if (typeof value["project"]["manifest"] !== "string") {
     throw new Error(`${location}.project.manifest must be a string.`);
   }
-  if (!Array.isArray(value["actions"])) {
-    throw new Error(`${location}.actions must be an array.`);
+  // A required primitive's array is checked up front, before its records; an
+  // optional one (omitted from snapshots that predate it) only when present.
+  const primitives = contractPrimitives();
+  for (const primitive of primitives) {
+    if (primitive.required && !Array.isArray(value[primitive.key])) {
+      throw new Error(`${location}.${primitive.key} must be an array.`);
+    }
   }
   if (!Array.isArray(value["diagnostics"])) {
     throw new Error(`${location}.diagnostics must be an array.`);
   }
 
-  const actions: ParsedActionContractRecord[] = [];
-  const seenIds = new Set<string>();
-  for (const [index, action] of value["actions"].entries()) {
-    const parsed = parseActionRecord(action, `${location}.actions[${index}]`);
-    if (seenIds.has(parsed.id)) {
-      throw new Error(`${location}.actions contains a duplicate action id: ${parsed.id}.`);
+  const records: Record<string, unknown[]> = {};
+  for (const primitive of primitives) {
+    const raw = value[primitive.key];
+    if (raw === undefined) {
+      continue;
     }
-    seenIds.add(parsed.id);
-    actions.push(parsed);
-  }
-
-  // `signals` is omitted from action-only snapshots (pre-signal baselines stay
-  // parseable); when present it must be a well-formed array.
-  let signals: ParsedSignalContractRecord[] | undefined;
-  if (value["signals"] !== undefined) {
-    if (!Array.isArray(value["signals"])) {
-      throw new Error(`${location}.signals must be an array.`);
+    if (!Array.isArray(raw)) {
+      throw new Error(`${location}.${primitive.key} must be an array.`);
     }
-    signals = [];
-    const seenSignalIds = new Set<string>();
-    for (const [index, signal] of value["signals"].entries()) {
-      const parsed = parseSignalRecord(signal, `${location}.signals[${index}]`);
-      if (seenSignalIds.has(parsed.id)) {
-        throw new Error(`${location}.signals contains a duplicate signal id: ${parsed.id}.`);
+    const parsed: unknown[] = [];
+    const seen = new Set<string>();
+    for (const [index, entry] of raw.entries()) {
+      const record = primitive.parseRecord(entry, `${location}.${primitive.key}[${index}]`);
+      const identity = primitive.identity(record);
+      if (seen.has(identity)) {
+        throw new Error(primitive.duplicateMessage(`${location}.${primitive.key}`, record));
       }
-      seenSignalIds.add(parsed.id);
-      signals.push(parsed);
+      seen.add(identity);
+      parsed.push(record);
     }
-  }
-
-  // `stores` is omitted from snapshots that predate stores in the contract.
-  let stores: StoreContractRecord[] | undefined;
-  if (value["stores"] !== undefined) {
-    if (!Array.isArray(value["stores"])) {
-      throw new Error(`${location}.stores must be an array.`);
-    }
-    stores = [];
-    const seenStores = new Set<string>();
-    for (const [index, store] of value["stores"].entries()) {
-      const parsed = parseStoreRecord(store, `${location}.stores[${index}]`);
-      const identity = storeIdentity(parsed);
-      if (seenStores.has(identity)) {
-        throw new Error(`${location}.stores contains a duplicate store: ${parsed.id}.`);
-      }
-      seenStores.add(identity);
-      stores.push(parsed);
-    }
+    records[primitive.key] = parsed;
   }
 
   const diagnostics: Diagnostic[] = [];
@@ -712,12 +692,10 @@ function parseActionContractSnapshotJsonAtPath(
       generatedDir: normalizePath(value["project"]["generatedDir"]),
       manifest: normalizePath(value["project"]["manifest"]),
     },
-    actions,
-    ...(signals !== undefined ? { signals } : {}),
-    ...(stores !== undefined ? { stores } : {}),
+    ...records,
     diagnostics,
     generatedAt: null,
-  };
+  } as unknown as ParsedActionContractSnapshot;
 }
 
 export function parseActionContractSnapshotJson(value: unknown): ActionContractSnapshot {
@@ -864,7 +842,7 @@ function diffProjectMetadata(
   }
 }
 
-function diffActions(
+export function diffActions(
   before: ActionContractSnapshot,
   after: ActionContractSnapshot,
   entries: ContractDiffEntry[],
@@ -1479,7 +1457,7 @@ function diffObjectSchema(
   }
 }
 
-function diffSignals(
+export function diffSignals(
   before: ActionContractSnapshot,
   after: ActionContractSnapshot,
   entries: ContractDiffEntry[],
@@ -1922,7 +1900,7 @@ function diffStoreSchema(
   }
 }
 
-function diffStores(
+export function diffStores(
   before: ActionContractSnapshot,
   after: ActionContractSnapshot,
   entries: ContractDiffEntry[],
@@ -2075,9 +2053,9 @@ export function diffActionContractSnapshots(
   const entries: ContractDiffEntry[] = [];
 
   diffProjectMetadata(before, after, entries);
-  diffActions(before, after, entries);
-  diffSignals(before, after, entries);
-  diffStores(before, after, entries);
+  for (const primitive of contractPrimitives()) {
+    primitive.diff(before, after, entries);
+  }
 
   entries.sort(
     (left, right) =>

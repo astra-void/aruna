@@ -23,11 +23,9 @@ import {
 } from "./format.js";
 import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { formatInitReport, runInit } from "./init.js";
-import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
-import { buildSignalInspectionReport, formatSignalInspection } from "./inspect-signals.js";
-import { buildStoreInspectionReport, formatStoreInspection } from "./inspect-stores.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
+import { PRIMITIVES } from "./primitives.js";
 import { runContractDiffCommand, type ContractDiffEntry } from "./contract-diff.js";
 import {
   collectContractGateDiagnostics,
@@ -1074,75 +1072,36 @@ export async function main(): Promise<number> {
     process.exitCode = output.ok ? 0 : 1;
   });
 
-  inspect
-    .command("actions")
-    .description("show discovered actions and contract metadata")
-    .action(async () => {
-      const options = program.optsWithGlobals<CliOptions>();
-      const output = await runInspect(options);
-      if (options.json) {
-        const report = buildActionInspectionReport(output);
-        writeJson(report);
-        process.exitCode = output.ok ? 0 : 1;
-        return;
-      }
-
-      const colors = resolveColorMode(options);
-      writeText(formatActionInspection(output, colors));
-      if (!options.quiet && output.diagnostics.length > 0) {
-        const diagnostics = formatDiagnostics(output, colors);
-        if (diagnostics.length > 0) {
-          writeText(diagnostics);
+  // One subcommand per registered primitive that has an inspection
+  // (src/cli/primitives.ts), in registration order.
+  for (const primitive of PRIMITIVES) {
+    const inspection = primitive.inspect;
+    if (inspection === undefined) {
+      continue;
+    }
+    inspect
+      .command(inspection.command)
+      .description(inspection.description)
+      .action(async () => {
+        const options = program.optsWithGlobals<CliOptions>();
+        const output = await runInspect(options);
+        if (options.json) {
+          writeJson(inspection.report(output));
+          process.exitCode = output.ok ? 0 : 1;
+          return;
         }
-      }
-      process.exitCode = output.ok ? 0 : 1;
-    });
 
-  inspect
-    .command("signals")
-    .description("show discovered server-to-client signals")
-    .action(async () => {
-      const options = program.optsWithGlobals<CliOptions>();
-      const output = await runInspect(options);
-      if (options.json) {
-        writeJson(buildSignalInspectionReport(output));
-        process.exitCode = output.ok ? 0 : 1;
-        return;
-      }
-
-      const colors = resolveColorMode(options);
-      writeText(formatSignalInspection(output, colors));
-      if (!options.quiet && output.diagnostics.length > 0) {
-        const diagnostics = formatDiagnostics(output, colors);
-        if (diagnostics.length > 0) {
-          writeText(diagnostics);
+        const colors = resolveColorMode(options);
+        writeText(inspection.format(output, colors));
+        if (!options.quiet && output.diagnostics.length > 0) {
+          const diagnostics = formatDiagnostics(output, colors);
+          if (diagnostics.length > 0) {
+            writeText(diagnostics);
+          }
         }
-      }
-      process.exitCode = output.ok ? 0 : 1;
-    });
-
-  inspect
-    .command("stores")
-    .description("show discovered stores and their persisted shape")
-    .action(async () => {
-      const options = program.optsWithGlobals<CliOptions>();
-      const output = await runInspect(options);
-      if (options.json) {
-        writeJson(buildStoreInspectionReport(output));
         process.exitCode = output.ok ? 0 : 1;
-        return;
-      }
-
-      const colors = resolveColorMode(options);
-      writeText(formatStoreInspection(output, colors));
-      if (!options.quiet && output.diagnostics.length > 0) {
-        const diagnostics = formatDiagnostics(output, colors);
-        if (diagnostics.length > 0) {
-          writeText(diagnostics);
-        }
-      }
-      process.exitCode = output.ok ? 0 : 1;
-    });
+      });
+  }
 
   inspect
     .command("contract")
