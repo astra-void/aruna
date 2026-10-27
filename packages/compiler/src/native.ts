@@ -29,6 +29,9 @@ export type NativeCompiler = {
   primitiveDescriptors?: () => unknown;
   // Optional for the same reason.
   CompilerSession?: new (input: unknown) => NativeCompilerSession;
+  // `aruna migrate` (crates/aruna_migrate). Optional for the same reason.
+  listCodemods?: () => unknown;
+  runCodemod?: (input: unknown) => unknown;
 };
 
 const NATIVE_MODULE_SHAPE_ERROR =

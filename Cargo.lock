@@ -40,10 +40,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "aruna_migrate"
+version = "0.1.0"
+dependencies = [
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_parser",
+ "oxc_span",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "walkdir",
+]
+
+[[package]]
 name = "aruna_napi"
 version = "0.1.0"
 dependencies = [
  "aruna_compiler",
+ "aruna_migrate",
  "napi",
  "napi-build",
  "napi-derive",

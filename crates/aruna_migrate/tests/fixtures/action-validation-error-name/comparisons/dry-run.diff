@@ -1,0 +1,24 @@
+--- a/src/comparisons.ts
++++ b/src/comparisons.ts
+@@ -6,16 +6,16 @@
+     return "ok";
+   } catch (err) {
+     const error = err as { name: string; message: string };
+-    if (error.name === "SchemaValidationError") {
++    if (error.name === "ActionValidationError") {
+       return "invalid";
+     }
+-    if ("SchemaValidationError" == error.name) return "invalid (reversed)";
+-    if (error?.name !== 'SchemaValidationError' && error["name"] != "SchemaValidationError") {
++    if ("ActionValidationError" == error.name) return "invalid (reversed)";
++    if (error?.name !== 'ActionValidationError' && error["name"] != "ActionValidationError") {
+       return "other";
+     }
+     // Wrapped receivers still read `name`.
+-    if ((err as { name: string }).name === ("SchemaValidationError")) return "cast";
+-    if ((error!).name === "SchemaValidationError") return "non-null";
++    if ((err as { name: string }).name === ("ActionValidationError")) return "cast";
++    if ((error!).name === "ActionValidationError") return "non-null";
+     return "unreachable";
+   }
+ }

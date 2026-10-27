@@ -22,6 +22,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna inspect graph` | Print the import graph. |
 | `aruna contract diff` | Compare contract snapshots — actions, signals, and stores (`--baseline`, `--from`, `--to`; with none, the committed snapshot). |
 | `aruna contract update` | Write the current contract to the committed snapshot (`contract.snapshot`); refuses a store change that leaves saved records unreadable. `--check` writes nothing and exits 1 when the snapshot is out of date. |
+| `aruna migrate <name>` | Run a codemod for one of Aruna's breaking changes (`--list` to see them, `--dry-run` for a unified diff that writes nothing). See [Codemods](https://github.com/astra-void/aruna/blob/main/docs/codemods.md). |
 
 ## The check vs build distinction
 
@@ -187,6 +188,21 @@ If `aruna/server`, `aruna/schema`, `$aruna/actions/client`, etc. fail to resolve
 tsconfig path aliases are missing or stale. `aruna doctor` reports their status;
 `aruna doctor --fix` writes the correct ones. Add `--emit-runtime` to also alias the
 `aruna/*` subpaths to the vendored runtime (pair with `build`'s default vendoring).
+
+## `aruna migrate`
+
+When a release changes something your code spells out — a renamed error name, a moved
+import — it ships a codemod, named in its CHANGELOG entry:
+
+```sh
+aruna migrate --list
+aruna migrate action-validation-error-name --dry-run   # prints a unified diff
+aruna migrate action-validation-error-name             # writes the changes
+```
+
+A codemod edits only the code it changes (no reformatting), can be run any number of
+times, and lists the sites it could not rewrite safely as `file:line:column` for you to
+check by hand. See [Codemods](https://github.com/astra-void/aruna/blob/main/docs/codemods.md).
 
 ## Config (`aruna.config.ts`)
 

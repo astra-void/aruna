@@ -1,0 +1,3 @@
+2:33 "SchemaValidationError" used outside a comparison against an error's name; if it names the error, change it to "ActionValidationError"
+7:16 "SchemaValidationError" used outside a comparison against an error's name; if it names the error, change it to "ActionValidationError"
+13:25 "SchemaValidationError" used outside a comparison against an error's name; if it names the error, change it to "ActionValidationError"

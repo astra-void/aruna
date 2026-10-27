@@ -27,6 +27,7 @@ import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { formatInitReport, runInit } from "./init.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
+import { runMigrateCommand } from "./migrate.js";
 import { PRIMITIVES } from "./primitives.js";
 import { runContractDiffCommand, type ContractDiffEntry } from "./contract-diff.js";
 import {
@@ -1448,6 +1449,35 @@ export async function main(): Promise<number> {
         readonly acceptUnreadableRecords?: boolean;
       };
       process.exitCode = await runContractUpdate(options);
+    });
+
+  const migrate = program
+    .command("migrate [name]")
+    .description("run a codemod for one of Aruna's breaking changes (see docs/codemods.md)")
+    .option("--list", "list the available codemods")
+    .option("--dry-run", "print the changes as a unified diff; write nothing")
+    .action(async (name: string | undefined) => {
+      const options = migrate.optsWithGlobals<CliOptions>() as CliOptions & {
+        readonly list?: boolean;
+        readonly dryRun?: boolean;
+      };
+      const input = compilerInput(options);
+      const result = runMigrateCommand({
+        name,
+        list: options.list,
+        dryRun: options.dryRun,
+        json: options.json,
+        root: input.root,
+        configPath: input.configPath,
+        colors: resolveColorMode(options),
+      });
+      if (result.stdout) {
+        process.stdout.write(result.stdout);
+      }
+      if (result.stderr) {
+        process.stderr.write(result.stderr);
+      }
+      process.exitCode = result.status;
     });
 
   await program.parseAsync(process.argv);

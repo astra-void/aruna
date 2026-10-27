@@ -45,6 +45,40 @@ pub fn primitive_descriptors() -> Value {
     )
 }
 
+// `aruna migrate`: the registered codemods (crates/aruna_migrate).
+#[napi]
+pub fn list_codemods() -> Result<Value> {
+    serde_json::to_value(aruna_migrate::list_codemods())
+        .map_err(|error| Error::from_reason(error.to_string()))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunCodemodInput {
+    name: String,
+    project_root: String,
+    #[serde(default)]
+    exclude_dirs: Vec<String>,
+    #[serde(default)]
+    dry_run: bool,
+}
+
+/// Runs a codemod over a project; writes the changes unless `dryRun`. Resolves
+/// to the report (changed files with their diffs, unhandled sites).
+#[napi]
+pub fn run_codemod(input: Value) -> Result<Value> {
+    let input: RunCodemodInput =
+        serde_json::from_value(input).map_err(|error| Error::from_reason(error.to_string()))?;
+    let report = aruna_migrate::run_codemod(
+        &input.name,
+        std::path::Path::new(&input.project_root),
+        &input.exclude_dirs,
+        input.dry_run,
+    )
+    .map_err(Error::from_reason)?;
+    serde_json::to_value(report).map_err(|error| Error::from_reason(error.to_string()))
+}
+
 struct SessionState {
     // `None` once disposed.
     session: Mutex<Option<CompilerSession>>,

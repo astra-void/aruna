@@ -1,0 +1,10 @@
+--- a/src/switch.ts
++++ b/src/switch.ts
+@@ -1,6 +1,6 @@
+ export function describeFailure(error: { name: string }): string {
+   switch (error.name) {
+-    case "SchemaValidationError":
++    case "ActionValidationError":
+       return "the request did not match the action's schema";
+     case "ActionRateLimitError":
+       return "slow down";

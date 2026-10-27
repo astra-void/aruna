@@ -102,6 +102,52 @@ export function createCompilerSession(
   };
 }
 
+// `aruna migrate`'s codemods (crates/aruna_migrate, docs/codemods.md).
+export type CodemodInfo = { readonly name: string; readonly description: string };
+
+export type CodemodReport = {
+  readonly codemod: string;
+  readonly dryRun: boolean;
+  readonly filesScanned: number;
+  // Project-relative paths, each with a unified diff of the change.
+  readonly changed: readonly { readonly file: string; readonly diff: string }[];
+  // Sites the codemod found but could not rewrite safely: check them by hand.
+  readonly unhandled: readonly {
+    readonly file: string;
+    readonly line: number;
+    readonly column: number;
+    readonly message: string;
+  }[];
+};
+
+function nativeMigrate() {
+  const native = loadNativeCompiler();
+  if (native.listCodemods === undefined || native.runCodemod === undefined) {
+    throw new Error("This build of the Aruna compiler has no codemods; rebuild or upgrade it.");
+  }
+  return { list: native.listCodemods, run: native.runCodemod };
+}
+
+export function listCodemods(): CodemodInfo[] {
+  return nativeMigrate().list() as CodemodInfo[];
+}
+
+// Runs codemod `name` over the TypeScript sources under `root` (skipping build
+// output and `excludeDirs`). Writes the changes unless `dryRun`.
+export function runCodemod(options: {
+  readonly name: string;
+  readonly root: string;
+  readonly excludeDirs?: readonly string[];
+  readonly dryRun: boolean;
+}): CodemodReport {
+  return nativeMigrate().run({
+    name: options.name,
+    projectRoot: options.root,
+    excludeDirs: [...(options.excludeDirs ?? [])],
+    dryRun: options.dryRun,
+  }) as CodemodReport;
+}
+
 // The one-shot entry points: a session used once, so the work still runs off
 // the main thread.
 async function runOnce(input: CompilerInput, mode: CompilerRunMode): Promise<CompilerOutput> {

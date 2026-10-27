@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 aruna_compiler = { path = "../aruna_compiler" }
+aruna_migrate = { path = "../aruna_migrate" }
 napi = { version = "2", default-features = false, features = ["napi4", "serde-json"] }
 napi-derive = "2"
 serde = { version = "1", features = ["derive"] }

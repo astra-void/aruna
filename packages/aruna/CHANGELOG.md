@@ -17,6 +17,15 @@ the game build like any other module.
 
 ### Added
 
+- **`aruna migrate`: codemods for breaking changes.** `aruna migrate --list`
+  shows them; `aruna migrate <name> --dry-run` prints a unified diff without
+  writing; `aruna migrate <name>` applies it. Codemods edit only what they
+  change (no reformatting), are safe to run twice, and report the sites they
+  could not rewrite with confidence, by file, line, and column. The first one,
+  `action-validation-error-name`, migrates code that compares an error's
+  `name` against the old `"SchemaValidationError"` to `"ActionValidationError"`
+  (see the stabilization round's rename). docs/codemods.md covers writing one.
+
 - **Canary releases.** Every push to `main` publishes the whole package graph
   as `<next patch>-canary.<sha>.<run>` under the npm `canary` tag
   (`npm install @arunajs/aruna@canary`), next to the tag-triggered stable
