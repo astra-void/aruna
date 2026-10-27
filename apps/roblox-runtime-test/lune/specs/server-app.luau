@@ -159,6 +159,81 @@ return function(ctx)
 			app.dispose()
 		end)
 
+		t.it("exempts app.dispatch from the in-flight cap the transport still applies", function()
+			local releases = {}
+			local runs = { count = 0 }
+			local captured = {}
+			local app = serverApp.createServerApp({
+				actions = {
+					slow = {
+						id = "slow",
+						run = function()
+							runs.count += 1
+							return ctx.Promise.new(function(resolve)
+								table.insert(releases, resolve)
+							end)
+						end,
+					},
+				},
+				transport = function(registry)
+					-- Capture the registry the transport sees, to drive its path.
+					captured.registry = registry
+					return nil
+				end,
+			})
+			local caller = { UserId = 11, Name = "Caller" }
+
+			-- 100 at once from trusted server code: none refused.
+			local inProcess = {}
+			for index = 1, 100 do
+				inProcess[index] = app.dispatch("slow", { player = caller }, nil)
+			end
+			-- The transport's 33rd concurrent call is refused (default maxInFlight 32);
+			-- the in-process calls took none of its slots.
+			local wire = {}
+			for index = 1, 32 do
+				wire[index] = captured.registry.dispatch(caller, "slow", nil)
+			end
+			local _, _, refused = t.await(captured.registry.dispatch(caller, "slow", nil))
+			t.isFalse(refused.ok)
+			t.eq(refused.errorName, "ActionRateLimitError")
+
+			for _, resolve in releases do
+				resolve("done")
+			end
+			for index = 1, 100 do
+				local settled, ok, output = t.await(inProcess[index])
+				t.isTrue(settled and ok, `in-process call {index} resolved`)
+				t.eq(output, "done")
+			end
+			for index = 1, 32 do
+				local _, _, result = t.await(wire[index])
+				t.isTrue(result.ok, `wire call {index} succeeded`)
+			end
+			t.eq(runs.count, 132)
+			app.dispose()
+		end)
+
+		t.it("keeps idempotency for app.dispatch", function()
+			local runs = { count = 0 }
+			local app = serverApp.createServerApp({
+				actions = {
+					buy = {
+						id = "buy",
+						run = function()
+							runs.count += 1
+							return "ok"
+						end,
+					},
+				},
+			})
+			local caller = { UserId = 12, Name = "Caller" }
+			t.await(app.dispatch("buy", { player = caller }, nil, { idempotencyKey = "k" }))
+			t.await(app.dispatch("buy", { player = caller }, nil, { idempotencyKey = "k" }))
+			t.eq(runs.count, 1)
+			app.dispose()
+		end)
+
 		t.it("does not remember a call refused before it ran", function()
 			local clockMs = 0
 			local runs = { count = 0 }

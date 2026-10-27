@@ -42,10 +42,22 @@ export interface ActionDispatchResult {
 }
 
 export interface ActionRegistry<TPlayer = unknown> {
-	// `idempotencyKey` is the key a retrying client sends with every attempt of
-	// one call: a valid key (a string of at most 64 characters) makes the action
-	// run once however many attempts arrive, and anything else is ignored.
+	// The transport's entry, for a client's envelope: a player's dispatches
+	// running at once are capped (`requestBudget.maxInFlight`), and the next is
+	// refused with ActionRateLimitError. `idempotencyKey` is the key a retrying
+	// client sends with every attempt of one call: a valid key (a string of at
+	// most 64 characters) makes the action run once however many attempts
+	// arrive, and anything else is ignored.
 	readonly dispatch: (
+		player: TPlayer,
+		actionId: string,
+		input: unknown,
+		idempotencyKey?: unknown,
+	) => Promise<ActionDispatchResult>;
+	// The same dispatch for trusted server code (`app.dispatch`, specs): not a
+	// client's envelope, so not held to the in-flight cap. Validation, rate
+	// limits, middleware, and idempotency are the same.
+	readonly dispatchInProcess: (
 		player: TPlayer,
 		actionId: string,
 		input: unknown,
@@ -374,7 +386,17 @@ export function createActionRegistry<TPlayer>(
 		});
 	};
 
-	const dispatchOnce = (
+	const notFound = (actionId: string): Promise<ActionDispatchResult> =>
+		Promise.resolve({
+			ok: false,
+			error: `Aruna action not found: ${actionId}`,
+			errorName: "ActionNotFoundError",
+		});
+
+	// The transport's path. A player's dispatches that may run at once are
+	// capped, so a burst of slow calls cannot pile up behind one another.
+	// Refused before any parsing.
+	const dispatchCapped = (
 		player: TPlayer,
 		actionId: string,
 		input: unknown,
@@ -382,15 +404,8 @@ export function createActionRegistry<TPlayer>(
 	): Promise<ActionDispatchResult> => {
 		const definition = actionsById.get(actionId);
 		if (definition === undefined) {
-			return Promise.resolve({
-				ok: false,
-				error: `Aruna action not found: ${actionId}`,
-				errorName: "ActionNotFoundError",
-			});
+			return notFound(actionId);
 		}
-
-		// A player's dispatches that may run at once are capped, so a burst of
-		// slow calls cannot pile up behind one another. Refused before any parsing.
 		if (!guard.begin(player)) {
 			guard.report(player, { reason: "too-many-in-flight", actionId });
 			const now = nowMs !== undefined ? nowMs() : os.clock() * 1000;
@@ -409,18 +424,44 @@ export function createActionRegistry<TPlayer>(
 		return settled;
 	};
 
+	// Trusted server code's path: no in-flight cap.
+	const dispatchUncapped = (
+		player: TPlayer,
+		actionId: string,
+		input: unknown,
+		progress: { ran: boolean } | undefined,
+	): Promise<ActionDispatchResult> => {
+		const definition = actionsById.get(actionId);
+		if (definition === undefined) {
+			return notFound(actionId);
+		}
+		return dispatchDefined(definition, player, actionId, input, progress);
+	};
+
+	type DispatchOnce = typeof dispatchCapped;
+	const withIdempotency = (
+		dispatchOnce: DispatchOnce,
+		player: TPlayer,
+		actionId: string,
+		input: unknown,
+		idempotencyKey: unknown,
+	): Promise<ActionDispatchResult> => {
+		if (isIdempotencyKey(idempotencyKey)) {
+			return idempotency.run(player, actionId, idempotencyKey, (progress) =>
+				dispatchOnce(player, actionId, input, progress),
+			);
+		}
+		return dispatchOnce(player, actionId, input, undefined);
+	};
+
 	return {
 		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
 		admitEnvelope: (player, requestId, actionId) =>
 			admitEnvelope(guard, player, requestId, actionId),
-		dispatch: (player, actionId, input, idempotencyKey) => {
-			if (isIdempotencyKey(idempotencyKey)) {
-				return idempotency.run(player, actionId, idempotencyKey, (progress) =>
-					dispatchOnce(player, actionId, input, progress),
-				);
-			}
-			return dispatchOnce(player, actionId, input, undefined);
-		},
+		dispatch: (player, actionId, input, idempotencyKey) =>
+			withIdempotency(dispatchCapped, player, actionId, input, idempotencyKey),
+		dispatchInProcess: (player, actionId, input, idempotencyKey) =>
+			withIdempotency(dispatchUncapped, player, actionId, input, idempotencyKey),
 		forgetPlayer: (player) => {
 			idempotency.forget(player);
 			guard.forget(player);

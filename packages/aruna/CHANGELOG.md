@@ -471,6 +471,16 @@ the game build like any other module.
   player, and weak keys would only bound how long the state lasts, not stop it
   coming back.
 
+- **`app.dispatch` is no longer refused by the in-flight cap.** The cap
+  (`requestBudget.maxInFlight`, 32) is for a client's envelopes, but
+  `app.dispatch` went through the same path, so trusted server code and specs
+  running more than 32 calls for one player at once got `ActionRateLimitError`.
+  Only the transport applies it now: the `ActionRegistry` gains
+  `dispatchInProcess`, which `app.dispatch` uses, while `dispatch` stays the
+  transport's capped entry. Idempotency, validation,
+  rate limits, and middleware are unchanged for both. The test harness's
+  `invoke` and `client` go through `app.dispatch`, so they are exempt too.
+
 - **The Node RemoteEvent transport dropped middleware, `onError`, `ctx.session`,
   and `ctx.store`.** `bindRemoteEventActions` copied a hand-kept list of five
   dispatch options and silently left out the rest. An action dispatched over
