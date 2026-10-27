@@ -20,6 +20,7 @@ every call site:
 | A transient DataStore error takes down a game thread | Nothing throws. Every operation resolves with a `StoreResult`. |
 | Two servers hold the same player (teleport, rejoin during shutdown) | The lock is claimed inside the same `UpdateAsync` that reads the record, and a server that lost its lock refuses to write. |
 | A shape change makes old records unreadable | Every write carries a version; older records go to `migrate` instead of being reinterpreted. |
+| An old server reads a record a newer version wrote | The record is refused (`StoreVersionAheadError`): never migrated, never written back. See [Mixed-version servers](#mixed-version-servers). |
 
 ## Defining a store
 
@@ -81,6 +82,7 @@ type StoreError = {
 | `StoreValidationError` | The record does not match the schema | No |
 | `StoreSerializationError` | The value cannot be persisted (function, Instance, NaN, cycle, > 4 MB) | No |
 | `StoreMigrationError` | `migrate` threw, refused, or produced an invalid value | No |
+| `StoreVersionAheadError` | The record is at a newer version than this server's (an old server after an update) | No |
 | `StoreKeyError` | Empty key, or longer than the 50-character DataStore limit | No |
 | `StoreLockedError` | Another live server holds the session lock | Yes |
 | `StoreClosedError` | The document was released (player left, shutting down) | No |
@@ -163,6 +165,42 @@ await document.release();                                  // final flush + unlo
 `set` and `update` validate before they mutate, so a bad value fails at the call site
 instead of silently at the next flush. After `release` the document is closed: further
 writes fail with `StoreClosedError` rather than resurrecting a departed player's record.
+
+### Mixed-version servers
+
+An update does not replace the servers that are already running. Until they empty out,
+old and new servers serve the same DataStore side by side, and a player moves between
+them: they play on a new server, which saves their record at v3, then follow a friend
+into an old server still at v2.
+
+`migrate` only goes forward, so the old server must not touch that record. Before this
+was refused, a permissive `migrate` (`(stored) => stored`) passed the v3 data straight
+through, the old server saved it back under a v2 envelope, and the next new server ran
+the v2 → v3 migration on it a second time — for a currency rescale, that multiplies
+every balance again.
+
+Now a record whose version is higher than the store's is a load failure:
+`StoreVersionAheadError`, not retryable. `migrate` is never called for it, a keyed
+store's `save` and `update` refuse it the same way, and a player store treats it like
+any other failed load: no document, no default value, and no session lock written —
+the record stays exactly as the newer server left it. Handle it in `onLoadFailed`:
+
+```ts
+export const profiles = createPlayerStore(profile, {
+  createBackend: robloxDataStore(),
+  onLoadFailed: (player, error) => {
+    if (error.name === "StoreVersionAheadError") {
+      player.Kick("This server is running an older version of the game. Please rejoin.");
+      return;
+    }
+    player.Kick(`Could not load your data (${error.name}). Please rejoin.`);
+  },
+});
+```
+
+Rejoining usually lands the player on a new server. This is the same `onLoadFailed`
+the app's own load reports through when you pass the store to
+`createServerApp({ playerStore })`; the app does not swallow it.
 
 ## Wiring into the server app
 

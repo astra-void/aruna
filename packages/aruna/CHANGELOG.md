@@ -252,6 +252,21 @@ the game build like any other module.
   with a dot in its name was affected, not just specs — and the boundary check
   then ran against whichever module the specifier had silently landed on.
 
+- **An old server no longer migrates, or writes back, a record a newer
+  version saved.** `decodeStoreValue` called `migrate` whenever the stored
+  version differed from the store's, including when it was *higher*. After an
+  update, old servers keep running; a player saved at v3 by a new server who
+  follows a friend into an old v2 server had their record handed to the v2
+  `migrate`. A permissive one passed the v3 data through, the old server saved
+  it back under a v2 envelope, and the next new server ran the v2 → v3
+  migration on it again — catastrophic for a currency rescale. A record from a
+  newer version now fails with the new, non-retryable
+  `StoreVersionAheadError` in both runtimes: `migrate` is not called, a keyed
+  store's `save` / `update` refuse it, and a player store treats it as a failed
+  load (no default document, no lock taken, nothing written). Kick from the
+  player store's existing `onLoadFailed`, which the app's load reports
+  through; `docs/stores.md` has the pattern.
+
 ### Security
 
 - **The native runtime now rejects NaN and infinities.** The Node runtime

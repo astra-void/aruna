@@ -182,3 +182,48 @@ describe("reference/vendor export parity", () => {
     });
   }
 });
+
+// The members of an exported string-literal union type, as written in one
+// runtime's entry point.
+function unionMembersOf(relativeEntry: string, typeName: string): string[] {
+  const absolute = path.join(packageRoot, relativeEntry);
+  const program = ts.createProgram([absolute], {
+    noLib: true,
+    skipLibCheck: true,
+    types: [],
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    module: ts.ModuleKind.ESNext,
+    target: ts.ScriptTarget.ESNext,
+    noEmit: true,
+  });
+  const checker = program.getTypeChecker();
+  const sourceFile = program.getSourceFile(absolute);
+  const moduleSymbol = sourceFile === undefined ? undefined : checker.getSymbolAtLocation(sourceFile);
+  if (moduleSymbol === undefined) {
+    throw new Error(`Entry is not a module: ${relativeEntry}`);
+  }
+  const exported = checker.getExportsOfModule(moduleSymbol).find((symbol) => symbol.getName() === typeName);
+  if (exported === undefined) {
+    throw new Error(`${relativeEntry} does not export ${typeName}`);
+  }
+  const symbol =
+    (exported.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(exported) : exported;
+  const type = checker.getDeclaredTypeOfSymbol(symbol);
+  const members = type.isUnion() ? type.types : [type];
+  return members
+    .map((member) => (member.isStringLiteral() ? member.value : checker.typeToString(member)))
+    .sort();
+}
+
+describe("reference/vendor error-name parity", () => {
+  // A store failure's `name` is what game code branches on (kick on
+  // StoreVersionAheadError, retry on StoreThrottledError), so the set of names
+  // must not drift between the runtimes.
+  it("declares the same StoreErrorName members in both runtimes", () => {
+    const reference = unionMembersOf("src/server.ts", "StoreErrorName");
+    const vendor = unionMembersOf("roblox/server.ts", "StoreErrorName");
+
+    expect(reference).toContain("StoreVersionAheadError");
+    expect(vendor).toEqual(reference);
+  });
+});

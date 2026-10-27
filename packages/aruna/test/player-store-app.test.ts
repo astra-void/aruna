@@ -145,6 +145,53 @@ describe("createServerApp with a player store", () => {
     expect(playerStore.get(player)).toBeUndefined();
   });
 
+  it("refuses a record from a newer version and lets the game kick from onLoadFailed", async () => {
+    // Mixed-version servers after an update: this server is at v1, the player
+    // was last saved at v2 by an updated server.
+    const newer = { v: 2, t: 0, d: { coins: 900 } };
+    const backend = createMemoryStoreBackend({ player_7: newer });
+    const players = createFakePlayers();
+    const kicked: string[] = [];
+    const playerStore = createPlayerStore<typeof profileSchema, FakePlayer>(
+      { id: "player.profile", schema: profileSchema, defaultValue: { coins: 0 } },
+      {
+        backend,
+        owner: "old-server",
+        onLoadFailed(_player, error) {
+          if (error.name === "StoreVersionAheadError") {
+            kicked.push("This server is running an older version. Please rejoin.");
+          }
+        },
+      },
+    );
+    const seen: (Profile | undefined)[] = [];
+    const app = createServerApp<FakePlayer>({
+      actions: {
+        "shop.buy": defineAction({
+          id: "shop.buy",
+          run(ctx) {
+            seen.push((ctx.store as StoreDocument<Profile> | undefined)?.get());
+            return { ok: true };
+          },
+        }),
+      },
+      players: players.source,
+      playerStore,
+    });
+
+    const player = { UserId: 7 };
+    players.emitAdded(player);
+    await settle(playerStore, player);
+    await app.dispatch("shop.buy", { player }, {});
+    players.emitRemoving(player);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(kicked).toHaveLength(1);
+    expect(seen).toEqual([undefined]);
+    expect(backend.snapshot()["player_7"]).toEqual(newer);
+    app.dispose();
+  });
+
   it("exposes the store on the app for shutdown flushing", async () => {
     const backend = createMemoryStoreBackend();
     const { app, players, playerStore } = createApp(backend, []);

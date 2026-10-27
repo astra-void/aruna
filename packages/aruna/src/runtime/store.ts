@@ -74,6 +74,12 @@ export type StoreErrorName =
   | "StoreSerializationError"
   // `migrate` threw, or returned a value that failed validation.
   | "StoreMigrationError"
+  // The record was written by a newer version of the game than this server is
+  // running: an old server still up after an update, reached by a friend
+  // follow. Never migrated (migrate only goes forward) and never written back,
+  // since saving it under this server's older version would make the next new
+  // server migrate it a second time. Not retryable.
+  | "StoreVersionAheadError"
   // The key is empty or longer than the DataStore limit.
   | "StoreKeyError"
   // Another live server holds the session lock for this key.
@@ -703,6 +709,16 @@ export function decodeStoreValue(
   const lock =
     envelope !== undefined && isStoreLockState(envelope.lock) ? envelope.lock : undefined;
   const updatedAtMs = envelope !== undefined ? envelope.t : undefined;
+
+  // A record from the future. Handing it to `migrate` would let a permissive
+  // migration pass newer data through, which this server would then save under
+  // its older version — and the next new server would migrate it again.
+  if (storedVersion > currentVersion) {
+    return storeFail(
+      "StoreVersionAheadError",
+      `Store ${definition.id} read a record at version ${storedVersion}, newer than this server's version ${currentVersion}. This server is running an older version of the game.`,
+    );
+  }
 
   let value: unknown = storedData;
   let migrated = false;

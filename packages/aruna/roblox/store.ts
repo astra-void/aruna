@@ -30,6 +30,9 @@ export type StoreErrorName =
 	| "StoreValidationError"
 	| "StoreSerializationError"
 	| "StoreMigrationError"
+	// The record was written by a newer version of the game than this server
+	// runs. Never migrated, never written back; see the Node reference runtime.
+	| "StoreVersionAheadError"
 	| "StoreKeyError"
 	| "StoreLockedError"
 	| "StoreClosedError";
@@ -631,6 +634,16 @@ export function decodeStoreValue(
 	const storedData = envelope !== undefined ? envelope.d : raw;
 	const lock = envelope !== undefined && isStoreLockState(envelope.lock) ? envelope.lock : undefined;
 	const updatedAtMs = envelope !== undefined ? envelope.t : undefined;
+
+	// A record from the future. Handing it to `migrate` would let a permissive
+	// migration pass newer data through, which this server would then save under
+	// its older version — and the next new server would migrate it again.
+	if (storedVersion > currentVersion) {
+		return storeFail(
+			"StoreVersionAheadError",
+			`Store ${definition.id} read a record at version ${storedVersion}, newer than this server's version ${currentVersion}. This server is running an older version of the game.`,
+		);
+	}
 
 	let value: unknown = storedData;
 	let migrated = false;

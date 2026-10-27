@@ -151,6 +151,36 @@ describe("session locking", () => {
     expect(store.get(player)).toBeUndefined();
   });
 
+  it("treats a record from a newer version as a failed load: no default, no lock, no write", async () => {
+    // A player saved at v3 by an updated server joins an old v2 server.
+    const newer = { v: 3, t: 0, d: { coins: 500, name: "ada" } };
+    const backend = createMemoryStoreBackend({ player_42: newer });
+    const failures: string[] = [];
+    let migrateCalls = 0;
+    const store = createPlayerStore(
+      definition({
+        version: 2,
+        migrate: (stored) => {
+          migrateCalls += 1;
+          return stored as Profile;
+        },
+      }),
+      { backend, onLoadFailed: (_player, error) => failures.push(error.name) },
+    );
+
+    const loaded = await store.load(player);
+    expect(loaded.ok === false && loaded.error.name).toBe("StoreVersionAheadError");
+    expect(failures).toEqual(["StoreVersionAheadError"]);
+    expect(store.get(player)).toBeUndefined();
+    expect(migrateCalls).toBe(0);
+    // Untouched: not even the session lock was written.
+    expect(backend.snapshot()["player_42"]).toEqual(newer);
+    expect(storedLock(backend)).toBeUndefined();
+
+    await store.release(player);
+    expect(backend.snapshot()["player_42"]).toEqual(newer);
+  });
+
   it("returns the same document for a repeated load", async () => {
     const store = createPlayerStore(definition(), { backend: createMemoryStoreBackend() });
     const first = await store.load(player);

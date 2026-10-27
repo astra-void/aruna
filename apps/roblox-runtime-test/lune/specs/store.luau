@@ -111,6 +111,38 @@ return function(ctx)
 			t.eq(entries["corrupt"].d.coins, "lots", "corrupt record untouched")
 		end)
 
+		t.it("refuses a record from a newer version without migrating or writing it", function()
+			local migrateCalls = { count = 0 }
+			local store = storeModule.createStore(
+				definition({
+					version = 2,
+					migrate = function(stored)
+						migrateCalls.count += 1
+						return stored
+					end,
+				}),
+				{ createBackend = backendFor }
+			)
+			local entries = fakes.dataStores.entriesFor("player.profile")
+			entries["ahead"] = { v = 3, t = 0, d = { coins = 500, name = "future" } }
+
+			local _, _, loaded = t.await(store.load("ahead"))
+			t.isFalse(loaded.ok, "load should fail")
+			t.eq(loaded.error.name, "StoreVersionAheadError", "error name")
+			t.isFalse(loaded.error.retryable, "not retryable")
+
+			local _, _, saved = t.await(store.save("ahead", { coins = 1, name = "ada" }))
+			t.eq(saved.error.name, "StoreVersionAheadError", "save refused")
+			local _, _, updated = t.await(store.update("ahead", function(current)
+				return current
+			end))
+			t.eq(updated.error.name, "StoreVersionAheadError", "update refused")
+
+			t.eq(migrateCalls.count, 0, "migrate never ran")
+			t.eq(entries["ahead"].v, 3, "record still at its version")
+			t.eq(entries["ahead"].d.coins, 500, "record untouched")
+		end)
+
 		t.it("refuses a value that does not match the schema", function()
 			local store = storeModule.createStore(definition(), { createBackend = backendFor })
 			local _, _, result = t.await(store.save("k2", { coins = "many", name = "ada" }))
@@ -212,6 +244,42 @@ return function(ctx)
 
 			t.isFalse(blocked.ok, "second load should fail")
 			t.eq(blocked.error.name, "StoreLockedError", "error name")
+		end)
+
+		t.it("treats a record from a newer version as a failed load and writes no lock", function()
+			local player = { UserId = 109 }
+			local entries = fakes.dataStores.entriesFor("player.profile")
+			entries["player_109"] = { v = 3, t = 0, d = { coins = 500, name = "future" } }
+			local failures = {}
+			local store = playerStoreModule.createPlayerStore(
+				definition({
+					session = { heartbeatMs = 1_000, lockTtlMs = 10_000, acquireAttempts = 2, acquireDelayMs = 1 },
+				}),
+				{
+					createBackend = backendFor,
+					owner = "old-server",
+					nowMs = function()
+						return 1_000
+					end,
+					onLoadFailed = function(_player, err)
+						table.insert(failures, err.name)
+					end,
+					onSaveFailed = function() end,
+					scheduler = manualScheduler(),
+				}
+			)
+
+			local _, _, result = t.await(store.load(player), 3)
+			t.isFalse(result.ok, "load should fail")
+			t.eq(result.error.name, "StoreVersionAheadError")
+			t.eq(#failures, 1)
+			t.eq(failures[1], "StoreVersionAheadError")
+			t.eq(store.get(player), nil, "no document")
+			t.eq(entries["player_109"].lock, nil, "no lock written")
+			t.eq(entries["player_109"].d.coins, 500, "record untouched")
+
+			t.await(store.release(player), 3)
+			t.eq(entries["player_109"].d.coins, 500, "release writes nothing")
 		end)
 
 		t.it("takes over a lock whose heartbeat went stale", function()

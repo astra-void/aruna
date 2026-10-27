@@ -124,6 +124,51 @@ describe("decoding", () => {
     expect(decoded.ok === false && decoded.error.name).toBe("StoreMigrationError");
   });
 
+  it("refuses a record from a newer version without calling migrate", () => {
+    let migrateCalls = 0;
+    const definition = profileStore({
+      version: 2,
+      migrate: (stored) => {
+        migrateCalls += 1;
+        return stored as { coins: number; name: string };
+      },
+    });
+
+    const decoded = decodeStoreValue(definition, { v: 3, t: 0, d: { coins: 5, name: "a" } });
+    expect(decoded.ok === false && decoded.error).toMatchObject({
+      name: "StoreVersionAheadError",
+      retryable: false,
+    });
+    expect(decoded.ok === false && decoded.error.message).toContain("version 3");
+    expect(migrateCalls).toBe(0);
+  });
+
+  it("never writes back over a record from a newer version", async () => {
+    const newer = { v: 3, t: 0, d: { coins: 500, name: "from the future" } };
+    const backend = createMemoryStoreBackend({ ada: newer });
+    let migrateCalls = 0;
+    const store = createStore(
+      profileStore({
+        version: 2,
+        migrate: (stored) => {
+          migrateCalls += 1;
+          return stored as { coins: number; name: string };
+        },
+      }),
+      { backend },
+    );
+
+    const loaded = await store.load("ada");
+    const saved = await store.save("ada", { coins: 1, name: "ada" });
+    const updated = await store.update("ada", (current) => ({ ...current, coins: 2 }));
+
+    expect(loaded.ok === false && loaded.error.name).toBe("StoreVersionAheadError");
+    expect(saved.ok === false && saved.error.name).toBe("StoreVersionAheadError");
+    expect(updated.ok === false && updated.error.name).toBe("StoreVersionAheadError");
+    expect(migrateCalls).toBe(0);
+    expect(backend.snapshot()["ada"]).toEqual(newer);
+  });
+
   it("migrates an older record forward", () => {
     const definition = profileStore({
       version: 2,
