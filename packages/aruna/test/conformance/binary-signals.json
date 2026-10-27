@@ -1,0 +1,113 @@
+{
+  "description": "Binary signal frames, run by both runtimes: test/binary-signals.test.ts (Node) and apps/roblox-runtime-test/lune/specs/signal.luau (native). Each case publishes `value` on a `wire: \"binary\"` signal with the `payload` schema; the frame on the wire must be exactly `bytes` (hex) in both runtimes, and the subscriber must deliver `value` back. The schema descriptor format is in test/conformance/README.md.",
+  "cases": [
+    {
+      "name": "an object packs its fields in sorted key order, with declared number widths",
+      "payload": {
+        "type": "object",
+        "fields": {
+          "id": {
+            "type": "number",
+            "format": "u16"
+          },
+          "hp": {
+            "type": "number",
+            "format": "u8"
+          },
+          "x": {
+            "type": "number",
+            "format": "f32"
+          },
+          "y": {
+            "type": "number"
+          }
+        }
+      },
+      "value": {
+        "id": 513,
+        "hp": 200,
+        "x": 1.5,
+        "y": -2.25
+      },
+      "bytes": "4bea7d10c801020000c03f00000000000002c0"
+    },
+    {
+      "name": "strings, booleans, optionals, and enums",
+      "payload": {
+        "type": "object",
+        "fields": {
+          "by": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "crit": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "optional",
+            "inner": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "type": "enum",
+            "values": [
+              "melee",
+              "ranged",
+              "magic"
+            ]
+          }
+        }
+      },
+      "value": {
+        "by": "ada",
+        "crit": true,
+        "kind": "magic"
+      },
+      "bytes": "1a07320403000000616461010200000000"
+    },
+    {
+      "name": "arrays and unions",
+      "payload": {
+        "type": "object",
+        "fields": {
+          "tags": {
+            "type": "array",
+            "item": {
+              "type": "number",
+              "format": "u8"
+            },
+            "maxItems": 8
+          },
+          "label": {
+            "type": "union",
+            "members": [
+              {
+                "type": "string",
+                "maxLength": 10
+              },
+              {
+                "type": "number",
+                "format": "i16"
+              }
+            ]
+          },
+          "phase": {
+            "type": "literal",
+            "value": "start"
+          }
+        }
+      },
+      "value": {
+        "tags": [
+          1,
+          2,
+          250
+        ],
+        "label": -3,
+        "phase": "start"
+      },
+      "bytes": "c4257f3901000000fdff030000000102fa"
+    }
+  ]
+}

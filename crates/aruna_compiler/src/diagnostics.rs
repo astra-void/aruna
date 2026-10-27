@@ -68,6 +68,11 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::203" => Some(("ambiguous-convention-match", DiagnosticSeverity::Warning)),
         // Severity follows strict.rawRemoteUsage; this is the default.
         "aruna::507" => Some(("raw-remote-usage", DiagnosticSeverity::Warning)),
+        // Unreliable signal payload size: Roblox drops an UnreliableRemoteEvent
+        // payload over its limit silently, so the compiler checks the bound.
+        "aruna::510" => Some(("unreliable-signal-payload-unbounded", DiagnosticSeverity::Warning)),
+        "aruna::511" => Some(("unreliable-signal-payload-too-large", DiagnosticSeverity::Error)),
+        "aruna::512" => Some(("invalid-signal-wire", DiagnosticSeverity::Error)),
         "aruna::550" => Some(("invalid-action-definition", DiagnosticSeverity::Error)),
         "aruna::551" => Some(("action-missing-run", DiagnosticSeverity::Error)),
         "aruna::552" => Some(("action-run-not-function", DiagnosticSeverity::Error)),

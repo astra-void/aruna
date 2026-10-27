@@ -199,3 +199,51 @@ reliable signals are untouched, and no unreliable remote is created when nothing
 it. Caveats: delivery and ordering are **not guaranteed** (never use it for state a
 client must not miss), and Roblox caps unreliable payloads at roughly **900 bytes**.
 The flag is compiler-discovered and recorded in the manifest.
+
+### Payload size
+
+Roblox drops an unreliable payload over its limit without an error on either side, so
+the compiler checks it. It computes the largest encoding a payload schema allows — the
+size of its `encodeBinary` frame — and records it as `maxEncodedBytes` in the manifest,
+`aruna inspect signals`, and the contract snapshot:
+
+- every number, boolean, literal, enum, and Roblox value type counts at its fixed width
+  (`u8` is 1 byte, `number` 8, `vector3` 12, `cframe` 48)
+- a string needs `.maxLength(n)` (or `.length(n)`), an array `.maxItems(n)`
+- an optional or a union counts its largest branch
+- a `schema.record(...)` is never bounded
+
+| Code | When | Severity |
+| --- | --- | --- |
+| `aruna::510 unreliable-signal-payload-unbounded` | an unreliable signal's payload has no bound | warning |
+| `aruna::511 unreliable-signal-payload-too-large` | its largest encoding is over 900 bytes | error |
+
+For a `wire: "binary"` signal the 4-byte frame header counts. For the default table
+encoding the binary size is a floor — Roblox adds type tags and keys on top — so an
+error there is certain, while staying under it is not a guarantee. String lengths are
+counted in bytes, as the native runtime's `.maxLength` does.
+
+## Binary wire
+
+`wire: "binary"` sends a signal's payload as an `encodeBinary` buffer, laid out from the
+payload schema: no field names or type tags, numbers at their declared width.
+
+```ts
+export const playerMoved = defineSignal({
+  id: "player.moved",
+  unreliable: true,
+  wire: "binary", // 4 + 3 x 4 = 16 bytes per message
+  payload: schema.object({ x: schema.f32(), y: schema.f32(), z: schema.f32() }),
+});
+```
+
+The publisher validates the payload as always, then encodes it; the subscriber decodes it
+before the schema check and the handlers, so handlers see the same value either way.
+Every frame starts with a fingerprint of the schema's layout: a client holding a
+different schema drops the message, exactly as it drops a payload that fails
+validation, instead of misreading the bytes. The frame is byte-identical between the
+Node and native runtimes.
+
+`wire` must be the string literal `"binary"`, and the signal needs a payload schema the
+codec can encode — no `schema.instance()` (`aruna::512 invalid-signal-wire` otherwise).
+Changing a signal's wire is a breaking change in `aruna contract diff`.

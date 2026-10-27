@@ -73,6 +73,89 @@ pub struct ArunaSchemaMetadata {
     pub inner: Option<Box<ArunaSchemaMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub members: Option<Vec<ArunaSchemaMetadata>>,
+    // `.maxLength(n)` / `.length(n)` on a string, in bytes. The only part of a
+    // string schema that bounds its encoded size, so it is kept even though
+    // other constraints are runtime-only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<u32>,
+    // `.maxItems(n)` / `.length(n)` on an array, for the same reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_items: Option<u32>,
+}
+
+// Every binary frame starts with a u32 schema fingerprint.
+pub const BINARY_FRAME_HEADER_BYTES: u64 = 4;
+
+// Roblox drops an UnreliableRemoteEvent payload over this size without an
+// error on either side, so the compiler checks it instead.
+pub const UNRELIABLE_PAYLOAD_LIMIT_BYTES: u64 = 900;
+
+// The largest payload `encodeBinary` can produce for a schema, frame header
+// excluded, or None when nothing bounds it. Follows the codec's layout
+// (src/runtime/binary.ts): a string needs `.maxLength`, an array `.maxItems`;
+// a record has no size bound at all; optionals and unions take their largest
+// branch.
+pub fn max_encoded_payload_bytes(schema: &ArunaSchemaMetadata) -> Option<u64> {
+    match schema.kind.as_str() {
+        "string" => schema.max_length.map(|length| 4 + u64::from(length)),
+        "number" => Some(match schema.numeric_format.as_deref() {
+            Some("u8") | Some("i8") => 1,
+            Some("u16") | Some("i16") => 2,
+            Some("u32") | Some("i32") | Some("f32") => 4,
+            _ => 8,
+        }),
+        "boolean" => Some(1),
+        "literal" => Some(0),
+        "enum" => Some(4),
+        "array" => {
+            let items = u64::from(schema.max_items?);
+            let item = max_encoded_payload_bytes(schema.items.as_deref()?)?;
+            Some(4 + items * item)
+        }
+        "object" => schema
+            .properties
+            .as_ref()?
+            .values()
+            .map(max_encoded_payload_bytes)
+            .sum::<Option<u64>>(),
+        "tuple" => schema
+            .members
+            .as_ref()?
+            .iter()
+            .map(max_encoded_payload_bytes)
+            .sum::<Option<u64>>(),
+        "optional" => Some(1 + max_encoded_payload_bytes(schema.inner.as_deref()?)?),
+        "union" => {
+            let mut largest = 0;
+            for member in schema.members.as_ref()? {
+                largest = largest.max(max_encoded_payload_bytes(member)?);
+            }
+            Some(4 + largest)
+        }
+        "vector2" => Some(8),
+        "vector3" | "color3" => Some(12),
+        "cframe" => Some(48),
+        "udim" => Some(8),
+        "udim2" => Some(16),
+        "dateTime" => Some(8),
+        "brickColor" => Some(2),
+        // `record` has no bound; `instance` cannot be binary-encoded at all.
+        _ => None,
+    }
+}
+
+fn schema_contains_kind(schema: &ArunaSchemaMetadata, kind: &str) -> bool {
+    schema.kind == kind
+        || schema
+            .properties
+            .as_ref()
+            .is_some_and(|properties| properties.values().any(|child| schema_contains_kind(child, kind)))
+        || schema.items.as_deref().is_some_and(|child| schema_contains_kind(child, kind))
+        || schema.inner.as_deref().is_some_and(|child| schema_contains_kind(child, kind))
+        || schema
+            .members
+            .as_ref()
+            .is_some_and(|members| members.iter().any(|child| schema_contains_kind(child, kind)))
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -159,6 +242,15 @@ pub struct ArunaSignalRecord {
     // guarantee). Omitted from the manifest JSON when false.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unreliable: bool,
+    // "binary" when the payload travels as an `encodeBinary` buffer; omitted for
+    // the default plain-table encoding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wire: Option<String>,
+    // The largest `encodeBinary` output for the payload, frame header included,
+    // or omitted when the schema is unbounded. Exact for `wire: "binary"`; for
+    // the table encoding it is a lower bound (Roblox adds type tags and keys).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_encoded_bytes: Option<u64>,
     pub serialization: ArunaActionSerializationMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload_schema: Option<ArunaSchemaMetadata>,
@@ -933,6 +1025,20 @@ fn is_chain_constraint_method(name: &str) -> bool {
     )
 }
 
+// The first argument of a length constraint, when it is a non-negative integer
+// literal. Anything else leaves the schema unbounded.
+fn literal_length_bound(call: &CallExpression<'_>) -> Option<u32> {
+    let Some(Argument::NumericLiteral(literal)) = call.arguments.first() else {
+        return None;
+    };
+    let value = literal.value;
+    if value >= 0.0 && value.fract() == 0.0 && value <= f64::from(u32::MAX) {
+        Some(value as u32)
+    } else {
+        None
+    }
+}
+
 fn parse_schema_call<'a>(
     file: &str,
     action_id: &str,
@@ -961,11 +1067,24 @@ fn parse_schema_call<'a>(
     // .maxLength(20), ...) are runtime-only: they do not change the rendered type
     // or the wire format. Parse the receiver as the real schema and drop the
     // constraint, so the metadata reflects only the underlying kind.
-    if is_chain_constraint_method(member.property.name.as_str()) {
+    //
+    // The exception is a length bound, which caps the encoded size: it is
+    // recorded so a signal's size can be checked (see max_encoded_payload_bytes).
+    let constraint = member.property.name.as_str();
+    if is_chain_constraint_method(constraint) {
         if let Expression::CallExpression(inner_call) = unwrap_schema_expression(&member.object) {
-            return parse_schema_call(
+            let mut parsed = parse_schema_call(
                 file, action_id, export_name, role, inner_call, scope, diagnostics,
-            );
+            )?;
+            if let Some(bound) = literal_length_bound(call) {
+                let tighten = |current: Option<u32>| Some(current.map_or(bound, |value| value.min(bound)));
+                match (parsed.kind.as_str(), constraint) {
+                    ("string", "maxLength" | "length") => parsed.max_length = tighten(parsed.max_length),
+                    ("array", "maxItems" | "length") => parsed.max_items = tighten(parsed.max_items),
+                    _ => {}
+                }
+            }
+            return Some(parsed);
         }
     }
 
@@ -2223,6 +2342,30 @@ fn analyze_define_signal_call<'a>(
     );
 
     let unreliable = extract_signal_unreliable(file, &id, export_name, object, diagnostics);
+    let wire = extract_signal_wire(
+        file,
+        &id,
+        export_name,
+        object,
+        payload_schema.as_ref(),
+        diagnostics,
+    );
+    let max_encoded_bytes = payload_schema
+        .as_ref()
+        .and_then(max_encoded_payload_bytes)
+        .map(|payload| payload + BINARY_FRAME_HEADER_BYTES);
+
+    if unreliable {
+        check_unreliable_payload_size(
+            file,
+            &id,
+            export_name,
+            object,
+            wire.is_some(),
+            max_encoded_bytes,
+            diagnostics,
+        );
+    }
 
     Some(ArunaSignalRecord {
         id,
@@ -2230,9 +2373,132 @@ fn analyze_define_signal_call<'a>(
         export_name: export_name.to_string(),
         has_payload_schema,
         unreliable,
+        wire,
+        max_encoded_bytes,
         serialization: ArunaActionSerializationMetadata::default(),
         payload_schema,
     })
+}
+
+// Reads the optional `wire` option off a defineSignal object. Only the string
+// literal "binary" is accepted, and only with a payload schema the binary codec
+// can encode: the codec lays the payload out from the schema, so without one
+// (or with an Instance in it) there is nothing to encode against.
+fn extract_signal_wire(
+    file: &str,
+    signal_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    payload_schema: Option<&ArunaSchemaMetadata>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Option<String> {
+    let property = find_object_property(object, "wire")?;
+    let span = DiagnosticSpan {
+        start: property.value.span().start as usize,
+        end: property.value.span().end as usize,
+    };
+    let invalid = |diagnostics: &mut Vec<ArunaDiagnostic>, details: &str, suggestion: &str| {
+        diagnostics.push(create_diagnostic(
+            "aruna::512",
+            format!("Signal {signal_id} has an invalid wire option."),
+            Some(file.to_string()),
+            Some(span.clone()),
+            Some(format!("{details} (export name: {export_name})")),
+            Some(suggestion.to_string()),
+        ));
+    };
+
+    match &property.value {
+        Expression::StringLiteral(literal) if literal.value.as_str() == "binary" => {}
+        _ => {
+            invalid(
+                diagnostics,
+                "wire must be the string literal \"binary\"",
+                "Set wire: \"binary\", or remove it for the default table encoding.",
+            );
+            return None;
+        }
+    }
+
+    let Some(schema) = payload_schema else {
+        invalid(
+            diagnostics,
+            "a binary signal needs a payload schema to encode against",
+            "Declare payload: schema.object({ ... }), or remove wire: \"binary\".",
+        );
+        return None;
+    };
+    if schema_contains_kind(schema, "instance") {
+        invalid(
+            diagnostics,
+            "schema.instance() cannot be binary-encoded",
+            "Send the Instance over the default table encoding, or remove it from the payload.",
+        );
+        return None;
+    }
+
+    Some("binary".to_string())
+}
+
+// An UnreliableRemoteEvent silently drops a payload over Roblox's limit, so an
+// unreliable signal whose payload could exceed it is caught here instead.
+fn check_unreliable_payload_size(
+    file: &str,
+    signal_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    binary: bool,
+    max_encoded_bytes: Option<u64>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) {
+    let span = find_object_property(object, "payload")
+        .map(|property| DiagnosticSpan {
+            start: property.span.start as usize,
+            end: property.span.end as usize,
+        })
+        .unwrap_or_else(|| object_span(object));
+
+    let Some(encoded) = max_encoded_bytes else {
+        diagnostics.push(create_diagnostic(
+            "aruna::510",
+            format!(
+                "Unreliable signal {signal_id} has no bound on its payload size; Roblox drops an unreliable payload over {UNRELIABLE_PAYLOAD_LIMIT_BYTES} bytes without an error."
+            ),
+            Some(file.to_string()),
+            Some(span),
+            Some(format!(
+                "A payload is bounded when every string has .maxLength(n), every array .maxItems(n), and it holds no record (export name: {export_name})."
+            )),
+            Some("Bound the payload schema, or make the signal reliable.".to_string()),
+        ));
+        return;
+    };
+
+    // The table encoding has no frame header, and its true size is larger than
+    // the binary layout, so the binary size without the header is a floor.
+    let compared = if binary {
+        encoded
+    } else {
+        encoded - BINARY_FRAME_HEADER_BYTES
+    };
+    if compared > UNRELIABLE_PAYLOAD_LIMIT_BYTES {
+        diagnostics.push(create_diagnostic(
+            "aruna::511",
+            format!(
+                "Unreliable signal {signal_id} can carry up to {compared} bytes, over Roblox's {UNRELIABLE_PAYLOAD_LIMIT_BYTES}-byte unreliable limit; larger payloads are dropped without an error."
+            ),
+            Some(file.to_string()),
+            Some(span),
+            Some(if binary {
+                format!("Largest binary frame, 4-byte header included (export name: {export_name}).")
+            } else {
+                format!(
+                    "Largest payload by the binary layout; the table encoding is larger still (export name: {export_name})."
+                )
+            }),
+            Some("Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.".to_string()),
+        ));
+    }
 }
 
 fn collect_signal_candidates(

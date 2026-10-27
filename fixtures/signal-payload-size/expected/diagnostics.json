@@ -1,0 +1,28 @@
+[
+  {
+    "code": "aruna::510",
+    "details": "A payload is bounded when every string has .maxLength(n), every array .maxItems(n), and it holds no record (export name: chat).",
+    "file": "src/shared/signals.ts",
+    "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+    "name": "unreliable-signal-payload-unbounded",
+    "severity": "warning",
+    "span": {
+      "end": 601,
+      "start": 552
+    },
+    "suggestion": "Bound the payload schema, or make the signal reliable."
+  },
+  {
+    "code": "aruna::511",
+    "details": "Largest binary frame, 4-byte header included (export name: trail).",
+    "file": "src/shared/signals.ts",
+    "message": "Unreliable signal fx.trail can carry up to 2312 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+    "name": "unreliable-signal-payload-too-large",
+    "severity": "error",
+    "span": {
+      "end": 886,
+      "start": 821
+    },
+    "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+  }
+]

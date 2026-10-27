@@ -136,6 +136,7 @@
       "file": "src/shared/combat/signals.ts",
       "hasPayloadSchema": true,
       "id": "combat.damaged",
+      "maxEncodedBytes": 12,
       "payloadSchema": {
         "kind": "object",
         "properties": {

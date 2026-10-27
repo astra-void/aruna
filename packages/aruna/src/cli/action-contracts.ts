@@ -58,6 +58,12 @@ export type SignalContractRecord = {
   readonly serialization: {
     readonly policy: "plain-data-v1";
   };
+  // Present only for `wire: "binary"`, so other signals' snapshots stay
+  // byte-stable.
+  readonly wire?: "binary";
+  // The largest binary frame for the payload, header included; present only
+  // when the payload schema is bounded.
+  readonly maxEncodedBytes?: number;
   readonly warnings: readonly string[];
 };
 
@@ -187,6 +193,8 @@ function summarizeSignal(
     serialization: {
       policy: signal.serialization.policy,
     },
+    ...(signal.wire === "binary" ? { wire: "binary" as const } : {}),
+    ...(signal.maxEncodedBytes !== undefined ? { maxEncodedBytes: signal.maxEncodedBytes } : {}),
     warnings: sortWarnings(payload.warnings),
   };
 }

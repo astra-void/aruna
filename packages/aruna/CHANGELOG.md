@@ -73,6 +73,25 @@ the game build like any other module.
   Budget state is dropped on leave. The native `ActionRegistry` gains
   `admitEnvelope`, which its transport calls first.
 
+- **`wire: "binary"` signals, and a size check for unreliable ones.** The
+  binary codec existed but no transport used it, and an unreliable signal
+  over Roblox's ~900-byte limit was dropped with no error anywhere.
+  `defineSignal({ wire: "binary" })` now sends the payload as an
+  `encodeBinary` buffer in both runtimes, byte-identical between them; the
+  subscriber decodes before validating, and a frame with another schema's
+  fingerprint is dropped like a schema mismatch. The compiler computes the
+  largest encoding a payload schema allows (strings need `.maxLength`, arrays
+  `.maxItems`; optionals and unions take their largest branch; records are
+  unbounded), records it as `maxEncodedBytes` in the manifest, `aruna inspect
+  signals`, and the contract snapshot, and checks unreliable signals:
+  `aruna::510` warns when the payload is unbounded, `aruna::511` fails the
+  build when it can exceed 900 bytes (the binary frame header included).
+  `aruna::512` rejects a `wire` that is not the literal `"binary"`, or a binary
+  signal without an encodable payload schema. The compiler now records a
+  string's `.maxLength` / `.length` and an array's `.maxItems` / `.length` in
+  schema metadata (`maxLength`, `maxItems`); other constraints stay
+  runtime-only.
+
 - **`aruna/testing` — the spec surface.** `createTestServerApp(options)` wraps a
   real `ServerApp`, owning the transport, the publisher, and the players source
   so a spec drives the shipping dispatch path — validation, rate limiting,

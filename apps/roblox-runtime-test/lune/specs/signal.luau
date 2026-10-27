@@ -1,6 +1,9 @@
 --!nocheck
 -- Execution coverage for the server -> client signal publisher/subscriber
 -- (roblox/signal-runtime.ts) over an in-process fake signal RemoteEvent.
+local fs = require("@lune/fs")
+local serde = require("@lune/serde")
+
 return function(ctx)
 	local t = ctx.t
 	local schema = ctx.load("schema").schema
@@ -246,6 +249,136 @@ return function(ctx)
 			-- Fire a raw malformed envelope straight onto the wire.
 			remote.FireAllClients({ signalId = "combat.damaged", payload = { amount = "nope" } })
 			t.eq(count, 0)
+			subscriber.dispose()
+		end)
+	end)
+
+	-- The shared golden table: the native frame must be byte-identical to the
+	-- Node runtime's (test/binary-signals.test.ts runs the same cases).
+	local binaryTable = serde.decode(
+		"json",
+		fs.readFile((string.gsub(ctx.conformancePath, "dispatch%.json$", "binary-signals.json")))
+	)
+
+	local function toSchema(descriptor)
+		local kind = descriptor.type
+		if kind == "string" then
+			local base = schema.string()
+			return if descriptor.maxLength ~= nil then base.maxLength(descriptor.maxLength) else base
+		elseif kind == "number" then
+			return if descriptor.format ~= nil then schema[descriptor.format]() else schema.number()
+		elseif kind == "boolean" then
+			return schema.boolean()
+		elseif kind == "literal" then
+			return schema.literal(descriptor.value)
+		elseif kind == "enum" then
+			return schema.enum(descriptor.values)
+		elseif kind == "optional" then
+			return schema.optional(toSchema(descriptor.inner))
+		elseif kind == "array" then
+			local base = schema.array(toSchema(descriptor.item))
+			return if descriptor.maxItems ~= nil then base.maxItems(descriptor.maxItems) else base
+		elseif kind == "object" then
+			local fields = {}
+			for key, field in descriptor.fields do
+				fields[key] = toSchema(field)
+			end
+			return schema.object(fields)
+		elseif kind == "union" then
+			local members = {}
+			for _, member in descriptor.members do
+				table.insert(members, toSchema(member))
+			end
+			return schema.union(members)
+		end
+		error(`unknown descriptor type: {tostring(kind)}`)
+	end
+
+	local function toHex(buf)
+		local parts = {}
+		for index = 0, buffer.len(buf) - 1 do
+			table.insert(parts, string.format("%02x", buffer.readu8(buf, index)))
+		end
+		return table.concat(parts)
+	end
+
+	local function deepEq(left, right)
+		if type(left) ~= "table" or type(right) ~= "table" then
+			return left == right
+		end
+		for key, value in left do
+			if not deepEq(value, right[key]) then
+				return false
+			end
+		end
+		for key in right do
+			if left[key] == nil then
+				return false
+			end
+		end
+		return true
+	end
+
+	local function recordingRemote()
+		local sent = {}
+		local remote = makeSignalRemote()
+		local fireAll = remote.FireAllClients
+		local recording = {
+			FireClient = function(_player, message)
+				table.insert(sent, message)
+				fireAll(message)
+			end,
+			FireAllClients = function(message)
+				table.insert(sent, message)
+				fireAll(message)
+			end,
+			OnClientEvent = remote.OnClientEvent,
+		}
+		return recording, sent
+	end
+
+	t.describe("binary signal wire (native)", function()
+		for _, case in binaryTable.cases do
+			t.it(case.name, function()
+				local signals = {
+					["fx.hit"] = defineSignal({ id = "fx.hit", payload = toSchema(case.payload), wire = "binary" }),
+				}
+				local remote, sent = recordingRemote()
+				local received = {}
+				local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+				subscriber.on("fx.hit", function(payload)
+					table.insert(received, payload)
+				end)
+
+				signalRuntime.createRemoteSignalPublisher(remote, signals).to({}, "fx.hit", case.value)
+
+				t.eq(#sent, 1)
+				t.eq(typeof(sent[1].payload), "buffer", "a binary signal sends a buffer")
+				t.eq(toHex(sent[1].payload), case.bytes, "byte-identical to the Node frame")
+				t.eq(#received, 1)
+				if not deepEq(received[1], case.value) then
+					t.fail(`decoded payload differs: {serde.encode("json", received[1])}`)
+				end
+				subscriber.dispose()
+			end)
+		end
+
+		t.it("drops a frame encoded with another schema version, and a non-buffer payload", function()
+			local v1 = { ["fx.hit"] = defineSignal({ id = "fx.hit", payload = schema.object({ hp = schema.u8() }), wire = "binary" }) }
+			local v2 = { ["fx.hit"] = defineSignal({ id = "fx.hit", payload = schema.object({ hp = schema.u16() }), wire = "binary" }) }
+			local remote, sent = recordingRemote()
+			local received = { count = 0 }
+			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, v2)
+			subscriber.on("fx.hit", function()
+				received.count += 1
+			end)
+
+			signalRuntime.createRemoteSignalPublisher(remote, v1).to({}, "fx.hit", { hp = 5 })
+			remote.FireAllClients({ signalId = "fx.hit", payload = { hp = 5 } })
+			remote.FireAllClients({ signalId = "fx.hit", payload = buffer.create(2) })
+
+			t.eq(#sent, 3)
+			t.eq(received.count, 0)
 			subscriber.dispose()
 		end)
 	end)

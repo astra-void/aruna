@@ -23,6 +23,12 @@ export type SignalDefinition<
   // for state a client must not miss. Payloads must stay under Roblox's
   // ~900-byte unreliable limit.
   readonly unreliable?: boolean;
+  // "binary" sends the payload as an `encodeBinary` buffer laid out from the
+  // payload schema (required): no field names or type tags on the wire, and a
+  // fingerprint that makes a client on a different schema drop the message
+  // instead of misreading it. The compiler knows its largest frame, which
+  // matters most for an unreliable signal. Must be the string literal.
+  readonly wire?: "binary";
 };
 
 export type InferSignalPayload<TSignal extends SignalDefinition<Schema | undefined>> =

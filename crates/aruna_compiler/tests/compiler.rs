@@ -1211,3 +1211,148 @@ export const profile = definePlayerStore({
     assert_eq!(schema["properties"]["coins"]["numericFormat"], "u8");
     assert_eq!(schema["properties"]["title"]["kind"], "optional");
 }
+
+fn signal_output(source: &str) -> aruna_compiler::CompilerOutput {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(root, "src/shared/signals.ts", source);
+    check_project(compiler_input(root))
+}
+
+#[test]
+fn computes_the_largest_binary_frame_of_a_bounded_payload() {
+    let output = signal_output(
+        r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const hit = defineSignal({
+  id: "fx.hit",
+  unreliable: true,
+  wire: "binary",
+  payload: schema.object({
+    at: schema.vector3(),
+    by: schema.string().maxLength(16),
+    tags: schema.array(schema.u8()).maxItems(4),
+    kind: schema.enum(["melee", "ranged"]),
+    crit: schema.optional(schema.boolean()),
+    label: schema.union([schema.string().length(10), schema.number()]),
+  }),
+});
+"#,
+    );
+
+    assert!(output.ok, "{:?}", output.diagnostics);
+    let signal = &output.manifest.signals[0];
+    assert_eq!(signal.wire.as_deref(), Some("binary"));
+    // vector3 12 + string 4+16 + array 4+4x1 + enum 4 + optional 1+1
+    // + union 4+max(4+10, 8) = 64, plus the 4-byte frame header.
+    assert_eq!(signal.max_encoded_bytes, Some(68));
+    let json = serde_json::to_value(signal).unwrap();
+    assert_eq!(json["maxEncodedBytes"], 68);
+    assert_eq!(json["payloadSchema"]["properties"]["by"]["maxLength"], 16);
+    assert_eq!(json["payloadSchema"]["properties"]["tags"]["maxItems"], 4);
+}
+
+#[test]
+fn warns_on_an_unreliable_signal_with_an_unbounded_payload() {
+    let output = signal_output(
+        r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const chat = defineSignal({
+  id: "chat.said",
+  unreliable: true,
+  payload: schema.object({ text: schema.string() }),
+});
+
+export const scores = defineSignal({
+  id: "board.scores",
+  unreliable: true,
+  payload: schema.record(schema.u32()),
+});
+
+// Reliable: no size check at all.
+export const log = defineSignal({
+  id: "log.line",
+  payload: schema.object({ text: schema.string() }),
+});
+"#,
+    );
+
+    assert_eq!(
+        diagnostic_codes(&output),
+        vec!["aruna::510".to_string(), "aruna::510".to_string()]
+    );
+    assert!(output.ok, "an unbounded payload only warns");
+    assert_eq!(output.manifest.signals[0].max_encoded_bytes, None);
+}
+
+#[test]
+fn errors_when_an_unreliable_payload_can_exceed_the_limit() {
+    // 4 + 896 bytes: exactly the 900-byte limit as a table, but the binary
+    // frame adds its 4-byte header and goes over.
+    let output = signal_output(
+        r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const table = defineSignal({
+  id: "fx.table",
+  unreliable: true,
+  payload: schema.array(schema.u8()).maxItems(896),
+});
+
+export const binary = defineSignal({
+  id: "fx.binary",
+  unreliable: true,
+  wire: "binary",
+  payload: schema.array(schema.u8()).maxItems(896),
+});
+"#,
+    );
+
+    let codes = diagnostic_codes(&output);
+    assert_eq!(codes, vec!["aruna::511".to_string()]);
+    assert!(output.diagnostics[0].message.contains("fx.binary"));
+    assert!(output.diagnostics[0].message.contains("904 bytes"));
+    assert!(!output.ok);
+}
+
+#[test]
+fn rejects_an_invalid_signal_wire() {
+    let output = signal_output(
+        r#"
+import { defineSignal } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const json = defineSignal({
+  id: "fx.json",
+  wire: "json",
+  payload: schema.object({ n: schema.number() }),
+});
+
+export const noPayload = defineSignal({
+  id: "fx.empty",
+  wire: "binary",
+});
+
+export const withInstance = defineSignal({
+  id: "fx.part",
+  wire: "binary",
+  payload: schema.object({ part: schema.instance() }),
+});
+"#,
+    );
+
+    assert_eq!(
+        diagnostic_codes(&output),
+        vec![
+            "aruna::512".to_string(),
+            "aruna::512".to_string(),
+            "aruna::512".to_string()
+        ]
+    );
+    assert!(output.manifest.signals.iter().all(|signal| signal.wire.is_none()));
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "src/.aruna/shared/signals.generated.ts",
+    "kind": "shared",
+    "path": "src/.aruna/shared/signals.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/signals module"
+  },
+  {
+    "id": "src/shared/signals.ts",
+    "kind": "shared",
+    "path": "src/shared/signals.ts",
+    "reason": "path"
+  }
+]

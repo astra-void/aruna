@@ -52,6 +52,7 @@ export type ContractDiffKind =
   | "signal-payload-field-added"
   | "signal-payload-field-removed"
   | "signal-payload-field-type-changed"
+  | "signal-wire-changed"
   | "store-added"
   | "store-removed"
   | "store-source-changed"
@@ -285,6 +286,15 @@ function parseSchemaMetadata(value: unknown, location: string): ParsedSchema {
     }
 
     parsed.numericFormat = value["numericFormat"];
+  }
+
+  for (const bound of ["maxLength", "maxItems"] as const) {
+    if (bound in value && value[bound] !== undefined) {
+      if (typeof value[bound] !== "number") {
+        throw new Error(`${location}.${bound} must be a number.`);
+      }
+      parsed[bound] = value[bound];
+    }
   }
 
   return parsed;
@@ -591,6 +601,10 @@ function parseSignalRecord(value: unknown, location: string): ParsedSignalContra
     serialization: {
       policy: value["serialization"]["policy"] as "plain-data-v1",
     },
+    ...(value["wire"] === "binary" ? { wire: "binary" as const } : {}),
+    ...(typeof value["maxEncodedBytes"] === "number"
+      ? { maxEncodedBytes: value["maxEncodedBytes"] }
+      : {}),
     warnings: parsedWarnings,
   };
 }
@@ -1525,6 +1539,22 @@ function diffSignals(
           message: `${signalId} module classification changed from ${previous.moduleKind} to ${current.moduleKind}.`,
           before: previous.moduleKind,
           after: current.moduleKind,
+        },
+        entries,
+      );
+    }
+
+    // A client built against the other encoding cannot read the payload.
+    if ((previous.wire ?? "table") !== (current.wire ?? "table")) {
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "signal-wire-changed",
+          actionId: signalId,
+          path: "wire",
+          message: `${signalId} wire changed from ${previous.wire ?? "table"} to ${current.wire ?? "table"}.`,
+          before: previous.wire ?? "table",
+          after: current.wire ?? "table",
         },
         entries,
       );

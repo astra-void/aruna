@@ -29,6 +29,9 @@ export type DiagnosticCode =
   | "aruna::200"
   | "aruna::203"
   | "aruna::507"
+  | "aruna::510"
+  | "aruna::511"
+  | "aruna::512"
   | "aruna::550"
   | "aruna::551"
   | "aruna::552"
@@ -120,6 +123,12 @@ export type SignalRecord = {
   // Routed over the dedicated UnreliableRemoteEvent (no delivery/ordering
   // guarantee). Omitted from the manifest JSON when false.
   unreliable?: boolean | undefined;
+  // "binary" when the payload travels as an `encodeBinary` buffer. Omitted for
+  // the default table encoding.
+  wire?: "binary" | undefined;
+  // The largest `encodeBinary` output for the payload, frame header included.
+  // Omitted when the schema has no size bound.
+  maxEncodedBytes?: number | undefined;
   serialization: {
     policy: "plain-data-v1";
   };
@@ -169,6 +178,10 @@ export type SchemaMetadata = {
   values?: SchemaLiteralMetadata[] | undefined;
   inner?: SchemaMetadata | undefined;
   members?: SchemaMetadata[] | undefined;
+  // A string's `.maxLength` / `.length` (bytes) and an array's `.maxItems` /
+  // `.length`: the constraints that bound the encoded size.
+  maxLength?: number | undefined;
+  maxItems?: number | undefined;
 };
 
 export type GeneratedFile = {

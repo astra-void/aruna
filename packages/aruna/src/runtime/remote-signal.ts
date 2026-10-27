@@ -1,5 +1,6 @@
 import type { RemoteEventSignalConnectionLike, RemoteEventSignalLike } from "./remote-event.js";
 import type { Schema } from "../schema/index.js";
+import { decodeBinary, encodeBinary } from "./binary.js";
 import {
   assertPublishableSignalPayload,
   isDeliverableSignalPayload,
@@ -72,6 +73,36 @@ export type RemoteSignalPublisher<TSignals extends SignalRegistry, TPlayer = unk
   ) => Promise<void>;
 };
 
+// The payload as it goes on the wire: an `encodeBinary` buffer for a binary
+// signal, the value itself otherwise. Validated first, so the encoder only ever
+// sees a conforming value.
+function wirePayload(signal: SignalDefinition<Schema | undefined>, payload: unknown): unknown {
+  return signal.wire === "binary" && signal.payload !== undefined
+    ? encodeBinary(signal.payload, payload)
+    : payload;
+}
+
+// The payload a binary signal's handlers receive, or `dropped` when the bytes
+// are not a frame of this schema (another schema version's fingerprint, a
+// truncated buffer, not bytes at all) — dropped the way a schema mismatch is.
+const DROPPED = Symbol("dropped");
+function readWirePayload(
+  signal: SignalDefinition<Schema | undefined>,
+  payload: unknown,
+): unknown {
+  if (signal.wire !== "binary" || signal.payload === undefined) {
+    return payload;
+  }
+  if (!(payload instanceof Uint8Array)) {
+    return DROPPED;
+  }
+  try {
+    return decodeBinary(signal.payload, payload);
+  } catch {
+    return DROPPED;
+  }
+}
+
 function resolveSignal(
   signals: SignalRegistry,
   signalId: string,
@@ -107,12 +138,12 @@ export function createRemoteSignalPublisher<
     to(player: TPlayer, signalId: string, payload: unknown): void {
       const signal = resolveSignal(signals, signalId);
       assertPublishableSignalPayload(signal, payload);
-      remoteFor(signal).FireClient(player, { signalId, payload });
+      remoteFor(signal).FireClient(player, { signalId, payload: wirePayload(signal, payload) });
     },
     toMany(players: readonly TPlayer[], signalId: string, payload: unknown): void {
       const signal = resolveSignal(signals, signalId);
       assertPublishableSignalPayload(signal, payload);
-      const message: RemoteSignalMessage = { signalId, payload };
+      const message: RemoteSignalMessage = { signalId, payload: wirePayload(signal, payload) };
       const wire = remoteFor(signal);
 
       for (const player of players) {
@@ -122,7 +153,7 @@ export function createRemoteSignalPublisher<
     toAll(signalId: string, payload: unknown): void {
       const signal = resolveSignal(signals, signalId);
       assertPublishableSignalPayload(signal, payload);
-      remoteFor(signal).FireAllClients({ signalId, payload });
+      remoteFor(signal).FireAllClients({ signalId, payload: wirePayload(signal, payload) });
     },
     async toBatched(
       player: TPlayer,
@@ -138,7 +169,7 @@ export function createRemoteSignalPublisher<
       for (let index = 0; index < payloads.length; index += 1) {
         const payload = payloads[index];
         assertPublishableSignalPayload(signal, payload);
-        wire.FireClient(player, { signalId, payload });
+        wire.FireClient(player, { signalId, payload: wirePayload(signal, payload) });
 
         const isChunkBoundary = (index + 1) % chunkSize === 0;
         if (isChunkBoundary && index + 1 < payloads.length) {
@@ -222,9 +253,13 @@ export function createRemoteSignalSubscriber<TSignals extends SignalRegistry>(
     }
 
     const signal = signals[message.signalId];
+    const payload = signal !== undefined ? readWirePayload(signal, message.payload) : message.payload;
+    if (payload === DROPPED) {
+      return;
+    }
 
     // Drop payloads that violate the declared schema before invoking handlers.
-    if (signal !== undefined && !isDeliverableSignalPayload(signal, message.payload)) {
+    if (signal !== undefined && !isDeliverableSignalPayload(signal, payload)) {
       return;
     }
 
@@ -238,7 +273,7 @@ export function createRemoteSignalSubscriber<TSignals extends SignalRegistry>(
     }
 
     for (const handler of snapshot) {
-      handler(message.payload);
+      handler(payload);
     }
   };
 

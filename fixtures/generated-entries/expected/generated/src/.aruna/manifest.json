@@ -126,6 +126,7 @@
       "file": "src/shared/combat/signals.ts",
       "exportName": "damaged",
       "hasPayloadSchema": true,
+      "maxEncodedBytes": 12,
       "serialization": {
         "policy": "plain-data-v1"
       },

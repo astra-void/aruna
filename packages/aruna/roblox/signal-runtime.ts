@@ -7,6 +7,7 @@
 import { firstSchemaIssue, type Schema } from "./schema";
 import type { InferSignalPayload, SignalDefinition } from "./signal";
 import { isWireSafe } from "./serialization";
+import { decodeBinary, encodeBinary } from "./binary";
 
 export interface RemoteSignalMessage {
 	readonly signalId: string;
@@ -133,6 +134,35 @@ function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload
 	}
 }
 
+// The payload as it goes on the wire: an `encodeBinary` buffer for a binary
+// signal, the value itself otherwise. Validated first, so the encoder only ever
+// sees a conforming value.
+function wirePayload(signal: SignalDefinition<Schema | undefined>, payload: unknown): unknown {
+	const payloadSchema = signal.payload;
+	return signal.wire === "binary" && payloadSchema !== undefined
+		? encodeBinary(payloadSchema, payload)
+		: payload;
+}
+
+// A binary signal's payload as its handlers receive it: decoded, or `ok` false
+// when the bytes are not a frame of this schema (another schema version's
+// fingerprint, a truncated buffer, not a buffer at all) — dropped the way a
+// schema mismatch is.
+function readWirePayload(
+	signal: SignalDefinition<Schema | undefined>,
+	payload: unknown,
+): { readonly ok: boolean; readonly value?: unknown } {
+	const payloadSchema = signal.payload;
+	if (signal.wire !== "binary" || payloadSchema === undefined) {
+		return { ok: true, value: payload };
+	}
+	if (!typeIs(payload, "buffer")) {
+		return { ok: false };
+	}
+	const [decoded, value] = pcall(() => decodeBinary(payloadSchema, payload));
+	return decoded ? { ok: true, value } : { ok: false };
+}
+
 export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(
 	remote: SignalServerLike<TPlayer>,
 	signals: TSignals,
@@ -153,12 +183,12 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 		to: (player: TPlayer, signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			remoteFor(signal).FireClient(player, { signalId, payload });
+			remoteFor(signal).FireClient(player, { signalId, payload: wirePayload(signal, payload) });
 		},
 		toMany: (players: ReadonlyArray<TPlayer>, signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			const message: RemoteSignalMessage = { signalId, payload };
+			const message: RemoteSignalMessage = { signalId, payload: wirePayload(signal, payload) };
 			const wire = remoteFor(signal);
 			for (const player of players) {
 				wire.FireClient(player, message);
@@ -167,7 +197,7 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 		toAll: (signalId: string, payload: unknown) => {
 			const signal = resolveSignal(index, signalId);
 			assertPublishable(signal, payload);
-			remoteFor(signal).FireAllClients({ signalId, payload });
+			remoteFor(signal).FireAllClients({ signalId, payload: wirePayload(signal, payload) });
 		},
 		toBatched: (
 			player: TPlayer,
@@ -190,7 +220,7 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 						for (let itemIndex = 0; itemIndex < payloads.size(); itemIndex += 1) {
 							const payload = payloads[itemIndex];
 							assertPublishable(signal, payload);
-							wire.FireClient(player, { signalId, payload });
+							wire.FireClient(player, { signalId, payload: wirePayload(signal, payload) });
 
 							const isChunkBoundary = (itemIndex + 1) % chunkSize === 0;
 							if (isChunkBoundary && itemIndex + 1 < payloads.size()) {
@@ -235,8 +265,13 @@ export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 			return;
 		}
 		const signal = index.get(signalId);
+		const read = signal !== undefined ? readWirePayload(signal, message.payload) : { ok: true, value: message.payload };
+		if (!read.ok) {
+			return;
+		}
+		const payload = read.value;
 		const payloadSchema = signal !== undefined ? signal.payload : undefined;
-		if (payloadSchema !== undefined && !payloadSchema.validate(message.payload)) {
+		if (payloadSchema !== undefined && !payloadSchema.validate(payload)) {
 			return;
 		}
 		const snapshot: Array<SignalHandler> = [];
@@ -244,7 +279,7 @@ export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 			snapshot.push(handler);
 		}
 		for (const handler of snapshot) {
-			handler(message.payload);
+			handler(payload);
 		}
 	};
 

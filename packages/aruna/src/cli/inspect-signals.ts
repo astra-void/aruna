@@ -27,6 +27,10 @@ function renderSignalBlock(signal: SignalContractRecord, colors: CliColorMode): 
     `    direction: ${signal.direction}`,
     `    payload: ${signal.payload.summary}`,
     `    serialization: ${signal.serialization.policy}`,
+    `    wire: ${signal.wire ?? "table"}`,
+    `    max encoded size: ${
+      signal.maxEncodedBytes === undefined ? "unbounded" : `${signal.maxEncodedBytes} bytes`
+    }`,
   ];
 }
 
