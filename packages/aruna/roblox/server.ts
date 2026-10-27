@@ -103,6 +103,12 @@ export interface ActionDefinition<
 	// the response, trading delivery confirmation for throughput on high-frequency
 	// commands. The default (false/undefined) keeps the request/response roundtrip.
 	readonly fireAndForget?: boolean;
+	// Declares that running this action twice has the same effect as running it
+	// once. Only then does the client's default retry policy retry a timeout: a
+	// timeout does not mean the server did not run the action, only that the
+	// response was late. Must be a boolean literal (the compiler reads it into the
+	// manifest and passes it from the generated client stub).
+	readonly idempotent?: boolean;
 	readonly input?: TInput;
 	readonly output?: TOutput;
 	run(

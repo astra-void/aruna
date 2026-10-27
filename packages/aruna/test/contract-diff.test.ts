@@ -323,6 +323,38 @@ describe("contract diff", () => {
     });
   });
 
+  it("treats dropping idempotent as breaking and adding it as non-breaking", () => {
+    const removed = diffActionContractSnapshots(
+      snapshot([action({ idempotent: true })]),
+      snapshot([action()]),
+    );
+    const added = diffActionContractSnapshots(
+      snapshot([action()]),
+      snapshot([action({ idempotent: true })]),
+    );
+
+    expect(removed.entries).toEqual([
+      expect.objectContaining({
+        severity: "breaking",
+        kind: "idempotent-removed",
+        actionId: "shop.purchaseItem",
+        before: true,
+        after: false,
+      }),
+    ]);
+    expect(added.entries).toEqual([
+      expect.objectContaining({ severity: "non-breaking", kind: "idempotent-added" }),
+    ]);
+  });
+
+  it("keeps idempotent when a snapshot round-trips through JSON", () => {
+    const parsed = parseActionContractSnapshotJson(
+      JSON.parse(JSON.stringify(snapshot([action({ idempotent: true })]))),
+    );
+
+    expect(parsed.actions[0]?.idempotent).toBe(true);
+  });
+
   it("sorts diff entries deterministically", () => {
     const before = snapshot([
       action({

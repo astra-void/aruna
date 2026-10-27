@@ -42,6 +42,9 @@ export type ActionContractRecord = {
     readonly windowMs: number;
     readonly max: number;
   } | null;
+  // Present (and true) only for an action declared `idempotent: true`, so the
+  // snapshot of every other action is byte-stable with older baselines.
+  readonly idempotent?: true;
   readonly warnings: readonly string[];
 };
 
@@ -144,6 +147,7 @@ function summarizeAction(
       policy: action.serialization.policy,
     },
     rateLimit: action.rateLimit ?? null,
+    ...(action.idempotent === true ? { idempotent: true as const } : {}),
     warnings,
   };
 }

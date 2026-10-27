@@ -90,6 +90,9 @@ export type ActionRecord = {
   // One-way action: the client does not wait for an ack and the server skips the
   // response. Omitted from the manifest JSON when false.
   fireAndForget?: boolean | undefined;
+  // Declared safe to run twice, so a timed-out invoke may be retried. Omitted
+  // from the manifest JSON when false.
+  idempotent?: boolean | undefined;
   serialization: {
     policy: "plain-data-v1";
   };

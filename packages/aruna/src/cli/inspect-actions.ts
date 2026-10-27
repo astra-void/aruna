@@ -68,6 +68,7 @@ function renderActionBlock(action: ActionInspectionEntry, colors: CliColorMode):
     `    output: ${action.output.summary}`,
     `    serialization: ${action.serialization.policy}`,
     renderRateLimit(action.rateLimit, colors),
+    `    idempotent: ${action.idempotent === true ? "yes (timeouts are retried)" : "no"}`,
     `    authority: server-owned, client callable`,
   ];
 

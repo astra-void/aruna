@@ -10,6 +10,7 @@ import {
   type RateLimitKeyResolver,
 } from "../runtime/server.js";
 import { createActionRateLimiter } from "../runtime/rate-limit.js";
+import { createIdempotencyCache } from "../runtime/idempotency.js";
 import { normalizeServerBinding, type ServerBinding } from "../runtime/binding.js";
 import type { AnyPlayerStore, StoreDocument } from "../runtime/player-store.js";
 import type { RemoteSignalPublisher } from "../runtime/remote-signal.js";
@@ -57,10 +58,13 @@ export type ServerApp<
   TSignals extends SignalRegistry = SignalRegistry,
 > = {
   readonly actions: TActions;
+  // `options.idempotencyKey` de-duplicates the call the way a retried wire call
+  // is: the same key for the same player and action runs it once.
   readonly dispatch: (
     actionId: string,
     ctx: ActionRunContext<TPlayer>,
     input: unknown,
+    options?: AppDispatchOptions,
   ) => Promise<unknown>;
   // Present when a `transport` was supplied to `createServerApp`. The app binds
   // the transport eagerly; this is the resulting disposable handle.
@@ -75,6 +79,10 @@ export type ServerApp<
   readonly playerStore?: AnyPlayerStore<TPlayer>;
   // Disposes the owned transport binding (no-op when no `transport` was given).
   readonly dispose: () => void;
+};
+
+export type AppDispatchOptions = {
+  readonly idempotencyKey?: string;
 };
 
 export type CreateServerAppOptions<
@@ -169,6 +177,11 @@ export function createServerApp<
   options: CreateServerAppOptions<TPlayer, TActions, TSignals, TSession>,
 ): ServerApp<TPlayer, TActions, TSignals> {
   const rateLimiter = options.rateLimiter ?? createActionRateLimiter();
+  // What each retried call settled to, per player, so it runs once. Dropped on
+  // leave (when the app has a `players` source); bounded and expiring otherwise.
+  const idempotency = createIdempotencyCache<TPlayer, unknown>(
+    options.nowMs !== undefined ? { nowMs: options.nowMs } : undefined,
+  );
 
   // Per-player session store, keyed by the player reference. Populated on join
   // (and boot backfill) and drained on leave; read by dispatch via `getSession`.
@@ -217,6 +230,7 @@ export function createServerApp<
       ? { exposeInternalErrors: options.exposeInternalErrors }
       : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+    idempotency,
   } satisfies DispatchActionOptions<TPlayer>;
 
   let transportBinding: ServerBinding | undefined;
@@ -230,12 +244,10 @@ export function createServerApp<
   const onPlayerRemoving = options.onPlayerRemoving;
   // The join handler runs when either a session must be created or `onPlayerAdded`
   // wants to observe the join; session creation precedes the hook. The leave
-  // handler runs when the hook wants it or a session must be dropped to avoid
-  // leaking a store entry for a departed player.
+  // handler always runs when there is a source: at the least, the player's
+  // idempotency entries have to be dropped.
   const needsAddedHandling =
     createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
-  const needsRemovingHandling =
-    onPlayerRemoving !== undefined || createSession !== undefined || playerStore !== undefined;
 
   const handlePlayerAdded = (player: TPlayer): void => {
     let session: TSession | undefined;
@@ -264,6 +276,7 @@ export function createServerApp<
       void playerStore.release(player);
     }
     sessions.delete(player);
+    idempotency.forget(player);
   };
 
   const playerAddedConnection =
@@ -271,7 +284,7 @@ export function createServerApp<
       ? options.players.PlayerAdded.Connect(handlePlayerAdded)
       : undefined;
   const playerRemovingConnection =
-    needsRemovingHandling && options.players !== undefined
+    options.players !== undefined
       ? options.players.PlayerRemoving.Connect(handlePlayerRemoving)
       : undefined;
 
@@ -285,8 +298,15 @@ export function createServerApp<
 
   return {
     actions: options.actions,
-    dispatch(actionId, ctx, input) {
-      return dispatchAction(options.actions, actionId, ctx, input, dispatchOptions);
+    dispatch(actionId, ctx, input, dispatchCallOptions) {
+      return dispatchAction(
+        options.actions,
+        actionId,
+        ctx,
+        input,
+        dispatchOptions,
+        dispatchCallOptions?.idempotencyKey,
+      );
     },
     ...(transportBinding !== undefined ? { binding: transportBinding } : {}),
     ...(publisher !== undefined ? { publisher } : {}),
@@ -296,6 +316,7 @@ export function createServerApp<
       playerAddedConnection?.Disconnect();
       playerRemovingConnection?.Disconnect();
       sessions.clear();
+      idempotency.clear();
     },
   };
 }

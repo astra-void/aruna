@@ -9,7 +9,12 @@
 // in the test too. A harness that re-implemented publishing would be the one
 // place a bug could hide.
 
-import { createServerApp, type CreateServerAppOptions, type ServerApp } from "../app/server.js";
+import {
+  createServerApp,
+  type AppDispatchOptions,
+  type CreateServerAppOptions,
+  type ServerApp,
+} from "../app/server.js";
 import { createClientApp, type ClientApp } from "../app/client.js";
 import {
   createRemoteSignalPublisher,
@@ -55,7 +60,14 @@ export type TestServerApp<
   // (`app.playerStore`, `app.publisher`, `app.dispatch` with a hand-built ctx).
   readonly app: ServerApp<TPlayer, TActions, TSignals>;
   // Dispatches as `player`, through validation, rate limiting, and middleware.
-  readonly invoke: (player: TPlayer, actionId: string, input?: unknown) => Promise<unknown>;
+  // `options.idempotencyKey` de-duplicates the call the way a retried wire call
+  // is.
+  readonly invoke: (
+    player: TPlayer,
+    actionId: string,
+    input?: unknown,
+    options?: AppDispatchOptions,
+  ) => Promise<unknown>;
   // Drives the player lifecycle the app subscribed to: sessions are created and
   // dropped, `onPlayerAdded` / `onPlayerRemoving` fire, and an owned player store
   // loads and releases the document.
@@ -170,8 +182,8 @@ export function createTestServerApp<
 
   return {
     app,
-    invoke(player, actionId, input) {
-      return app.dispatch(actionId, { player }, input);
+    invoke(player, actionId, input, dispatchOptions) {
+      return app.dispatch(actionId, { player }, input, dispatchOptions);
     },
     join(player) {
       if (present.includes(player)) {
@@ -216,7 +228,16 @@ export function createTestServerApp<
     client(player) {
       const signals = options.signals;
       const clientApp = createClientApp<TSignals>({
-        transport: (actionId, input) => app.dispatch(actionId, { player }, input),
+        // The key `withRetry` minted travels on, as it would over the wire.
+        transport: (actionId, input, invokeOptions) =>
+          app.dispatch(
+            actionId,
+            { player },
+            input,
+            invokeOptions?.idempotencyKey !== undefined
+              ? { idempotencyKey: invokeOptions.idempotencyKey }
+              : undefined,
+          ),
         ...(signals !== undefined
           ? {
               signals,

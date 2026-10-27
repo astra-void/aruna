@@ -770,7 +770,7 @@ describe("client retry", () => {
     expect(rec.delays).toEqual([50, 50]);
   });
 
-  it("uses exponential backoff for timeouts and propagates after maxRetries", async () => {
+  it("uses exponential backoff for an idempotent call's timeouts and propagates after maxRetries", async () => {
     let attempts = 0;
     const base: ActionInvoker = async () => {
       attempts += 1;
@@ -779,9 +779,77 @@ describe("client retry", () => {
     const rec = recordingDelay();
 
     const wrapped = withRetry(base, { maxRetries: 3, baseDelayMs: 100 }, rec.delay);
-    await expect(wrapped("shop.buy", {})).rejects.toMatchObject({ name: "ActionTimeoutError" });
+    await expect(wrapped("quest.claim", {}, { idempotent: true })).rejects.toMatchObject({
+      name: "ActionTimeoutError",
+    });
     expect(attempts).toBe(4); // initial + 3 retries
     expect(rec.delays).toEqual([100, 200, 400]);
+  });
+
+  it("does not retry a timeout for a call that is not idempotent", async () => {
+    // A timeout does not mean the server did not run the action: the purchase
+    // may have committed and only the response was late.
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      throw rejectionNamed("ActionTimeoutError");
+    };
+
+    const wrapped = withRetry(base, { maxRetries: 3 }, recordingDelay().delay);
+    await expect(wrapped("shop.buy", {})).rejects.toMatchObject({ name: "ActionTimeoutError" });
+    expect(attempts).toBe(1);
+  });
+
+  it("sends one idempotency key with every attempt of a call", async () => {
+    const keys: (string | undefined)[] = [];
+    let attempts = 0;
+    const base: ActionInvoker = async (_actionId, _input, options) => {
+      keys.push(options?.idempotencyKey);
+      attempts += 1;
+      if (attempts < 3) {
+        throw rejectionNamed("ActionRateLimitError", { retryAfterMs: 0 });
+      }
+      return "ok";
+    };
+
+    const wrapped = withRetry(base, { maxRetries: 3 }, recordingDelay().delay);
+    await expect(wrapped("shop.buy", {})).resolves.toBe("ok");
+    await expect(wrapped("shop.buy", {})).resolves.toBe("ok");
+
+    expect(keys).toHaveLength(4);
+    expect(typeof keys[0]).toBe("string");
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).toBe(keys[0]);
+    // A new call is a new key.
+    expect(keys[3]).not.toBe(keys[0]);
+  });
+
+  it("keeps a caller-supplied idempotency key", async () => {
+    const keys: (string | undefined)[] = [];
+    const base: ActionInvoker = async (_actionId, _input, options) => {
+      keys.push(options?.idempotencyKey);
+      return "ok";
+    };
+
+    const wrapped = withRetry(base, { maxRetries: 1 });
+    await wrapped("shop.buy", {}, { idempotencyKey: "checkout-42" });
+    expect(keys).toEqual(["checkout-42"]);
+  });
+
+  it("lets a custom retryOn retry a timeout without idempotent", async () => {
+    let attempts = 0;
+    const base: ActionInvoker = async () => {
+      attempts += 1;
+      throw rejectionNamed("ActionTimeoutError");
+    };
+
+    const wrapped = withRetry(
+      base,
+      { maxRetries: 1, retryOn: () => true },
+      recordingDelay().delay,
+    );
+    await expect(wrapped("shop.buy", {})).rejects.toMatchObject({ name: "ActionTimeoutError" });
+    expect(attempts).toBe(2);
   });
 
   it("does not retry a non-retryable rejection", async () => {

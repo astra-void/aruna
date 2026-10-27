@@ -86,6 +86,81 @@ return function(ctx)
 			t.eq(#removed, 1, "no callback after dispose")
 		end)
 
+		t.it("runs a duplicate idempotency key once and forgets the player's keys on leave", function()
+			local runs = { count = 0 }
+			local release = nil
+			local app = serverApp.createServerApp({
+				actions = {
+					buy = {
+						id = "buy",
+						run = function(_self, _context, _input)
+							runs.count += 1
+							if release == nil then
+								return ctx.Promise.new(function(resolve)
+									release = function()
+										resolve({ order = runs.count })
+									end
+								end)
+							end
+							return { order = runs.count }
+						end,
+					},
+				},
+			})
+			local leaver = { UserId = 9, Name = "Leaver" }
+
+			-- The second arrives while the first is in flight: it attaches.
+			local first = app.dispatch("buy", { player = leaver }, nil, { idempotencyKey = "k1" })
+			local second = app.dispatch("buy", { player = leaver }, nil, { idempotencyKey = "k1" })
+			release()
+			local _, ok1, out1 = t.await(first)
+			local _, ok2, out2 = t.await(second)
+			t.isTrue(ok1 and ok2, "both resolved")
+			t.eq(runs.count, 1, "run called once")
+			t.eq(out1, out2, "both callers get the same result")
+
+			-- After it settled: the remembered result, no second run.
+			local _, _, out3 = t.await(app.dispatch("buy", { player = leaver }, nil, { idempotencyKey = "k1" }))
+			t.eq(out3, out1)
+			t.eq(runs.count, 1)
+
+			-- Leaving drops the player's keys, so the same key runs again.
+			fakes.playerRemoving:Fire(leaver)
+			t.await(app.dispatch("buy", { player = leaver }, nil, { idempotencyKey = "k1" }))
+			t.eq(runs.count, 2)
+			app.dispose()
+		end)
+
+		t.it("does not remember a call refused before it ran", function()
+			local clockMs = 0
+			local runs = { count = 0 }
+			local app = serverApp.createServerApp({
+				actions = {
+					limited = {
+						id = "limited",
+						rateLimit = { key = "player", windowMs = 1000, max = 1 },
+						run = function(_self, _context, _input)
+							runs.count += 1
+							return runs.count
+						end,
+					},
+				},
+				nowMs = function()
+					return clockMs
+				end,
+			})
+
+			t.await(app.dispatch("limited", { player = player }, nil))
+			local _, ok, reason = t.await(app.dispatch("limited", { player = player }, nil, { idempotencyKey = "k1" }))
+			t.isFalse(ok, "rate limited")
+			t.eq(reason.name, "ActionRateLimitError")
+			clockMs += 1000
+			local _, retried, output = t.await(app.dispatch("limited", { player = player }, nil, { idempotencyKey = "k1" }))
+			t.isTrue(retried, "the retry after the window runs")
+			t.eq(output, 2)
+			app.dispose()
+		end)
+
 		t.it("dispatch passes the ctx player through to the action", function()
 			local app = serverApp.createServerApp({
 				actions = {

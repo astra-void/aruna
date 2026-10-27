@@ -55,7 +55,12 @@ type Expectation = {
 
 type Step =
   | { readonly advanceMs: number }
-  | { readonly dispatch: string; readonly input?: unknown; readonly expect: Expectation };
+  | {
+      readonly dispatch: string;
+      readonly input?: unknown;
+      readonly idempotencyKey?: string;
+      readonly expect: Expectation;
+    };
 
 type ConformanceCase = {
   readonly name: string;
@@ -241,6 +246,7 @@ describe("dispatch conformance (Node)", () => {
           requestId: `conformance:${requestCount}`,
           actionId: step.dispatch,
           input: materialize(step.input),
+          ...(step.idempotencyKey !== undefined ? { idempotencyKey: step.idempotencyKey } : {}),
         });
         const expected = step.expect;
 

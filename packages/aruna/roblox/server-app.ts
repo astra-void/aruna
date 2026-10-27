@@ -29,6 +29,10 @@ export type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = 
 	signals: TSignals,
 ) => SignalPublisher<TSignals, TPlayer>;
 
+export interface AppDispatchOptions {
+	readonly idempotencyKey?: string;
+}
+
 export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// The action map the app was created with, for enumeration/tooling.
 	readonly actions: ActionMap<TPlayer>;
@@ -37,10 +41,13 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// with the action's output and rejects with the error string on failure.
 	// Mirrors the Node reference runtime's `app.dispatch(actionId, ctx, input)`;
 	// this is the supported way to exercise actions from tests (e.g. under Lune).
+	// `options.idempotencyKey` de-duplicates the call the way a retried wire call
+	// is: the same key for the same player and action runs it once.
 	readonly dispatch: (
 		actionId: string,
 		ctx: { readonly player: TPlayer },
 		input: unknown,
+		options?: AppDispatchOptions,
 	) => Promise<unknown>;
 	// Present when a `transport` was supplied to `createServerApp`.
 	readonly binding?: ServerAppBinding;
@@ -204,10 +211,6 @@ export function createServerApp<
 	// wants to observe the join. Session creation precedes the hook.
 	const needsAddedHandling =
 		createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
-	// The leave handler runs when either the hook wants it or a session must be
-	// dropped to avoid leaking a store entry for a departed player.
-	const needsRemovingHandling =
-		onPlayerRemoving !== undefined || createSession !== undefined || playerStore !== undefined;
 
 	const handlePlayerAdded = (player: TPlayer): void => {
 		let session: TSession | undefined;
@@ -236,6 +239,7 @@ export function createServerApp<
 			playerStore.release(player);
 		}
 		sessions.delete(player);
+		registry.forgetPlayer(player);
 	};
 
 	// Lifecycle teardown is collected as closures rather than as a shared
@@ -256,12 +260,11 @@ export function createServerApp<
 			});
 			lifecycleCleanups.push(() => connection.Disconnect());
 		}
-		if (needsRemovingHandling) {
-			const connection = source.PlayerRemoving.Connect((player) => {
-				handlePlayerRemoving(player);
-			});
-			lifecycleCleanups.push(() => connection.Disconnect());
-		}
+		// Always: at the least, the player's idempotency keys have to be dropped.
+		const removingConnection = source.PlayerRemoving.Connect((player) => {
+			handlePlayerRemoving(player);
+		});
+		lifecycleCleanups.push(() => removingConnection.Disconnect());
 		const getPlayers = source.GetPlayers;
 		if (needsAddedHandling && getPlayers !== undefined) {
 			for (const player of getPlayers()) {
@@ -276,12 +279,10 @@ export function createServerApp<
 			});
 			lifecycleCleanups.push(() => connection.Disconnect());
 		}
-		if (needsRemovingHandling) {
-			const connection = players.PlayerRemoving.Connect((player) => {
-				handlePlayerRemoving(player as unknown as TPlayer);
-			});
-			lifecycleCleanups.push(() => connection.Disconnect());
-		}
+		const removingConnection = players.PlayerRemoving.Connect((player) => {
+			handlePlayerRemoving(player as unknown as TPlayer);
+		});
+		lifecycleCleanups.push(() => removingConnection.Disconnect());
 
 		// Boot backfill: fire the join handler for players already in the server
 		// when the app is created, so a mid-session boot does not miss anyone.
@@ -314,21 +315,28 @@ export function createServerApp<
 
 	return {
 		actions: options.actions,
-		dispatch: (actionId, ctx, input) =>
-			registry.dispatch(ctx.player, actionId, input).then((result) => {
-				if (result.ok) {
-					return result.output;
-				}
-				// Same structured rejection shape the client invoker produces, so
-				// in-process callers and wire callers handle failures identically.
-				throw {
-					message: result.error !== undefined ? result.error : "action failed",
-					...(result.errorName !== undefined ? { name: result.errorName } : {}),
-					...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
-					...(result.resetAtMs !== undefined ? { resetAtMs: result.resetAtMs } : {}),
-					...(result.errorId !== undefined ? { errorId: result.errorId } : {}),
-				};
-			}),
+		dispatch: (actionId, ctx, input, dispatchOptions) =>
+			registry
+				.dispatch(
+					ctx.player,
+					actionId,
+					input,
+					dispatchOptions !== undefined ? dispatchOptions.idempotencyKey : undefined,
+				)
+				.then((result) => {
+					if (result.ok) {
+						return result.output;
+					}
+					// Same structured rejection shape the client invoker produces, so
+					// in-process callers and wire callers handle failures identically.
+					throw {
+						message: result.error !== undefined ? result.error : "action failed",
+						...(result.errorName !== undefined ? { name: result.errorName } : {}),
+						...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
+						...(result.resetAtMs !== undefined ? { resetAtMs: result.resetAtMs } : {}),
+						...(result.errorId !== undefined ? { errorId: result.errorId } : {}),
+					};
+				}),
 		...(binding !== undefined ? { binding } : {}),
 		...(publisher !== undefined ? { publisher } : {}),
 		...(playerStore !== undefined ? { playerStore } : {}),

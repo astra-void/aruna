@@ -7,6 +7,7 @@ import {
 } from "../schema/index.js";
 import { assertSerializableActionValue } from "./serialization.js";
 import { ActionInternalError, createErrorId, isPublicActionError } from "./action-error.js";
+import { isIdempotencyKey, type IdempotencyCache } from "./idempotency.js";
 // Type-only, so the store runtime is not pulled into the dispatch module's
 // require graph.
 import type { StoreDocument } from "./player-store.js";
@@ -118,6 +119,12 @@ export type ActionDefinition<
   // response, trading delivery confirmation for throughput on high-frequency
   // commands. The default (false/undefined) keeps the request/response roundtrip.
   readonly fireAndForget?: boolean;
+  // Declares that running this action twice has the same effect as running it
+  // once. Only then does the client's default retry policy retry a timeout: a
+  // timeout does not mean the server did not run the action, only that the
+  // response was late. Must be a boolean literal (the compiler reads it into the
+  // manifest and passes it from the generated client stub).
+  readonly idempotent?: boolean;
   readonly input?: TInputSchema;
   readonly output?: TOutputSchema;
   run(
@@ -192,6 +199,10 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   // Supplied by `createServerApp` from its `playerStore`. Returns undefined
   // while the load is still in flight or after the document was released.
   readonly getStore?: (player: TPlayer) => StoreDocument<unknown> | undefined;
+  // Remembers what each (player, action, idempotency key) settled to, so a
+  // retried call runs once. Supplied by `createServerApp`, which clears a
+  // player's entries on leave; without it, keys are ignored.
+  readonly idempotency?: IdempotencyCache<TPlayer, unknown>;
   // Applied outermost-first around every action's execution.
   readonly middleware?: readonly ActionMiddleware<TPlayer>[];
   readonly onError?: ActionErrorHandler<TPlayer>;
@@ -243,12 +254,33 @@ function assertActionSchema(
 
 const defaultActionRateLimiter = createActionRateLimiter();
 
-export async function dispatchAction<TPlayer = unknown>(
+// `idempotencyKey` is the key a retrying client sends with every attempt of one
+// call. With `options.idempotency` set, a valid key makes the action run once
+// however many attempts arrive; an invalid one is ignored.
+export function dispatchAction<TPlayer = unknown>(
   registry: ActionRegistry<TPlayer>,
   actionId: string,
   ctx: ActionRunContext<TPlayer>,
   input: unknown,
   options?: DispatchActionOptions<TPlayer>,
+  idempotencyKey?: unknown,
+): Promise<unknown> {
+  const idempotency = options?.idempotency;
+  if (idempotency !== undefined && isIdempotencyKey(idempotencyKey)) {
+    return idempotency.run(ctx.player, actionId, idempotencyKey, (progress) =>
+      dispatchActionOnce(registry, actionId, ctx, input, options, progress),
+    );
+  }
+  return dispatchActionOnce(registry, actionId, ctx, input, options);
+}
+
+async function dispatchActionOnce<TPlayer>(
+  registry: ActionRegistry<TPlayer>,
+  actionId: string,
+  ctx: ActionRunContext<TPlayer>,
+  input: unknown,
+  options: DispatchActionOptions<TPlayer> | undefined,
+  progress?: { ran: boolean },
 ): Promise<unknown> {
   const action = registry[actionId];
 
@@ -366,6 +398,11 @@ export async function dispatchAction<TPlayer = unknown>(
       const next = invoke;
       invoke = () => Promise.resolve(layer(info, next));
     }
+  }
+
+  // Past every check that refuses a call without running it.
+  if (progress !== undefined) {
+    progress.ran = true;
   }
 
   try {

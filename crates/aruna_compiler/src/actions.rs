@@ -124,6 +124,11 @@ pub struct ArunaActionRecord {
     // pre-fire-and-forget manifest snapshots stay byte-stable.
     #[serde(default, skip_serializing_if = "is_false")]
     pub fire_and_forget: bool,
+    // Declared safe to run twice. The generated client stub passes
+    // `{ idempotent: true }`, which is what lets the default retry policy retry
+    // a timeout. Omitted from JSON when false, like fire_and_forget.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub idempotent: bool,
     pub serialization: ArunaActionSerializationMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit: Option<ArunaActionRateLimitMetadata>,
@@ -1887,6 +1892,40 @@ fn extract_action_fire_and_forget(
     }
 }
 
+// Reads the optional `idempotent` flag off a defineAction object. Accepts a
+// boolean literal only: the flag decides whether a timed-out call may be sent
+// again, so a value the compiler cannot read must not quietly become `false`
+// (or `true`).
+fn extract_action_idempotent(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> bool {
+    let Some(property) = find_object_property(object, "idempotent") else {
+        return false;
+    };
+
+    match &property.value {
+        Expression::BooleanLiteral(literal) => literal.value,
+        _ => {
+            diagnostics.push(create_diagnostic(
+                "aruna::569",
+                format!("Server action {action_id} has an invalid idempotent option."),
+                Some(file.to_string()),
+                Some(DiagnosticSpan {
+                    start: property.value.span().start as usize,
+                    end: property.value.span().end as usize,
+                }),
+                Some(format!("export name: {export_name}")),
+                Some("Set idempotent to a boolean literal (true or false).".to_string()),
+            ));
+            false
+        }
+    }
+}
+
 // Reads the optional `unreliable` flag off a defineSignal object. Accepts a
 // boolean literal; anything else is a hard error so a typo'd value can't
 // silently change which remote a signal travels over.
@@ -2004,6 +2043,7 @@ fn analyze_define_action_call<'a>(
     let rate_limit = extract_action_rate_limit(file, &id, export_name, object, diagnostics);
     let fire_and_forget =
         extract_action_fire_and_forget(file, &id, export_name, object, diagnostics);
+    let idempotent = extract_action_idempotent(file, &id, export_name, object, diagnostics);
 
     let Some(run_property) = find_object_property(object, "run") else {
         diagnostics.push(create_diagnostic(
@@ -2022,6 +2062,7 @@ fn analyze_define_action_call<'a>(
             has_output_schema,
             has_run: false,
             fire_and_forget,
+            idempotent,
             serialization: ArunaActionSerializationMetadata::default(),
             rate_limit,
             input_schema,
@@ -2052,6 +2093,7 @@ fn analyze_define_action_call<'a>(
         has_output_schema,
         has_run,
         fire_and_forget,
+        idempotent,
         serialization: ArunaActionSerializationMetadata::default(),
         rate_limit,
         input_schema,

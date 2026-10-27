@@ -862,6 +862,87 @@ export const demo = defineAction({
 }
 
 #[test]
+fn captures_idempotent_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const claim = defineAction({
+  id: "quest.claim",
+  idempotent: true,
+  run() {
+    return null;
+  },
+});
+
+export const purchase = defineAction({
+  id: "shop.purchase",
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok);
+    let claim = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "quest.claim")
+        .expect("expected idempotent action metadata");
+    assert!(claim.idempotent);
+
+    let purchase = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "shop.purchase")
+        .expect("expected plain action metadata");
+    assert!(!purchase.idempotent);
+    // Omitted from the manifest JSON when false, so existing snapshots stay
+    // byte-stable.
+    let json = serde_json::to_string(purchase).unwrap();
+    assert!(!json.contains("idempotent"));
+}
+
+#[test]
+fn rejects_non_literal_idempotent_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+const SAFE = true;
+
+export const demo = defineAction({
+  id: "demo.idempotent",
+  idempotent: SAFE,
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::569".to_string()]);
+    assert!(!output.ok);
+}
+
+#[test]
 fn rejects_invalid_rate_limit_metadata() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

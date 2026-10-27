@@ -36,6 +36,8 @@ export type ContractDiffKind =
   | "rate-limit-removed"
   | "rate-limit-tightened"
   | "rate-limit-loosened"
+  | "idempotent-added"
+  | "idempotent-removed"
   | "authority-changed"
   | "generated-export-changed"
   | "signal-added"
@@ -422,6 +424,7 @@ function parseActionRecord(value: unknown, location: string): ParsedActionContra
       value["rateLimit"] === undefined
         ? null
         : parseRateLimit(value["rateLimit"], `${location}.rateLimit`),
+    ...(value["idempotent"] === true ? { idempotent: true as const } : {}),
     warnings: parsedWarnings,
   };
 
@@ -877,9 +880,47 @@ function diffActions(
     }
 
     diffRateLimit(actionId, previous.rateLimit, current.rateLimit, entries);
+    diffIdempotent(actionId, previous.idempotent === true, current.idempotent === true, entries);
     diffSchema("input", actionId, previous.input.schema, current.input.schema, entries);
     diffSchema("output", actionId, previous.output.schema, current.output.schema, entries);
   }
+}
+
+// Dropping `idempotent` is breaking: a client built against the old contract
+// still retries a timed-out call, and the action no longer promises that a
+// second run is harmless. Adding it only lets clients retry more.
+function diffIdempotent(
+  actionId: string,
+  before: boolean,
+  after: boolean,
+  entries: ContractDiffEntry[],
+): void {
+  if (before === after) {
+    return;
+  }
+
+  makeEntry(
+    before
+      ? {
+          severity: "breaking",
+          kind: "idempotent-removed",
+          actionId,
+          path: "idempotent",
+          message: `${actionId} is no longer idempotent; clients that retry a timed-out call may run it twice.`,
+          before: true,
+          after: false,
+        }
+      : {
+          severity: "non-breaking",
+          kind: "idempotent-added",
+          actionId,
+          path: "idempotent",
+          message: `${actionId} is now idempotent; a timed-out call may be retried.`,
+          before: false,
+          after: true,
+        },
+    entries,
+  );
 }
 
 function diffRateLimit(

@@ -21,6 +21,7 @@ export const purchaseItem = defineAction({
   id: "shop.purchaseItem",          // unique, dotted by convention
   rateLimit: { key: "player", windowMs: 1000, max: 5 },  // optional, per-action
   fireAndForget: false,             // optional; see below
+  idempotent: false,                // optional; see "Retries and idempotency"
   input: schema.object({ itemId: schema.string(), quantity: schema.number() }),
   output: schema.object({ ok: schema.boolean(), total: schema.number() }),
   run(ctx, input) {
@@ -37,6 +38,7 @@ type ActionDefinition<TInput, TOutput, TPlayer> = {
   readonly id: string;
   readonly rateLimit?: { key: "player"; windowMs: number; max: number };
   readonly fireAndForget?: boolean;
+  readonly idempotent?: boolean;
   readonly input?: Schema;
   readonly output?: Schema;
   run(
@@ -255,6 +257,35 @@ rate-limit and input-validation rejections are not routed through it.
 Set `fireAndForget: true` for one-way actions (logging, telemetry) that don't need a
 response. The client does not wait for an ack and `run`'s return value is discarded. Only
 use it when you genuinely don't care whether/when the server finished.
+
+## Retries and idempotency
+
+`createClientApp({ retry: { maxRetries } })` retries a failed call. By default it retries
+a rate-limit rejection — the server refused the call without running it — and never a
+validation, serialization, or cancellation error.
+
+A **timeout** is retried only for an action declared `idempotent: true`. A timeout does
+not mean the server did not run the action: a purchase may have committed and only the
+response was late, and sending it again would charge twice. Declare `idempotent: true`
+only when running the action twice has the same effect as running it once (setting a
+value, claiming something the action itself checks was not claimed yet). It must be a
+boolean literal (`aruna::569` otherwise): the compiler records it in the manifest, and
+the generated client stub passes `{ idempotent: true }`. A `retryOn` you supply replaces
+the default rule entirely.
+
+Retried or not, every attempt of one call carries the same **idempotency key**, and the
+server runs a call once per key. A duplicate that arrives while the first attempt is
+still running waits for it; one that arrives later gets the remembered result. The
+server keeps a player's keys for 20 seconds (twice the default request timeout), at most
+64 per player, and drops them when the player leaves. A call refused before it ran
+(rate limited, invalid input) is not remembered, so its retry can still run. The key is
+the 4th argument of the action RemoteEvent; anything other than a string of at most 64
+characters is ignored. To de-duplicate across calls yourself (a double-clicked buy
+button), pass your own: `invokeAction(id, input, { idempotencyKey })`, or
+`app.dispatch(id, ctx, input, { idempotencyKey })` in-process.
+
+Dropping `idempotent` from an action is a breaking change in `aruna contract diff`: a
+client built against the old contract still retries the action's timeouts.
 
 ## Testing without a transport
 

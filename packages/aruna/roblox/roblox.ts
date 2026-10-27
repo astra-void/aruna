@@ -235,7 +235,13 @@ export function createActionInvoker(
 				},
 			};
 			pending.set(requestId, entry);
-			remote.FireServer(requestId, actionId, input);
+			// The idempotency key rides as the 4th argument, only when there is one.
+			const idempotencyKey = options !== undefined ? options.idempotencyKey : undefined;
+			if (idempotencyKey !== undefined) {
+				remote.FireServer(requestId, actionId, input, idempotencyKey);
+			} else {
+				remote.FireServer(requestId, actionId, input);
+			}
 
 			// The response may have arrived synchronously above; only arm the
 			// timeout and cancellation listener while still pending.
@@ -311,6 +317,9 @@ export function bindActions<TPlayer>(
 		const requestId = args[0];
 		const actionId = args[1];
 		const input = args[2];
+		// Untrusted: dispatch ignores anything that is not a string of at most 64
+		// characters.
+		const idempotencyKey = args[3];
 
 		// Drop malformed envelopes from untrusted clients before dispatch.
 		if (!typeIs(requestId, "string") || !typeIs(actionId, "string")) {
@@ -321,7 +330,7 @@ export function bindActions<TPlayer>(
 		// effects and rate limiting), but no response is sent back, since the
 		// client is not waiting for one.
 		const fireAndForget = registry.isFireAndForget(actionId);
-		void registry.dispatch(player as unknown as TPlayer, actionId, input).then((result) => {
+		void registry.dispatch(player as unknown as TPlayer, actionId, input, idempotencyKey).then((result) => {
 			if (!fireAndForget) {
 				remote.FireClient(player, requestId, result);
 			}

@@ -363,6 +363,55 @@
       "trace": ["outer:before", "run", "onError"]
     },
     {
+      "name": "a duplicate idempotency key runs the action once",
+      "actions": [{ "id": "buy", "behavior": "returnConstant", "value": "bought" }],
+      "steps": [
+        { "dispatch": "buy", "idempotencyKey": "k1", "expect": { "ok": true, "output": "bought" } },
+        { "dispatch": "buy", "idempotencyKey": "k1", "expect": { "ok": true, "output": "bought" } },
+        { "dispatch": "buy", "idempotencyKey": "k2", "expect": { "ok": true, "output": "bought" } }
+      ],
+      "trace": ["run", "run"]
+    },
+    {
+      "name": "an idempotency key longer than 64 characters is ignored",
+      "actions": [{ "id": "buy", "behavior": "returnConstant", "value": "bought" }],
+      "steps": [
+        {
+          "dispatch": "buy",
+          "idempotencyKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "expect": { "ok": true, "output": "bought" }
+        },
+        {
+          "dispatch": "buy",
+          "idempotencyKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "expect": { "ok": true, "output": "bought" }
+        }
+      ],
+      "trace": ["run", "run"]
+    },
+    {
+      "name": "a call refused before it ran is not remembered under its key",
+      "actions": [
+        {
+          "id": "limited",
+          "behavior": "returnConstant",
+          "value": "done",
+          "rateLimit": { "windowMs": 1000, "max": 1 }
+        }
+      ],
+      "steps": [
+        { "dispatch": "limited", "expect": { "ok": true, "output": "done" } },
+        {
+          "dispatch": "limited",
+          "idempotencyKey": "k1",
+          "expect": { "ok": false, "errorName": "ActionRateLimitError" }
+        },
+        { "advanceMs": 1000 },
+        { "dispatch": "limited", "idempotencyKey": "k1", "expect": { "ok": true, "output": "done" } }
+      ],
+      "trace": ["run", "run"]
+    },
+    {
       "name": "fireAndForget runs the handler and sends no response",
       "actions": [{ "id": "fire", "behavior": "echoInput", "fireAndForget": true }],
       "steps": [{ "dispatch": "fire", "input": { "n": 1 }, "expect": { "noResponse": true } }],

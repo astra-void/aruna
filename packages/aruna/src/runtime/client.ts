@@ -111,9 +111,17 @@ export function isActionCancelledError(value: unknown): boolean {
 // true }`; the option is optional so existing two-way invokers are unaffected.
 // `signal` supplies a cancellation token; cancelling it aborts a pending two-way
 // invoke (fire-and-forget invokes ignore it — there is nothing to wait on).
+// `idempotent` says the action is safe to run twice (generated stubs pass it for
+// an action declared `idempotent: true`), which is what lets the default retry
+// policy retry a timeout. `idempotencyKey` names one logical call: the server
+// runs a call once per key, however many attempts carry it. `withRetry` mints
+// one per call and reuses it for every attempt; pass your own to de-duplicate
+// across calls (a double-clicked button, say). At most 64 characters.
 export type ActionInvokeOptions = {
   readonly fireAndForget?: boolean;
   readonly signal?: CancelToken;
+  readonly idempotent?: boolean;
+  readonly idempotencyKey?: string;
 };
 
 export type ActionInvoker = (
@@ -175,8 +183,9 @@ export function withClientMiddleware(
 // retries after the first attempt (0 = disabled). Backoff for retry N (1-based)
 // is `baseDelayMs * 2^(N-1)` capped at `maxDelayMs`; a rate-limit rejection's
 // `retryAfterMs` overrides that when `respectRetryAfter` is set. `retryOn`
-// decides which rejections are retryable — the default retries rate-limit and
-// timeout errors and never retries cancellation.
+// decides which rejections are retryable — the default retries rate-limit
+// errors, retries a timeout only for an idempotent call, and never retries
+// cancellation. A `retryOn` you supply replaces that rule entirely.
 export type ClientRetryPolicy = {
   readonly maxRetries: number;
   readonly baseDelayMs?: number;
@@ -193,10 +202,12 @@ function readNumber(value: unknown, key: string): number | undefined {
   return typeof candidate === "number" ? candidate : undefined;
 }
 
-// Rate-limit (carries retryAfterMs or the rate-limit name) and timeout
-// rejections are retryable; everything else — validation, serialization,
-// cancellation — is not.
-function defaultRetryOn(error: unknown): boolean {
+// A rate-limit rejection (carries retryAfterMs or the rate-limit name) is
+// retryable: the server refused the call without running it. A timeout is
+// retryable only for an idempotent call, because it does not mean the server
+// did not run the action — a purchase may have committed and only the response
+// was late. Everything else (validation, serialization, cancellation) is not.
+function defaultRetryOn(error: unknown, idempotent: boolean): boolean {
   if (typeof error !== "object" || error === null) {
     return false;
   }
@@ -204,8 +215,18 @@ function defaultRetryOn(error: unknown): boolean {
   return (
     readNumber(error, "retryAfterMs") !== undefined ||
     name === ACTION_RATE_LIMIT_ERROR_NAME ||
-    name === ACTION_TIMEOUT_ERROR_NAME
+    (idempotent && name === ACTION_TIMEOUT_ERROR_NAME)
   );
+}
+
+let idempotencyKeyCounter = 0;
+
+// One key per logical call. The counter keeps keys unique within this client;
+// the random part keeps a rejoining client from reusing a key the server may
+// still remember.
+function createIdempotencyKey(): string {
+  idempotencyKeyCounter += 1;
+  return `${idempotencyKeyCounter.toString(36)}:${Math.floor(Math.random() * 0x7fffffff).toString(36)}`;
 }
 
 // How long to wait before retry N (0-based `retryIndex`): a rate-limit
@@ -251,7 +272,7 @@ export function withRetry(
   const baseDelayMs = policy.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
   const maxDelayMs = policy.maxDelayMs ?? DEFAULT_RETRY_MAX_DELAY_MS;
   const respectRetryAfter = policy.respectRetryAfter ?? true;
-  const retryOn = policy.retryOn ?? defaultRetryOn;
+  const customRetryOn = policy.retryOn;
 
   return (actionId, input, options) => {
     // One-way requests carry no ack, so a "failure" cannot be observed and a
@@ -260,8 +281,18 @@ export function withRetry(
       return invoker(actionId, input, options);
     }
 
+    const idempotent = options?.idempotent === true;
+    const retryOn =
+      customRetryOn ?? ((error: unknown): boolean => defaultRetryOn(error, idempotent));
+    // Every attempt carries the same key, so the server can tell a retry from a
+    // new call and run the action once.
+    const attemptOptions: ActionInvokeOptions = {
+      ...options,
+      idempotencyKey: options?.idempotencyKey ?? createIdempotencyKey(),
+    };
+
     const attempt = (retryIndex: number): Promise<unknown> =>
-      invoker(actionId, input, options).then(undefined, (error: unknown) => {
+      invoker(actionId, input, attemptOptions).then(undefined, (error: unknown) => {
         // Never retry a cancellation, an exhausted budget, a non-retryable
         // error, or once the caller's signal has been cancelled.
         if (

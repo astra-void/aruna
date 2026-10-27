@@ -404,14 +404,22 @@ fn client_stub_lines(action: &ArunaActionRecord, input_type: &str, output_type: 
         ];
     }
 
+    // An idempotent action tells the invoker so: the default retry policy only
+    // retries a timeout when the call says it is safe to run twice.
+    let invoke_options = if action.idempotent {
+        ", { idempotent: true }"
+    } else {
+        ""
+    };
+
     vec![
         format!(
             "export const {} = (input: {}): Promise<{}> => {{",
             action.export_name, input_type, output_type
         ),
         format!(
-            "  return invokeAction(\"{}\", input) as Promise<{}>;",
-            action.id, output_type
+            "  return invokeAction(\"{}\", input{}) as Promise<{}>;",
+            action.id, invoke_options, output_type
         ),
         "};".to_string(),
     ]
@@ -608,6 +616,11 @@ pub fn compute_contract_hash(
         canonical.push_str(&action.id);
         canonical.push('|');
         canonical.push_str(if action.fire_and_forget { "faf" } else { "req" });
+        // Appended only when set, so the hash of every existing contract is
+        // unchanged.
+        if action.idempotent {
+            canonical.push_str("+idem");
+        }
         canonical.push('|');
         canonical.push_str(&serde_json::to_string(&action.serialization).unwrap_or_default());
         canonical.push('|');
@@ -1105,6 +1118,7 @@ mod tests {
             has_output_schema: false,
             has_run: true,
             fire_and_forget: false,
+            idempotent: false,
             serialization: Default::default(),
             rate_limit: None,
             input_schema: None,
@@ -1237,6 +1251,33 @@ mod tests {
         assert!(output.files[1]
             .contents
             .contains("\"spray.paint\": src_shared_spray_actions_paint,"));
+    }
+
+    #[test]
+    fn renders_idempotent_client_stub_with_the_invoke_option() {
+        let mut claim = action("quest.claim", "src/shared/quest/actions.ts", "claim");
+        claim.idempotent = true;
+        let actions = vec![claim];
+
+        let output = generate_action_files("src/.aruna", &actions, &[], &test_rate_limit(), true);
+
+        assert!(output.diagnostics.is_empty());
+        let client = &output.files[0].contents;
+        assert!(client.contains(
+            "return invokeAction(\"quest.claim\", input, { idempotent: true }) as Promise<ClaimOutput>;"
+        ));
+    }
+
+    #[test]
+    fn contract_hash_changes_only_when_an_action_is_idempotent() {
+        let plain = vec![action("quest.claim", "src/shared/quest/actions.ts", "claim")];
+        let mut idempotent = plain.clone();
+        idempotent[0].idempotent = true;
+
+        assert_ne!(
+            compute_contract_hash(&plain, &[]),
+            compute_contract_hash(&idempotent, &[])
+        );
     }
 
     #[test]
@@ -1483,6 +1524,7 @@ mod tests {
             has_output_schema: true,
             has_run: true,
             fire_and_forget: false,
+            idempotent: false,
             serialization: Default::default(),
             rate_limit: None,
             input_schema: Some(ArunaSchemaMetadata {

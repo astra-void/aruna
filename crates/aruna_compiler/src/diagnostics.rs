@@ -86,6 +86,9 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
             DiagnosticSeverity::Error,
         )),
         "aruna::568" => Some(("unknown-hook-export", DiagnosticSeverity::Warning)),
+        // An error, like 559: whether a timed-out call is sent again must not
+        // depend on a value the compiler cannot read.
+        "aruna::569" => Some(("invalid-action-idempotent", DiagnosticSeverity::Error)),
         // Stores. Persistence failures are unrecoverable in a way a wrong remote
         // payload is not — a bad store definition can cost a player their save
         // file — so the structural rules are errors, not warnings.

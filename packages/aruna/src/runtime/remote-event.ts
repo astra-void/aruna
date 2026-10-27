@@ -19,6 +19,9 @@ export type RemoteEventActionRequest = {
   readonly requestId: string;
   readonly actionId: string;
   readonly input: unknown;
+  // Names one logical call across retries; the server runs it once per key.
+  // Sent only when the invoke options carry one (see `withRetry`).
+  readonly idempotencyKey?: string;
 };
 
 export type RemoteEventActionErrorPayload = {
@@ -348,6 +351,9 @@ export function createRemoteEventActionInvoker(
           requestId,
           actionId,
           input,
+          ...(invokeOptions?.idempotencyKey !== undefined
+            ? { idempotencyKey: invokeOptions.idempotencyKey }
+            : {}),
         });
       } catch (error) {
         pendingRequests.delete(requestId);
@@ -453,6 +459,9 @@ export function bindRemoteEventActions<TPlayer = unknown>(
         context,
         request.input,
         dispatchOptions,
+        // Untrusted: dispatch ignores anything that is not a string of at most
+        // 64 characters.
+        (request as { readonly idempotencyKey?: unknown }).idempotencyKey,
       );
 
       if (!fireAndForget) {

@@ -6,6 +6,7 @@ import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
+import { createIdempotencyCache, isIdempotencyKey } from "./idempotency";
 import {
 	ACTION_INTERNAL_ERROR_MESSAGE,
 	ACTION_INTERNAL_ERROR_NAME,
@@ -33,11 +34,18 @@ export interface ActionDispatchResult {
 }
 
 export interface ActionRegistry<TPlayer = unknown> {
+	// `idempotencyKey` is the key a retrying client sends with every attempt of
+	// one call: a valid key (a string of at most 64 characters) makes the action
+	// run once however many attempts arrive, and anything else is ignored.
 	readonly dispatch: (
 		player: TPlayer,
 		actionId: string,
 		input: unknown,
+		idempotencyKey?: unknown,
 	) => Promise<ActionDispatchResult>;
+	// Drops what the registry remembers about a player's calls (their
+	// idempotency keys). `createServerApp` calls it on leave.
+	readonly forgetPlayer: (player: TPlayer) => void;
 	// True when the action is declared `fireAndForget` (one-way). The transport
 	// binder uses this to decide whether to send a response back to the client.
 	// Unknown action ids return false.
@@ -175,158 +183,181 @@ export function createActionRegistry<TPlayer>(
 	const exposeInternalErrors = options?.exposeInternalErrors === true;
 	const rateLimiter = createActionRateLimiter();
 	const nowMs = options?.nowMs;
+	const idempotency = createIdempotencyCache<TPlayer, ActionDispatchResult>(nowMs);
+
+	const dispatchOnce = (
+		player: TPlayer,
+		actionId: string,
+		input: unknown,
+		progress: { ran: boolean } | undefined,
+	): Promise<ActionDispatchResult> => {
+		return new Promise<ActionDispatchResult>((resolve) => {
+			const definition = actionsById.get(actionId);
+			if (definition === undefined) {
+				resolve({
+					ok: false,
+					error: `Aruna action not found: ${actionId}`,
+					errorName: "ActionNotFoundError",
+				});
+				return;
+			}
+
+			// Fill `.default(...)` values before validation and user code, so an
+			// omitted defaulted field arrives populated.
+			if (definition.input !== undefined) {
+				input = applyDefaults(definition.input, input);
+			}
+
+			// Reject non-wire-safe input before validation or user code runs.
+			if (!isWireSafe(input)) {
+				resolve({
+					ok: false,
+					error: "non-serializable action input",
+					errorName: "ActionSerializationError",
+				});
+				return;
+			}
+
+			const inputSchema = definition.input;
+			if (inputSchema !== undefined && !inputSchema.validate(input)) {
+				// The boolean validate stays the cheap gate; the metadata walk runs
+				// only on failure to attach the first failing path + reason.
+				const failure = validationFailure(actionId, "input", inputSchema, input);
+				resolve({ ok: false, error: failure.message, errorName: failure.name });
+				return;
+			}
+
+			// A per-action `rateLimit` always wins; otherwise fall back to the
+			// registry-wide default. Only when neither is present is the action
+			// left unthrottled.
+			const rateLimit = definition.rateLimit ?? defaultRateLimit;
+			if (rateLimit !== undefined) {
+				const limitKey = resolveRateLimitKey(rateLimit, { actionId, player, input });
+				// The limiter works in seconds; the injected clock mirrors the Node
+				// reference runtime's `nowMs`, so the option means the same thing in
+				// both runtimes.
+				const limitResult = rateLimiter.check(
+					actionId,
+					limitKey,
+					rateLimit,
+					nowMs !== undefined ? nowMs() / 1000 : undefined,
+				);
+				if (!limitResult.ok) {
+					resolve({
+						ok: false,
+						error: `Aruna action ${actionId} is rate limited. Retry after ${limitResult.retryAfterMs}ms.`,
+						errorName: "ActionRateLimitError",
+						retryAfterMs: limitResult.retryAfterMs,
+						resetAtMs: limitResult.resetAtMs,
+					});
+					return;
+				}
+			}
+
+			const context: ActionContext<TPlayer> = { player };
+			if (publisher !== undefined) {
+				(context as { publisher?: SignalPublisher<SignalMap, unknown> }).publisher = publisher;
+			}
+			if (getSession !== undefined) {
+				const session = getSession(player);
+				if (session !== undefined) {
+					(context as { session?: unknown }).session = session;
+				}
+			}
+			if (getStore !== undefined) {
+				const document = getStore(player);
+				if (document !== undefined) {
+					(context as { store?: StoreDocument<unknown> }).store = document;
+				}
+			}
+
+			// Invoke the handler inside a pcall so a *synchronous* throw becomes
+			// a result payload rather than rejecting the dispatch promise. A
+			// rejection would leave the transport's `.then` success handler
+			// unfired and the client waiting forever for a response.
+			//
+			// Output is checked here, in the innermost step, exactly where the
+			// Node runtime checks it: middleware sees a failing output as a
+			// rejection, and it reaches `onError` like any other run failure.
+			//
+			// A failing output is a server bug, not something the client did:
+			// the errors raised here are public types (middleware and `onError`
+			// see the real failure), but this dispatch remembers them and masks
+			// them like any other internal error.
+			const outputFailures = new Set<unknown>();
+			const runAction = (): Promise<unknown> => {
+				const [invoked, runResult] = pcall(() => definition.run(context, input as never));
+				if (!invoked) {
+					return Promise.reject(runResult);
+				}
+				return Promise.resolve(runResult).then((output) => {
+					const outputSchema = definition.output;
+					if (outputSchema !== undefined && !outputSchema.validate(output)) {
+						const failure = validationFailure(actionId, "output", outputSchema, output);
+						outputFailures.add(failure);
+						throw failure;
+					}
+					if (!isWireSafe(output)) {
+						const failure = actionError("ActionSerializationError", "non-serializable action output");
+						outputFailures.add(failure);
+						throw failure;
+					}
+					return output;
+				});
+			};
+
+			// Compose middleware outermost-first around the run: middleware[0]
+			// is the outermost layer, `runAction` the innermost `next`. Each
+			// layer call is routed through a resolved promise so a synchronous
+			// throw inside a layer becomes a rejection, not an unhandled error.
+			let invoke = runAction;
+			if (middleware !== undefined) {
+				const info = { actionId, ctx: context, input };
+				for (let index = middleware.size() - 1; index >= 0; index -= 1) {
+					const layer = middleware[index];
+					if (layer === undefined) {
+						continue;
+					}
+					const nextInvoke = invoke;
+					invoke = () => Promise.resolve().then(() => layer(info, nextInvoke));
+				}
+			}
+
+			// Past every check that refuses a call without running it.
+			if (progress !== undefined) {
+				progress.ran = true;
+			}
+
+			invoke().then(
+				(output) => {
+					resolve({ ok: true, output });
+				},
+				(reason) => {
+					// Every non-public failure gets an id for `onError`; the client
+					// is sent it only when the failure is masked.
+					const isPublic = isPublicActionError(reason) && !outputFailures.has(reason);
+					const errorId = isPublic ? undefined : createErrorId();
+					if (onError !== undefined) {
+						onError(reason, errorId !== undefined ? { actionId, player, errorId } : { actionId, player });
+					}
+					resolve(rejectionResult(reason, isPublic, exposeInternalErrors, errorId));
+				},
+			);
+		});
+	};
 
 	return {
 		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
-		dispatch: (player, actionId, input) => {
-			return new Promise<ActionDispatchResult>((resolve) => {
-				const definition = actionsById.get(actionId);
-				if (definition === undefined) {
-					resolve({
-						ok: false,
-						error: `Aruna action not found: ${actionId}`,
-						errorName: "ActionNotFoundError",
-					});
-					return;
-				}
-
-				// Fill `.default(...)` values before validation and user code, so an
-				// omitted defaulted field arrives populated.
-				if (definition.input !== undefined) {
-					input = applyDefaults(definition.input, input);
-				}
-
-				// Reject non-wire-safe input before validation or user code runs.
-				if (!isWireSafe(input)) {
-					resolve({
-						ok: false,
-						error: "non-serializable action input",
-						errorName: "ActionSerializationError",
-					});
-					return;
-				}
-
-				const inputSchema = definition.input;
-				if (inputSchema !== undefined && !inputSchema.validate(input)) {
-					// The boolean validate stays the cheap gate; the metadata walk runs
-					// only on failure to attach the first failing path + reason.
-					const failure = validationFailure(actionId, "input", inputSchema, input);
-					resolve({ ok: false, error: failure.message, errorName: failure.name });
-					return;
-				}
-
-				// A per-action `rateLimit` always wins; otherwise fall back to the
-				// registry-wide default. Only when neither is present is the action
-				// left unthrottled.
-				const rateLimit = definition.rateLimit ?? defaultRateLimit;
-				if (rateLimit !== undefined) {
-					const limitKey = resolveRateLimitKey(rateLimit, { actionId, player, input });
-					// The limiter works in seconds; the injected clock mirrors the Node
-					// reference runtime's `nowMs`, so the option means the same thing in
-					// both runtimes.
-					const limitResult = rateLimiter.check(
-						actionId,
-						limitKey,
-						rateLimit,
-						nowMs !== undefined ? nowMs() / 1000 : undefined,
-					);
-					if (!limitResult.ok) {
-						resolve({
-							ok: false,
-							error: `Aruna action ${actionId} is rate limited. Retry after ${limitResult.retryAfterMs}ms.`,
-							errorName: "ActionRateLimitError",
-							retryAfterMs: limitResult.retryAfterMs,
-							resetAtMs: limitResult.resetAtMs,
-						});
-						return;
-					}
-				}
-
-				const context: ActionContext<TPlayer> = { player };
-				if (publisher !== undefined) {
-					(context as { publisher?: SignalPublisher<SignalMap, unknown> }).publisher = publisher;
-				}
-				if (getSession !== undefined) {
-					const session = getSession(player);
-					if (session !== undefined) {
-						(context as { session?: unknown }).session = session;
-					}
-				}
-				if (getStore !== undefined) {
-					const document = getStore(player);
-					if (document !== undefined) {
-						(context as { store?: StoreDocument<unknown> }).store = document;
-					}
-				}
-
-				// Invoke the handler inside a pcall so a *synchronous* throw becomes
-				// a result payload rather than rejecting the dispatch promise. A
-				// rejection would leave the transport's `.then` success handler
-				// unfired and the client waiting forever for a response.
-				//
-				// Output is checked here, in the innermost step, exactly where the
-				// Node runtime checks it: middleware sees a failing output as a
-				// rejection, and it reaches `onError` like any other run failure.
-				//
-				// A failing output is a server bug, not something the client did:
-				// the errors raised here are public types (middleware and `onError`
-				// see the real failure), but this dispatch remembers them and masks
-				// them like any other internal error.
-				const outputFailures = new Set<unknown>();
-				const runAction = (): Promise<unknown> => {
-					const [invoked, runResult] = pcall(() => definition.run(context, input as never));
-					if (!invoked) {
-						return Promise.reject(runResult);
-					}
-					return Promise.resolve(runResult).then((output) => {
-						const outputSchema = definition.output;
-						if (outputSchema !== undefined && !outputSchema.validate(output)) {
-							const failure = validationFailure(actionId, "output", outputSchema, output);
-							outputFailures.add(failure);
-							throw failure;
-						}
-						if (!isWireSafe(output)) {
-							const failure = actionError("ActionSerializationError", "non-serializable action output");
-							outputFailures.add(failure);
-							throw failure;
-						}
-						return output;
-					});
-				};
-
-				// Compose middleware outermost-first around the run: middleware[0]
-				// is the outermost layer, `runAction` the innermost `next`. Each
-				// layer call is routed through a resolved promise so a synchronous
-				// throw inside a layer becomes a rejection, not an unhandled error.
-				let invoke = runAction;
-				if (middleware !== undefined) {
-					const info = { actionId, ctx: context, input };
-					for (let index = middleware.size() - 1; index >= 0; index -= 1) {
-						const layer = middleware[index];
-						if (layer === undefined) {
-							continue;
-						}
-						const nextInvoke = invoke;
-						invoke = () => Promise.resolve().then(() => layer(info, nextInvoke));
-					}
-				}
-
-				invoke().then(
-					(output) => {
-						resolve({ ok: true, output });
-					},
-					(reason) => {
-						// Every non-public failure gets an id for `onError`; the client
-						// is sent it only when the failure is masked.
-						const isPublic = isPublicActionError(reason) && !outputFailures.has(reason);
-						const errorId = isPublic ? undefined : createErrorId();
-						if (onError !== undefined) {
-							onError(reason, errorId !== undefined ? { actionId, player, errorId } : { actionId, player });
-						}
-						resolve(rejectionResult(reason, isPublic, exposeInternalErrors, errorId));
-					},
+		dispatch: (player, actionId, input, idempotencyKey) => {
+			if (isIdempotencyKey(idempotencyKey)) {
+				return idempotency.run(player, actionId, idempotencyKey, (progress) =>
+					dispatchOnce(player, actionId, input, progress),
 				);
-			});
+			}
+			return dispatchOnce(player, actionId, input, undefined);
+		},
+		forgetPlayer: (player) => {
+			idempotency.forget(player);
 		},
 	};
 }

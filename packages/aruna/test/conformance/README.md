@@ -30,6 +30,10 @@ or a dispatch:
 { "dispatch": "actionId", "input": {}, "expect": { "ok": false, "errorName": "..." } }
 ```
 
+A dispatch step may add `"idempotencyKey": "..."`, which is sent the way a
+retrying client sends it (the request envelope's key in Node, the 4th argument
+of `registry.dispatch` natively).
+
 `expect` fields (each one optional):
 
 - `ok`: the response's `ok`

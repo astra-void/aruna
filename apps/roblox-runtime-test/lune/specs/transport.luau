@@ -2,6 +2,7 @@
 return function(ctx)
 	local t = ctx.t
 	local transport = ctx.load("roblox")
+	local fakes = ctx.fakes
 	local createActionRegistry = ctx.load("server-runtime").createActionRegistry
 
 	t.describe("RemoteEvent transport", function()
@@ -227,6 +228,102 @@ return function(ctx)
 			t.isFalse(ok, "rejected")
 			t.eq(value.name, "ActionValidationError")
 			t.eq(attempts.count, 1)
+		end)
+
+		t.it("does not retry a timeout unless the call is idempotent", function()
+			local attempts = { count = 0 }
+			local base = function(_actionId, _input, _options)
+				attempts.count += 1
+				return ctx.Promise.reject({ message = "late", name = "ActionTimeoutError" })
+			end
+
+			local wrapped = withRetry(base, { maxRetries = 3 }, immediateDelay)
+			local _, ok, value = t.await(wrapped("shop.buy", {}))
+			t.isFalse(ok, "rejected")
+			t.eq(value.name, "ActionTimeoutError")
+			t.eq(attempts.count, 1, "a non-idempotent call is not sent again")
+
+			attempts.count = 0
+			local _, idempotentOk = t.await(wrapped("quest.claim", {}, { idempotent = true }))
+			t.isFalse(idempotentOk, "still rejected once retries run out")
+			t.eq(attempts.count, 4, "an idempotent call is retried")
+		end)
+
+		t.it("lets a custom retryOn retry a timeout without idempotent", function()
+			local attempts = { count = 0 }
+			local base = function(_actionId, _input, _options)
+				attempts.count += 1
+				return ctx.Promise.reject({ message = "late", name = "ActionTimeoutError" })
+			end
+
+			local wrapped = withRetry(base, {
+				maxRetries = 1,
+				retryOn = function()
+					return true
+				end,
+			}, immediateDelay)
+			t.await(wrapped("shop.buy", {}))
+			t.eq(attempts.count, 2)
+		end)
+
+		t.it("sends one idempotency key with every attempt of a call", function()
+			local keys = {}
+			local attempts = { count = 0 }
+			local base = function(_actionId, _input, options)
+				table.insert(keys, options.idempotencyKey)
+				attempts.count += 1
+				if attempts.count < 3 then
+					return ctx.Promise.reject({ message = "slow down", name = "ActionRateLimitError", retryAfterMs = 0 })
+				end
+				return ctx.Promise.resolve("ok")
+			end
+
+			local wrapped = withRetry(base, { maxRetries = 3 }, immediateDelay)
+			t.await(wrapped("shop.buy", {}))
+			t.await(wrapped("shop.buy", {}))
+			t.eq(#keys, 4)
+			t.eq(type(keys[1]), "string")
+			t.eq(keys[2], keys[1])
+			t.eq(keys[3], keys[1])
+			t.isTrue(keys[4] ~= keys[1], "a new call is a new key")
+		end)
+	end)
+
+	t.describe("RemoteEvent transport idempotency key", function()
+		local runs = { count = 0 }
+		local registry = createActionRegistry({
+			buy = {
+				id = "buy",
+				run = function(_self, _context, _input)
+					runs.count += 1
+					return { order = runs.count }
+				end,
+			},
+		})
+
+		t.it("carries the key as the 4th argument, so a retried call runs once", function()
+			local binding = transport.bindActions(registry)
+			local invoke = transport.createActionInvoker()
+			local _, ok1, first = t.await(invoke("buy", {}, { idempotencyKey = "k1" }))
+			local _, ok2, second = t.await(invoke("buy", {}, { idempotencyKey = "k1" }))
+			t.isTrue(ok1 and ok2, "both resolved")
+			t.eq(runs.count, 1)
+			t.eq(first.order, 1)
+			t.eq(second.order, 1)
+			binding.disconnect()
+		end)
+
+		t.it("ignores a key that is too long or not a string", function()
+			local binding = transport.bindActions(registry)
+			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local before = runs.count
+			local tooLong = string.rep("x", 65)
+			remote:FireServer("r1", "buy", nil, tooLong)
+			remote:FireServer("r2", "buy", nil, tooLong)
+			remote:FireServer("r3", "buy", nil, 42)
+			remote:FireServer("r4", "buy", nil, 42)
+			t.eq(runs.count, before + 4)
+			binding.disconnect()
 		end)
 	end)
 

@@ -182,7 +182,7 @@ return function(ctx)
 					lastErrorId = nil
 					lastErrorName = nil
 					local settled, ok, result =
-						t.await(registry.dispatch(player, step.dispatch, materialize(step.input)))
+						t.await(registry.dispatch(player, step.dispatch, materialize(step.input), step.idempotencyKey))
 					t.isTrue(settled, "dispatch settled")
 					t.isTrue(ok, "dispatch resolves rather than rejecting")
 					local response = if registry.isFireAndForget(step.dispatch) then nil else result

@@ -17,6 +17,26 @@ the game build like any other module.
 
 ### Added
 
+- **`idempotent: true` on `defineAction`, and server-side de-duplication of
+  retried calls.** Declaring an action idempotent says running it twice has the
+  same effect as running it once. The compiler reads it (a boolean literal,
+  `aruna::569 invalid-action-idempotent` otherwise) into the manifest, `aruna
+  inspect actions`, and the contract snapshot, and the generated client stub
+  passes `{ idempotent: true }`, which is what lets the default retry policy
+  retry a timeout. `aruna contract diff` treats dropping it as breaking.
+
+  Independently, every attempt of a retried call now carries one idempotency
+  key (the 4th argument of the action RemoteEvent; a field of the Node request
+  envelope), and the server runs a call once per key: a duplicate that arrives
+  while the first is still running attaches to it, and a later one gets the
+  remembered result. Keys are kept per player for 20 seconds, at most 64 per
+  player, and dropped on leave. A call refused before it ran (rate limited,
+  invalid input) is not remembered. `ActionInvokeOptions` gains `idempotent` and
+  `idempotencyKey`; `app.dispatch` and the test harness's `invoke` take
+  `{ idempotencyKey }` as a fourth argument, and the native `ActionRegistry`
+  gains `forgetPlayer`. A server app now always subscribes to player removal
+  (where it has a players source) so it can drop those keys.
+
 - **`aruna/testing` — the spec surface.** `createTestServerApp(options)` wraps a
   real `ServerApp`, owning the transport, the publisher, and the players source
   so a spec drives the shipping dispatch path — validation, rate limiting,
@@ -112,6 +132,16 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **Breaking: the default client retry no longer retries a timeout, unless the
+  action is idempotent.** `withRetry` (and `createClientApp({ retry })`) used to
+  retry `ActionTimeoutError` for every action. A timeout does not mean the server
+  did not run the action — a purchase may have committed and only the response
+  was late — and each attempt went out under a fresh request id, so the server
+  could not tell a retry from a new purchase: a non-idempotent action could run
+  twice. Rate-limit rejections are still retried (the server refused the call
+  without running it). A timeout is retried only for an action declared
+  `idempotent: true`, and a `retryOn` you supply keeps full control.
 
 - **`strict.unresolvedImports` now sets the severity of `aruna::105`.** It was
   parsed and ignored, so the warning stayed a warning whatever it said. `"error"`
