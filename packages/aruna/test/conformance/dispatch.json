@@ -54,6 +54,64 @@
       "trace": []
     },
     {
+      "name": "NaN and infinities into number() are rejected before the handler",
+      "actions": [{ "id": "amount", "behavior": "echoInput", "input": { "type": "number" } }],
+      "steps": [
+        {
+          "dispatch": "amount",
+          "input": { "$number": "NaN" },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        },
+        {
+          "dispatch": "amount",
+          "input": { "$number": "Infinity" },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        },
+        {
+          "dispatch": "amount",
+          "input": { "$number": "-Infinity" },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "NaN and infinities into f32() are rejected before the handler",
+      "actions": [
+        { "id": "amount", "behavior": "echoInput", "input": { "type": "number", "format": "f32" } }
+      ],
+      "steps": [
+        {
+          "dispatch": "amount",
+          "input": { "$number": "NaN" },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        },
+        {
+          "dispatch": "amount",
+          "input": { "$number": "Infinity" },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        },
+        {
+          "dispatch": "amount",
+          "input": { "$number": "-Infinity" },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "a nested NaN into an action with no input schema is not wire-safe",
+      "actions": [{ "id": "echo", "behavior": "echoInput" }],
+      "steps": [
+        {
+          "dispatch": "echo",
+          "input": { "stats": { "hp": { "$number": "NaN" } } },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": []
+    },
+    {
       "name": "invalid input is rejected before the handler and not reported",
       "actions": [
         {

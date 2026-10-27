@@ -20,6 +20,7 @@ import {
 type SchemaDescriptor = {
   readonly type: "string" | "number" | "boolean" | "object";
   readonly fields?: Readonly<Record<string, SchemaDescriptor>>;
+  readonly format?: "f32";
   readonly default?: unknown;
 };
 
@@ -75,7 +76,7 @@ function toSchema(descriptor: SchemaDescriptor): Schema {
       case "string":
         return schema.string();
       case "number":
-        return schema.number();
+        return descriptor.format === "f32" ? schema.f32() : schema.number();
       case "boolean":
         return schema.boolean();
       case "object":
@@ -92,7 +93,14 @@ function toSchema(descriptor: SchemaDescriptor): Schema {
   return (base as unknown as { default(value: unknown): Schema }).default(descriptor.default);
 }
 
-// `{ "$function": true }` stands in for a function, which JSON cannot carry.
+const NON_FINITE_NUMBERS: Readonly<Record<string, number>> = {
+  NaN: Number.NaN,
+  Infinity: Number.POSITIVE_INFINITY,
+  "-Infinity": Number.NEGATIVE_INFINITY,
+};
+
+// `{ "$function": true }` stands in for a function, and `{ "$number": "NaN" }`
+// (or "Infinity" / "-Infinity") for a non-finite number: JSON can carry neither.
 function materialize(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(materialize);
@@ -100,6 +108,14 @@ function materialize(value: unknown): unknown {
   if (typeof value === "object" && value !== null) {
     if ((value as { $function?: unknown }).$function === true) {
       return () => undefined;
+    }
+    const numberName = (value as { $number?: unknown }).$number;
+    if (typeof numberName === "string") {
+      const nonFinite = NON_FINITE_NUMBERS[numberName];
+      if (nonFinite === undefined) {
+        throw new Error(`unknown $number sentinel: ${numberName}`);
+      }
+      return nonFinite;
     }
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [key, materialize(entry)]),

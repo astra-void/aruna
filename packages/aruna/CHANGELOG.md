@@ -222,6 +222,26 @@ the game build like any other module.
   with a dot in its name was affected, not just specs — and the boundary check
   then ran against whichever module the specifier had silently landed on.
 
+### Security
+
+- **The native runtime now rejects NaN and infinities.** The Node runtime
+  rejected them through `Number.isFinite`, and the README said plain-data-v1
+  did, but the native runtime — the one that runs in the game — only checked
+  `typeIs(value, "number")`. `schema.number()` and `schema.f32()` accepted
+  `0/0`, `math.huge` and `-math.huge`, the wire-safety check let every number
+  through, and `schema.vector3()` and the other Roblox value types accepted a
+  value with a NaN component. That is exploitable: every comparison with NaN is
+  false, so a guard like `if (input.amount > balance) throw ...` lets a NaN
+  through, and the NaN then poisons whatever it is added to — a store
+  document included. Now a non-finite number fails every number format and the
+  wire-safety check, top-level or nested, and so does a Vector3, Vector2,
+  Color3, CFrame (all 12 components), UDim, or UDim2 with a non-finite
+  component. An action without an input schema rejects one as
+  `ActionSerializationError`, the same as with one, since the wire check runs
+  first. The native schema messages now match Node's: `expected finite number`,
+  `expected Vector3 { x, y, z }`, and so on. A spec that matched the old
+  `expected number` has to change.
+
 ## [0.6.0] - 2026-08-16
 
 The domain-layout release. A domain was one file per concern — every action in

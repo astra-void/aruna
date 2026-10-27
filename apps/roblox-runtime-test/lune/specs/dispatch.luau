@@ -159,7 +159,7 @@ return function(ctx)
 			t.contains(value.error, "Aruna action typed input validation failed")
 			t.eq(value.errorName, "ActionValidationError")
 			-- The failure carries the first failing path + reason.
-			t.contains(value.error, "n: expected number")
+			t.contains(value.error, "n: expected finite number")
 		end)
 
 		t.it("enforces the rate limit", function()

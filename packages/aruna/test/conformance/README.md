@@ -61,11 +61,17 @@ Optional: `input` and `output` schema descriptors, `rateLimit`
 (`{ windowMs, max }`), `fireAndForget`.
 
 A schema descriptor is `{ "type": "string" | "number" | "boolean" }` or
-`{ "type": "object", "fields": { name: descriptor } }`. Any of them can add
+`{ "type": "object", "fields": { name: descriptor } }`. A number descriptor can
+add `"format": "f32"` for `schema.f32()`. Any of them can add
 `"default": value`.
 
-JSON has no functions, so an input value of `{ "$function": true }` becomes a
-function before dispatch. That is how a case sends input that can't cross the
-wire.
+JSON has no functions and no non-finite numbers, so two sentinels stand in for
+them anywhere in an input value, and each runner swaps them before dispatch:
+
+- `{ "$function": true }` becomes a function
+- `{ "$number": "NaN" | "Infinity" | "-Infinity" }` becomes that number (`0/0`,
+  `math.huge`, `-math.huge` in Luau)
+
+That is how a case sends input that can't cross the wire.
 
 A case that needs more than this belongs in a runtime's own tests.

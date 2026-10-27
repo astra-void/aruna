@@ -21,7 +21,7 @@ return function(ctx)
 		if descriptor.type == "string" then
 			base = schema.string()
 		elseif descriptor.type == "number" then
-			base = schema.number()
+			base = if descriptor.format == "f32" then schema.f32() else schema.number()
 		elseif descriptor.type == "boolean" then
 			base = schema.boolean()
 		elseif descriptor.type == "object" then
@@ -39,13 +39,28 @@ return function(ctx)
 		return base
 	end
 
-	-- `{ "$function": true }` stands in for a function, which JSON cannot carry.
+	local nonFiniteNumbers = {
+		NaN = 0 / 0,
+		Infinity = math.huge,
+		["-Infinity"] = -math.huge,
+	}
+
+	-- `{ "$function": true }` stands in for a function, and `{ "$number": "NaN" }`
+	-- (or "Infinity" / "-Infinity") for a non-finite number: JSON can carry neither.
 	local function materialize(value)
 		if type(value) ~= "table" then
 			return value
 		end
 		if value["$function"] == true then
 			return function() end
+		end
+		local numberName = value["$number"]
+		if type(numberName) == "string" then
+			local nonFinite = nonFiniteNumbers[numberName]
+			if nonFinite == nil then
+				error(`unknown $number sentinel: {numberName}`)
+			end
+			return nonFinite
 		end
 		local copy = {}
 		for key, entry in value do

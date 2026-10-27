@@ -138,7 +138,44 @@ return function(ctx)
 			local event = schema.discriminatedUnion("type", {
 				schema.object({ type = schema.literal("move"), dx = schema.number() }),
 			})
-			t.eq(firstSchemaIssue(event, { type = "move", dx = "nope" }), "dx: expected number")
+			t.eq(firstSchemaIssue(event, { type = "move", dx = "nope" }), "dx: expected finite number")
+		end)
+
+		t.it("rejects NaN and infinities for every number format", function()
+			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			for _, build in { schema.number, schema.f32, schema.i32, schema.u32 } do
+				local s = build()
+				t.isTrue(s.validate(1))
+				t.isFalse(s.validate(0 / 0), "NaN")
+				t.isFalse(s.validate(math.huge), "inf")
+				t.isFalse(s.validate(-math.huge), "-inf")
+			end
+			t.eq(firstSchemaIssue(schema.number(), 0 / 0), "expected finite number")
+			t.eq(firstSchemaIssue(schema.f32(), math.huge), "expected finite number")
+			t.eq(firstSchemaIssue(schema.object({ amount = schema.number() }), { amount = -math.huge }), "amount: expected finite number")
+		end)
+
+		t.it("rejects Roblox value types with a non-finite component", function()
+			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local nan = 0 / 0
+			local cases = {
+				{ schema.vector3(), roblox.Vector3.new(1, 2, 3), roblox.Vector3.new(1, nan, 3), "expected Vector3 { x, y, z }" },
+				{ schema.vector3(), roblox.Vector3.new(1, 2, 3), roblox.Vector3.new(math.huge, 2, 3), "expected Vector3 { x, y, z }" },
+				{ schema.vector2(), roblox.Vector2.new(1, 2), roblox.Vector2.new(1, -math.huge), "expected Vector2 { x, y }" },
+				{ schema.color3(), roblox.Color3.new(0, 0.5, 1), roblox.Color3.new(0, nan, 1), "expected Color3 { r, g, b }" },
+				{ schema.cframe(), roblox.CFrame.new(1, 2, 3), roblox.CFrame.new(1, nan, 3), "expected CFrame { components: number[12] }" },
+				-- A NaN in the rotation matrix, not the position.
+				{ schema.cframe(), roblox.CFrame.new(1, 2, 3), roblox.CFrame.new(0, 0, 0, 1, 0, 0, 0, nan, 0, 0, 0, 1), "expected CFrame { components: number[12] }" },
+				-- UDim offsets are int32 in the engine, so only the scale can be NaN.
+				{ schema.udim(), roblox.UDim.new(0.5, 4), roblox.UDim.new(nan, 4), "expected UDim { scale, offset }" },
+				{ schema.udim2(), roblox.UDim2.new(0.5, 4, 1, 0), roblox.UDim2.new(0.5, 4, math.huge, 0), "expected UDim2 { x: UDim, y: UDim }" },
+			}
+			for _, case in cases do
+				local s, good, bad, message = case[1], case[2], case[3], case[4]
+				t.isTrue(s.validate(good), `{message}: finite value`)
+				t.isFalse(s.validate(bad), `{message}: non-finite value`)
+				t.eq(firstSchemaIssue(s, bad), message)
+			end
 		end)
 
 		t.it("validates BrickColor and Instance userdata", function()

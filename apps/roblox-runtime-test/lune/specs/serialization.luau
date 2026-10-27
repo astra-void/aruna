@@ -1,4 +1,6 @@
 --!nocheck
+local roblox = require("@lune/roblox")
+
 return function(ctx)
 	local t = ctx.t
 	local isWireSafe = ctx.load("serialization").isWireSafe
@@ -14,6 +16,37 @@ return function(ctx)
 		t.it("accepts nested plain tables and arrays", function()
 			t.isTrue(isWireSafe({ a = 1, b = { c = "x", d = { 1, 2, 3 } } }))
 			t.isTrue(isWireSafe({ 1, 2, { 3, 4 } }))
+		end)
+
+		t.it("rejects NaN and infinities, top-level and nested", function()
+			t.isFalse(isWireSafe(0 / 0))
+			t.isFalse(isWireSafe(math.huge))
+			t.isFalse(isWireSafe(-math.huge))
+			t.isFalse(isWireSafe({ amount = 0 / 0 }))
+			t.isFalse(isWireSafe({ 1, { 2, math.huge } }))
+		end)
+
+		t.it("accepts Roblox value types with finite components", function()
+			t.isTrue(isWireSafe(roblox.Vector3.new(1, 2, 3)))
+			t.isTrue(isWireSafe(roblox.Vector2.new(1, 2)))
+			t.isTrue(isWireSafe(roblox.Color3.new(0, 0.5, 1)))
+			t.isTrue(isWireSafe(roblox.CFrame.new(1, 2, 3)))
+			t.isTrue(isWireSafe(roblox.UDim.new(0.5, 4)))
+			t.isTrue(isWireSafe(roblox.UDim2.new(0.5, 4, 1, 0)))
+		end)
+
+		t.it("rejects Roblox value types with a non-finite component", function()
+			local nan = 0 / 0
+			t.isFalse(isWireSafe(roblox.Vector3.new(nan, 0, 0)))
+			t.isFalse(isWireSafe(roblox.Vector3.new(0, 0, -math.huge)))
+			t.isFalse(isWireSafe(roblox.Vector2.new(0, nan)))
+			t.isFalse(isWireSafe(roblox.Color3.new(nan, 0, 0)))
+			t.isFalse(isWireSafe(roblox.CFrame.new(0, math.huge, 0)))
+			t.isFalse(isWireSafe(roblox.CFrame.new(0, 0, 0, nan, 0, 0, 0, 1, 0, 0, 0, 1)))
+			t.isFalse(isWireSafe(roblox.UDim.new(nan, 0)))
+			t.isFalse(isWireSafe(roblox.UDim2.new(0, 0, nan, 0)))
+			-- Nested inside a plain table, too.
+			t.isFalse(isWireSafe({ position = roblox.Vector3.new(nan, 0, 0) }))
 		end)
 
 		t.it("rejects functions and threads", function()

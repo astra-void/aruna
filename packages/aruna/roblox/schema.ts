@@ -8,6 +8,8 @@
 // roblox-ts reserves identifiers that collide with Lua globals (e.g. `string`).
 // The public API stays `schema.string()` etc. via the exported `schema` object.
 
+import { hasFiniteComponents, isFiniteNumber } from "./serialization";
+
 export type SchemaTypeName =
 	| "string"
 	| "number"
@@ -145,7 +147,7 @@ function numberSchemaWithFormat(
 		format,
 		refinements,
 		validate: (value) => {
-			if (!typeIs(value, "number")) {
+			if (!typeIs(value, "number") || !isFiniteNumber(value)) {
 				return false;
 			}
 			if (range !== undefined) {
@@ -498,48 +500,49 @@ function discriminatedUnionSchema<const TMembers extends readonly Schema[]>(
 	};
 }
 
-// Roblox userdata schemas. Validation defers to the native runtime type; the
-// RemoteEvent transport serializes these directly, and the binary codec packs
-// them as f32 components (see ./binary.ts).
+// Roblox userdata schemas. Validation checks the native runtime type and that
+// every numeric component is finite (a NaN component slips past comparisons the
+// same way a bare NaN does); the RemoteEvent transport serializes these
+// directly, and the binary codec packs them as f32 components (see ./binary.ts).
 function vector3Schema(): Schema<Vector3> {
 	return {
 		typeName: "vector3",
-		validate: (value) => typeIs(value, "Vector3"),
+		validate: (value) => typeIs(value, "Vector3") && hasFiniteComponents(value),
 	};
 }
 
 function vector2Schema(): Schema<Vector2> {
 	return {
 		typeName: "vector2",
-		validate: (value) => typeIs(value, "Vector2"),
+		validate: (value) => typeIs(value, "Vector2") && hasFiniteComponents(value),
 	};
 }
 
 function color3Schema(): Schema<Color3> {
 	return {
 		typeName: "color3",
-		validate: (value) => typeIs(value, "Color3"),
+		validate: (value) => typeIs(value, "Color3") && hasFiniteComponents(value),
 	};
 }
 
 function cframeSchema(): Schema<CFrame> {
 	return {
 		typeName: "cframe",
-		validate: (value) => typeIs(value, "CFrame"),
+		validate: (value) => typeIs(value, "CFrame") && hasFiniteComponents(value),
 	};
 }
 
 function udimSchema(): Schema<UDim> {
 	return {
 		typeName: "udim",
-		validate: (value) => typeIs(value, "UDim"),
+		validate: (value) => typeIs(value, "UDim") && hasFiniteComponents(value),
 	};
 }
 
 function udim2Schema(): Schema<UDim2> {
 	return {
 		typeName: "udim2",
-		validate: (value) => typeIs(value, "UDim2"),
+		validate: (value) => typeIs(value, "UDim2") && hasFiniteComponents(value),
 	};
 }
 
@@ -676,8 +679,8 @@ export function firstSchemaIssue(schema: Schema, value: unknown, path?: string):
 		}
 		return firstRefinementIssue(schema.refinements, value, at);
 	} else if (typeName === "number") {
-		if (!typeIs(value, "number")) {
-			return withPath(at, "expected number");
+		if (!typeIs(value, "number") || !isFiniteNumber(value)) {
+			return withPath(at, "expected finite number");
 		}
 		const format = schema.format;
 		const range = format !== undefined ? NUMBER_FORMAT_RANGES.get(format) : undefined;
@@ -818,17 +821,29 @@ export function firstSchemaIssue(schema: Schema, value: unknown, path?: string):
 		}
 		return undefined;
 	} else if (typeName === "vector3") {
-		return typeIs(value, "Vector3") ? undefined : withPath(at, "expected Vector3");
+		return typeIs(value, "Vector3") && hasFiniteComponents(value)
+			? undefined
+			: withPath(at, "expected Vector3 { x, y, z }");
 	} else if (typeName === "vector2") {
-		return typeIs(value, "Vector2") ? undefined : withPath(at, "expected Vector2");
+		return typeIs(value, "Vector2") && hasFiniteComponents(value)
+			? undefined
+			: withPath(at, "expected Vector2 { x, y }");
 	} else if (typeName === "color3") {
-		return typeIs(value, "Color3") ? undefined : withPath(at, "expected Color3");
+		return typeIs(value, "Color3") && hasFiniteComponents(value)
+			? undefined
+			: withPath(at, "expected Color3 { r, g, b }");
 	} else if (typeName === "cframe") {
-		return typeIs(value, "CFrame") ? undefined : withPath(at, "expected CFrame");
+		return typeIs(value, "CFrame") && hasFiniteComponents(value)
+			? undefined
+			: withPath(at, "expected CFrame { components: number[12] }");
 	} else if (typeName === "udim") {
-		return typeIs(value, "UDim") ? undefined : withPath(at, "expected UDim");
+		return typeIs(value, "UDim") && hasFiniteComponents(value)
+			? undefined
+			: withPath(at, "expected UDim { scale, offset }");
 	} else if (typeName === "udim2") {
-		return typeIs(value, "UDim2") ? undefined : withPath(at, "expected UDim2");
+		return typeIs(value, "UDim2") && hasFiniteComponents(value)
+			? undefined
+			: withPath(at, "expected UDim2 { x: UDim, y: UDim }");
 	} else if (typeName === "dateTime") {
 		return typeIs(value, "DateTime") ? undefined : withPath(at, "expected DateTime");
 	} else if (typeName === "brickColor") {
