@@ -138,7 +138,7 @@ pub const UNRELIABLE_PAYLOAD_LIMIT_BYTES: u64 = 900;
 
 // The largest payload `encodeBinary` can produce for a schema, frame header
 // excluded, or None when nothing bounds it. Follows the codec's layout
-// (src/runtime/binary.ts): a string needs `.maxLength` or `.maxChars`, an
+// (packages/aruna/roblox/binary.ts): a string needs `.maxLength` or `.maxChars`, an
 // array `.maxItems`;
 // a record has no size bound at all; optionals and unions take their largest
 // branch.

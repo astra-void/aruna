@@ -1,7 +1,6 @@
 // Aruna roblox-ts native runtime — the test framework specs are written against.
 //
-// The behavioural mirror of src/testing/framework.ts. It exists separately
-// because a project's specs are roblox-ts source: they compile to Luau with the
+// It ships with the runtime because a project's specs are roblox-ts source: they compile to Luau with the
 // rest of the project and run under Lune, where no host test runner exists. So
 // collection, hooks, sequencing, and the matchers all ship here.
 //
@@ -147,8 +146,7 @@ const hooksFor = (testCase: TestCase): { before: Array<TestHook>; after: Array<T
 	return { before, after };
 };
 
-// Both runtimes reject with different shapes — this one with a plain table or a
-// string, the Node reference runtime with an Error — so every message read goes
+// A rejection may be a plain table or a string, so every message read goes
 // through here rather than assuming a field.
 export function describeThrown(value: unknown): string {
 	if (typeIs(value, "string")) {

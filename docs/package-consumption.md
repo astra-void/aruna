@@ -11,7 +11,7 @@ Both compile a consumer to Luau end-to-end, including the Roblox-facing runtime.
 
 Roblox-facing code is consumed through a **vendored runtime**, not through direct `node_modules` package imports of Roblox modules:
 
-- The roblox-ts-native runtime lives at `packages/aruna/roblox/` and is separate from the Node reference runtime under `packages/aruna/src` (which vitest validates). It is intentionally thin: schema (`string`/`number`/`boolean`/`object`/`array`/`optional`/`literal`/`enum`/`union`), `defineAction`, client `invokeAction`, server dispatch, a default `RemoteEvent` action transport, and `plain-data-v1` serialization plus fixed-window rate-limit enforcement in dispatch.
+- The roblox-ts-native runtime lives at `packages/aruna/roblox/` and is the only runtime; the `aruna/*` subpaths are type-only and resolve to its declarations (`dist/native/`). It is intentionally thin: schema (`string`/`number`/`boolean`/`object`/`array`/`optional`/`literal`/`enum`/`union`), `defineAction`, client `invokeAction`, server dispatch, a default `RemoteEvent` action transport, and `plain-data-v1` serialization plus fixed-window rate-limit enforcement in dispatch.
 - The native runtime ships in the published package via `files`.
 - `aruna build --emit-runtime` vendors that runtime into the consumer as project source under `<generatedDir>/runtime/` (e.g. `src/.aruna/runtime/`).
 - `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig `paths` aliases that pair with `build --emit-runtime`.

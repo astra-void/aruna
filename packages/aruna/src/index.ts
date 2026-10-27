@@ -1,6 +1,7 @@
-// The package root is the config + compiler surface. Runtime APIs live under the
-// dedicated subpaths: `aruna/server`, `aruna/client`, `aruna/roblox`, and
-// `aruna/schema`.
+// The package root is the config + compiler surface, and the only entry that
+// runs under Node. The runtime lives under the type-only subpaths
+// `aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema`, and
+// `aruna/testing`, which a game compiles from its vendored copy.
 export {
   defineConfig,
   type CompilerInput,
@@ -25,6 +26,3 @@ export {
 } from "@arunajs/core";
 
 export { buildProject, checkProject, inspectProject } from "@arunajs/compiler";
-
-// The schema-driven binary codec is wire-level and shared by both runtimes.
-export { decodeBinary, encodeBinary, schemaFingerprint } from "./runtime/binary.js";

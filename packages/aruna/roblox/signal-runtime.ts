@@ -82,7 +82,7 @@ export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
 	// replay of a stored broadcast log) where firing hundreds/thousands of
 	// messages synchronously would spike outbound bandwidth for that frame.
 	// Resolves after the last chunk is sent (rejects if a payload fails
-	// validation), matching the Node reference runtime's signature.
+	// validation).
 	readonly toBatched: <TId extends SignalId<TSignals>>(
 		player: TPlayer,
 		signalId: TId,
@@ -176,8 +176,8 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 	const remoteFor = (signal: SignalDefinition<Schema | undefined>): SignalServerLike<TPlayer> =>
 		signal.unreliable === true && unreliableRemote !== undefined ? unreliableRemote : remote;
 
-	// Implemented against loose signatures and re-typed on the way out, mirroring
-	// the Node reference runtime: inferring the heavy generic publisher surface
+	// Implemented against loose signatures and re-typed on the way out:
+	// inferring the heavy generic publisher surface
 	// inside the implementation trips the TS excessive-depth checker.
 	const publisher = {
 		to: (player: TPlayer, signalId: string, payload: unknown) => {

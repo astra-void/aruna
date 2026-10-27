@@ -97,10 +97,10 @@ const serverApp = createServerApp<Player>({
 
 ```ts
 {
-  actions: ActionRegistry;
+  actions: ActionMap;
   transport?: ServerTransport;                      // owns the remote binding (recommended)
   defaultRateLimit?: { key: "player" | "global"; windowMs: number; max: number };
-  signals?: SignalRegistry;                         // + createPublisher: app-owned publisher
+  signals?: SignalMap;                              // + createPublisher: app-owned publisher
   middleware?: ActionMiddleware[];
   onError?: (err, info) => void;                    // see below
   exposeInternalErrors?: boolean;                   // default false; see "Errors the client sees"
@@ -245,8 +245,7 @@ createServerApp({
 
 `createServerApp({ exposeInternalErrors: true })` sends a masked error's own name and
 message instead, which is useful while developing. `createTestServerApp` turns it on by
-default so a spec sees the real failure. `app.dispatch` follows the same rule. In the
-Node runtime the masked error is an `ActionInternalError` with the original as `cause`.
+default so a spec sees the real failure. `app.dispatch` follows the same rule.
 
 ## Middleware & error observability
 

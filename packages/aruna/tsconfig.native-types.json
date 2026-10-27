@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.roblox.json",
+  "compilerOptions": {
+    // The public subpaths' declarations, emitted from the native runtime the
+    // consumer actually compiles, so a project sees the same types with or
+    // without the doctor aliases.
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "rootDir": "roblox",
+    "outDir": "dist/native"
+  },
+  "include": ["roblox/**/*.ts"],
+  "exclude": ["dist", "node_modules", "src", "test"]
+}

@@ -19,13 +19,12 @@ export interface ServerAppBinding {
 
 // A server transport binds the dispatch-ready registry to a concrete remote and
 // returns a disposable binding. Pass one to `createServerApp({ transport })` so
-// the app owns the wiring. Mirrors the Node reference runtime's ServerTransport.
+// the app owns the wiring.
 export type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>) => ServerAppBinding;
 
 // Builds a server-side signal publisher from a signal registry, ensuring the
 // signal remote exists at call time. `createSignalPublisher` from `aruna/roblox`
-// is the canonical implementation. Mirrors the Node reference runtime's
-// ServerSignalPublisherFactory.
+// is the canonical implementation.
 export type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = (
 	signals: TSignals,
 ) => SignalPublisher<TSignals, TPlayer>;
@@ -40,8 +39,7 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// In-process dispatch through the same validated, rate-limited,
 	// middleware-wrapped path the wire uses — no RemoteEvent required. Resolves
 	// with the action's output and rejects with the error string on failure.
-	// Mirrors the Node reference runtime's `app.dispatch(actionId, ctx, input)`;
-	// this is the supported way to exercise actions from tests (e.g. under Lune).
+	// This is the supported way to exercise actions from tests (e.g. under Lune).
 	// `options.idempotencyKey` de-duplicates the call the way a retried wire call
 	// is: the same key for the same player and action runs it once.
 	readonly dispatch: (
@@ -69,7 +67,6 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 // in-memory one so a spec can join a fake player without a running game.
 // `PlayerAdded` and `GetPlayers` are optional: without `PlayerAdded` the app
 // never fires `onPlayerAdded`, and without `GetPlayers` it skips boot backfill.
-// Mirrors the Node reference runtime's PlayersSource.
 export interface PlayersSource<TPlayer> {
 	readonly PlayerAdded?: {
 		readonly Connect: (callback: (player: TPlayer) => void) => {
@@ -147,8 +144,7 @@ export interface CreateServerAppOptions<
 	readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
 	// The clock the rate limiter reads, in milliseconds. Left unset in a game;
 	// set by `createTestServerApp`, which freezes it so a spec steps past a
-	// window with `advance(ms)` rather than waiting one out. Mirrors the Node
-	// reference runtime's option of the same name.
+	// window with `advance(ms)` rather than waiting one out.
 	readonly nowMs?: () => number;
 	// Per-player limits in front of dispatch, for every envelope a client sends:
 	// a token bucket (`burst` envelopes, refilled at `perSecond`) charged before

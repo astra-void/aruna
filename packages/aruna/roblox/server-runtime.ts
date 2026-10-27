@@ -70,8 +70,7 @@ export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinit
 // Around-run middleware. Runs after input validation and rate limiting (so a
 // throttled or malformed request never reaches it) and wraps the action's `run`
 // plus output validation. Short-circuit by rejecting (or by not calling `next`);
-// observe/transform by awaiting `next()`. Mirrors the Node reference runtime's
-// ActionMiddleware.
+// observe/transform by awaiting `next()`.
 export type ActionMiddleware<TPlayer = unknown> = (
 	info: {
 		readonly actionId: string;
@@ -132,7 +131,7 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 }
 
-// A schema failure at the action boundary, in the Node runtime's message shape.
+// A schema failure at the action boundary.
 // The boolean `validate` stays the cheap gate; this metadata walk runs only on
 // failure, to name the first failing path and reason.
 function validationFailure(
@@ -250,9 +249,8 @@ export function createActionRegistry<TPlayer>(
 			const rateLimit = definition.rateLimit ?? defaultRateLimit;
 			if (rateLimit !== undefined) {
 				const limitKey = resolveRateLimitKey(rateLimit, { actionId, player, input });
-				// The limiter works in seconds; the injected clock mirrors the Node
-				// reference runtime's `nowMs`, so the option means the same thing in
-				// both runtimes.
+				// The limiter works in seconds; the injected clock (`nowMs`) is in
+				// milliseconds, like every other duration option.
 				const limitResult = rateLimiter.check(
 					actionId,
 					limitKey,
@@ -293,8 +291,8 @@ export function createActionRegistry<TPlayer>(
 			// rejection would leave the transport's `.then` success handler
 			// unfired and the client waiting forever for a response.
 			//
-			// Output is checked here, in the innermost step, exactly where the
-			// Node runtime checks it: middleware sees a failing output as a
+			// Output is checked here, in the innermost step: middleware sees a
+			// failing output as a
 			// rejection, and it reaches `onError` like any other run failure.
 			//
 			// A failing output is a server bug, not something the client did:

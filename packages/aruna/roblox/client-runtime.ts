@@ -54,10 +54,9 @@ export function createCancelToken(): CancelTokenSource {
 	return new CancelTokenSourceImpl();
 }
 
-// Error name carried by a cancelled-invoke rejection, on both runtimes. The
-// native runtime rejects a plain { message, name } object; the Node reference
-// runtime rejects an ActionCancelledError instance with the same name — so
-// detect cancellation by name via `isActionCancelledError`, never a type check.
+// Error name carried by a cancelled-invoke rejection. The rejection is a plain
+// { message, name } table, so detect cancellation by name via
+// `isActionCancelledError`, never a type check.
 export const ACTION_CANCELLED_ERROR_NAME = "ActionCancelledError";
 
 // Error names the default retry predicate treats as retryable. Rate-limit

@@ -46,8 +46,8 @@ schema.array(schema.string()).minItems(1).maxItems(8)
 schema.number().refine((value) => value % 2 === 0, "expected an even number")
 ```
 
-**String lengths are bytes.** `minLength`, `maxLength`, and `length` count UTF-8 bytes in
-both runtimes, which is what a string costs on the wire and in the binary codec: `"abc"`
+**String lengths are bytes.** `minLength`, `maxLength`, and `length` count UTF-8 bytes,
+which is what a string costs on the wire and in the binary codec: `"abc"`
 is 3, `"가나다"` is 9, `"😀"` is 4. They are the right tool for a size budget (an
 unreliable signal, a DataStore record). For a limit a person reads — a name, a chat line —
 use `minChars` / `maxChars`, which count code points: `"가나다"` is 3 and `"😀"` is 1.
@@ -137,7 +137,7 @@ type PurchaseInput = Infer<typeof purchaseInput>;
 // { itemId: string; quantity: number; currency: "coins"; coupon?: string | undefined }
 ```
 
-> `Infer` is the single schema-inference type name, identical across both runtimes.
+> `Infer` is the single schema-inference type name.
 
 There are matching helpers for definitions: `InferInput`/`InferOutput` (from
 `aruna/server`) on an action, and `InferSignalPayload` on a signal.

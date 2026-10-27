@@ -162,9 +162,10 @@ even when the test failed, so a harness a test created is still disposed.
 
 Matchers: `toBe`, `toEqual` (structural), `toBeDefined`, `toBeUndefined`, `toBeTruthy`,
 `toBeFalsy`, `toContain`, `toHaveLength`, `toThrow`, and `expect(promise).rejects.toThrow`.
-Every matcher negates through `.not`. Rejection messages are read through the same helper
-in both runtimes, so `rejects.toThrow("rate limited")` works whether the rejection is an
-`Error` or the native runtime's plain table.
+Every matcher negates through `.not`. `rejects.toThrow("rate limited")` reads the message of
+whatever the promise rejected with — a string, or the runtime's `{ name, message }` table.
+`toBeTruthy` / `toBeFalsy` follow Luau truthiness: only `undefined` and `false` are falsy, so
+`""` and `0` are truthy. Test names join suites with `" > "`.
 
 ## What the game build does with specs
 

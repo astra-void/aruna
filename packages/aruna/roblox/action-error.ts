@@ -6,7 +6,7 @@
 // `actionError`. Everything else is reported to the client as
 // `ActionInternalError` with an `errorId`, because a Luau runtime error carries
 // the server script's path and line (`ServerScriptService.domains.shop.actions:42:
-// attempt to index nil`). Mirrors the Node reference runtime.
+// attempt to index nil`).
 
 export const ACTION_INTERNAL_ERROR_NAME = "ActionInternalError";
 export const ACTION_INTERNAL_ERROR_MESSAGE = "internal error";

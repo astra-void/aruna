@@ -28,7 +28,7 @@ export interface SignalDefinition<
 export type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;
 
 // The identity helper captures the id as a literal type (`TId extends string`
-// forces literal inference, mirroring the Node runtime): `defineSignal({ id:
+// forces literal inference): `defineSignal({ id:
 // "spray.painted", ... }).id` stays "spray.painted", so call sites never retype
 // signal ids.
 export function defineSignal<

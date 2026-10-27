@@ -58,8 +58,9 @@ path aliases:
 | `$aruna/signals` | `shared/signals.generated.ts` | `signals` registry + payload aliases |
 
 The `aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema` specifiers are also
-path aliases (written by `build` / `doctor --fix`) pointing at the runtime — either the
-npm package or, after vendoring, the runtime copied into `shared/runtime/`. The server
+path aliases (written by `build` / `doctor --fix`) pointing at the runtime copied into
+`shared/runtime/`. Without the aliases they resolve to the package's declarations of the
+same runtime. The server
 registry is emitted under `server/` so it is server-classified; stubs, signals, and the
 runtime are `shared/`.
 
@@ -71,21 +72,23 @@ classification, and emits a service-separated `default.project.json`. This is wh
 goes to `ReplicatedStorage`. The default Rojo project file is the contract for that
 layout — if you hand-edit it, keep the service separation.
 
-## The dual runtime
+## The runtime
 
-There are two implementations of the runtime, and you should know which you are editing or
-reasoning about:
+There is one runtime: the roblox-ts native one in `roblox/`, which compiles to Luau and
+runs in-game. `aruna build --emit-runtime` (the default) vendors it into
+`shared/runtime/`, and the game compiles that copy. The package does not run it under
+Node: the `aruna/*` runtime subpaths are type-only, and their declarations
+(`dist/native/`) are emitted from the same source, so a project gets the same types with
+or without the doctor aliases. The root `aruna` entry — `defineConfig` and the compiler —
+is the only part that runs under Node.
 
-- **Node reference runtime** — plain TypeScript, used for unit tests and as the source of
-  truth for behavior.
-- **roblox-ts native runtime** — the version that compiles to Luau and runs in-game,
-  vendored into `shared/runtime/` by `aruna build --emit-runtime` (the default).
+Its behavior is tested by executing it: `apps/roblox-runtime-test` compiles it with
+`rbxtsc` and runs it under Lune, through hand-written Luau specs, the dispatch
+conformance table, and TypeScript specs run by the same runner `aruna test` ships.
 
-The two are kept behaviorally identical. The binary codec in particular is designed to be
-**byte-identical across both runtimes**: schema-driven `encodeBinary`/`decodeBinary`
-(exported from the package root) with numeric width hints (u8..f32) and userdata kinds
-(vector3/color3/cframe encoded as f32 components). Userdata that travels as plain records
-in Node is reconstructed as native `Vector3`/`Color3`/`CFrame` in Roblox.
+The binary codec — schema-driven `encodeBinary`/`decodeBinary`, exported from
+`aruna/schema` — packs into a Luau `buffer`, with numeric width hints (u8..f32) and
+userdata kinds (vector3/color3/cframe encoded as f32 components).
 
 ## Transport
 

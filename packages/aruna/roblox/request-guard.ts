@@ -5,8 +5,7 @@
 // itself unpriced: an exploiter could fire malformed payloads for free, each one
 // costing a wire-safety walk, defaults, and a schema validation. The guard
 // charges every envelope against a token bucket before any of that runs, and
-// caps how many of a player's dispatches can be running at once. Mirrors the
-// Node reference runtime's src/runtime/request-guard.ts.
+// caps how many of a player's dispatches can be running at once.
 
 export interface RequestBudgetOptions {
 	// Envelopes a player may send in a burst. Default 60.

@@ -12,7 +12,7 @@ import type { Schema } from "./schema";
 
 const MAX_DEPTH = 32;
 // Values a single walk may visit. Depth alone does not bound the work: a flat
-// array of a million numbers is one level deep. Mirrors the Node runtime.
+// array of a million numbers is one level deep.
 export const DEFAULT_MAX_WIRE_NODES = 2048;
 
 interface WalkState {
@@ -72,7 +72,7 @@ function childSchema(schema: Schema | undefined, key: unknown): Schema | undefin
 // NaN, math.huge and -math.huge are numbers to `typeIs`, and they pass any
 // comparison guard the wrong way: `amount > balance` is false for NaN, so a
 // NaN slips past it and poisons whatever it is added to. They never cross the
-// action boundary, matching the Node runtime's Number.isFinite.
+// action boundary.
 export function isFiniteNumber(value: number): boolean {
 	return value === value && value !== math.huge && value !== -math.huge;
 }

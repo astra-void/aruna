@@ -40,23 +40,18 @@ function buildFullPublicExports() {
     },
     "./client": {
       types: "./client.d.ts",
-      import: "./client.js",
     },
     "./roblox": {
       types: "./roblox.d.ts",
-      import: "./roblox.js",
     },
     "./schema": {
       types: "./schema.d.ts",
-      import: "./schema.js",
     },
     "./testing": {
       types: "./testing.d.ts",
-      import: "./testing.js",
     },
     "./server": {
       types: "./server.d.ts",
-      import: "./server.js",
     },
   };
 }
@@ -191,7 +186,7 @@ describe("verify-package-consumption args", () => {
     expect(tsconfig.exclude).toEqual(["dist", "node_modules", "out"]);
   });
 
-  it("requires the public package subpath shims that rbxtsc resolves", async () => {
+  it("requires the public package subpath shims and native declarations", async () => {
     const root = await makeTempRoot("aruna-package-subpaths-");
     await writeJsonFile(path.join(root, "package.json"), {
       exports: buildFullPublicExports(),

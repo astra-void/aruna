@@ -4,8 +4,7 @@
 // with every attempt. The server remembers, per player, what a key's dispatch
 // settled to: a duplicate that arrives while the first is still running attaches
 // to it, and one that arrives later gets the settled result. Either way the
-// action runs once. Mirrors the Node reference runtime's
-// src/runtime/idempotency.ts.
+// action runs once.
 
 // The longest key the server accepts. Anything else (wrong type, too long) is
 // ignored and the call is dispatched without de-duplication.

@@ -424,17 +424,16 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - `aruna build` writes deterministic `src/.aruna/shared/actions.client.generated.ts` and `src/.aruna/server/actions.server.generated.ts`
 - generated client stubs are typed from schema metadata where the metadata is supported
 - generated client stubs now connect to a minimal action runtime contract
-- `createServerApp(...).dispatch` is the in-process action path for non-Roblox tests (both runtimes; the old in-memory invoker is internal)
+- `createServerApp(...).dispatch` is the in-process action path for tests (the `aruna/testing` harness wraps it)
 - thin client/server app bootstrap helpers at `aruna/client` and `aruna/server` wire the runtime invoker and server action registry
 - the bootstrap helpers are functional, disposable, and intentionally do not scan modules or register services
-- a structural Roblox `RemoteEvent` request/response transport adapter exists for tests and future Studio integration
 - Roblox-facing default action remote helpers bind to the flat `ReplicatedStorage/ArunaActionRemoteEvent` (matching the native runtime; the RemoteFunction transport was removed — the RemoteEvent request/response transport is the transport)
-- `packages/aruna` is organized internally into `cli/`, `runtime/`, `actions/`, and `schema/` implementations
-- the public subpath exports remain stable through top-level compatibility shims
+- there is one runtime: the roblox-ts-native one at `packages/aruna/roblox/`, which games compile from their vendored copy; `packages/aruna/src` is the CLI and the root `aruna` entry
+- the runtime subpaths are type-only: each ships the native runtime's declarations, so a project sees the same types with or without the doctor aliases
 - `@rbxts/types` and `@rbxts/compiler-types` are used at typecheck time for Roblox-facing runtime types
 - runtime schema validation now runs on action input and output at dispatch time
 - runtime serialization policy now runs on action input and output at dispatch time using the default `plain-data-v1` boundary
-- action input/output rejects function, class-instance, cyclic, non-finite (NaN, ±inf, also inside Roblox value types), and other non-plain values, in both runtimes; an `Instance` (a `Player` included) is accepted only where the schema declares `schema.instance()`, so an action without an input schema rejects one
+- action input/output rejects function, class-instance, cyclic, non-finite (NaN, ±inf, also inside Roblox value types), and other non-plain values; an `Instance` (a `Player` included) is accepted only where the schema declares `schema.instance()`, so an action without an input schema rejects one
 - client input is checked for wire safety before anything else reads it, and the walk stops at 2048 values as well as at depth 32
 - basic fixed-window action rate limiting now runs per action and player/key before `run()`
 - invalid input and serialization failures do not consume per-action quota; every envelope is charged to a per-player request budget (60 burst, 30 per second) before it is read, and a player's dispatches in flight are capped (32), so malformed payloads are not free
@@ -639,11 +638,10 @@ Requires `entries: "generated"` — the generated server entry is what runs them
 
 ## Binary serialization
 
-`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed byte buffer, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint** (`schemaFingerprint(schema)`, identical across both runtimes): decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
+`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed Luau `buffer`, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint** (`schemaFingerprint(schema)`): decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
 
 ```ts
-import { encodeBinary, decodeBinary } from "aruna";
-import { schema } from "aruna/schema";
+import { decodeBinary, encodeBinary, schema } from "aruna/schema";
 
 const hit = schema.object({ amount: schema.number(), source: schema.string() });
 
@@ -651,13 +649,13 @@ const bytes = encodeBinary(hit, { amount: 12, source: "trap" });
 const value = decodeBinary(hit, bytes); // { amount: 12, source: "trap" }
 ```
 
-- The wire format is byte-identical across the Node reference runtime (`Uint8Array` + `DataView`) and the roblox-ts native runtime (Luau `buffer`), so a value encoded on one decodes on the other.
+- The codec runs in-game, from `aruna/schema`. (It used to be exported from the root `aruna` entry as a Node implementation over `Uint8Array`; that was removed with the Node runtime.)
 - Layout: frame = u32 schema fingerprint + payload; string = u32 length + UTF-8; number = the declared numeric width; boolean = u8; literal = 0 bytes; array = u32 count + items; object = fields in sorted key order; optional = u8 present flag + inner; enum = u32 index; union = u32 member index + member.
 - **Numeric width hints** pick a packed encoding per number. `schema.number()` is a full-width `f64`; `schema.f32()`, `schema.u8()`, `schema.u16()`, `schema.u32()`, `schema.i8()`, `schema.i16()`, and `schema.i32()` pack to their declared byte width and (for integer formats) validate the value is a whole number in range. A `{ hp: u16, team: u8 }` element costs 3 payload bytes instead of 16. Widths flow through the compiler into action/signal schema metadata (`numericFormat`) and the contract summary.
 
   ```ts
   const hit = schema.object({ amount: schema.u16(), crit: schema.boolean() });
-  encodeBinary(hit, { amount: 1200, crit: true }).length; // 7 bytes (4-byte frame header + 3 payload bytes)
+  buffer.len(encodeBinary(hit, { amount: 1200, crit: true })); // 7 bytes (4-byte frame header + 3 payload bytes)
   ```
 
 - Encoding assumes the value already matches the schema (the action and signal boundaries validate first); a mismatch throws rather than emitting a corrupt buffer.
@@ -668,7 +666,7 @@ const value = decodeBinary(hit, bytes); // { amount: 12, source: "trap" }
 Serialization boundary, fixed-window rate limits, the pre-dispatch request budget, the contract snapshot, contract diff (with the store compatibility gate), and package-consumption validation are all implemented. The binary signal wire puts the existing codec on the existing signal transport rather than adding a transport. The cutline stays on stabilization, not new transports or a policy/capability system:
 
 1. Stabilize current compiler, action, runtime, and package-consumption behavior. (Ongoing.)
-2. Done: runtime execution tests for the roblox-ts-native runtime. CI compiles it and runs it under Lune (`apps/roblox-runtime-test`), and one dispatch conformance table (`packages/aruna/test/conformance/`) runs against both runtimes.
+2. Done: runtime execution tests for the roblox-ts-native runtime. CI compiles it and runs it under Lune (`apps/roblox-runtime-test`): hand-written Luau specs, the dispatch conformance table (`apps/roblox-runtime-test/conformance/`), and TypeScript specs run through the same runner `aruna test` ships.
 3. Refine thin authority inspection without adding a full policy/capability system.
 4. Done: the starter contract. `create-aruna-app` scaffolds the starter (since 0.2.0); [docs/create-app-plan.md](docs/create-app-plan.md) is its plan.
 5. Design resources and invalidation after the starter contract is stable.
@@ -683,7 +681,7 @@ It is not `create-aruna-app` output.
 
 Package consumption uses a vendored-runtime model rather than direct `node_modules` imports of Roblox-facing code:
 
-- The roblox-ts-native runtime lives at `packages/aruna/roblox/` and ships in the package via `files` (it is separate from the Node reference runtime under `packages/aruna/src`).
+- The roblox-ts-native runtime lives at `packages/aruna/roblox/` and ships in the package via `files`; its declarations (`dist/native/`) are what the `aruna/*` subpaths resolve to.
 - `aruna build --emit-runtime` vendors that native runtime into the consumer as project source under `src/.aruna/shared/runtime/`.
 - `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig path aliases that pair with `build --emit-runtime`.
 - `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer — including the vendored runtime — to Luau without the "modules directly under node_modules" rejection.

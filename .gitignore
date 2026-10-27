@@ -18,9 +18,9 @@ coverage/
 target/
 tmp/
 
-# Aruna public-subpath shim build outputs (sources are packages/aruna/*.ts)
+# Stale outputs of the former compiled public-subpath shims. The shims are now
+# the hand-written packages/aruna/*.d.ts files, which are tracked.
 /packages/aruna/*.js
-/packages/aruna/*.d.ts
 
 # Tooling / cache
 .turbo/

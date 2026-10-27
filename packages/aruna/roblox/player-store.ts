@@ -16,8 +16,6 @@
 //     flushes pending changes, so an unclean shutdown loses at most one interval.
 //   * Releasing writes one final time and clears the lock, so the player's next
 //     server can start immediately instead of waiting out the TTL.
-//
-// The reference implementation is `src/runtime/player-store.ts`.
 
 import type { Infer, Schema } from "./schema";
 import {
@@ -499,8 +497,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			});
 
 		const armHeartbeat = (): void => {
-			// Unlike the reference runtime there is always a real timer available, so
-			// a store created without an explicit scheduler still heartbeats.
+			// There is always a real timer available, so a store created without an
+			// explicit scheduler still heartbeats.
 			const activeScheduler = scheduler !== undefined ? scheduler : defaultStoreScheduler;
 			if (!state.active) {
 				return;

@@ -1,18 +1,22 @@
 // Aruna roblox-ts native runtime — the safe DataStore core.
 //
-// The reference implementation and its rationale live in
-// `src/runtime/store.ts`; this is the Luau-side mirror. The safety properties
-// are the same:
+// The safety properties this module owns, and why each exists:
 //
-//   * No throwing. Every operation resolves with a `StoreResult`, so a
-//     DataStore outage cannot unwind a game thread.
-//   * No blind overwrite. A read that fails never degrades into "start from the
-//     default and save over it".
-//   * Bounded retries with capped backoff and jitter; permanent failures (no
-//     API access, oversized payload, bad key) are not retried.
-//   * Budget awareness through GetRequestBudgetForRequestType.
-//   * Versioned payloads, so an older record is migrated rather than
-//     reinterpreted.
+//   * No throwing. Every operation resolves with a `StoreResult`. A DataStore
+//     outage mid-session must not unwind a game thread through code that never
+//     expected persistence to fail.
+//   * No blind overwrite. A read that fails — request error, corrupt payload,
+//     schema mismatch, failed migration — never degrades into "start from the
+//     default and save over it". Data loss is the one failure mode a store
+//     cannot apologize for, so a failed load yields an error, not a value.
+//   * Bounded retries. Transient DataStore failures are retried with capped
+//     exponential backoff and jitter; permanent ones (no API access, oversized
+//     payload, bad key) are not retried at all.
+//   * Budget awareness. When the backend reports a request budget
+//     (GetRequestBudgetForRequestType), an exhausted budget waits instead of
+//     burning the request and eating a throttle.
+//   * Versioned payloads. Every write carries a version and a timestamp, so an
+//     older record can be migrated forward instead of silently reinterpreted.
 
 import { applyDefaults, firstSchemaIssue, type Infer, type Schema } from "./schema";
 
@@ -31,7 +35,8 @@ export type StoreErrorName =
 	| "StoreSerializationError"
 	| "StoreMigrationError"
 	// The record was written by a newer version of the game than this server
-	// runs. Never migrated, never written back; see the Node reference runtime.
+	// runs. Never migrated, never written back: migrating it down, or saving
+	// over it, would destroy what the newer server wrote.
 	| "StoreVersionAheadError"
 	| "StoreKeyError"
 	| "StoreLockedError"

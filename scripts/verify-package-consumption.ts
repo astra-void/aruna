@@ -29,17 +29,19 @@ export type PackedPackage = {
   tarballPath: string;
 };
 
+// The runtime subpaths are type-only: each shim re-exports the native runtime's
+// declarations from dist/native.
 export const publicArunaSubpathFiles = [
   "client.d.ts",
-  "client.js",
   "roblox.d.ts",
-  "roblox.js",
   "schema.d.ts",
-  "schema.js",
   "server.d.ts",
-  "server.js",
   "testing.d.ts",
-  "testing.js",
+  "dist/native/client.d.ts",
+  "dist/native/roblox.d.ts",
+  "dist/native/schema.d.ts",
+  "dist/native/server.d.ts",
+  "dist/native/testing.d.ts",
 ] as const;
 
 // Shipped as package data for `aruna test`; resolved at runtime relative to
@@ -312,6 +314,38 @@ export function buildConsumerTsconfigJson(tsconfigBasePath: string): string {
   ].join("\n");
 }
 
+// Writes a tsconfig that extends tsconfig.typecheck.json with every `aruna/*`
+// runtime alias removed from `paths` (the `$aruna/*` generated-code aliases
+// stay), and returns its file name.
+export async function writeNoRuntimeAliasTsconfig(
+  projectRoot: string,
+  moduleResolution: "Bundler" | "Node",
+): Promise<string> {
+  const chain = await readTsconfigChain(path.join(projectRoot, "tsconfig.json"));
+  const paths = chain
+    .map((entry) => entry.compilerOptions)
+    .filter((entry): entry is JsonRecord => isRecord(entry))
+    .find((entry) => isRecord(entry.paths))?.paths;
+  const kept: JsonRecord = {};
+  if (isRecord(paths)) {
+    for (const [specifier, targets] of Object.entries(paths)) {
+      if (!specifier.startsWith("aruna/") && specifier !== "aruna") {
+        kept[specifier] = targets;
+      }
+    }
+  }
+  const fileName = `tsconfig.no-runtime-aliases.${moduleResolution.toLowerCase()}.json`;
+  await writeJson(path.join(projectRoot, fileName), {
+    extends: "./tsconfig.typecheck.json",
+    compilerOptions: {
+      ...(moduleResolution === "Node" ? { module: "CommonJS" } : {}),
+      moduleResolution,
+      paths: kept,
+    },
+  });
+  return fileName;
+}
+
 export function buildConsumerTypecheckTsconfigJson(): string {
   return [
     "{",
@@ -344,20 +378,13 @@ export async function assertPublicPackageSubpathFiles(packageRoot: string): Prom
     );
   }
 
-  const expectedExports: Record<string, { import: string; types: string }> = {
-    "./client": { import: "./client.js", types: "./client.d.ts" },
-    "./roblox": { import: "./roblox.js", types: "./roblox.d.ts" },
-    "./schema": { import: "./schema.js", types: "./schema.d.ts" },
-    "./server": { import: "./server.js", types: "./server.d.ts" },
-    "./testing": { import: "./testing.js", types: "./testing.d.ts" },
-  };
-
-  for (const [subpath, expected] of Object.entries(expectedExports)) {
+  for (const name of ["client", "roblox", "schema", "server", "testing"]) {
+    const subpath = `./${name}`;
     const actual = exportsRecord[subpath];
-    if (!isRecord(actual) || actual.import !== expected.import || actual.types !== expected.types) {
-      throw new Error(
-        `Expected ${subpath} to map to ${expected.import} and ${expected.types} in ${packageJsonPath}.`,
-      );
+    // Types only: no `import` condition, so Node refuses the subpath outright
+    // rather than loading a runtime that is not the one a game runs.
+    if (!isRecord(actual) || actual.types !== `./${name}.d.ts` || Object.keys(actual).length !== 1) {
+      throw new Error(`Expected ${subpath} to map to types ./${name}.d.ts only in ${packageJsonPath}.`);
     }
   }
 
@@ -1195,6 +1222,20 @@ async function runChecks(): Promise<void> {
     tempRoot,
     "11-typecheck.log",
   );
+  // The same project with the doctor's `aruna/*` runtime aliases taken out, so
+  // each subpath resolves through the installed package's own declarations — the
+  // view an editor has before the first `aruna build`. It must type-check exactly
+  // as the aliased one does, under both module resolutions a project might use.
+  for (const resolution of ["Bundler", "Node"] as const) {
+    const configName = await writeNoRuntimeAliasTsconfig(tempRoot, resolution);
+    await runCommand(
+      `tsc without runtime aliases (${resolution})`,
+      "pnpm",
+      ["exec", "tsc", "-p", configName, "--noEmit"],
+      tempRoot,
+      `11-typecheck-no-runtime-aliases-${resolution.toLowerCase()}.log`,
+    );
+  }
   await assertPublicPackageSubpathFiles(path.join(tempRoot, "node_modules", "aruna"));
   // Final Luau-compile gate. Use the turnkey `aruna build` (which partitions the
   // project into client/server/shared and runs rbxtsc against the service-separated

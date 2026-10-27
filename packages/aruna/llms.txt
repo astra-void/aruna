@@ -34,7 +34,7 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 - [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
 - [Testing](./docs/testing.md): `aruna test`, `aruna/testing` (`createTestServerApp`, `createTestPlayer`, `describe`/`it`/`expect`), what the game build does with specs.
 - [CLI](./docs/cli.md): `aruna build`/`check`/`init`/`doctor`/`inspect`/`contract`, flags, what each generates.
-- [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the dual runtime, binary codec.
+- [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the runtime, binary codec.
 
 ## Rules of thumb (read before writing Aruna code)
 

@@ -15,7 +15,6 @@
     "lune",
     "docs",
     "llms.txt",
-    "*.js",
     "*.d.ts"
   ],
   "type": "module",
@@ -28,30 +27,25 @@
       "import": "./dist/index.js"
     },
     "./server": {
-      "types": "./server.d.ts",
-      "import": "./server.js"
+      "types": "./server.d.ts"
     },
     "./client": {
-      "types": "./client.d.ts",
-      "import": "./client.js"
+      "types": "./client.d.ts"
     },
     "./roblox": {
-      "types": "./roblox.d.ts",
-      "import": "./roblox.js"
+      "types": "./roblox.d.ts"
     },
     "./schema": {
-      "types": "./schema.d.ts",
-      "import": "./schema.js"
+      "types": "./schema.d.ts"
     },
     "./testing": {
-      "types": "./testing.d.ts",
-      "import": "./testing.js"
+      "types": "./testing.d.ts"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.shims.json",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.native-types.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit && tsc -p tsconfig.roblox.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.roblox.json --noEmit",
     "test": "pnpm exec vitest run",
     "lint": "pnpm exec oxlint src test",
     "lint:fix": "pnpm exec oxlint src test --fix",

@@ -1,11 +1,10 @@
 // Aruna roblox-ts native runtime — schema-driven binary codec.
 //
-// Mirror of the Node reference codec (src/runtime/binary.ts) over the Luau
-// `buffer` library. Encodes a schema-conforming value into a packed buffer that
+// Built on the Luau `buffer` library. Encodes a schema-conforming value into a packed buffer that
 // RemoteEvents replicate natively, spending no bytes on field names.
 //
 // Every frame starts with a u32 **schema fingerprint** (a portable hash of the
-// schema layout, identical across both runtimes). Decoding is positional, so a
+// schema layout). Decoding is positional, so a
 // client and server holding different schema versions — the normal state
 // mid-rollout — would otherwise silently mis-read each other's bytes; the
 // fingerprint check turns that into an immediate, explicit error.
@@ -137,7 +136,7 @@ class BinaryReader {
 	// Bounds guard before every read. The buffer on a client->server action is
 	// untrusted input, so a truncated or corrupt frame must fail with a clear
 	// error instead of an unguarded Luau buffer-access error (or worse, reading
-	// adjacent bytes). Mirrors the Node reference reader.
+	// adjacent bytes).
 	private require(extra: number): void {
 		if (this.offset + extra > this.length) {
 			throw "Aruna binary decode ran past the end of the buffer.";
@@ -543,9 +542,9 @@ function literalTag(value: unknown): string {
 	throw "Aruna schema fingerprint: unsupported literal value.";
 }
 
-// Canonical layout string. MUST stay byte-identical with the Node reference
-// runtime's schemaLayoutString — the fingerprint only works as a cross-version
-// guard if both runtimes derive the same string for the same schema.
+// Canonical layout string. Changing it changes every fingerprint, so frames from
+// a server on the previous release stop decoding mid-rollout: treat it as wire
+// format.
 function schemaLayoutString(schema: Schema): string {
 	const typeName = schema.typeName;
 	if (typeName === "string") {
@@ -634,7 +633,7 @@ function schemaLayoutString(schema: Schema): string {
 
 // Deterministic 32-bit fingerprint of a schema's wire layout. djb2 over the
 // canonical layout string, using only plain arithmetic (exact in doubles) so
-// Node and Luau produce the identical value for the identical schema.
+// the value is the same on every machine for the same schema.
 export function schemaFingerprint(schema: Schema): number {
 	const layout = schemaLayoutString(schema);
 	let hash = 5381;

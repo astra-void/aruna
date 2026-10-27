@@ -1,30 +1,18 @@
+// The runtime subpaths (`aruna/server`, `client`, `roblox`, `schema`,
+// `testing`) are type-only: a game compiles its vendored copy of the native
+// runtime, and the package ships that runtime's declarations so a project sees
+// the same types whether or not the doctor aliases are installed. These cases
+// pin the package shape that makes that true. Needs `pnpm build` (dist/native).
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const distRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const nativeTypesRoot = path.join(packageRoot, "dist", "native");
 
-const entrypoints = [
-  "client.js",
-  "server.js",
-  "schema.js",
-  "roblox.js",
-  "actions/define-action.js",
-] as const;
-
-const publicShims = [
-  "client.js",
-  "client.d.ts",
-  "roblox.js",
-  "roblox.d.ts",
-  "schema.js",
-  "schema.d.ts",
-  "server.js",
-  "server.d.ts",
-] as const;
+const SUBPATHS = ["server", "client", "roblox", "schema", "testing"] as const;
 
 const forbiddenFragments = [
   "node:fs",
@@ -33,142 +21,104 @@ const forbiddenFragments = [
   "commander",
   "gradient-string",
   "picocolors",
-  "./cli/",
-  "../cli/",
+  "/cli/",
 ];
 
-function resolveRelativeImports(filePath: string, contents: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    contents,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.JS,
-  );
-  const specifiers: string[] = [];
-
-  // Only a call whose callee is the `import` keyword is a module specifier.
-  // Matching every call expression treats any first string argument beginning
-  // with "." as an import — `parts.join(".")` and friends included — which
-  // resolves to a directory and makes the walk read one.
-  const isDynamicImport = (node: ts.Node): node is ts.CallExpression =>
-    ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword;
-
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isImportDeclaration(node) ||
-      ts.isExportDeclaration(node) ||
-      isDynamicImport(node) ||
-      ts.isImportTypeNode(node)
-    ) {
-      const maybeSpecifier = isDynamicImport(node)
-        ? node.arguments[0]
-        : ts.isImportTypeNode(node)
-          ? node.argument
-          : node.moduleSpecifier;
-
-      if (maybeSpecifier && ts.isStringLiteralLike(maybeSpecifier)) {
-        const text = maybeSpecifier.text;
-        if (text.startsWith(".")) {
-          specifiers.push(text);
-        }
-      }
+// Exported names of each module, resolved with the rbxts ambient types the native
+// declarations are written against. One program for every file: the ambient
+// types are the expensive part, and loading them per file is seconds each.
+function exportNamesOf(absoluteFiles: readonly string[]): Map<string, string[]> {
+  const program = ts.createProgram([...absoluteFiles], {
+    noLib: true,
+    skipLibCheck: true,
+    types: ["@rbxts/types", "@rbxts/compiler-types"],
+    typeRoots: [
+      path.join(packageRoot, "node_modules"),
+      path.join(packageRoot, "node_modules/@rbxts"),
+    ],
+    moduleResolution: ts.ModuleResolutionKind.Node10,
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ESNext,
+    noEmit: true,
+  });
+  const checker = program.getTypeChecker();
+  const names = new Map<string, string[]>();
+  for (const absoluteFile of absoluteFiles) {
+    const sourceFile = program.getSourceFile(absoluteFile);
+    const moduleSymbol =
+      sourceFile === undefined ? undefined : checker.getSymbolAtLocation(sourceFile);
+    if (moduleSymbol === undefined) {
+      throw new Error(`Not a module: ${absoluteFile}`);
     }
-
-    ts.forEachChild(node, visit);
-  };
-
-  visit(sourceFile);
-  return specifiers;
-}
-
-async function resolveReachableFiles(): Promise<Set<string>> {
-  const reachable = new Set<string>();
-  const queue = entrypoints.map((entrypoint) => path.join(distRoot, entrypoint));
-
-  while (queue.length > 0) {
-    const filePath = queue.pop();
-    if (!filePath || reachable.has(filePath)) {
-      continue;
-    }
-
-    const contents = await fs.readFile(filePath, "utf8");
-    reachable.add(filePath);
-
-    for (const specifier of resolveRelativeImports(filePath, contents)) {
-      const candidates = [
-        path.resolve(path.dirname(filePath), specifier),
-        path.resolve(path.dirname(filePath), `${specifier}.js`),
-        path.resolve(path.dirname(filePath), `${specifier}.mjs`),
-        path.resolve(path.dirname(filePath), `${specifier}.cjs`),
-        path.resolve(path.dirname(filePath), specifier, "index.js"),
-      ];
-
-      let nextFile: string | undefined;
-      for (const candidate of candidates) {
-        try {
-          await fs.access(candidate);
-          nextFile = candidate;
-          break;
-        } catch {
-          continue;
-        }
-      }
-
-      if (nextFile) {
-        queue.push(nextFile);
-      }
-    }
+    names.set(
+      absoluteFile,
+      checker
+        .getExportsOfModule(moduleSymbol)
+        .map((symbol) => symbol.getName())
+        .sort(),
+    );
   }
-
-  return reachable;
+  return names;
 }
 
-describe("public subpath reachability", () => {
-  it("keeps the package-root public shims pointed at dist", async () => {
-    const packageJson = JSON.parse(await fs.readFile(path.join(packageRoot, "package.json"), "utf8")) as {
-      exports?: Record<string, { import?: string; types?: string }>;
+describe("public subpaths", () => {
+  it("publishes each runtime subpath as types only", async () => {
+    const packageJson = JSON.parse(
+      await fs.readFile(path.join(packageRoot, "package.json"), "utf8"),
+    ) as {
+      exports?: Record<string, Record<string, string>>;
       files?: string[];
     };
 
     expect(packageJson.files).toContain("dist");
-    expect(packageJson.files).toContain("*.js");
     expect(packageJson.files).toContain("*.d.ts");
-
-    expect(packageJson.exports?.["./client"]).toEqual({
-      types: "./client.d.ts",
-      import: "./client.js",
+    expect(packageJson.files).not.toContain("*.js");
+    // The root stays a Node entry: config and compiler.
+    expect(packageJson.exports?.["."]).toEqual({
+      types: "./dist/index.d.ts",
+      import: "./dist/index.js",
     });
-    expect(packageJson.exports?.["./server"]).toEqual({
-      types: "./server.d.ts",
-      import: "./server.js",
-    });
-    expect(packageJson.exports?.["./roblox"]).toEqual({
-      types: "./roblox.d.ts",
-      import: "./roblox.js",
-    });
-    expect(packageJson.exports?.["./schema"]).toEqual({
-      types: "./schema.d.ts",
-      import: "./schema.js",
-    });
-
-    for (const fileName of publicShims) {
-      const contents = await fs.readFile(path.join(packageRoot, fileName), "utf8");
-      expect(contents.trim().length, fileName).toBeGreaterThan(0);
-      expect(contents).toContain(`./dist/${fileName.replace(/\.d\.ts$/, ".js")}`);
-      for (const fragment of forbiddenFragments) {
-        expect(contents, `${fileName} should not reference ${fragment}`).not.toContain(fragment);
-      }
+    for (const subpath of SUBPATHS) {
+      expect(packageJson.exports?.[`./${subpath}`], subpath).toEqual({
+        types: `./${subpath}.d.ts`,
+      });
     }
   });
 
-  it("keeps Roblox-facing exports away from CLI and Node-only imports", async () => {
-    const reachableFiles = await resolveReachableFiles();
+  it("points every subpath shim at the native runtime's declarations", async () => {
+    for (const subpath of SUBPATHS) {
+      const contents = await fs.readFile(path.join(packageRoot, `${subpath}.d.ts`), "utf8");
+      expect(contents, subpath).toContain(`export * from "./dist/native/${subpath}.js";`);
+      await expect(
+        fs.access(path.join(nativeTypesRoot, `${subpath}.d.ts`)),
+      ).resolves.toBeUndefined();
+    }
+  });
 
-    for (const filePath of reachableFiles) {
-      const contents = await fs.readFile(filePath, "utf8");
+  it("gives a project without aliases the same exports as the vendored runtime", () => {
+    const shim = (subpath: string) => path.join(packageRoot, `${subpath}.d.ts`);
+    const vendored = (subpath: string) => path.join(packageRoot, "roblox", `${subpath}.ts`);
+    const names = exportNamesOf(SUBPATHS.flatMap((subpath) => [shim(subpath), vendored(subpath)]));
+    for (const subpath of SUBPATHS) {
+      const throughPackage = names.get(shim(subpath)) ?? [];
+      expect(throughPackage.length, subpath).toBeGreaterThan(0);
+      expect({ subpath, names: throughPackage }).toEqual({
+        subpath,
+        names: names.get(vendored(subpath)),
+      });
+    }
+  }, 60_000);
+
+  it("keeps the shipped declarations free of CLI and Node-only imports", async () => {
+    for (const entry of await fs.readdir(nativeTypesRoot)) {
+      if (!entry.endsWith(".d.ts")) {
+        continue;
+      }
+      const contents = await fs.readFile(path.join(nativeTypesRoot, entry), "utf8");
       for (const fragment of forbiddenFragments) {
-        expect(contents, `${path.relative(distRoot, filePath)} should not reference ${fragment}`).not.toContain(fragment);
+        expect(contents, `dist/native/${entry} should not reference ${fragment}`).not.toContain(
+          fragment,
+        );
       }
     }
   });

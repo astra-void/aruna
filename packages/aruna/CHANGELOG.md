@@ -206,6 +206,35 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: the `aruna/*` runtime subpaths are type-only, and their types are
+  the native runtime's.** `aruna/server`, `aruna/client`, `aruna/roblox`,
+  `aruna/schema`, and `aruna/testing` used to resolve, without the doctor
+  aliases, to a separate Node implementation of the runtime and its
+  declarations — which differed from the native runtime a game compiles (the
+  run context was `ActionRunContext` instead of `ActionContext`, errors were
+  classes, `aruna/schema` exported 46 names instead of 12). They now carry only
+  `types`, emitted from the native runtime (`dist/native/`), so an editor
+  without the aliases sees exactly what `rbxtsc` compiles against. Importing
+  them from Node fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`; a roblox-ts build
+  is unaffected, since it always compiled the vendored copy.
+
+  Migration: code that only type-checked against the Node declarations now
+  reports the errors `rbxtsc` already reported. The usual ones are
+  `ActionRunContext` → `ActionContext`, `instanceof ActionValidationError` (and
+  the other error classes) → compare `err.name`, `validateSchema(s, v)` →
+  `s.validate(v)` / `firstSchemaIssue(s, v)`, and `getActionRemote` /
+  `ensureActionRemote` / `waitForActionRemote` → `createActionInvoker` /
+  `robloxRemoteEvent`, which find or create the remote themselves.
+
+- **`encodeBinary`, `decodeBinary`, and `schemaFingerprint` are exported from
+  `aruna/schema`**, working on a Luau `buffer` in-game. They replace the root
+  `aruna` export (see Removed).
+
+- **`createRemoteSignalPublisher` / `createRemoteSignalSubscriber` are exported
+  from `aruna/roblox`**, as docs/signals.md already said — the lower-level
+  endpoints over a remote you supply. `SignalMap` is exported from
+  `aruna/server`.
+
 - **Breaking: string length constraints count UTF-8 bytes in both runtimes.**
   `maxLength`, `minLength`, and `length` counted UTF-16 code units in Node
   (`value.length`) and bytes natively (`#value`), so `"가나다"` was 3 in a spec and
@@ -359,6 +388,42 @@ the game build like any other module.
   reads `Aruna action shop.buy input validation failed: item: expected string`,
   not `invalid action input: item: expected string`. A spec that matched the old
   text has to change.
+
+### Removed
+
+- **Breaking: the Node runtime.** The package carried two implementations of
+  the runtime: the roblox-ts one games compile, and a Node one under
+  `packages/aruna/src` that no consumer's game ever ran. Every feature was paid
+  for twice and kept in step by a conformance table. The Node one is gone; its
+  test suites were ported to specs that run the native runtime under Lune
+  (`apps/roblox-runtime-test`), case by case — the mapping is in
+  `docs/runtime-consolidation.md`.
+
+  Where the two had drifted, the native behavior — what games already ran — is
+  the one kept, so no game changes behavior. Things only the Node runtime did,
+  which therefore disappear from the package: error objects carrying
+  `actionId` / `role` / `max` / `windowMs` / `timeoutMs` / `expected` /
+  `actual` / `cause` (native rejections carry `name`, `message`, and
+  `retryAfterMs` / `resetAtMs` / `errorId` where they apply), per-violation
+  wire-safety paths (the native boundary reports `non-serializable action
+  input`), `invokeAction` rejecting rather than throwing when no invoker is
+  installed, transports returning a cleanup function or a disposable instead
+  of `{ disconnect }`, and an invoker `dispose()`. Schema issue wording follows
+  the native runtime (`expected literal sword`, `expected one of a | b`), and
+  `aruna/testing` follows Luau truthiness in `toBeTruthy` / `toBeFalsy` and
+  joins test names with `" > "`.
+
+- **Breaking: `encodeBinary`, `decodeBinary`, and `schemaFingerprint` on the
+  root `aruna` entry.** They were the Node codec over `Uint8Array`. Use them
+  from `aruna/schema` in-game. The root entry is now `defineConfig` and the
+  compiler only.
+
+- **The structural Node transport API**: `createRemoteEventActionInvoker`,
+  `bindRemoteEventActions`, the `RemoteEvent*Like` / `RemoteSignal*Like`
+  types, `TimeoutError`, `dispatchAction`, `createActionRateLimiter`,
+  `validateSerializableActionValue`, `assertSchema`, and the in-memory invoker.
+  They ran Aruna over a non-Roblox event emitter, which nothing supported
+  outside this repo's own tests.
 
 ### Fixed
 

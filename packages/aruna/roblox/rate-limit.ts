@@ -8,7 +8,7 @@ interface RateLimitBucket {
 	count: number;
 }
 
-// Structured check result, mirroring the Node reference limiter: a rejection
+// Structured check result: a rejection
 // carries when the caller may retry, so the wire can surface it to the client.
 export type RateLimitCheckResult =
 	| { readonly ok: true }
@@ -26,8 +26,7 @@ export interface ActionRateLimiter {
 		nowSeconds?: number,
 	) => RateLimitCheckResult;
 	// Removes buckets whose window has fully elapsed at `now` (seconds, defaults
-	// to os.clock()) and returns how many were removed. Mirrors the Node
-	// reference runtime's leftover-key cleanup path.
+	// to os.clock()) and returns how many were removed.
 	readonly purge: (now?: number) => number;
 }
 

@@ -1,7 +1,6 @@
 // Aruna roblox-ts native runtime — the in-process test harness.
 //
-// The mirror of src/testing/harness.ts, and the one a game project actually
-// compiles: a real `ServerApp` wired to fakes a spec can drive, so a test
+// What a game project's specs compile against: a real `ServerApp` wired to fakes a spec can drive, so a test
 // exercises the same validated, rate-limited, middleware-wrapped dispatch path
 // the wire uses — with no RemoteEvent, no Players service, and no DataStore.
 //

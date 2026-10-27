@@ -5,10 +5,10 @@ import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import type { StoreDocument } from "./player-store";
 
 // defineSignal lives alongside defineAction on the `aruna/server` surface so
-// signal definitions import from the same entry as actions (mirrors the Node
-// reference runtime's src/server.ts barrel).
+// signal definitions import from the same entry as actions.
 export { defineSignal } from "./signal";
 export type { InferSignalPayload, SignalDefinition } from "./signal";
+export type { SignalMap } from "./signal-runtime";
 
 export interface ActionContext<
 	TPlayer = unknown,
@@ -147,8 +147,7 @@ export function defineAction<
 // Builds a `defineAction` bound to your project's signal registry, so an action's
 // `ctx.publisher.to/toMany/toAll(...)` is checked against the real signal ids and
 // payloads — and present without a `?`. The publisher is still injected by
-// `createServerApp`; this is pure typing sugar, no runtime state. Mirrors the
-// Node reference runtime's `createActionDefiner`.
+// `createServerApp`; this is pure typing sugar, no runtime state.
 // `TStore` types `ctx.store` against the value your player store holds — pass
 // the store's value type to get `ctx.store?.get()` typed instead of `unknown`.
 // It stays optional on the ctx by design; see the note on ActionContext.

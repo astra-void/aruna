@@ -222,7 +222,7 @@ size of its `encodeBinary` frame — and records it as `maxEncodedBytes` in the 
 For a `wire: "binary"` signal the 4-byte frame header counts. For the default table
 encoding the binary size is a floor — Roblox adds type tags and keys on top — so an
 error there is certain, while staying under it is not a guarantee. String lengths are
-counted in UTF-8 bytes, as `.maxLength` is in both runtimes.
+counted in UTF-8 bytes, as `.maxLength` is.
 
 ## Binary wire
 

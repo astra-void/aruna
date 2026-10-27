@@ -37,9 +37,12 @@ export { defineStore, definePlayerStore } from "./define-store";
 // its name and message.
 export { actionError } from "./action-error";
 export type { PublicActionError } from "./action-error";
-// The DataStoreService adapter. Roblox-only by nature — the reference runtime
-// has no DataStore to talk to — so it lives on this entry rather than
-// `aruna/server`, alongside the RemoteEvent transport.
+// The lower-level signal endpoints over a remote you supply yourself (anything
+// with FireClient/FireAllClients, or OnClientEvent). `createSignalPublisher` /
+// `createSignalSubscriber` below wrap them around the default Aruna remotes.
+export { createRemoteSignalPublisher, createRemoteSignalSubscriber };
+// The DataStoreService adapter. Roblox-only by nature, so it lives on this entry
+// rather than `aruna/server`, alongside the RemoteEvent transport.
 export * from "./datastore";
 
 export function defineAction<
@@ -123,16 +126,14 @@ function defaultRequestId(): string {
 }
 
 // The default request timeout, applied when requestTimeoutMs is not given.
-// Pass requestTimeoutMs: 0 to explicitly opt out (wait forever). Mirrors the
-// Node reference runtime.
+// Pass requestTimeoutMs: 0 to explicitly opt out (wait forever).
 export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface CreateActionInvokerOptions extends ContractHandshakeOptions {
 	readonly createRequestId?: () => string;
 	// Milliseconds to wait for a server response before rejecting with a timeout
 	// error. Defaults to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0 to
-	// disable the timeout entirely. Mirrors the Node reference runtime's
-	// ActionInvokerOptions.requestTimeoutMs.
+	// disable the timeout entirely.
 	readonly requestTimeoutMs?: number;
 }
 

@@ -1,8 +1,8 @@
 // Aruna roblox-ts native runtime — schema DSL.
 //
-// Hand-authored to compile under roblox-ts. This is the Roblox-targeted runtime
-// (vendored into a project's src/.aruna/runtime/), distinct from the Node
-// reference runtime that vitest validates.
+// Hand-authored to compile under roblox-ts, and vendored into a project's
+// <generatedDir>/shared/runtime/. The package's `aruna/schema` declarations are
+// emitted from this file.
 //
 // Builder functions are named `*Schema` rather than `string`/`number`/... because
 // roblox-ts reserves identifiers that collide with Lua globals (e.g. `string`).
@@ -47,8 +47,7 @@ export interface Refinement {
 
 // Structural metadata is carried alongside `validate` so schema-driven tools
 // (the binary codec, manifest emission) can read the layout without re-deriving
-// it. Mirrors the Node reference schema's discriminated shape; fields are
-// populated per typeName by the builders below.
+// it. Fields are populated per typeName by the builders below.
 export interface Schema<T = unknown> {
 	readonly typeName: SchemaTypeName;
 	readonly validate: (value: unknown) => boolean;
@@ -73,7 +72,7 @@ export interface Schema<T = unknown> {
 	readonly defaultValue?: unknown;
 }
 
-// Numeric width hints, mirroring the Node reference schema. The binary codec
+// Numeric width hints. The binary codec
 // reads `format` to pick a packed wire encoding; integer formats also constrain
 // validation to whole numbers within range.
 export type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
@@ -99,8 +98,7 @@ type FieldRecord = { readonly [key: string]: Schema };
 type Simplify<T> = { [K in keyof T]: T[K] };
 
 // A field whose inferred type admits `undefined` (i.e. `schema.optional(...)`)
-// becomes an optional key, matching the Node reference schema's object
-// inference — so consumers can omit optional fields (`return { ok }`) instead of
+// becomes an optional key — so consumers can omit optional fields (`return { ok }`) instead of
 // being forced to write `{ ok, reason: undefined }`.
 type InferFields<F extends FieldRecord> = Simplify<
 	{ [K in keyof F as undefined extends Infer<F[K]> ? never : K]: Infer<F[K]> } & {
@@ -922,3 +920,8 @@ export const schema = {
 	brickColor: brickColorSchema,
 	instance: instanceSchema,
 };
+
+// The schema-driven binary codec, for packing a value into a `buffer` yourself
+// (signals with `wire: "binary"` already use it). binary.ts imports this module
+// for types only, so re-exporting it here adds no require cycle.
+export { decodeBinary, encodeBinary, schemaFingerprint } from "./binary";
