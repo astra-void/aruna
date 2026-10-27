@@ -62,8 +62,10 @@ export interface ActionRateLimitOptions {
 
 export interface ActionRegistry<TPlayer = unknown> {
     readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
+    readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
     readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
     readonly forgetPlayer: (player: TPlayer) => void;
+    readonly readmitPlayer: (player: TPlayer) => void;
     readonly isFireAndForget: (actionId: string) => boolean;
 }
 

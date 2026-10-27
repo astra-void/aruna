@@ -690,3 +690,24 @@ Statuses: **ported** — same assertion against the native runtime; **ported-ada
 | public-exports.test.ts › public exports › exposes the RemoteEvent client invoker | — | retired | createRemoteEventActionInvoker over a structural remote was Node-only; the native invoker over the real remote is covered by src/test/remote-event-runtime.spec.ts. |
 | public-exports.test.ts › public exports › exposes the default Roblox action remote helpers | src/test/public-exports.spec.ts › public exports › exposes the default Roblox action remote helpers | ported-adapted | getActionRemote/ensureActionRemote/waitForActionRemote are Node-only exports; asserts the native helper surface (ACTION_REMOTE_NAME, SIGNAL_REMOTE_NAME, robloxRemoteEvent, createActionInvoker, bindActions). |
 | conformance.test.ts › dispatch conformance (Node) › (one case per dispatch.json row) | lune/specs/conformance.luau (same table, every row) | covered | The table already ran natively; only the Node runner is deleted. |
+
+### Ported after the consolidation
+
+Four fixes landed on `fix/stabilization` after this branch forked, each with vitest cases
+against the Node runtime. They were ported here with their Node halves dropped:
+
+| Commit (ported as) | vitest case | Lune spec case |
+|---|---|---|
+| 83c621f (2a88eb2) | serialization.test.ts › serialization policy › keeps the walk inside the node budget when a field is a union | lune/specs/serialization.luau › same name |
+| 83c621f (2a88eb2) | serialization.test.ts › serialization policy › does not narrow nested unions by validating them | lune/specs/serialization.luau › same name |
+| 83c621f (2a88eb2) | serialization.test.ts › serialization policy › accepts an Instance where any union member at that position is schema.instance() | lune/specs/serialization.luau › same name |
+| 9931a59 (c105b49) | binary-signals.test.ts › … › refuses a binary unreliable frame that is over the limit with its envelope | lune/specs/signal.luau › same name |
+| 9931a59 (c105b49) | binary-signals.test.ts › … › rejects toBatched with the same error | lune/specs/signal.luau › refuses a binary unreliable frame that is over the limit with its envelope (asserts the toBatched rejection) |
+| 9931a59 (c105b49) | binary-signals.test.ts › … › leaves reliable and table-encoded signals alone | lune/specs/signal.luau › same name |
+| 2fc1cb8 (ef60e95) | request-guard.test.ts › after leave › drops an envelope that arrives after the player left, and creates no state for it | lune/specs/transport.luau › RemoteEvent transport after leave › same name |
+| 2fc1cb8 (ef60e95) | request-guard.test.ts › after leave › does not remember a late call's idempotency key | lune/specs/transport.luau › RemoteEvent transport after leave › same name |
+| 2fc1cb8 (ef60e95) | request-guard.test.ts › after leave › forgets the departed mark after DEPARTED_PLAYER_TTL_MS, so it does not pin the player | lune/specs/transport.luau › RemoteEvent transport after leave › forgets the departed mark after its TTL, so it does not pin the player |
+| 2fc1cb8 (ef60e95) | request-guard.test.ts › after leave › sweeps expired departures when another player leaves | src/test/request-guard.spec.ts › after leave › same name |
+| 2fc1cb8 (ef60e95) | request-guard.test.ts › request budget › (two cases changed to rejoin before sending again) | src/test/request-guard.spec.ts › keeps each player's budget separate and drops it on leave; frees a player's in-flight slots on leave (same change) |
+| f248d46 (5a28f05) | request-guard.test.ts › in-process dispatch › is not held to the in-flight cap, while the transport still is | lune/specs/server-app.luau › exempts app.dispatch from the in-flight cap the transport still applies |
+| f248d46 (5a28f05) | request-guard.test.ts › in-process dispatch › still de-duplicates by idempotency key | lune/specs/server-app.luau › keeps idempotency for app.dispatch |
