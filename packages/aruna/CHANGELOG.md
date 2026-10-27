@@ -17,6 +17,11 @@ the game build like any other module.
 
 ### Added
 
+- **Canary releases.** Every push to `main` publishes the whole package graph
+  as `<next patch>-canary.<sha>.<run>` under the npm `canary` tag
+  (`npm install @arunajs/aruna@canary`), next to the tag-triggered stable
+  release. Canaries carry no stability guarantees (docs/stability.md).
+
 - **`aruna dev` and `aruna build --watch` recompile incrementally.** The watch
   loop keeps one compiler session for its lifetime and tells it which files
   changed, so a rebuild re-reads and re-parses only those files; on a 3,000-file

@@ -46,9 +46,10 @@ below. Minors add; patches fix. A bug fix that changes behavior someone could de
 — a diagnostic that starts firing, an error that becomes stricter — ships in a minor
 with a CHANGELOG entry, never in a patch.
 
-**Canary releases** (`x.y.z-canary.<sha>.<run>`, npm tag `canary`) are builds of `main`
-with no guarantees beyond "it passed CI". They exist to try a change before it is
-released; never depend on one from a project you ship.
+**Canary releases** (`x.y.(z+1)-canary.<sha7>.<run>`, npm tag `canary`) are published
+from every push to `main` (and from manual runs of the publish workflow), with no
+guarantees beyond "built from main". They exist to try a change before it is released —
+`npm install @arunajs/aruna@canary` — never to depend on from a project you ship.
 
 ## Deprecation
 

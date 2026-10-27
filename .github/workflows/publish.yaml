@@ -1,7 +1,14 @@
 name: publish
 
 # Publishes the full Aruna package graph (8 native targets + @arunajs/core +
-# @arunajs/compiler + @arunajs/aruna + create-aruna-app) to npm when a v* tag is pushed.
+# @arunajs/compiler + @arunajs/aruna + create-aruna-app) to npm, on two channels:
+#
+#   - stable: a pushed v* tag publishes the version in package.json under the
+#     `latest` dist-tag.
+#   - canary: a push to main, or a manual run (channel: canary, the default),
+#     publishes `<next patch>-canary.<sha7>.<run>` under the `canary` dist-tag
+#     (scripts/canary-version.ts sets it in every job). No guarantees beyond
+#     "built from main" — see docs/stability.md.
 #
 # The 8 native targets are built in parallel, one job per target, each on the
 # cheapest runner that can build it:
@@ -21,7 +28,17 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
   workflow_dispatch:
+    inputs:
+      channel:
+        description: "Release channel"
+        type: choice
+        options:
+          - canary
+          - stable
+        default: canary
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -30,6 +47,11 @@ concurrency:
 permissions:
   contents: read
   id-token: write # required for npm provenance + OIDC trusted publishing
+
+env:
+  # canary for a push to main or a manual canary run; stable for a v* tag or a
+  # manual stable run.
+  CHANNEL: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary')) && 'canary' || 'stable' }}
 
 jobs:
   build-native:
@@ -107,6 +129,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Before the build: the staged native package carries the version.
+      - name: Set the canary version
+        if: env.CHANNEL == 'canary'
+        run: pnpm exec tsx scripts/canary-version.ts
+
       - name: Build native target
         run: pnpm release:build-native --mode cross --targets ${{ matrix.target }}
 
@@ -148,5 +175,9 @@ jobs:
           pattern: compiler-*
           path: .npm
 
+      - name: Set the canary version
+        if: env.CHANNEL == 'canary'
+        run: pnpm exec tsx scripts/canary-version.ts
+
       - name: Publish
-        run: pnpm release:publish --assemble --provenance --no-verify-credentials
+        run: pnpm release:publish --assemble --provenance --no-verify-credentials --tag ${{ env.CHANNEL == 'canary' && 'canary' || 'latest' }}
