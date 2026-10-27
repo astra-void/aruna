@@ -10,20 +10,38 @@ import {
   type RemoteEventActionResponse,
 } from "../src/runtime/remote-event.js";
 import { validateSerializableActionValue } from "../src/runtime/serialization.js";
-import type { RequestAbuseReason } from "../src/runtime/request-guard.js";
+import { createIdempotencyCache } from "../src/runtime/idempotency.js";
+import {
+  DEPARTED_PLAYER_TTL_MS,
+  createDepartedPlayers,
+  createRequestGuard,
+  type RequestAbuseReason,
+} from "../src/runtime/request-guard.js";
 
 type Player = { readonly UserId: number };
 
 function createFakePlayers() {
+  const added = new Set<(player: Player) => void>();
   const removing = new Set<(player: Player) => void>();
   return {
     source: {
+      PlayerAdded: {
+        Connect(callback: (player: Player) => void) {
+          added.add(callback);
+          return { Disconnect: () => added.delete(callback) };
+        },
+      },
       PlayerRemoving: {
         Connect(callback: (player: Player) => void) {
           removing.add(callback);
           return { Disconnect: () => removing.delete(callback) };
         },
       },
+    },
+    join(player: Player) {
+      for (const callback of added) {
+        callback(player);
+      }
     },
     leave(player: Player) {
       for (const callback of removing) {
@@ -84,9 +102,14 @@ function setup(options: {
     advance(ms: number) {
       clockMs += ms;
     },
-    send(player: Player, input: unknown = undefined) {
+    send(player: Player, input: unknown = undefined, idempotencyKey?: string) {
       sent += 1;
-      return listener?.(player, { requestId: `r${sent}`, actionId: "shop.buy", input });
+      return listener?.(player, {
+        requestId: `r${sent}`,
+        actionId: "shop.buy",
+        input,
+        ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+      });
     },
   };
 }
@@ -132,6 +155,7 @@ describe("request budget", () => {
 
     // A fresh budget after leaving and coming back.
     harness.players.leave(ada);
+    harness.players.join(ada);
     await harness.send(ada);
     expect(harness.runs()).toBe(3);
     harness.app.dispose();
@@ -171,10 +195,93 @@ describe("request budget", () => {
     void harness.send(ada);
     await Promise.resolve();
     harness.players.leave(ada);
+    harness.players.join(ada);
     void harness.send(ada);
     await Promise.resolve();
     expect(harness.runs()).toBe(2);
     harness.app.dispose();
+  });
+});
+
+describe("after leave", () => {
+  it("drops an envelope that arrives after the player left, and creates no state for it", async () => {
+    const harness = setup({ requestBudget: { burst: 1, perSecond: 1 } });
+    const ada = { UserId: 1 };
+
+    harness.players.leave(ada);
+    await harness.send(ada);
+    expect(harness.runs()).toBe(0);
+    expect(harness.responses).toEqual([]);
+    // Late, not abusive: nothing is reported.
+    expect(harness.abuse).toEqual([]);
+
+    // Had the late envelope created a budget, it would have spent the only
+    // token, and this one would be dropped.
+    harness.players.join(ada);
+    await harness.send(ada);
+    expect(harness.runs()).toBe(1);
+    harness.app.dispose();
+  });
+
+  it("does not remember a late call's idempotency key", async () => {
+    const harness = setup({});
+    const ada = { UserId: 1 };
+
+    await harness.send(ada, undefined, "key-1");
+    expect(harness.runs()).toBe(1);
+    harness.players.leave(ada);
+    await harness.send(ada, undefined, "key-1");
+    expect(harness.runs()).toBe(1);
+
+    // Leave dropped the key, and the late envelope did not put it back: the
+    // same key runs again for the returning player.
+    harness.players.join(ada);
+    await harness.send(ada, undefined, "key-1");
+    expect(harness.runs()).toBe(2);
+    harness.app.dispose();
+  });
+
+  it("forgets the departed mark after DEPARTED_PLAYER_TTL_MS, so it does not pin the player", async () => {
+    const harness = setup({});
+    const ada = { UserId: 1 };
+
+    harness.players.leave(ada);
+    harness.advance(DEPARTED_PLAYER_TTL_MS);
+    await harness.send(ada);
+    expect(harness.runs()).toBe(0);
+    harness.advance(1);
+    await harness.send(ada);
+    expect(harness.runs()).toBe(1);
+    harness.app.dispose();
+  });
+
+  it("sweeps expired departures when another player leaves", () => {
+    let clockMs = 0;
+    const departed = createDepartedPlayers<string>(() => clockMs);
+    const remembered: string[] = [];
+    const guard = createRequestGuard<string>({ departed, nowMs: () => clockMs });
+    const cache = createIdempotencyCache<string, string>({ departed, nowMs: () => clockMs });
+
+    departed.add("ada");
+    expect(guard.admit("ada")).toBe(false);
+    expect(guard.begin("ada")).toBe(true);
+    void cache.run("ada", "shop.buy", "k", () => {
+      remembered.push("ran");
+      return Promise.resolve("ok");
+    });
+    void cache.run("ada", "shop.buy", "k", () => {
+      remembered.push("ran");
+      return Promise.resolve("ok");
+    });
+    // Not de-duplicated: nothing was remembered for a departed player.
+    expect(remembered).toEqual(["ran", "ran"]);
+
+    clockMs = DEPARTED_PLAYER_TTL_MS + 1;
+    departed.add("bo");
+    expect(departed.has("ada")).toBe(false);
+    expect(departed.has("bo")).toBe(true);
+    departed.remove("bo");
+    expect(departed.has("bo")).toBe(false);
   });
 });
 

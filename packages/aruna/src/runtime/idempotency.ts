@@ -6,6 +6,8 @@
 // to it, and one that arrives later gets the settled result. Either way the
 // action runs once. Mirrors the native runtime's roblox/idempotency.ts.
 
+import type { DepartedPlayers } from "./request-guard.js";
+
 // The longest key the server accepts. Anything else (wrong type, too long) is
 // ignored and the call is dispatched without de-duplication.
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 64;
@@ -51,8 +53,12 @@ export type IdempotencyCache<TPlayer, TResult> = {
 
 export function createIdempotencyCache<TPlayer, TResult>(options?: {
   readonly nowMs?: () => number;
+  // Players who left: their calls run without being remembered, so a late one
+  // does not recreate the entries leave dropped (see DepartedPlayers).
+  readonly departed?: DepartedPlayers<TPlayer>;
 }): IdempotencyCache<TPlayer, TResult> {
   const nowMs = options?.nowMs ?? Date.now;
+  const departed = options?.departed;
   const players = new Map<TPlayer, PlayerEntries<TResult>>();
 
   const remove = (state: PlayerEntries<TResult>, slot: string): void => {
@@ -67,6 +73,9 @@ export function createIdempotencyCache<TPlayer, TResult>(options?: {
     run(player, actionId, key, dispatch) {
       // Scoped by action: a key reused for a different action is a different call.
       const slot = `${actionId}\n${key}`;
+      if (departed?.has(player) === true) {
+        return dispatch({ ran: false });
+      }
       let state = players.get(player);
       if (state !== undefined) {
         const existing = state.entries.get(slot);

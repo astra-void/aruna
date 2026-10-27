@@ -131,6 +131,34 @@ return function(ctx)
 			app.dispose()
 		end)
 
+		t.it("clears a departed player's mark on join, with no join hook configured", function()
+			local runs = { count = 0 }
+			local app = serverApp.createServerApp({
+				actions = {
+					buy = {
+						id = "buy",
+						run = function()
+							runs.count += 1
+							return "ok"
+						end,
+					},
+				},
+			})
+			local returning = { UserId = 10, Name = "Returning" }
+
+			fakes.playerRemoving:Fire(returning)
+			-- Departed: each call runs, and nothing is remembered for the player.
+			t.await(app.dispatch("buy", { player = returning }, nil, { idempotencyKey = "k1" }))
+			t.await(app.dispatch("buy", { player = returning }, nil, { idempotencyKey = "k1" }))
+			t.eq(runs.count, 2)
+
+			fakes.playerAdded:Fire(returning)
+			t.await(app.dispatch("buy", { player = returning }, nil, { idempotencyKey = "k1" }))
+			t.await(app.dispatch("buy", { player = returning }, nil, { idempotencyKey = "k1" }))
+			t.eq(runs.count, 3, "back: the key is remembered again")
+			app.dispose()
+		end)
+
 		t.it("does not remember a call refused before it ran", function()
 			local clockMs = 0
 			local runs = { count = 0 }

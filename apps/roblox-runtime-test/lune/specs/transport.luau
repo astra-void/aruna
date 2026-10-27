@@ -401,12 +401,96 @@ return function(ctx)
 			local _, _, again = t.await(registry.dispatch(player, "buy", nil))
 			t.eq(again.errorName, "ActionRateLimitError", "refused while the slot is taken")
 
-			-- Leaving drops the count: the pending call no longer holds the slot.
+			-- Leaving drops the count: the pending call no longer holds the slot
+			-- when the player comes back.
 			registry.forgetPlayer(player)
+			registry.readmitPlayer(player)
 			local pending = registry.dispatch(player, "buy", nil)
 			release("done")
 			local _, _, freed = t.await(pending)
 			t.isTrue(freed.ok, "a fresh slot after forgetPlayer")
+		end)
+	end)
+
+	t.describe("RemoteEvent transport after leave", function()
+		local function clockedRegistry(budget, runs, abuse, clock)
+			return createActionRegistry({
+				buy = {
+					id = "buy",
+					run = function()
+						runs.count += 1
+						return "ok"
+					end,
+				},
+			}, {
+				requestBudget = budget,
+				nowMs = function()
+					return clock.ms
+				end,
+				onAbuse = function(_player, info)
+					table.insert(abuse, info.reason)
+				end,
+			})
+		end
+
+		t.it("drops an envelope that arrives after the player left, and creates no state for it", function()
+			local runs, abuse, clock = { count = 0 }, {}, { ms = 0 }
+			local registry = clockedRegistry({ burst = 1, perSecond = 1 }, runs, abuse, clock)
+			local binding = transport.bindActions(registry)
+			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local player = remote._fakePlayer
+			local responses = { count = 0 }
+			local connection = remote.OnClientEvent:Connect(function()
+				responses.count += 1
+			end)
+
+			registry.forgetPlayer(player)
+			remote:FireServer("late", "buy", nil)
+			t.eq(runs.count, 0, "the late envelope is dropped")
+			t.eq(responses.count, 0, "without a response")
+			t.eq(#abuse, 0, "late, not abusive: nothing is reported")
+
+			-- Had the late envelope created a budget, it would have spent the
+			-- only token, and this one would be dropped.
+			registry.readmitPlayer(player)
+			remote:FireServer("back", "buy", nil)
+			t.eq(runs.count, 1)
+			connection.Disconnect()
+			binding.disconnect()
+		end)
+
+		t.it("does not remember a late call's idempotency key", function()
+			local runs, abuse, clock = { count = 0 }, {}, { ms = 0 }
+			local registry = clockedRegistry(nil, runs, abuse, clock)
+			local player = { UserId = 7 }
+
+			t.await(registry.dispatch(player, "buy", nil, "key-1"))
+			t.eq(runs.count, 1)
+			registry.forgetPlayer(player)
+			-- Reaching the cache after leave (the transport would have dropped it
+			-- already), the call runs but nothing is stored for the player.
+			t.await(registry.dispatch(player, "buy", nil, "key-1"))
+			t.await(registry.dispatch(player, "buy", nil, "key-1"))
+			t.eq(runs.count, 3, "not de-duplicated, so not remembered")
+
+			registry.readmitPlayer(player)
+			t.await(registry.dispatch(player, "buy", nil, "key-1"))
+			t.eq(runs.count, 4, "leave dropped the key and nothing put it back")
+			t.await(registry.dispatch(player, "buy", nil, "key-1"))
+			t.eq(runs.count, 4, "remembered again once the player is back")
+		end)
+
+		t.it("forgets the departed mark after its TTL, so it does not pin the player", function()
+			local DEPARTED_PLAYER_TTL_MS = ctx.load("request-guard").DEPARTED_PLAYER_TTL_MS
+			local runs, abuse, clock = { count = 0 }, {}, { ms = 0 }
+			local registry = clockedRegistry(nil, runs, abuse, clock)
+			local player = { UserId = 8 }
+
+			registry.forgetPlayer(player)
+			clock.ms = DEPARTED_PLAYER_TTL_MS
+			t.isFalse(registry.admitEnvelope(player, "r1", "buy"), "still departed at the TTL")
+			clock.ms += 1
+			t.isTrue(registry.admitEnvelope(player, "r2", "buy"), "expired one millisecond later")
 		end)
 	end)
 

@@ -219,12 +219,18 @@ export function createServerApp<
 
 	const onPlayerAdded = options.onPlayerAdded;
 	const onPlayerRemoving = options.onPlayerRemoving;
-	// The join handler runs when either a session must be created or `onPlayerAdded`
-	// wants to observe the join. Session creation precedes the hook.
+	// Both handlers run whenever there is a players source: on leave the
+	// player's idempotency keys have to be dropped, and on join a departed mark
+	// cleared. Boot backfill runs only when a session must be created or
+	// `onPlayerAdded` wants to observe the join. Session creation precedes the
+	// hook.
 	const needsAddedHandling =
 		createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
 
 	const handlePlayerAdded = (player: TPlayer): void => {
+		// A player who left and came back (the same object, as a test harness
+		// reuses one) is no longer departed.
+		registry.readmitPlayer(player);
 		let session: TSession | undefined;
 		if (createSession !== undefined) {
 			session = createSession(player);
@@ -266,7 +272,8 @@ export function createServerApp<
 		// Injected source (tests, and anything that drives joins itself). Never
 		// touches the Players service, so it works outside a running game.
 		const addedSignal = source.PlayerAdded;
-		if (needsAddedHandling && addedSignal !== undefined) {
+		// Always, where the source has it: a rejoin clears the departed mark.
+		if (addedSignal !== undefined) {
 			const connection = addedSignal.Connect((player) => {
 				handlePlayerAdded(player);
 			});
@@ -285,12 +292,11 @@ export function createServerApp<
 		}
 	} else {
 		const players = game.GetService("Players");
-		if (needsAddedHandling) {
-			const connection = players.PlayerAdded.Connect((player) => {
-				handlePlayerAdded(player as unknown as TPlayer);
-			});
-			lifecycleCleanups.push(() => connection.Disconnect());
-		}
+		// Always: a rejoin clears the departed mark.
+		const addedConnection = players.PlayerAdded.Connect((player) => {
+			handlePlayerAdded(player as unknown as TPlayer);
+		});
+		lifecycleCleanups.push(() => addedConnection.Disconnect());
 		const removingConnection = players.PlayerRemoving.Connect((player) => {
 			handlePlayerRemoving(player as unknown as TPlayer);
 		});

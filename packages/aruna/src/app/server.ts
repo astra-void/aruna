@@ -12,6 +12,7 @@ import {
 import { createActionRateLimiter } from "../runtime/rate-limit.js";
 import { createIdempotencyCache } from "../runtime/idempotency.js";
 import {
+  createDepartedPlayers,
   createRequestGuard,
   type RequestAbuseHandler,
   type RequestBudgetOptions,
@@ -193,15 +194,20 @@ export function createServerApp<
   const rateLimiter = options.rateLimiter ?? createActionRateLimiter();
   // What each retried call settled to, per player, so it runs once. Dropped on
   // leave (when the app has a `players` source); bounded and expiring otherwise.
-  const idempotency = createIdempotencyCache<TPlayer, unknown>(
-    options.nowMs !== undefined ? { nowMs: options.nowMs } : undefined,
-  );
+  // Players who just left. Leave drops their keys and budget; this keeps a
+  // late envelope from creating them again (and holding the player forever).
+  const departed = createDepartedPlayers<TPlayer>(options.nowMs);
+  const idempotency = createIdempotencyCache<TPlayer, unknown>({
+    ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+    departed,
+  });
   // The envelope budget and in-flight cap: the transport charges the budget,
   // dispatch claims the slot. Dropped per player on leave, like the keys.
   const requestGuard = createRequestGuard<TPlayer>({
     ...(options.requestBudget !== undefined ? { budget: options.requestBudget } : {}),
     ...(options.onAbuse !== undefined ? { onAbuse: options.onAbuse } : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+    departed,
   });
 
   // Per-player session store, keyed by the player reference. Populated on join
@@ -264,14 +270,17 @@ export function createServerApp<
 
   const onPlayerAdded = options.onPlayerAdded;
   const onPlayerRemoving = options.onPlayerRemoving;
-  // The join handler runs when either a session must be created or `onPlayerAdded`
-  // wants to observe the join; session creation precedes the hook. The leave
-  // handler always runs when there is a source: at the least, the player's
-  // idempotency entries have to be dropped.
+  // Both handlers run whenever there is a source: on leave the player's
+  // idempotency entries have to be dropped, and on join a departed mark cleared.
+  // Boot backfill runs only when a session must be created or `onPlayerAdded`
+  // wants to observe the join; session creation precedes the hook.
   const needsAddedHandling =
     createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
 
   const handlePlayerAdded = (player: TPlayer): void => {
+    // A player who left and came back (the same object, as a test harness
+    // reuses one) is no longer departed.
+    departed.remove(player);
     let session: TSession | undefined;
     if (createSession !== undefined) {
       session = createSession(player);
@@ -300,10 +309,12 @@ export function createServerApp<
     sessions.delete(player);
     idempotency.forget(player);
     requestGuard.forget(player);
+    departed.add(player);
   };
 
+  // Always, where the source has the signal: a rejoin clears the departed mark.
   const playerAddedConnection =
-    needsAddedHandling && options.players?.PlayerAdded !== undefined
+    options.players?.PlayerAdded !== undefined
       ? options.players.PlayerAdded.Connect(handlePlayerAdded)
       : undefined;
   const playerRemovingConnection =
@@ -341,6 +352,7 @@ export function createServerApp<
       sessions.clear();
       idempotency.clear();
       requestGuard.clear();
+      departed.clear();
     },
   };
 }
