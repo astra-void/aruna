@@ -105,10 +105,23 @@ fn compile_globset(patterns: &[String]) -> Result<GlobSet, String> {
     builder.build().map_err(|error| error.to_string())
 }
 
+thread_local! {
+    // Compiled glob sets by pattern list. Classification asks the same few
+    // pattern lists for every file of every check, and compiling a set costs far
+    // more than matching one — at 3,000 files, compiling per call was most of a
+    // check. A pattern list that fails to compile is remembered as `None`.
+    static GLOBSET_CACHE: std::cell::RefCell<std::collections::HashMap<Vec<String>, Option<GlobSet>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
 fn matches_any(patterns: &[String], path: &str) -> bool {
-    compile_globset(patterns)
-        .map(|globset| globset.is_match(path))
-        .unwrap_or(false)
+    GLOBSET_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let globset = cache
+            .entry(patterns.to_vec())
+            .or_insert_with(|| compile_globset(patterns).ok());
+        globset.as_ref().is_some_and(|globset| globset.is_match(path))
+    })
 }
 
 fn patterns_for_kind(conventions: &ConventionConfig, kind: &ModuleKind) -> Vec<String> {
