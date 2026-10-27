@@ -33,6 +33,37 @@ schema.i16()   // -32768..32767
 schema.i32()   // -2147483648..2147483647
 ```
 
+## Constraints
+
+Chained after a builder, a constraint adds a runtime check without changing the type or
+the wire format. A value that fails it fails validation like a wrong type does.
+
+```ts
+schema.number().min(0).max(100).int()
+schema.string().minLength(1).maxLength(64)      // UTF-8 bytes
+schema.string().minChars(2).maxChars(16)        // characters (code points)
+schema.array(schema.string()).minItems(1).maxItems(8)
+schema.number().refine((value) => value % 2 === 0, "expected an even number")
+```
+
+**String lengths are bytes.** `minLength`, `maxLength`, and `length` count UTF-8 bytes in
+both runtimes, which is what a string costs on the wire and in the binary codec: `"abc"`
+is 3, `"가나다"` is 9, `"😀"` is 4. They are the right tool for a size budget (an
+unreliable signal, a DataStore record). For a limit a person reads — a name, a chat line —
+use `minChars` / `maxChars`, which count code points: `"가나다"` is 3 and `"😀"` is 1.
+A string that is not valid UTF-8 has no character count and fails `minChars` /
+`maxChars` (natively, where `utf8.len` returns nil; in Node, a string with a lone
+surrogate). Both can be chained when a field needs both kinds of limit:
+
+```ts
+schema.string().maxChars(40).maxLength(120)  // 40 characters, and never over 120 bytes
+```
+
+The compiler reads a literal `.maxLength(n)` / `.maxItems(n)` (and `.maxChars(n)`, as at
+most 4n bytes) to size signal payloads, and the [store gate](./stores.md#the-compatibility-gate)
+compares them across builds. Every other constraint is runtime code it cannot evaluate;
+it records a hash of the chain so the gate can at least tell one changed.
+
 ## Collections & composition
 
 ```ts

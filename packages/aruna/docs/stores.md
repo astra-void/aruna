@@ -301,8 +301,10 @@ new schema must accept everything the old one did.
 | --- | --- |
 | Same version, a new required field with no `.default()` | **breaking** — every saved record lacks it |
 | Same version, a field's type changed, or narrowed (`number` → `u8`, an enum value or union member dropped, optional → required) | **breaking** |
+| Same version, a literal `.maxLength(n)` / `.maxItems(n)` lowered, or added where there was none | **breaking** — saved values may be longer |
+| Same version, any other constraint changed (`.min()`, `.minLength()`, `.maxChars()`, `.refine()`, a bound that is not a literal) | warning — "constraint changed; saved records not verified": the compiler sees the chain changed (it records a hash of its source) but cannot run it against saved records |
 | Same version, a field removed | warning — saved records still hold it, and rebuilding the value drops it |
-| Same version, a new optional field, or one with `.default()`; a type widened | compatible |
+| Same version, a new optional field, or one with `.default()`; a type widened; a `.maxLength` / `.maxItems` raised or removed | compatible |
 | Version bumped, `migrate` declared | info — old records go through `migrate`, so the schemas are not compared |
 | Version bumped, no `migrate` | **breaking** — every saved record fails to load |
 | Version decreased | **breaking** — saved records are now [ahead of this build](#mixed-version-servers) |

@@ -1,0 +1,72 @@
+{
+  "actions": [],
+  "diagnostics": [],
+  "imports": [
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/economy/store.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    },
+    {
+      "from": "src/server.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./domains/economy/store",
+      "to": "src/domains/economy/store.ts"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/domains/economy/store.ts",
+      "kind": "serverStore",
+      "path": "src/domains/economy/store.ts",
+      "reason": "directive",
+      "reasonDetail": "defineStore(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "projectRoot": ".",
+  "stores": [
+    {
+      "exportName": "profile",
+      "file": "src/domains/economy/store.ts",
+      "id": "player.profile",
+      "kind": "playerStore",
+      "schema": {
+        "kind": "object",
+        "properties": {
+          "name": {
+            "kind": "string",
+            "maxLength": 16
+          },
+          "tags": {
+            "items": {
+              "kind": "string"
+            },
+            "kind": "array",
+            "maxItems": 10
+          },
+          "title": {
+            "kind": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "version": 1
+    }
+  ],
+  "version": 1
+}

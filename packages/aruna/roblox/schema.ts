@@ -38,7 +38,8 @@ export type SchemaLiteral = string | number | boolean;
 // A runtime-only validation refinement: a predicate plus the message reported
 // when it fails. Constraints like `.min(0)` / `.maxLength(20)` are built-in
 // refinements. They run after the structural check passes and never change the
-// wire format or the rendered type, so the compiler ignores them.
+// wire format or the rendered type. The compiler keeps only a literal length
+// bound and a hash of the chain's source.
 export interface Refinement {
 	readonly check: (value: unknown) => boolean;
 	readonly message: string;
@@ -206,9 +207,15 @@ function defaultSchema<T>(inner: Schema<T>, value: unknown): Schema<T> {
 // roblox-ts treats them as plain properties. Each returns a fresh schema whose
 // validate closure re-runs the full refinement list.
 export interface StringSchemaChain extends Schema<string> {
+	// Length in UTF-8 bytes, the size a string has on the wire and in the binary
+	// codec ("가" is 3). For a limit people read, use minChars / maxChars.
 	readonly minLength: (value: number) => StringSchemaChain;
 	readonly maxLength: (value: number) => StringSchemaChain;
 	readonly length: (value: number) => StringSchemaChain;
+	// Length in code points ("가" and "😀" are 1 each). A string that is not
+	// valid UTF-8 has no such length and fails.
+	readonly minChars: (value: number) => StringSchemaChain;
+	readonly maxChars: (value: number) => StringSchemaChain;
 	readonly refine: (check: (value: unknown) => boolean, message: string) => StringSchemaChain;
 	readonly default: (value: string) => Schema<string>;
 }
@@ -229,6 +236,15 @@ export interface ArraySchemaChain<T = unknown> extends Schema<Array<T>> {
 	readonly default: (value: ReadonlyArray<T>) => Schema<Array<T>>;
 }
 
+// Code points in a string, or undefined when it is not valid UTF-8.
+function charCount(candidate: unknown): number | undefined {
+	if (!typeIs(candidate, "string")) {
+		return undefined;
+	}
+	const [count] = utf8.len(candidate);
+	return typeIs(count, "number") ? count : undefined;
+}
+
 function stringSchemaChain(refinements: readonly Refinement[]): StringSchemaChain {
 	const core = stringSchemaCore(refinements);
 	return {
@@ -238,7 +254,7 @@ function stringSchemaChain(refinements: readonly Refinement[]): StringSchemaChai
 				...refinements,
 				{
 					check: (candidate) => typeIs(candidate, "string") && (candidate as string).size() >= value,
-					message: `expected length >= ${value}`,
+					message: `expected length >= ${value} bytes`,
 				},
 			]),
 		maxLength: (value) =>
@@ -246,7 +262,7 @@ function stringSchemaChain(refinements: readonly Refinement[]): StringSchemaChai
 				...refinements,
 				{
 					check: (candidate) => typeIs(candidate, "string") && (candidate as string).size() <= value,
-					message: `expected length <= ${value}`,
+					message: `expected length <= ${value} bytes`,
 				},
 			]),
 		length: (value) =>
@@ -254,7 +270,29 @@ function stringSchemaChain(refinements: readonly Refinement[]): StringSchemaChai
 				...refinements,
 				{
 					check: (candidate) => typeIs(candidate, "string") && (candidate as string).size() === value,
-					message: `expected length ${value}`,
+					message: `expected length ${value} bytes`,
+				},
+			]),
+		minChars: (value) =>
+			stringSchemaChain([
+				...refinements,
+				{
+					check: (candidate) => {
+						const count = charCount(candidate);
+						return count !== undefined && count >= value;
+					},
+					message: `expected at least ${value} characters`,
+				},
+			]),
+		maxChars: (value) =>
+			stringSchemaChain([
+				...refinements,
+				{
+					check: (candidate) => {
+						const count = charCount(candidate);
+						return count !== undefined && count <= value;
+					},
+					message: `expected at most ${value} characters`,
 				},
 			]),
 		refine: (check, message) => stringSchemaChain([...refinements, { check, message }]),

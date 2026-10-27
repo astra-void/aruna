@@ -178,10 +178,14 @@ export type SchemaMetadata = {
   values?: SchemaLiteralMetadata[] | undefined;
   inner?: SchemaMetadata | undefined;
   members?: SchemaMetadata[] | undefined;
-  // A string's `.maxLength` / `.length` (bytes) and an array's `.maxItems` /
-  // `.length`: the constraints that bound the encoded size.
+  // A string's `.maxLength` / `.length` (UTF-8 bytes; `.maxChars(n)` counts
+  // 4n) and an array's `.maxItems` / `.length`: the constraints that bound the
+  // encoded size.
   maxLength?: number | undefined;
   maxItems?: number | undefined;
+  // A hash of the rest of the constraint chain's source (`.min(0)`,
+  // `.refine(...)`, ...). Opaque: equal means the chain did not change.
+  constraintsHash?: string | undefined;
 };
 
 export type GeneratedFile = {

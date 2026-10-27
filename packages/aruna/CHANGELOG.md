@@ -61,6 +61,24 @@ the game build like any other module.
   - `aruna contract update` writes the snapshot; `aruna contract diff` with no
     arguments compares against it.
 
+- **`schema.string().maxChars(n)` / `.minChars(n)`.** Length limits in
+  characters (code points) — `"가나다"` is 3, `"😀"` is 1 — for the limits a
+  person reads: names, chat lines. A string that is not valid UTF-8 (natively,
+  where `utf8.len` returns nil; in Node, one with a lone surrogate) has no
+  character count and fails. The compiler counts a literal `.maxChars(n)` as at
+  most 4n bytes when sizing a signal payload.
+
+- **The store gate sees constraints.** At the same version, `aruna contract
+  diff` and the `aruna::578` gate now treat a literal `.maxLength(n)` /
+  `.maxItems(n)` that was lowered, or added where there was none, as breaking
+  (`store-bound-tightened`): records saved under the old bound may be longer.
+  Raising or removing one is compatible. Constraints the compiler cannot
+  evaluate — `.min()`, `.minLength()`, `.maxChars()`, `.refine()`, a non-literal
+  bound — it now records as `constraintsHash` in the schema metadata (a stable
+  hash of the chain's source, whitespace ignored, omitted when there is no
+  chain); a hash that changed at the same version is a `warning`,
+  `store-constraint-changed`: "constraint changed; saved records not verified".
+
 - **A request budget in front of dispatch.** `createServerApp({ requestBudget,
   onAbuse })`, in both runtimes. A per-action `rateLimit` rightly ignores
   invalid input, but nothing priced the checking itself, so an exploiter could
@@ -187,6 +205,20 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **Breaking: string length constraints count UTF-8 bytes in both runtimes.**
+  `maxLength`, `minLength`, and `length` counted UTF-16 code units in Node
+  (`value.length`) and bytes natively (`#value`), so `"가나다"` was 3 in a spec and
+  9 in the game, and a Korean name that passed every Node test failed in
+  production. The compiler's size bound and the binary codec already counted
+  bytes. Node now counts UTF-8 bytes too, and the failure message says so:
+  `expected length <= 16 bytes` (was `expected length <= 16`), in both runtimes.
+
+  **Migration:** ASCII strings are unaffected. A limit meant for people
+  (characters on screen) should become `.maxChars(n)` / `.minChars(n)`; a limit
+  meant as a size budget can stay `.maxLength(n)`, but check the number — it is
+  now bytes in Node as well, so a Korean or emoji value takes 3–4 per character.
+  Tests that match the old message text need the ` bytes` suffix.
 
 - **Breaking: `aruna contract update` refuses a store change saved records
   cannot survive.** It used to write the snapshot unconditionally, and

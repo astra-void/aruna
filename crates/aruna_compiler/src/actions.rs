@@ -73,14 +73,60 @@ pub struct ArunaSchemaMetadata {
     pub inner: Option<Box<ArunaSchemaMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub members: Option<Vec<ArunaSchemaMetadata>>,
-    // `.maxLength(n)` / `.length(n)` on a string, in bytes. The only part of a
-    // string schema that bounds its encoded size, so it is kept even though
-    // other constraints are runtime-only.
+    // `.maxLength(n)` / `.length(n)` on a string, in UTF-8 bytes, or four bytes
+    // per character of `.maxChars(n)`. The only part of a string schema that
+    // bounds its encoded size, so it is kept even though other constraints are
+    // runtime-only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<u32>,
     // `.maxItems(n)` / `.length(n)` on an array, for the same reason.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_items: Option<u32>,
+    // A hash of the constraint chain's source (`.min(0).refine(...)`), for the
+    // constraints the metadata does not otherwise record: the store gate cannot
+    // check a saved record against them, but it can tell they changed. A literal
+    // `.maxLength(n)` / `.maxItems(n)` is recorded above instead and left out.
+    // Omitted when there is no such chain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub constraints_hash: Option<String>,
+}
+
+// FNV-1a, 64-bit: stable across platforms and builds, which a snapshot
+// compared between machines needs. Not a security boundary.
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+// One constraint call as hashed: its name and each argument's source with all
+// whitespace removed, so reformatting (line breaks, a trailing comma) does not
+// read as a change.
+fn canonical_constraint_call(name: &str, call: &CallExpression<'_>, source: &str) -> String {
+    let arguments: Vec<String> = call
+        .arguments
+        .iter()
+        .map(|argument| {
+            let span = argument.span();
+            source
+                .get(span.start as usize..span.end as usize)
+                .unwrap_or_default()
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect()
+        })
+        .collect();
+    format!(".{name}({})", arguments.join(","))
+}
+
+// Extends a chain hash by one call: the hash of the previous hash followed by
+// the call, so it covers the whole chain in order.
+fn extend_constraints_hash(previous: Option<&str>, call: &str) -> String {
+    let input = format!("{}{call}", previous.unwrap_or_default());
+    format!("{:016x}", fnv1a_64(input.as_bytes()))
 }
 
 // Every binary frame starts with a u32 schema fingerprint.
@@ -92,7 +138,8 @@ pub const UNRELIABLE_PAYLOAD_LIMIT_BYTES: u64 = 900;
 
 // The largest payload `encodeBinary` can produce for a schema, frame header
 // excluded, or None when nothing bounds it. Follows the codec's layout
-// (src/runtime/binary.ts): a string needs `.maxLength`, an array `.maxItems`;
+// (src/runtime/binary.ts): a string needs `.maxLength` or `.maxChars`, an
+// array `.maxItems`;
 // a record has no size bound at all; optionals and unions take their largest
 // branch.
 pub fn max_encoded_payload_bytes(schema: &ArunaSchemaMetadata) -> Option<u64> {
@@ -505,6 +552,8 @@ enum ImportedSchemaResolution {
 struct SchemaScope<'a> {
     env: SchemaEnv<'a>,
     imported: HashMap<String, ImportedSchemaResolution>,
+    // The file's source, for hashing a schema's constraint chain.
+    source: &'a str,
 }
 
 /// Pre-resolves every relative named import of `program` as a potential schema
@@ -590,6 +639,7 @@ fn resolve_imported_schema_bindings(
         let target_scope = SchemaScope {
             env: collect_schema_bindings(&parsed.program),
             imported: HashMap::new(),
+            source: parsed.program.source_text,
         };
         for (local, exported_name) in requested {
             let Some(expression) = target_scope.env.get(exported_name.as_str()).copied() else {
@@ -1021,6 +1071,8 @@ fn is_chain_constraint_method(name: &str) -> bool {
             | "maxLength"
             | "minItems"
             | "maxItems"
+            | "minChars"
+            | "maxChars"
             | "refine"
     )
 }
@@ -1068,21 +1120,48 @@ fn parse_schema_call<'a>(
     // or the wire format. Parse the receiver as the real schema and drop the
     // constraint, so the metadata reflects only the underlying kind.
     //
-    // The exception is a length bound, which caps the encoded size: it is
-    // recorded so a signal's size can be checked (see max_encoded_payload_bytes).
+    // Two things are kept. A length bound caps the encoded size, so it is
+    // recorded for a signal's size check (see max_encoded_payload_bytes). The
+    // rest go into constraints_hash, so the store gate can tell they changed.
     let constraint = member.property.name.as_str();
     if is_chain_constraint_method(constraint) {
         if let Expression::CallExpression(inner_call) = unwrap_schema_expression(&member.object) {
             let mut parsed = parse_schema_call(
                 file, action_id, export_name, role, inner_call, scope, diagnostics,
             )?;
-            if let Some(bound) = literal_length_bound(call) {
-                let tighten = |current: Option<u32>| Some(current.map_or(bound, |value| value.min(bound)));
+            let bound = literal_length_bound(call);
+            if let Some(bound) = bound {
+                let tighten = |current: Option<u32>, bytes: u32| {
+                    Some(current.map_or(bytes, |value| value.min(bytes)))
+                };
                 match (parsed.kind.as_str(), constraint) {
-                    ("string", "maxLength" | "length") => parsed.max_length = tighten(parsed.max_length),
-                    ("array", "maxItems" | "length") => parsed.max_items = tighten(parsed.max_items),
+                    ("string", "maxLength" | "length") => {
+                        parsed.max_length = tighten(parsed.max_length, bound)
+                    }
+                    // A character is at most four UTF-8 bytes.
+                    ("string", "maxChars") => {
+                        parsed.max_length = tighten(parsed.max_length, bound.saturating_mul(4))
+                    }
+                    ("array", "maxItems" | "length") => {
+                        parsed.max_items = tighten(parsed.max_items, bound)
+                    }
                     _ => {}
                 }
+            }
+            // A literal upper bound is fully described by max_length / max_items,
+            // so a change to it is judged from those. Everything else, `length`
+            // (it is a lower bound too) and `maxChars` (bytes are not characters)
+            // included, is only visible through the hash.
+            let recorded = bound.is_some()
+                && matches!(
+                    (parsed.kind.as_str(), constraint),
+                    ("string", "maxLength") | ("array", "maxItems")
+                );
+            if !recorded {
+                parsed.constraints_hash = Some(extend_constraints_hash(
+                    parsed.constraints_hash.as_deref(),
+                    &canonical_constraint_call(constraint, call, scope.source),
+                ));
             }
             return Some(parsed);
         }
@@ -2231,6 +2310,7 @@ fn collect_action_candidates(
     let scope = SchemaScope {
         env: collect_schema_bindings(program),
         imported: resolve_imported_schema_bindings(path, program),
+        source: program.source_text,
     };
 
     for statement in &program.body {
@@ -2467,7 +2547,7 @@ fn check_unreliable_payload_size(
             Some(file.to_string()),
             Some(span),
             Some(format!(
-                "A payload is bounded when every string has .maxLength(n), every array .maxItems(n), and it holds no record (export name: {export_name})."
+                "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: {export_name})."
             )),
             Some("Bound the payload schema, or make the signal reliable.".to_string()),
         ));
@@ -2512,6 +2592,7 @@ fn collect_signal_candidates(
     let scope = SchemaScope {
         env: collect_schema_bindings(program),
         imported: resolve_imported_schema_bindings(path, program),
+        source: program.source_text,
     };
 
     for statement in &program.body {
@@ -2757,6 +2838,7 @@ fn collect_store_candidates(
     let scope = SchemaScope {
         env: collect_schema_bindings(program),
         imported: resolve_imported_schema_bindings(path, program),
+        source: program.source_text,
     };
 
     for statement in &program.body {
@@ -3411,6 +3493,90 @@ export const settings = defineStore({
         assert_eq!(result.stores.len(), 1);
         assert_eq!(result.diagnostics.len(), 1);
         assert_eq!(result.diagnostics[0].code, "aruna::577");
+    }
+
+    fn store_fields(source_schema: &str) -> BTreeMap<String, ArunaSchemaMetadata> {
+        let result = collect_stores(&format!(
+            r#"
+import {{ defineStore }} from "aruna/server";
+import {{ schema }} from "aruna/schema";
+
+export const profile = defineStore({{
+  id: "player.profile",
+  schema: {source_schema},
+  defaultValue: {{}},
+}});
+"#
+        ));
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        result.stores[0]
+            .schema
+            .as_ref()
+            .expect("expected store schema")
+            .properties
+            .clone()
+            .expect("expected object properties")
+    }
+
+    #[test]
+    fn hashes_constraints_the_metadata_does_not_record() {
+        let fields = store_fields(
+            r#"schema.object({
+    name: schema.string().minLength(2).maxLength(16),
+    plain: schema.string(),
+    capped: schema.string().maxLength(16),
+    level: schema.number().min(0).refine((value) => value % 2 === 0, "even"),
+    tags: schema.array(schema.string()).maxItems(8),
+  })"#,
+        );
+
+        // A literal maxLength / maxItems is recorded as a bound, not hashed.
+        assert_eq!(fields["name"].max_length, Some(16));
+        assert!(fields["name"].constraints_hash.is_some());
+        assert_eq!(fields["capped"].max_length, Some(16));
+        assert_eq!(fields["capped"].constraints_hash, None);
+        assert_eq!(fields["tags"].max_items, Some(8));
+        assert_eq!(fields["tags"].constraints_hash, None);
+        assert_eq!(fields["plain"].constraints_hash, None);
+        let level = fields["level"].constraints_hash.as_deref().expect("expected a hash");
+        assert_eq!(level.len(), 16);
+
+        // Reformatting the chain is not a change.
+        let reformatted = store_fields(
+            r#"schema.object({ level: schema.number()
+      .min( 0 )
+      .refine(
+        (value) => value % 2 === 0,
+        "even",
+      ) })"#,
+        );
+        assert_eq!(reformatted["level"].constraints_hash.as_deref(), Some(level));
+
+        // A different bound, or the same calls in another order, is.
+        let changed = store_fields(
+            r#"schema.object({ level: schema.number().min(1).refine((value) => value % 2 === 0, "even") })"#,
+        );
+        assert_ne!(changed["level"].constraints_hash.as_deref(), Some(level));
+        let reordered = store_fields(
+            r#"schema.object({ level: schema.number().refine((value) => value % 2 === 0, "even").min(0) })"#,
+        );
+        assert_ne!(reordered["level"].constraints_hash.as_deref(), Some(level));
+    }
+
+    #[test]
+    fn bounds_a_max_chars_string_at_four_bytes_a_character() {
+        let fields = store_fields(
+            r#"schema.object({
+    chat: schema.string().maxChars(50),
+    both: schema.string().maxChars(50).maxLength(120),
+  })"#,
+        );
+
+        assert_eq!(fields["chat"].max_length, Some(200));
+        // maxChars is hashed: bytes do not describe a character limit.
+        assert!(fields["chat"].constraints_hash.is_some());
+        assert_eq!(fields["both"].max_length, Some(120));
+        assert_eq!(fields["both"].constraints_hash, fields["chat"].constraints_hash);
     }
 
     #[test]

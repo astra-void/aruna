@@ -21,8 +21,15 @@ type SchemaDescriptor = {
   readonly type: "string" | "number" | "boolean" | "object" | "instance";
   readonly fields?: Readonly<Record<string, SchemaDescriptor>>;
   readonly format?: "f32";
+  readonly minLength?: number;
+  readonly maxLength?: number;
+  readonly minChars?: number;
+  readonly maxChars?: number;
   readonly default?: unknown;
 };
+
+// The string constraints a descriptor can add, in the order they are chained.
+const STRING_CONSTRAINTS = ["minLength", "maxLength", "minChars", "maxChars"] as const;
 
 type ActionFixture = {
   readonly id: string;
@@ -78,8 +85,16 @@ const table = JSON.parse(
 function toSchema(descriptor: SchemaDescriptor): Schema {
   const base = (() => {
     switch (descriptor.type) {
-      case "string":
-        return schema.string();
+      case "string": {
+        let chain = schema.string();
+        for (const constraint of STRING_CONSTRAINTS) {
+          const bound = descriptor[constraint];
+          if (bound !== undefined) {
+            chain = chain[constraint](bound);
+          }
+        }
+        return chain;
+      }
       case "number":
         return descriptor.format === "f32" ? schema.f32() : schema.number();
       case "boolean":

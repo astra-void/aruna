@@ -21,6 +21,11 @@ return function(ctx)
 		local base
 		if descriptor.type == "string" then
 			base = schema.string()
+			for _, constraint in { "minLength", "maxLength", "minChars", "maxChars" } do
+				if descriptor[constraint] ~= nil then
+					base = base[constraint](descriptor[constraint])
+				end
+			end
 		elseif descriptor.type == "number" then
 			base = if descriptor.format == "f32" then schema.f32() else schema.number()
 		elseif descriptor.type == "boolean" then

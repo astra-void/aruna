@@ -209,7 +209,8 @@ size of its `encodeBinary` frame — and records it as `maxEncodedBytes` in the 
 
 - every number, boolean, literal, enum, and Roblox value type counts at its fixed width
   (`u8` is 1 byte, `number` 8, `vector3` 12, `cframe` 48)
-- a string needs `.maxLength(n)` (or `.length(n)`), an array `.maxItems(n)`
+- a string needs `.maxLength(n)` (or `.length(n)`), or `.maxChars(n)`, counted as 4n bytes;
+  an array `.maxItems(n)`
 - an optional or a union counts its largest branch
 - a `schema.record(...)` is never bounded
 
@@ -221,7 +222,7 @@ size of its `encodeBinary` frame — and records it as `maxEncodedBytes` in the 
 For a `wire: "binary"` signal the 4-byte frame header counts. For the default table
 encoding the binary size is a floor — Roblox adds type tags and keys on top — so an
 error there is certain, while staying under it is not a guarantee. String lengths are
-counted in bytes, as the native runtime's `.maxLength` does.
+counted in UTF-8 bytes, as `.maxLength` is in both runtimes.
 
 ## Binary wire
 

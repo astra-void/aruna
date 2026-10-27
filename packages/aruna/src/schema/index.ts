@@ -3,8 +3,10 @@ export type SchemaLiteral = string | number | boolean | undefined;
 // A runtime-only validation refinement: a predicate plus the message reported
 // when it fails. Constraints like `.min(0)` / `.maxLength(20)` are built-in
 // refinements. Refinements run after the structural check passes and never
-// change the rendered TypeScript type or the wire format, so the compiler
-// ignores them — they are pure runtime validation.
+// change the rendered TypeScript type or the wire format — they are pure
+// runtime validation. The compiler keeps only a literal length bound (it caps
+// the encoded size) and a hash of the chain's source, so the store gate can
+// tell a constraint changed.
 export type Refinement = {
   readonly check: (value: unknown) => boolean;
   readonly message: string;
@@ -812,9 +814,17 @@ export function assertSchema(
 
 // A string schema with chainable length/refine constraints.
 export interface StringSchemaChain extends StringSchema {
+  // Length in UTF-8 bytes, the size a string has on the wire and in the binary
+  // codec ("가" is 3), as the native runtime counts it. For a limit people
+  // read, use minChars / maxChars.
   minLength(value: number): StringSchemaChain;
   maxLength(value: number): StringSchemaChain;
   length(value: number): StringSchemaChain;
+  // Length in code points ("가" and "😀" are 1 each). A string with a lone
+  // surrogate has no UTF-8 form, so no such length, and fails — as invalid
+  // UTF-8 does natively.
+  minChars(value: number): StringSchemaChain;
+  maxChars(value: number): StringSchemaChain;
   refine(check: (value: unknown) => boolean, message: string): StringSchemaChain;
   default(value: string): DefaultSchema & { readonly inner: StringSchema; readonly value: string };
 }
@@ -847,30 +857,71 @@ function appendRefinement<TSchema extends { readonly refinements?: readonly Refi
   return { ...base, refinements: [...(base.refinements ?? []), refinement] };
 }
 
+const utf8Encoder = new TextEncoder();
+
+// A string's length in UTF-8 bytes: what `.size()` / `#` counts natively.
+function utf8ByteLength(value: string): number {
+  return utf8Encoder.encode(value).byteLength;
+}
+
+const LONE_SURROGATE = /\p{Cs}/u;
+
+// Code points in a string, or undefined when it holds a lone surrogate and so
+// has no UTF-8 form. Mirrors `utf8.len`, which returns nil for invalid UTF-8.
+function charCount(candidate: unknown): number | undefined {
+  if (typeof candidate !== "string" || LONE_SURROGATE.test(candidate)) {
+    return undefined;
+  }
+  return [...candidate].length;
+}
+
 function stringSchemaChain(base: StringSchema): StringSchemaChain {
   return {
     ...base,
     minLength(value) {
       return stringSchemaChain(
         appendRefinement(base, {
-          check: (candidate) => typeof candidate === "string" && candidate.length >= value,
-          message: `expected length >= ${value}`,
+          check: (candidate) => typeof candidate === "string" && utf8ByteLength(candidate) >= value,
+          message: `expected length >= ${value} bytes`,
         }),
       );
     },
     maxLength(value) {
       return stringSchemaChain(
         appendRefinement(base, {
-          check: (candidate) => typeof candidate === "string" && candidate.length <= value,
-          message: `expected length <= ${value}`,
+          check: (candidate) => typeof candidate === "string" && utf8ByteLength(candidate) <= value,
+          message: `expected length <= ${value} bytes`,
         }),
       );
     },
     length(value) {
       return stringSchemaChain(
         appendRefinement(base, {
-          check: (candidate) => typeof candidate === "string" && candidate.length === value,
-          message: `expected length ${value}`,
+          check: (candidate) =>
+            typeof candidate === "string" && utf8ByteLength(candidate) === value,
+          message: `expected length ${value} bytes`,
+        }),
+      );
+    },
+    minChars(value) {
+      return stringSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => {
+            const count = charCount(candidate);
+            return count !== undefined && count >= value;
+          },
+          message: `expected at least ${value} characters`,
+        }),
+      );
+    },
+    maxChars(value) {
+      return stringSchemaChain(
+        appendRefinement(base, {
+          check: (candidate) => {
+            const count = charCount(candidate);
+            return count !== undefined && count <= value;
+          },
+          message: `expected at most ${value} characters`,
         }),
       );
     },

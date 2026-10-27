@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "project": {
+    "root": "../../../../../../private/tmp/claude-501/-Users-returnf4lse-Desktop-Workspace-typescript-aruna/742ff090-7dd9-4a65-ab15-685f2a4b3318/scratchpad/tmp2_1_bozf",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "stores": [
+    {
+      "id": "player.profile",
+      "source": "src/domains/economy/store.ts",
+      "kind": "playerStore",
+      "version": 1,
+      "scope": null,
+      "hasMigrate": false,
+      "schema": {
+        "summary": "object { name: string, tags: string[], title: string }",
+        "schema": {
+          "kind": "object",
+          "properties": {
+            "name": {
+              "kind": "string",
+              "maxLength": 32
+            },
+            "tags": {
+              "items": {
+                "kind": "string"
+              },
+              "kind": "array"
+            },
+            "title": {
+              "kind": "string",
+              "maxLength": 32
+            }
+          }
+        }
+      },
+      "warnings": []
+    }
+  ],
+  "diagnostics": [],
+  "generatedAt": null
+}

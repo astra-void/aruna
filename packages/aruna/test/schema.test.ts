@@ -180,12 +180,51 @@ describe("schema constraints and refinements", () => {
     expect(validateSchema(username, "ada")).toEqual({ ok: true });
     expect(validateSchema(username, "ab")).toEqual({
       ok: false,
-      issues: [{ path: [], message: "expected length >= 3" }],
+      issues: [{ path: [], message: "expected length >= 3 bytes" }],
     });
     expect(validateSchema(schema.string().length(4), "abcde")).toEqual({
       ok: false,
-      issues: [{ path: [], message: "expected length 4" }],
+      issues: [{ path: [], message: "expected length 4 bytes" }],
     });
+  });
+
+  it("counts maxLength / minLength / length in UTF-8 bytes, as the native runtime does", () => {
+    // "가나다" is 3 characters and 9 bytes; "😀" is 1 character and 4 bytes.
+    expect(validateSchema(schema.string().maxLength(9), "가나다")).toEqual({ ok: true });
+    expect(validateSchema(schema.string().maxLength(8), "가나다")).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected length <= 8 bytes" }],
+    });
+    expect(validateSchema(schema.string().minLength(4), "😀")).toEqual({ ok: true });
+    expect(validateSchema(schema.string().minLength(5), "😀").ok).toBe(false);
+    expect(validateSchema(schema.string().length(8), "a가😀")).toEqual({ ok: true });
+    expect(validateSchema(schema.string().length(3), "a가😀").ok).toBe(false);
+  });
+
+  it("counts maxChars / minChars in code points", () => {
+    const name = schema.string().minChars(2).maxChars(3);
+    expect(validateSchema(name, "가나다")).toEqual({ ok: true });
+    expect(validateSchema(name, "😀😀")).toEqual({ ok: true });
+    expect(validateSchema(name, "가나다라")).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected at most 3 characters" }],
+    });
+    expect(validateSchema(name, "😀")).toEqual({
+      ok: false,
+      issues: [{ path: [], message: "expected at least 2 characters" }],
+    });
+    // Both bounds at once: chars for the reader, bytes for the wire.
+    const bubble = schema.string().maxChars(3).maxLength(8);
+    expect(validateSchema(bubble, "abc")).toEqual({ ok: true });
+    expect(validateSchema(bubble, "가나다").ok).toBe(false);
+  });
+
+  it("fails maxChars / minChars on a string with no UTF-8 form", () => {
+    // A lone surrogate is the JS analog of invalid UTF-8, where utf8.len is nil.
+    expect(validateSchema(schema.string().maxChars(10), "a\uD800b").ok).toBe(false);
+    expect(validateSchema(schema.string().minChars(0), "\uDC00").ok).toBe(false);
+    // A surrogate pair is one well-formed code point.
+    expect(validateSchema(schema.string().maxChars(1), "\uD83D\uDE00")).toEqual({ ok: true });
   });
 
   it("enforces array length constraints", () => {
@@ -219,7 +258,7 @@ describe("schema constraints and refinements", () => {
     const form = schema.object({ name: schema.string().minLength(2) });
     expect(validateSchema(form, { name: "a" })).toEqual({
       ok: false,
-      issues: [{ path: ["name"], message: "expected length >= 2" }],
+      issues: [{ path: ["name"], message: "expected length >= 2 bytes" }],
     });
   });
 

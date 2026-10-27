@@ -66,8 +66,9 @@ Optional: `input` and `output` schema descriptors, `rateLimit`
 
 A schema descriptor is `{ "type": "string" | "number" | "boolean" | "instance" }` or
 `{ "type": "object", "fields": { name: descriptor } }`. A number descriptor can
-add `"format": "f32"` for `schema.f32()`. Any of them can add
-`"default": value`.
+add `"format": "f32"` for `schema.f32()`. A string descriptor can add
+`"minLength"`, `"maxLength"` (UTF-8 bytes), `"minChars"`, and `"maxChars"` (code
+points), chained in that order. Any of them can add `"default": value`.
 
 JSON has no functions and no non-finite numbers, so two sentinels stand in for
 them anywhere in an input value, and each runner swaps them before dispatch:

@@ -109,7 +109,37 @@ return function(ctx)
 		t.it("reports the constraint message via firstSchemaIssue", function()
 			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
 			t.eq(firstSchemaIssue(schema.number().min(10), 5), "expected a number >= 10")
-			t.eq(firstSchemaIssue(schema.string().minLength(3), "ab"), "expected length >= 3")
+			t.eq(firstSchemaIssue(schema.string().minLength(3), "ab"), "expected length >= 3 bytes")
+		end)
+
+		t.it("counts maxLength / minLength / length in UTF-8 bytes", function()
+			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			-- "가나다" is 3 characters and 9 bytes; "😀" is 1 character and 4 bytes.
+			t.isTrue(schema.string().maxLength(9).validate("가나다"))
+			t.eq(firstSchemaIssue(schema.string().maxLength(8), "가나다"), "expected length <= 8 bytes")
+			t.isTrue(schema.string().minLength(4).validate("😀"))
+			t.isFalse(schema.string().minLength(5).validate("😀"))
+			t.isTrue(schema.string().length(8).validate("a가😀"))
+		end)
+
+		t.it("counts maxChars / minChars in code points", function()
+			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local name = schema.string().minChars(2).maxChars(3)
+			t.isTrue(name.validate("가나다"))
+			t.isTrue(name.validate("😀😀"))
+			t.eq(firstSchemaIssue(name, "가나다라"), "expected at most 3 characters")
+			t.eq(firstSchemaIssue(name, "😀"), "expected at least 2 characters")
+			local bubble = schema.string().maxChars(3).maxLength(8)
+			t.isTrue(bubble.validate("abc"))
+			t.isFalse(bubble.validate("가나다"))
+		end)
+
+		t.it("fails maxChars / minChars on invalid UTF-8", function()
+			-- utf8.len returns nil for these, so there is no character count.
+			t.isFalse(schema.string().maxChars(10).validate("a\255b"))
+			t.isFalse(schema.string().minChars(0).validate("\xC3"))
+			-- The byte length of the same string is still defined.
+			t.isTrue(schema.string().maxLength(3).validate("a\255b"))
 		end)
 
 		t.it("keeps chained refinements immutable across branches", function()

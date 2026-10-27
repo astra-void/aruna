@@ -491,6 +491,83 @@
       ],
       "steps": [{ "dispatch": "fire", "expect": { "noResponse": true } }],
       "trace": ["run", "onError"]
+    },
+    {
+      "name": "maxLength counts UTF-8 bytes: Korean",
+      "actions": [
+        {
+          "id": "say",
+          "behavior": "echoInput",
+          "input": { "type": "object", "fields": { "text": { "type": "string", "maxLength": 9 } } }
+        }
+      ],
+      "steps": [
+        { "dispatch": "say", "input": { "text": "가나다" }, "expect": { "ok": true, "output": { "text": "가나다" } } },
+        { "dispatch": "say", "input": { "text": "가나다a" }, "expect": { "ok": false, "errorName": "ActionValidationError", "messageContains": "expected length <= 9 bytes" } }
+      ],
+      "trace": ["run"]
+    },
+    {
+      "name": "maxLength counts UTF-8 bytes: emoji",
+      "actions": [
+        {
+          "id": "say",
+          "behavior": "echoInput",
+          "input": { "type": "object", "fields": { "text": { "type": "string", "maxLength": 7 } } }
+        }
+      ],
+      "steps": [
+        { "dispatch": "say", "input": { "text": "abc" }, "expect": { "ok": true, "output": { "text": "abc" } } },
+        { "dispatch": "say", "input": { "text": "😀😀" }, "expect": { "ok": false, "errorName": "ActionValidationError", "messageContains": "expected length <= 7 bytes" } }
+      ],
+      "trace": ["run"]
+    },
+    {
+      "name": "minLength counts UTF-8 bytes",
+      "actions": [
+        {
+          "id": "say",
+          "behavior": "echoInput",
+          "input": { "type": "object", "fields": { "text": { "type": "string", "minLength": 4 } } }
+        }
+      ],
+      "steps": [
+        { "dispatch": "say", "input": { "text": "😀" }, "expect": { "ok": true, "output": { "text": "😀" } } },
+        { "dispatch": "say", "input": { "text": "가" }, "expect": { "ok": false, "errorName": "ActionValidationError", "messageContains": "expected length >= 4 bytes" } }
+      ],
+      "trace": ["run"]
+    },
+    {
+      "name": "maxChars counts code points: Korean and emoji",
+      "actions": [
+        {
+          "id": "say",
+          "behavior": "echoInput",
+          "input": { "type": "object", "fields": { "text": { "type": "string", "maxChars": 3 } } }
+        }
+      ],
+      "steps": [
+        { "dispatch": "say", "input": { "text": "가나다" }, "expect": { "ok": true, "output": { "text": "가나다" } } },
+        { "dispatch": "say", "input": { "text": "😀😀😀" }, "expect": { "ok": true, "output": { "text": "😀😀😀" } } },
+        { "dispatch": "say", "input": { "text": "가😀a" }, "expect": { "ok": true, "output": { "text": "가😀a" } } },
+        { "dispatch": "say", "input": { "text": "가나다라" }, "expect": { "ok": false, "errorName": "ActionValidationError", "messageContains": "expected at most 3 characters" } }
+      ],
+      "trace": ["run", "run", "run"]
+    },
+    {
+      "name": "minChars counts code points",
+      "actions": [
+        {
+          "id": "say",
+          "behavior": "echoInput",
+          "input": { "type": "object", "fields": { "text": { "type": "string", "minChars": 2 } } }
+        }
+      ],
+      "steps": [
+        { "dispatch": "say", "input": { "text": "가😀" }, "expect": { "ok": true, "output": { "text": "가😀" } } },
+        { "dispatch": "say", "input": { "text": "😀" }, "expect": { "ok": false, "errorName": "ActionValidationError", "messageContains": "expected at least 2 characters" } }
+      ],
+      "trace": ["run"]
     }
   ]
 }

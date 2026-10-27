@@ -3,7 +3,7 @@
   "diagnostics": [
     {
       "code": "aruna::510",
-      "details": "A payload is bounded when every string has .maxLength(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
       "file": "src/shared/signals.ts",
       "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
       "name": "unreliable-signal-payload-unbounded",

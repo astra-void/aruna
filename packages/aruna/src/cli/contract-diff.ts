@@ -66,6 +66,8 @@ export type ContractDiffKind =
   | "store-field-added-optional"
   | "store-field-removed"
   | "store-field-type-changed"
+  | "store-bound-tightened"
+  | "store-constraint-changed"
   | "metadata-changed";
 
 export type ContractDiffEntry = {
@@ -295,6 +297,13 @@ function parseSchemaMetadata(value: unknown, location: string): ParsedSchema {
       }
       parsed[bound] = value[bound];
     }
+  }
+
+  if ("constraintsHash" in value && value["constraintsHash"] !== undefined) {
+    if (typeof value["constraintsHash"] !== "string") {
+      throw new Error(`${location}.constraintsHash must be a string.`);
+    }
+    parsed.constraintsHash = value["constraintsHash"];
   }
 
   return parsed;
@@ -1696,6 +1705,38 @@ function storeChange(
   );
 }
 
+// A literal upper bound (`maxLength`, `maxItems`) the reader adds or lowers
+// refuses saved values the writer allowed, so it is breaking at the same
+// version. Raising or dropping one is compatible.
+function diffStoreBound(
+  storeId: string,
+  bound: "maxLength" | "maxItems",
+  unit: string,
+  written: number | undefined,
+  read: number | undefined,
+  path: string,
+  entries: ContractDiffEntry[],
+): void {
+  if (read === undefined || (written !== undefined && read >= written)) {
+    return;
+  }
+  makeEntry(
+    {
+      severity: "breaking",
+      kind: "store-bound-tightened",
+      actionId: storeId,
+      path,
+      message:
+        written === undefined
+          ? `${storeId} ${path} gained ${bound} ${read}; saved records may be longer and will fail to load.`
+          : `${storeId} ${path} ${bound} lowered from ${written} to ${read}; saved records up to ${written} ${unit} will fail to load.`,
+      before: written ?? null,
+      after: read,
+    },
+    entries,
+  );
+}
+
 // `writer` is the schema records were saved under, `reader` the one that will
 // read them now.
 function diffStoreSchema(
@@ -1738,7 +1779,25 @@ function diffStoreSchema(
     return;
   }
 
+  // The rest of the chain (`.min(0)`, `.refine(...)`, a non-literal bound) is
+  // only a hash: a change can be seen, but not judged against saved records.
+  if (writer.constraintsHash !== reader.constraintsHash) {
+    storeChange(
+      storeId,
+      "warning",
+      "store-constraint-changed",
+      path,
+      `${storeId} ${path} constraint changed; saved records not verified. Check that every record saved under the old constraints still passes the new ones, or bump the version with a migrate.`,
+      writer,
+      reader,
+      entries,
+    );
+  }
+
   switch (reader.kind) {
+    case "string":
+      diffStoreBound(storeId, "maxLength", "bytes long", writer.maxLength, reader.maxLength, path, entries);
+      return;
     case "number":
       if (!numericFormatAccepts(writer.numericFormat, reader.numericFormat)) {
         breaking(
@@ -1780,6 +1839,7 @@ function diffStoreSchema(
       return;
     }
     case "array":
+      diffStoreBound(storeId, "maxItems", "items long", writer.maxItems, reader.maxItems, path, entries);
       diffStoreSchema(storeId, writer.items ?? null, reader.items ?? null, entries, `${path}[]`);
       return;
     case "record":
@@ -1857,7 +1917,7 @@ function diffStoreSchema(
       return;
     }
     default:
-      // string, boolean, and the Roblox value kinds carry nothing beyond the kind.
+      // boolean and the Roblox value kinds carry nothing beyond the kind.
       return;
   }
 }

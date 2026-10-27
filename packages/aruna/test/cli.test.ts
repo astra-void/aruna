@@ -189,6 +189,49 @@ describe("store contract gate", () => {
     );
   });
 
+  it("fails the gate when a store bound is lowered or added at the same version", () => {
+    const root = path.join(fixturesRoot, "store-contract-bound-tightened", "input");
+    const check = runCli(["check", "--json", "--project", root]);
+
+    expect(check.status).toBe(1);
+    const messages = gateDiagnostics(String(check.stdout)).map((diagnostic) => diagnostic.message);
+    expect(messages).toEqual([
+      "player.profile schema.name maxLength lowered from 32 to 16; saved records up to 32 bytes long will fail to load.",
+      "player.profile schema.tags gained maxItems 10; saved records may be longer and will fail to load.",
+    ]);
+
+    // Raising title's maxLength is compatible, so it is not listed at all.
+    const diff = runCli(["contract", "diff", "--json"], root);
+    const parsed = JSON.parse(String(diff.stdout)) as {
+      entries: Array<{ kind: string; path: string; before: unknown; after: unknown }>;
+    };
+    expect(parsed.entries).toEqual([
+      expect.objectContaining({ kind: "store-bound-tightened", path: "schema.name", before: 32, after: 16 }),
+      expect.objectContaining({ kind: "store-bound-tightened", path: "schema.tags", before: null, after: 10 }),
+    ]);
+  });
+
+  it("warns, without failing the gate, when a constraint the compiler cannot check changed", () => {
+    const root = path.join(fixturesRoot, "store-contract-constraint-changed", "input");
+
+    expect(runCli(["check", "--project", root]).status).toBe(0);
+    const diff = runCli(["contract", "diff", "--json"], root);
+    expect(diff.status).toBe(0);
+    const parsed = JSON.parse(String(diff.stdout)) as {
+      summary: { breaking: number; warning: number };
+      entries: Array<{ kind: string; severity: string; path: string; message: string }>;
+    };
+    expect(parsed.summary).toMatchObject({ breaking: 0, warning: 2 });
+    expect(parsed.entries.map((entry) => [entry.kind, entry.severity, entry.path])).toEqual([
+      ["store-constraint-changed", "warning", "schema.level"],
+      ["store-constraint-changed", "warning", "schema.nickname"],
+    ]);
+    expect(parsed.entries[0]?.message).toContain("constraint changed; saved records not verified");
+    // A warning is not an unreadable-record change, so update records it.
+    const copy = copyFixtureInput("store-contract-constraint-changed");
+    expect(runCli(["contract", "update", "--project", copy]).status).toBe(0);
+  });
+
   it("lowers the gate to a warning through strict.storeCompatibility", () => {
     const root = copyFixtureInput("store-contract-incompatible");
     writeProject(root, {
