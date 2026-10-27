@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  arunaLuneRunnerAssets,
   buildConsumerPackageJson,
   buildConsumerTsconfigJson,
   buildConsumerTypecheckTsconfigJson,
@@ -48,6 +49,10 @@ function buildFullPublicExports() {
     "./schema": {
       types: "./schema.d.ts",
       import: "./schema.js",
+    },
+    "./testing": {
+      types: "./testing.d.ts",
+      import: "./testing.js",
     },
     "./server": {
       types: "./server.d.ts",
@@ -194,6 +199,9 @@ describe("verify-package-consumption args", () => {
 
     for (const fileName of publicArunaSubpathFiles) {
       await writeTextFile(path.join(root, fileName), "export {};\n");
+    }
+    for (const asset of arunaLuneRunnerAssets) {
+      await writeTextFile(path.join(root, "lune", asset), "return nil\n");
     }
 
     await expect(assertPublicPackageSubpathFiles(root)).resolves.toBeUndefined();
