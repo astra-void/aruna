@@ -112,6 +112,23 @@
       "trace": []
     },
     {
+      "name": "an input of more than 2048 values is not wire-safe, however shallow",
+      "actions": [{ "id": "echo", "behavior": "echoInput" }],
+      "steps": [
+        {
+          "dispatch": "echo",
+          "input": { "$array": { "length": 2048, "of": 0 } },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        },
+        {
+          "dispatch": "echo",
+          "input": { "$array": { "length": 2047, "of": 0 } },
+          "expect": { "ok": true }
+        }
+      ],
+      "trace": ["run"]
+    },
+    {
       "name": "invalid input is rejected before the handler and not reported",
       "actions": [
         {

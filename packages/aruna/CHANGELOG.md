@@ -61,6 +61,18 @@ the game build like any other module.
   - `aruna contract update` writes the snapshot; `aruna contract diff` with no
     arguments compares against it.
 
+- **A request budget in front of dispatch.** `createServerApp({ requestBudget,
+  onAbuse })`, in both runtimes. A per-action `rateLimit` rightly ignores
+  invalid input, but nothing priced the checking itself, so an exploiter could
+  spam malformed payloads for free, each one costing defaults, a full
+  wire-safety walk, and a validation. Now every envelope is charged to a
+  per-player token bucket (60 burst, 30 per second) before the payload is read
+  and dropped silently once it is spent; a player's dispatches running at once
+  are capped (32), and the next is refused with `ActionRateLimitError`
+  (`retryAfterMs: 100`). `onAbuse(player, { reason })` hears about each one.
+  Budget state is dropped on leave. The native `ActionRegistry` gains
+  `admitEnvelope`, which its transport calls first.
+
 - **`aruna/testing` — the spec surface.** `createTestServerApp(options)` wraps a
   real `ServerApp`, owning the transport, the publisher, and the players source
   so a spec drives the shipping dispatch path — validation, rate limiting,
@@ -156,6 +168,22 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **Breaking: malformed request envelopes are dropped, and ids are
+  bounded.** A request id must be a string of at most 64 characters and an
+  action id at most 128, or the envelope is dropped before dispatch. The Node
+  RemoteEvent transport used to answer a malformed envelope that still had a
+  usable request id with an `ActionRequestError`; it now sends nothing, like
+  the native transport — a reply only gives a flood something to measure.
+
+- **Breaking: wire safety runs first, and stops at 2048 values.** Dispatch now
+  checks wire safety before filling `.default(...)` values (then validation,
+  then the per-action rate limit), and the walk gives up past 2048 visited
+  values in both runtimes, on top of the existing depth limit: depth alone did
+  not bound the work, since a flat array of a million numbers is one level
+  deep. An input with more values than that is `ActionSerializationError`. An
+  action's output and a signal payload are server-authored and not held to the
+  limit.
 
 - **Breaking: the default client retry no longer retries a timeout, unless the
   action is idempotent.** `withRetry` (and `createClientApp({ retry })`) used to

@@ -49,6 +49,17 @@ return function(ctx)
 			t.isFalse(isWireSafe({ position = roblox.Vector3.new(nan, 0, 0) }))
 		end)
 
+		t.it("rejects a value with more than 2048 values in it, however shallow", function()
+			local flat = {}
+			for index = 1, 2047 do
+				flat[index] = 0
+			end
+			t.isTrue(isWireSafe(flat), "2048 values including the table")
+			flat[2048] = 0
+			t.isFalse(isWireSafe(flat), "2049 values")
+			t.isTrue(isWireSafe(flat, math.huge), "unbounded for a server-authored value")
+		end)
+
 		t.it("rejects functions and threads", function()
 			t.isFalse(isWireSafe(function() end))
 			t.isFalse(isWireSafe(coroutine.create(function() end)))

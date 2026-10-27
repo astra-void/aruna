@@ -9,6 +9,7 @@ import {
 	type ActionRegistryOptions,
 } from "./server-runtime";
 import type { ActionRateLimitOptions } from "./server";
+import type { RequestAbuseHandler, RequestBudgetOptions } from "./request-guard";
 import type { AnyPlayerStore, StoreDocument } from "./player-store";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 
@@ -149,6 +150,15 @@ export interface CreateServerAppOptions<
 	// window with `advance(ms)` rather than waiting one out. Mirrors the Node
 	// reference runtime's option of the same name.
 	readonly nowMs?: () => number;
+	// Per-player limits in front of dispatch, for every envelope a client sends:
+	// a token bucket (`burst` envelopes, refilled at `perSecond`) charged before
+	// the transport reads the payload, and a cap on dispatches running at once
+	// (`maxInFlight`). An envelope over budget is dropped without a response; a
+	// call over the cap is refused with ActionRateLimitError. Defaults 60 / 30 / 32.
+	readonly requestBudget?: RequestBudgetOptions;
+	// Told when a player's envelope is dropped (malformed, over budget) or a call
+	// is refused for too many in flight — for logging, or a kick.
+	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 	// Replaces the Players service as the source of joins and leaves. Left unset
 	// in a game — the app connects to `Players` itself; set by the test harness,
 	// which fires the handlers on demand.
@@ -200,6 +210,8 @@ export function createServerApp<
 			? { exposeInternalErrors: options.exposeInternalErrors }
 			: {}),
 		...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+		...(options.requestBudget !== undefined ? { requestBudget: options.requestBudget } : {}),
+		...(options.onAbuse !== undefined ? { onAbuse: options.onAbuse } : {}),
 	};
 	const registry = createActionRegistry<TPlayer>(options.actions, registryOptions);
 

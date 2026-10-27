@@ -316,15 +316,20 @@ export function bindActions<TPlayer>(
 	const connection = remote.OnServerEvent.Connect((player: Player, ...args: Array<unknown>) => {
 		const requestId = args[0];
 		const actionId = args[1];
+
+		// Before anything else is read: drop a malformed envelope (ids must be
+		// bounded strings) and charge the player's request budget, dropping the
+		// envelope when it is spent. Neither gets a response.
+		if (!registry.admitEnvelope(player as unknown as TPlayer, requestId, actionId)) {
+			return;
+		}
+		if (!typeIs(requestId, "string") || !typeIs(actionId, "string")) {
+			return;
+		}
 		const input = args[2];
 		// Untrusted: dispatch ignores anything that is not a string of at most 64
 		// characters.
 		const idempotencyKey = args[3];
-
-		// Drop malformed envelopes from untrusted clients before dispatch.
-		if (!typeIs(requestId, "string") || !typeIs(actionId, "string")) {
-			return;
-		}
 
 		// Fire-and-forget actions are one-way: dispatch still runs (for its side
 		// effects and rate limiting), but no response is sent back, since the

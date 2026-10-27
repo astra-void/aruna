@@ -11,6 +11,11 @@ import {
 } from "../runtime/server.js";
 import { createActionRateLimiter } from "../runtime/rate-limit.js";
 import { createIdempotencyCache } from "../runtime/idempotency.js";
+import {
+  createRequestGuard,
+  type RequestAbuseHandler,
+  type RequestBudgetOptions,
+} from "../runtime/request-guard.js";
 import { normalizeServerBinding, type ServerBinding } from "../runtime/binding.js";
 import type { AnyPlayerStore, StoreDocument } from "../runtime/player-store.js";
 import type { RemoteSignalPublisher } from "../runtime/remote-signal.js";
@@ -148,6 +153,15 @@ export type CreateServerAppOptions<
   readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
   readonly players?: PlayersSource<TPlayer>;
   readonly nowMs?: () => number;
+  // Per-player limits in front of dispatch, for every envelope a client sends:
+  // a token bucket (`burst` envelopes, refilled at `perSecond`) charged before
+  // the transport reads the payload, and a cap on dispatches running at once
+  // (`maxInFlight`). An envelope over budget is dropped without a response; a
+  // call over the cap is refused with ActionRateLimitError. Defaults 60 / 30 / 32.
+  readonly requestBudget?: RequestBudgetOptions;
+  // Told when a player's envelope is dropped (malformed, over budget) or a call
+  // is refused for too many in flight — for logging, or a kick.
+  readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 };
 
 // A Players-service-shaped source for the player lifecycle hooks. `PlayerAdded`
@@ -182,6 +196,13 @@ export function createServerApp<
   const idempotency = createIdempotencyCache<TPlayer, unknown>(
     options.nowMs !== undefined ? { nowMs: options.nowMs } : undefined,
   );
+  // The envelope budget and in-flight cap: the transport charges the budget,
+  // dispatch claims the slot. Dropped per player on leave, like the keys.
+  const requestGuard = createRequestGuard<TPlayer>({
+    ...(options.requestBudget !== undefined ? { budget: options.requestBudget } : {}),
+    ...(options.onAbuse !== undefined ? { onAbuse: options.onAbuse } : {}),
+    ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
+  });
 
   // Per-player session store, keyed by the player reference. Populated on join
   // (and boot backfill) and drained on leave; read by dispatch via `getSession`.
@@ -231,6 +252,7 @@ export function createServerApp<
       : {}),
     ...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
     idempotency,
+    requestGuard,
   } satisfies DispatchActionOptions<TPlayer>;
 
   let transportBinding: ServerBinding | undefined;
@@ -277,6 +299,7 @@ export function createServerApp<
     }
     sessions.delete(player);
     idempotency.forget(player);
+    requestGuard.forget(player);
   };
 
   const playerAddedConnection =
@@ -317,6 +340,7 @@ export function createServerApp<
       playerRemovingConnection?.Disconnect();
       sessions.clear();
       idempotency.clear();
+      requestGuard.clear();
     },
   };
 }

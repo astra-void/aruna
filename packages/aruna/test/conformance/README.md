@@ -75,6 +75,8 @@ them anywhere in an input value, and each runner swaps them before dispatch:
 - `{ "$function": true }` becomes a function
 - `{ "$number": "NaN" | "Infinity" | "-Infinity" }` becomes that number (`0/0`,
   `math.huge`, `-math.huge` in Luau)
+- `{ "$array": { "length": n, "of": value } }` becomes an array of `n` copies
+  of `value` (itself materialized), for inputs too large to write out
 
 That is how a case sends input that can't cross the wire.
 

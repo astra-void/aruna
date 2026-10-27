@@ -1,6 +1,7 @@
 import { ActionInternalError } from "./action-error.js";
 import { createServerBinding, type ServerBinding } from "./binding.js";
 import { ActionRateLimitError } from "./rate-limit.js";
+import { admitEnvelope, isValidEnvelopeIds } from "./request-guard.js";
 import {
   ACTION_CANCELLED_ERROR_NAME,
   ACTION_VERSION_MISMATCH_ERROR_NAME,
@@ -179,14 +180,6 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function isValidRequestEnvelope(value: unknown): value is RemoteEventActionRequest {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as { readonly requestId?: unknown; readonly actionId?: unknown };
-  return isString(candidate.requestId) && isString(candidate.actionId);
-}
 
 // Dispatch has already decided what is public: it rethrows a public error, and
 // replaces anything else with `ActionInternalError` unless internal errors are
@@ -424,24 +417,23 @@ export function bindRemoteEventActions<TPlayer = unknown>(
   // middleware `app.dispatch` applied.
   const { createContext, ...dispatchOptions } = options ?? {};
 
+  const requestGuard = dispatchOptions.requestGuard;
+
   const connection = remote.OnServerEvent.Connect(async (player, request) => {
-    // Clients can fire arbitrary payloads. Reject malformed envelopes before
-    // touching the registry: respond with an error when there is a usable
-    // requestId to address, otherwise drop the packet entirely.
-    if (!isValidRequestEnvelope(request)) {
-      const requestId = (request as { readonly requestId?: unknown } | null | undefined)?.requestId;
-
-      if (isString(requestId)) {
-        remote.FireClient(player, {
-          requestId,
-          ok: false,
-          error: {
-            message: "Invalid Aruna action request envelope.",
-            name: "ActionRequestError",
-          },
-        });
-      }
-
+    // Clients can fire arbitrary payloads. Before anything else is read: drop a
+    // malformed envelope (ids must be bounded strings) and charge the player's
+    // request budget, dropping the envelope when it is spent. Neither gets a
+    // response — answering a malformed envelope would only give a flood
+    // something to measure.
+    const envelope = (typeof request === "object" && request !== null ? request : {}) as {
+      readonly requestId?: unknown;
+      readonly actionId?: unknown;
+    };
+    const admitted =
+      requestGuard !== undefined
+        ? admitEnvelope(requestGuard, player, envelope.requestId, envelope.actionId)
+        : isValidEnvelopeIds(envelope.requestId, envelope.actionId);
+    if (!admitted) {
       return;
     }
 

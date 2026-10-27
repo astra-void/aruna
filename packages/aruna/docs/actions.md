@@ -171,6 +171,40 @@ a limit is exceeded the dispatcher throws `ActionRateLimitError` (`retryAfterMs`
 `err.retryAfterMs` / `err.resetAtMs`, so clients can back off precisely instead of
 string-matching messages.
 
+### The request budget in front of dispatch
+
+A per-action `rateLimit` counts only calls that passed validation — invalid input does
+not use up a player's quota. That leaves the checking itself unpriced, so the server app
+puts per-player limits in front of every action, before the payload is read:
+
+| Limit | Default | Over it |
+| --- | --- | --- |
+| Envelope budget: a token bucket charged for **every** envelope, valid or not | 60 burst, 30 per second | dropped, no response |
+| Request id a string of at most 64 characters, action id at most 128 | — | dropped, no response |
+| Dispatches running at once | 32 | `ActionRateLimitError` (`retryAfterMs: 100`) |
+| Values in the input, however shallow (the wire-safety walk) | 2048 | `ActionSerializationError` |
+
+Each dispatch then runs in the order that keeps a hostile payload cheap: wire safety,
+then `.default(...)` filling, then validation, then the per-action rate limit. An action's
+own output and a signal payload are server-authored, so they are not held to the
+2048-value limit.
+
+```ts
+createServerApp({
+  actions,
+  transport: robloxRemoteEvent(),
+  requestBudget: { burst: 60, perSecond: 30, maxInFlight: 32 },
+  onAbuse: (player, { reason }) => {
+    // "budget-exhausted" | "malformed-envelope" | "too-many-in-flight"
+    warn(`${player.Name}: ${reason}`);
+  },
+});
+```
+
+A player's budget and in-flight count are dropped when they leave. The budget is charged
+by the transport, so `app.dispatch` in-process (and the test harness's `invoke`) is not;
+the in-flight cap applies to every dispatch.
+
 ## Errors the client sees
 
 An error reaches the client with its own `name` and `message` only when it is public.

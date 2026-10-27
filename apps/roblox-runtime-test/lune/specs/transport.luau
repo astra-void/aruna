@@ -327,6 +327,89 @@ return function(ctx)
 		end)
 	end)
 
+	t.describe("RemoteEvent transport request budget", function()
+		local function budgetedRegistry(budget, run, abuse)
+			return createActionRegistry({
+				buy = {
+					id = "buy",
+					run = run,
+				},
+			}, {
+				requestBudget = budget,
+				nowMs = function()
+					return 0
+				end,
+				onAbuse = function(_player, info)
+					table.insert(abuse, info.reason)
+				end,
+			})
+		end
+
+		t.it("drops envelopes past the burst, and malformed ones, without a response", function()
+			local runs = { count = 0 }
+			local abuse = {}
+			local registry = budgetedRegistry({ burst = 3, perSecond = 1 }, function()
+				runs.count += 1
+				return "ok"
+			end, abuse)
+			local binding = transport.bindActions(registry)
+			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local responses = { count = 0 }
+			local connection = remote.OnClientEvent:Connect(function()
+				responses.count += 1
+			end)
+
+			-- Malformed: a non-string action id, an over-long request id. Charged
+			-- and dropped.
+			remote:FireServer("r0", 42, nil)
+			remote:FireServer(string.rep("r", 65), "buy", nil)
+			for index = 1, 3 do
+				remote:FireServer(`r{index}`, "buy", nil)
+			end
+
+			t.eq(runs.count, 1, "two tokens went to the malformed envelopes")
+			t.eq(responses.count, 1, "only the dispatched envelope was answered")
+			t.eq(abuse[1], "malformed-envelope")
+			t.eq(abuse[2], "malformed-envelope")
+			t.eq(abuse[3], "budget-exhausted")
+			connection.Disconnect()
+			binding.disconnect()
+		end)
+
+		t.it("refuses calls past the in-flight cap and frees the slots on forgetPlayer", function()
+			local abuse = {}
+			local release = nil
+			local registry = budgetedRegistry({ maxInFlight = 1 }, function()
+				return ctx.Promise.new(function(resolve)
+					release = resolve
+				end)
+			end, abuse)
+			local player = { UserId = 5 }
+
+			local first = registry.dispatch(player, "buy", nil)
+			local _, _, refused = t.await(registry.dispatch(player, "buy", nil))
+			t.isFalse(refused.ok)
+			t.eq(refused.errorName, "ActionRateLimitError")
+			t.eq(refused.retryAfterMs, 100)
+			t.eq(abuse[1], "too-many-in-flight")
+
+			release("done")
+			t.await(first)
+			-- The slot is free again: this one takes it and stays pending...
+			local _second = registry.dispatch(player, "buy", nil)
+			-- ...so the next is refused.
+			local _, _, again = t.await(registry.dispatch(player, "buy", nil))
+			t.eq(again.errorName, "ActionRateLimitError", "refused while the slot is taken")
+
+			-- Leaving drops the count: the pending call no longer holds the slot.
+			registry.forgetPlayer(player)
+			local pending = registry.dispatch(player, "buy", nil)
+			release("done")
+			local _, _, freed = t.await(pending)
+			t.isTrue(freed.ok, "a fresh slot after forgetPlayer")
+		end)
+	end)
+
 	t.describe("RemoteEvent transport cancellation", function()
 		local createCancelToken = ctx.load("client-runtime").createCancelToken
 		local ran = { count = 0 }

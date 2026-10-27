@@ -106,6 +106,8 @@ const NON_FINITE_NUMBERS: Readonly<Record<string, number>> = {
 
 // `{ "$function": true }` stands in for a function, and `{ "$number": "NaN" }`
 // (or "Infinity" / "-Infinity") for a non-finite number: JSON can carry neither.
+// `{ "$array": { "length": n, "of": value } }` builds a large array without
+// writing it out.
 function materialize(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(materialize);
@@ -113,6 +115,10 @@ function materialize(value: unknown): unknown {
   if (typeof value === "object" && value !== null) {
     if ((value as { $function?: unknown }).$function === true) {
       return () => undefined;
+    }
+    const repeated = (value as { $array?: { length?: unknown; of?: unknown } }).$array;
+    if (repeated !== undefined) {
+      return Array.from({ length: Number(repeated.length) }, () => materialize(repeated.of));
     }
     const numberName = (value as { $number?: unknown }).$number;
     if (typeof numberName === "string") {

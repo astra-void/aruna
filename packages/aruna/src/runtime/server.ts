@@ -8,6 +8,7 @@ import {
 import { assertSerializableActionValue } from "./serialization.js";
 import { ActionInternalError, createErrorId, isPublicActionError } from "./action-error.js";
 import { isIdempotencyKey, type IdempotencyCache } from "./idempotency.js";
+import { IN_FLIGHT_RETRY_AFTER_MS, type RequestGuard } from "./request-guard.js";
 // Type-only, so the store runtime is not pulled into the dispatch module's
 // require graph.
 import type { StoreDocument } from "./player-store.js";
@@ -203,6 +204,10 @@ export type DispatchActionOptions<TPlayer = unknown> = {
   // retried call runs once. Supplied by `createServerApp`, which clears a
   // player's entries on leave; without it, keys are ignored.
   readonly idempotency?: IdempotencyCache<TPlayer, unknown>;
+  // The per-player envelope budget and in-flight cap. Supplied by
+  // `createServerApp`; dispatch claims an in-flight slot, the transport charges
+  // the budget.
+  readonly requestGuard?: RequestGuard<TPlayer>;
   // Applied outermost-first around every action's execution.
   readonly middleware?: readonly ActionMiddleware<TPlayer>[];
   readonly onError?: ActionErrorHandler<TPlayer>;
@@ -274,7 +279,7 @@ export function dispatchAction<TPlayer = unknown>(
   return dispatchActionOnce(registry, actionId, ctx, input, options);
 }
 
-async function dispatchActionOnce<TPlayer>(
+function dispatchActionOnce<TPlayer>(
   registry: ActionRegistry<TPlayer>,
   actionId: string,
   ctx: ActionRunContext<TPlayer>,
@@ -285,8 +290,48 @@ async function dispatchActionOnce<TPlayer>(
   const action = registry[actionId];
 
   if (action === undefined) {
-    throw new ActionNotFoundError(actionId);
+    return Promise.reject(new ActionNotFoundError(actionId));
   }
+
+  // A player's dispatches that may run at once are capped, so a burst of slow
+  // calls cannot pile up behind one another. Refused before any parsing.
+  const guard = options?.requestGuard;
+  if (guard === undefined) {
+    return dispatchDefinedAction(action, actionId, ctx, input, options, progress);
+  }
+  if (!guard.begin(ctx.player)) {
+    guard.report(ctx.player, { reason: "too-many-in-flight", actionId });
+    return Promise.reject(
+      new ActionRateLimitError(
+        `Aruna action ${actionId} refused: ${guard.maxInFlight} requests already in flight.`,
+        {
+          actionId,
+          max: guard.maxInFlight,
+          windowMs: 0,
+          retryAfterMs: IN_FLIGHT_RETRY_AFTER_MS,
+          resetAtMs: (options?.nowMs ?? Date.now)() + IN_FLIGHT_RETRY_AFTER_MS,
+        },
+      ),
+    );
+  }
+  return dispatchDefinedAction(action, actionId, ctx, input, options, progress).finally(() => {
+    guard.finish(ctx.player);
+  });
+}
+
+// Everything after the action lookup and the in-flight cap, in the order that
+// keeps a hostile payload cheap: wire safety (bounded in depth and size) before
+// defaults, defaults before validation, validation before the per-action rate
+// limit (invalid input does not consume quota).
+async function dispatchDefinedAction<TPlayer>(
+  action: ActionRegistry<TPlayer>[string],
+  actionId: string,
+  ctx: ActionRunContext<TPlayer>,
+  input: unknown,
+  options: DispatchActionOptions<TPlayer> | undefined,
+  progress?: { ran: boolean },
+): Promise<unknown> {
+  assertSerializableActionValue(input, "input", actionId);
 
   // Fill `.default(...)` values before validation and before the handler runs,
   // so an omitted defaulted field arrives populated. No-op when the schema has
@@ -294,8 +339,6 @@ async function dispatchActionOnce<TPlayer>(
   if (action.input !== undefined) {
     input = applyDefaults(action.input, input);
   }
-
-  assertSerializableActionValue(input, "input", actionId);
 
   if (action.input !== undefined) {
     assertActionSchema(action.input, input, actionId, "input");
@@ -375,7 +418,9 @@ async function dispatchActionOnce<TPlayer>(
         assertActionSchema(action.output, output, actionId, "output");
       }
 
-      assertSerializableActionValue(output, "output", actionId);
+      // Server-authored, so not held to the node budget that bounds a
+      // client's input.
+      assertSerializableActionValue(output, "output", actionId, { maxNodes: Infinity });
     } catch (error) {
       outputFailures.add(error);
       throw error;

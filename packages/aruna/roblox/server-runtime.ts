@@ -8,6 +8,13 @@ import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";
 import { createIdempotencyCache, isIdempotencyKey } from "./idempotency";
 import {
+	admitEnvelope,
+	createRequestGuard,
+	IN_FLIGHT_RETRY_AFTER_MS,
+	type RequestAbuseHandler,
+	type RequestBudgetOptions,
+} from "./request-guard";
+import {
 	ACTION_INTERNAL_ERROR_MESSAGE,
 	ACTION_INTERNAL_ERROR_NAME,
 	actionError,
@@ -43,8 +50,12 @@ export interface ActionRegistry<TPlayer = unknown> {
 		input: unknown,
 		idempotencyKey?: unknown,
 	) => Promise<ActionDispatchResult>;
-	// Drops what the registry remembers about a player's calls (their
-	// idempotency keys). `createServerApp` calls it on leave.
+	// The transport's gate for one envelope, before it reads the input: the
+	// request and action ids must be bounded strings, and the player's request
+	// budget must have a token. False means drop the envelope with no response.
+	readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
+	// Drops what the registry remembers about a player: idempotency keys, the
+	// request budget, the in-flight count. `createServerApp` calls it on leave.
 	readonly forgetPlayer: (player: TPlayer) => void;
 	// True when the action is declared `fireAndForget` (one-way). The transport
 	// binder uses this to decide whether to send a response back to the client.
@@ -114,6 +125,11 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// where os.clock() is the right answer; set by the test harness so a spec can
 	// step past a rate-limit window instead of waiting out a real one.
 	readonly nowMs?: () => number;
+	// The per-player envelope budget and in-flight cap in front of dispatch.
+	readonly requestBudget?: RequestBudgetOptions;
+	// Told when a player's envelope is dropped (malformed, over budget) or a
+	// dispatch is refused for too many in flight. For logging, or a kick.
+	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 }
 
 // A schema failure at the action boundary, in the Node runtime's message shape.
@@ -184,20 +200,30 @@ export function createActionRegistry<TPlayer>(
 	const rateLimiter = createActionRateLimiter();
 	const nowMs = options?.nowMs;
 	const idempotency = createIdempotencyCache<TPlayer, ActionDispatchResult>(nowMs);
+	const guard = createRequestGuard<TPlayer>({
+		...(options?.requestBudget !== undefined ? { budget: options.requestBudget } : {}),
+		...(options?.onAbuse !== undefined ? { onAbuse: options.onAbuse } : {}),
+		...(nowMs !== undefined ? { nowMs } : {}),
+	});
 
-	const dispatchOnce = (
+	// Everything after the action lookup and the in-flight cap, in the order that
+	// keeps a hostile payload cheap: wire safety (bounded in depth and size)
+	// before defaults, defaults before validation, validation before the
+	// per-action rate limit (invalid input does not consume quota).
+	const dispatchDefined = (
+		definition: AnyActionDefinition<TPlayer>,
 		player: TPlayer,
 		actionId: string,
 		input: unknown,
 		progress: { ran: boolean } | undefined,
 	): Promise<ActionDispatchResult> => {
 		return new Promise<ActionDispatchResult>((resolve) => {
-			const definition = actionsById.get(actionId);
-			if (definition === undefined) {
+			// Reject non-wire-safe input before anything else reads it.
+			if (!isWireSafe(input)) {
 				resolve({
 					ok: false,
-					error: `Aruna action not found: ${actionId}`,
-					errorName: "ActionNotFoundError",
+					error: "non-serializable action input",
+					errorName: "ActionSerializationError",
 				});
 				return;
 			}
@@ -206,16 +232,6 @@ export function createActionRegistry<TPlayer>(
 			// omitted defaulted field arrives populated.
 			if (definition.input !== undefined) {
 				input = applyDefaults(definition.input, input);
-			}
-
-			// Reject non-wire-safe input before validation or user code runs.
-			if (!isWireSafe(input)) {
-				resolve({
-					ok: false,
-					error: "non-serializable action input",
-					errorName: "ActionSerializationError",
-				});
-				return;
 			}
 
 			const inputSchema = definition.input;
@@ -297,7 +313,9 @@ export function createActionRegistry<TPlayer>(
 						outputFailures.add(failure);
 						throw failure;
 					}
-					if (!isWireSafe(output)) {
+					// Server-authored, so not held to the node budget that bounds a
+					// client's input.
+					if (!isWireSafe(output, math.huge)) {
 						const failure = actionError("ActionSerializationError", "non-serializable action output");
 						outputFailures.add(failure);
 						throw failure;
@@ -346,8 +364,45 @@ export function createActionRegistry<TPlayer>(
 		});
 	};
 
+	const dispatchOnce = (
+		player: TPlayer,
+		actionId: string,
+		input: unknown,
+		progress: { ran: boolean } | undefined,
+	): Promise<ActionDispatchResult> => {
+		const definition = actionsById.get(actionId);
+		if (definition === undefined) {
+			return Promise.resolve({
+				ok: false,
+				error: `Aruna action not found: ${actionId}`,
+				errorName: "ActionNotFoundError",
+			});
+		}
+
+		// A player's dispatches that may run at once are capped, so a burst of
+		// slow calls cannot pile up behind one another. Refused before any parsing.
+		if (!guard.begin(player)) {
+			guard.report(player, { reason: "too-many-in-flight", actionId });
+			const now = nowMs !== undefined ? nowMs() : os.clock() * 1000;
+			return Promise.resolve({
+				ok: false,
+				error: `Aruna action ${actionId} refused: ${guard.maxInFlight} requests already in flight.`,
+				errorName: "ActionRateLimitError",
+				retryAfterMs: IN_FLIGHT_RETRY_AFTER_MS,
+				resetAtMs: now + IN_FLIGHT_RETRY_AFTER_MS,
+			});
+		}
+		const settled = dispatchDefined(definition, player, actionId, input, progress);
+		settled.finally(() => {
+			guard.finish(player);
+		});
+		return settled;
+	};
+
 	return {
 		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
+		admitEnvelope: (player, requestId, actionId) =>
+			admitEnvelope(guard, player, requestId, actionId),
 		dispatch: (player, actionId, input, idempotencyKey) => {
 			if (isIdempotencyKey(idempotencyKey)) {
 				return idempotency.run(player, actionId, idempotencyKey, (progress) =>
@@ -358,6 +413,7 @@ export function createActionRegistry<TPlayer>(
 		},
 		forgetPlayer: (player) => {
 			idempotency.forget(player);
+			guard.forget(player);
 		},
 	};
 }

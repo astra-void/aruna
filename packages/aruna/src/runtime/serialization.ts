@@ -1,5 +1,8 @@
 const DEFAULT_MAX_DEPTH = 32;
 const DEFAULT_MAX_VIOLATIONS = 20;
+// Values a single walk may visit. Depth alone does not bound the work: a flat
+// array of a million numbers is one level deep. Mirrors the native runtime.
+export const DEFAULT_MAX_WIRE_NODES = 2048;
 
 export type SerializableActionValue =
   | undefined
@@ -25,6 +28,9 @@ export type SerializationPolicyResult =
 export type SerializationPolicyOptions = {
   readonly maxDepth?: number;
   readonly maxViolations?: number;
+  // Total values visited before the walk gives up and rejects. Default
+  // DEFAULT_MAX_WIRE_NODES; pass Infinity for a server-authored value.
+  readonly maxNodes?: number;
 };
 
 export class ActionSerializationError extends Error {
@@ -159,12 +165,29 @@ function validateValue(
   state: {
     readonly maxDepth: number;
     readonly maxViolations: number;
+    readonly maxNodes: number;
     readonly seen: Set<object>;
     readonly violations: SerializationPolicyViolation[];
+    nodes: number;
+    exhausted: boolean;
   },
   depth: number,
 ): void {
-  if (state.violations.length >= state.maxViolations) {
+  if (state.exhausted || state.violations.length >= state.maxViolations) {
+    return;
+  }
+
+  state.nodes += 1;
+  if (state.nodes > state.maxNodes) {
+    // One violation, then stop: everything left would only add to the cost.
+    addViolation(
+      state.violations,
+      state.maxViolations,
+      path,
+      `more than ${state.maxNodes} values cannot cross action boundaries`,
+      value,
+    );
+    state.exhausted = true;
     return;
   }
 
@@ -243,7 +266,7 @@ function validateValue(
     state.seen.add(value);
     for (let index = 0; index < value.length; index += 1) {
       validateValue(value[index], appendArrayPath(path, index), state, depth + 1);
-      if (state.violations.length >= state.maxViolations) {
+      if (state.exhausted || state.violations.length >= state.maxViolations) {
         break;
       }
     }
@@ -287,7 +310,7 @@ function validateValue(
     state.seen.add(value);
     for (const key of sortObjectKeys(value)) {
       validateValue(value[key], appendObjectPath(path, key), state, depth + 1);
-      if (state.violations.length >= state.maxViolations) {
+      if (state.exhausted || state.violations.length >= state.maxViolations) {
         break;
       }
     }
@@ -325,6 +348,10 @@ export function validateSerializableActionValue(
 ): SerializationPolicyResult {
   const maxDepth = normalizePositiveInteger(options?.maxDepth, DEFAULT_MAX_DEPTH);
   const maxViolations = normalizePositiveInteger(options?.maxViolations, DEFAULT_MAX_VIOLATIONS);
+  const maxNodes =
+    options?.maxNodes === Infinity
+      ? Infinity
+      : normalizePositiveInteger(options?.maxNodes, DEFAULT_MAX_WIRE_NODES);
   const violations: SerializationPolicyViolation[] = [];
 
   validateValue(
@@ -333,8 +360,11 @@ export function validateSerializableActionValue(
     {
       maxDepth,
       maxViolations,
+      maxNodes,
       seen: new Set<object>(),
       violations,
+      nodes: 0,
+      exhausted: false,
     },
     0,
   );

@@ -7,6 +7,15 @@
 // with finite components) are allowed.
 
 const MAX_DEPTH = 32;
+// Values a single walk may visit. Depth alone does not bound the work: a flat
+// array of a million numbers is one level deep. Mirrors the Node runtime.
+export const DEFAULT_MAX_WIRE_NODES = 2048;
+
+interface WalkState {
+	readonly seen: Set<object>;
+	readonly maxNodes: number;
+	nodes: number;
+}
 
 // NaN, math.huge and -math.huge are numbers to `typeIs`, and they pass any
 // comparison guard the wrong way: `amount > balance` is false for NaN, so a
@@ -60,8 +69,12 @@ export function hasFiniteComponents(value: unknown): boolean {
 	return true;
 }
 
-function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolean {
+function checkWireSafe(value: unknown, depth: number, state: WalkState): boolean {
 	if (depth > MAX_DEPTH) {
+		return false;
+	}
+	state.nodes += 1;
+	if (state.nodes > state.maxNodes) {
 		return false;
 	}
 	if (value === undefined) {
@@ -99,6 +112,7 @@ function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolea
 		return false;
 	}
 
+	const seen = state.seen;
 	const tableValue = value as object;
 	if (seen.has(tableValue)) {
 		return false;
@@ -111,7 +125,7 @@ function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolea
 			safe = false;
 			break;
 		}
-		if (!checkWireSafe(entry, depth + 1, seen)) {
+		if (!checkWireSafe(entry, depth + 1, state)) {
 			safe = false;
 			break;
 		}
@@ -121,6 +135,13 @@ function checkWireSafe(value: unknown, depth: number, seen: Set<object>): boolea
 	return safe;
 }
 
-export function isWireSafe(value: unknown): boolean {
-	return checkWireSafe(value, 0, new Set<object>());
+// `maxNodes` bounds the values visited (default DEFAULT_MAX_WIRE_NODES), so a
+// client's input costs at most that much to check. Pass `math.huge` for a
+// server-authored value (an action's output, a signal payload).
+export function isWireSafe(value: unknown, maxNodes?: number): boolean {
+	return checkWireSafe(value, 0, {
+		seen: new Set<object>(),
+		maxNodes: maxNodes !== undefined ? maxNodes : DEFAULT_MAX_WIRE_NODES,
+		nodes: 0,
+	});
 }

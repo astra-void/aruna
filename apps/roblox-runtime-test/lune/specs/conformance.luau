@@ -47,12 +47,22 @@ return function(ctx)
 
 	-- `{ "$function": true }` stands in for a function, and `{ "$number": "NaN" }`
 	-- (or "Infinity" / "-Infinity") for a non-finite number: JSON can carry neither.
+	-- `{ "$array": { "length": n, "of": value } }` builds a large array without
+	-- writing it out.
 	local function materialize(value)
 		if type(value) ~= "table" then
 			return value
 		end
 		if value["$function"] == true then
 			return function() end
+		end
+		local repeated = value["$array"]
+		if type(repeated) == "table" then
+			local list = {}
+			for index = 1, repeated.length do
+				list[index] = materialize(repeated.of)
+			end
+			return list
 		end
 		local numberName = value["$number"]
 		if type(numberName) == "string" then

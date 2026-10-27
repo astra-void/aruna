@@ -1212,7 +1212,7 @@ describe("bindRemoteEventActions", () => {
     });
   });
 
-  it("rejects a malformed request envelope with an error response", async () => {
+  it("drops a malformed request envelope without a response", async () => {
     const remote = createFakeRemoteEvent({ name: "Ada" });
     const run = vi.fn(() => ({ ok: true }));
     const registry: ActionRegistry = {
@@ -1221,29 +1221,29 @@ describe("bindRemoteEventActions", () => {
 
     bindRemoteEventActions(remote, registry);
 
-    // actionId is not a string, but the requestId is usable for a reply.
+    // A usable requestId no longer earns a reply: a malformed envelope is
+    // dropped, so a flood of them has nothing to measure.
     remote.serverSignal.emit({ name: "Ada" }, {
       requestId: "request-1",
       actionId: 123,
+      input: {},
+    } as unknown as RemoteEventActionRequest);
+    // Ids past their length limits are malformed too.
+    remote.serverSignal.emit({ name: "Ada" }, {
+      requestId: "r".repeat(65),
+      actionId: "shop.purchaseItem",
+      input: {},
+    } as unknown as RemoteEventActionRequest);
+    remote.serverSignal.emit({ name: "Ada" }, {
+      requestId: "request-3",
+      actionId: "a".repeat(129),
       input: {},
     } as unknown as RemoteEventActionRequest);
 
     await flushMicrotasks();
 
     expect(run).not.toHaveBeenCalled();
-    expect(remote.responses).toEqual([
-      {
-        player: { name: "Ada" },
-        response: {
-          requestId: "request-1",
-          ok: false,
-          error: {
-            message: "Invalid Aruna action request envelope.",
-            name: "ActionRequestError",
-          },
-        },
-      },
-    ]);
+    expect(remote.responses).toEqual([]);
   });
 
   it("drops a request that has no usable requestId", async () => {
