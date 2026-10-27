@@ -28,8 +28,12 @@ import { buildSignalInspectionReport, formatSignalInspection } from "./inspect-s
 import { buildStoreInspectionReport, formatStoreInspection } from "./inspect-stores.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
-import { runContractDiffCommand } from "./contract-diff.js";
-import { collectContractGateDiagnostics, writeContractSnapshot } from "./contract-gate.js";
+import { runContractDiffCommand, type ContractDiffEntry } from "./contract-diff.js";
+import {
+  collectContractGateDiagnostics,
+  planContractUpdate,
+  writeContractSnapshot,
+} from "./contract-gate.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
 import {
   compileTestPartition,
@@ -893,6 +897,126 @@ function spawnRojoServe(
   };
 }
 
+type ContractUpdateCliOptions = CliOptions & {
+  readonly check?: boolean;
+  readonly acceptUnreadableRecords?: boolean;
+};
+
+function describeUnreadableChange(entry: ContractDiffEntry): string {
+  return entry.actionId !== undefined ? `${entry.actionId}: ${entry.message}` : entry.message;
+}
+
+// `aruna contract update`. The snapshot is the record of what shipped, and a
+// store change that leaves saved records unreadable is exactly what the gate
+// exists to stop, so recording one is refused: intending the change does not
+// make the old records readable. Only --accept-unreadable-records overrides it.
+async function runContractUpdate(options: ContractUpdateCliOptions): Promise<number> {
+  const colors = resolveColorMode(options);
+  const output = await inspectProject(compilerInput(options));
+  if (!output.ok) {
+    // A snapshot is the record of what shipped; one taken from a project
+    // that does not compile would record something that never could.
+    renderCompilerOutput(output, options, 0, "inspect");
+    return 1;
+  }
+  const plan = await planContractUpdate(output);
+  const unreadable = plan.unreadable.map(describeUnreadableChange);
+
+  if (options.check === true) {
+    if (options.json) {
+      writeJson({
+        ok: !plan.outOfDate,
+        snapshot: plan.snapshotPath,
+        outOfDate: plan.outOfDate,
+        committed: plan.committed,
+        unreadableRecordChanges: unreadable,
+      });
+    } else if (!plan.outOfDate) {
+      if (!options.quiet) {
+        writeText(formatSuccess(`${plan.snapshotPath} is up to date`, colors));
+      }
+    } else {
+      const reason =
+        plan.committed === "missing"
+          ? "does not exist"
+          : plan.committed === "invalid"
+            ? `could not be read: ${plan.invalidMessage ?? ""}`
+            : "is out of date";
+      const lines = [formatError(`${plan.snapshotPath} ${reason}`, colors)];
+      if (unreadable.length > 0) {
+        lines.push(
+          "  `aruna contract update` will refuse it: these store changes leave saved records unreadable:",
+          ...unreadable.map((line) => `    - ${line}`),
+        );
+      } else {
+        lines.push("  Run `aruna contract update` and commit the snapshot.");
+      }
+      process.stderr.write(`${lines.join("\n")}\n`);
+    }
+    return plan.outOfDate ? 1 : 0;
+  }
+
+  const accept = options.acceptUnreadableRecords === true;
+  const refusal =
+    plan.committed === "invalid"
+      ? [
+          `could not compare against ${plan.snapshotPath}: ${plan.invalidMessage ?? ""}`,
+          "Restore it from version control so the stores can be checked against it.",
+        ]
+      : unreadable.length > 0
+        ? [
+            `refusing to update ${plan.snapshotPath}: ${unreadable.length === 1 ? "a store change leaves" : `${unreadable.length} store changes leave`} records the last build saved unreadable`,
+            ...unreadable.map((line) => `  - ${line}`),
+            "Give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records.",
+          ]
+        : undefined;
+
+  if (refusal !== undefined && !accept) {
+    if (options.json) {
+      writeJson({
+        ok: false,
+        snapshot: plan.snapshotPath,
+        committed: plan.committed,
+        unreadableRecordChanges: unreadable,
+      });
+    } else {
+      const [headline, ...rest] = refusal;
+      process.stderr.write(
+        `${[formatError(headline ?? "", colors), ...rest, "Writing it anyway takes --accept-unreadable-records."].join("\n")}\n`,
+      );
+    }
+    return 1;
+  }
+
+  if (refusal !== undefined) {
+    // Loud on purpose, and on stderr so it survives --json and --quiet: past
+    // this point the gate no longer protects the records named here.
+    const what =
+      plan.committed === "invalid"
+        ? [`${plan.snapshotPath} could not be read, so no store was checked.`]
+        : [
+            "These changes leave records the last build saved UNREADABLE by this one:",
+            ...unreadable.map((line) => `  - ${line}`),
+            "Players whose records were saved before this change will fail to load.",
+          ];
+    process.stderr.write(
+      `${[formatWarning("WARNING: --accept-unreadable-records: recording an incompatible store change", colors), ...what].join("\n")}\n`,
+    );
+  }
+
+  const written = await writeContractSnapshot(output, plan.snapshot);
+  if (options.json) {
+    writeJson({
+      ok: true,
+      snapshot: written,
+      ...(refusal !== undefined ? { acceptedUnreadableRecordChanges: unreadable } : {}),
+    });
+  } else if (!options.quiet) {
+    writeText(formatSuccess(`wrote ${written}`, colors));
+  }
+  return 0;
+}
+
 async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
   try {
     const compilerOptions = compilerInput(options);
@@ -1321,28 +1445,22 @@ export async function main(): Promise<number> {
       process.exitCode = result.status;
     });
 
-  contract
+  const contractUpdate = contract
     .command("update")
     .description(
       "write the current contract to the committed snapshot (contract.snapshot) that check and build compare stores against",
     )
+    .option("--check", "write nothing; exit 1 when the committed snapshot is out of date (for CI)")
+    .option(
+      "--accept-unreadable-records",
+      "write even when a store change leaves records the committed snapshot's build saved unreadable",
+    )
     .action(async () => {
-      const options = program.optsWithGlobals<CliOptions>();
-      const output = await inspectProject(compilerInput(options));
-      if (!output.ok) {
-        // A snapshot is the record of what shipped; one taken from a project
-        // that does not compile would record something that never could.
-        renderCompilerOutput(output, options, 0, "inspect");
-        process.exitCode = 1;
-        return;
-      }
-      const written = await writeContractSnapshot(output);
-      if (options.json) {
-        writeJson({ ok: true, snapshot: written });
-      } else if (!options.quiet) {
-        writeText(formatSuccess(`wrote ${written}`, resolveColorMode(options)));
-      }
-      process.exitCode = 0;
+      const options = contractUpdate.optsWithGlobals<CliOptions>() as CliOptions & {
+        readonly check?: boolean;
+        readonly acceptUnreadableRecords?: boolean;
+      };
+      process.exitCode = await runContractUpdate(options);
     });
 
   await program.parseAsync(process.argv);

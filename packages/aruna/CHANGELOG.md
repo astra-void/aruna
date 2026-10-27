@@ -188,6 +188,27 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: `aruna contract update` refuses a store change saved records
+  cannot survive.** It used to write the snapshot unconditionally, and
+  `aruna::578` told you to run it "once the change is intended" — advice that,
+  followed, shipped exactly the failure the gate exists to prevent: intending a
+  change does not make the old records readable. `contract update` now diffs
+  the committed snapshot against the code first and, when a `store-*` change is
+  breaking, lists the changes and exits 1 without writing. It writes anyway only
+  with `--accept-unreadable-records`, and prints a warning naming every record
+  change it accepted. An unreadable snapshot file is refused the same way (there
+  is nothing to compare against; restore it). The `aruna::578` suggestion now
+  names the only two fixes — a `.default(...)`, or a version bump with a
+  `migrate()` — and no longer mentions `contract update`.
+
+  **Migration:** if a script runs `aruna contract update` after a store change
+  that is breaking on purpose, add `--accept-unreadable-records`.
+
+- **`aruna contract update --check`.** Writes nothing; exits 1 when the
+  committed snapshot is missing, unreadable, or differs from what `contract
+  update` would write (whitespace aside), and says whether `update` would
+  refuse the difference. `docs/cli.md` has a CI recipe.
+
 - **Breaking: malformed request envelopes are dropped, and ids are
   bounded.** A request id must be a string of at most 64 characters and an
   action id at most 128, or the envelope is dropped before dispatch. The Node

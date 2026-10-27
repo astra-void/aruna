@@ -7,13 +7,18 @@
 // contract snapshot (`contract.snapshot`, default `aruna.contract.json`), every
 // check and build compares the stores against it, and a change that would leave
 // saved records unreadable fails the build (aruna::578) instead of surfacing as
-// load failures in production. `aruna contract update` rewrites the snapshot
-// once a change is intended.
+// load failures in production. `aruna contract update` rewrites the snapshot,
+// and refuses to record a change like that: intending it does not make the old
+// records readable.
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CompilerOutput, Diagnostic } from "@arunajs/core";
 import { buildActionContractSnapshot, type ActionContractSnapshot } from "./action-contracts.js";
-import { diffActionContractSnapshots, parseActionContractSnapshotJson } from "./contract-diff.js";
+import {
+  diffActionContractSnapshots,
+  parseActionContractSnapshotJson,
+  type ContractDiffEntry,
+} from "./contract-diff.js";
 
 export const STORE_INCOMPATIBLE_CHANGE_CODE = "aruna::578";
 export const CONTRACT_SNAPSHOT_INVALID_CODE = "aruna::579";
@@ -90,7 +95,7 @@ export async function collectContractGateDiagnostics(
         message: `The committed contract snapshot ${relative} could not be read: ${committed.message}`,
         file: relative,
         suggestion:
-          "Fix the file, or regenerate it from the current code with `aruna contract update`.",
+          "Restore the file from version control. `aruna contract update --accept-unreadable-records` overwrites it without comparing, which skips the store check this once.",
       },
     ];
   }
@@ -100,12 +105,9 @@ export async function collectContractGateDiagnostics(
   }
 
   const current = buildActionContractSnapshot(output);
-  const result = diffActionContractSnapshots(committed.snapshot, current);
   const sourceOf = new Map((current.stores ?? []).map((store) => [store.id, store.source]));
 
-  return result.entries
-    .filter((entry) => entry.severity === "breaking" && entry.kind.startsWith("store-"))
-    .map((entry): Diagnostic => {
+  return unreadableRecordChanges(committed.snapshot, current).map((entry): Diagnostic => {
       const storeId = entry.actionId ?? "";
       const detailLines = [
         `compared against ${relative}`,
@@ -120,18 +122,80 @@ export async function collectContractGateDiagnostics(
         file: sourceOf.get(storeId) ?? relative,
         details: detailLines.join("\n"),
         suggestion:
-          "Keep saved records readable: give a new field a .default(...), or bump the store's version and add a migrate(). Once the change is intended, run `aruna contract update`.",
+          "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records.",
       };
     });
+}
+
+// The store changes between two snapshots that would leave a record the older
+// one saved unreadable by the newer one.
+export function unreadableRecordChanges(
+  before: ActionContractSnapshot,
+  after: ActionContractSnapshot,
+): ContractDiffEntry[] {
+  return diffActionContractSnapshots(before, after).entries.filter(
+    (entry) => entry.severity === "breaking" && entry.kind.startsWith("store-"),
+  );
+}
+
+function serializeSnapshot(snapshot: ActionContractSnapshot): string {
+  return `${JSON.stringify(snapshot, null, 2)}\n`;
+}
+
+export type ContractUpdatePlan = {
+  readonly snapshotPath: string;
+  readonly snapshot: ActionContractSnapshot;
+  // False when the committed file already records this snapshot.
+  readonly outOfDate: boolean;
+  // How the committed file was read: absent, unreadable, or compared.
+  readonly committed: "missing" | "invalid" | "ok";
+  readonly invalidMessage?: string;
+  // Store changes since the committed snapshot that leave saved records
+  // unreadable. Empty unless `committed` is "ok".
+  readonly unreadable: readonly ContractDiffEntry[];
+};
+
+// What `aruna contract update` would do: the snapshot it would write, whether
+// that differs from the committed one, and what it would accept by writing it.
+// Whitespace in the committed file does not make it out of date.
+export async function planContractUpdate(output: CompilerOutput): Promise<ContractUpdatePlan> {
+  const { absolute, relative } = contractSnapshotPath(output);
+  const snapshot = buildActionContractSnapshot(output);
+  const committed = await readCommittedSnapshot(output);
+  if (committed.kind === "missing") {
+    return { snapshotPath: relative, snapshot, outOfDate: true, committed: "missing", unreadable: [] };
+  }
+  if (committed.kind === "invalid") {
+    return {
+      snapshotPath: relative,
+      snapshot,
+      outOfDate: true,
+      committed: "invalid",
+      invalidMessage: committed.message,
+      unreadable: [],
+    };
+  }
+  // The parsed snapshot normalizes what it reads, so the raw file is what is
+  // compared: a field the parser drops still makes the file out of date.
+  const raw = await fs.readFile(absolute, "utf8");
+  return {
+    snapshotPath: relative,
+    snapshot,
+    outOfDate: JSON.stringify(JSON.parse(raw)) !== JSON.stringify(snapshot),
+    committed: "ok",
+    unreadable: unreadableRecordChanges(committed.snapshot, snapshot),
+  };
 }
 
 // Writes the current contract to the configured snapshot path. The snapshot is
 // the project's record of what it last shipped, so it is written only from a
 // project that compiles cleanly.
-export async function writeContractSnapshot(output: CompilerOutput): Promise<string> {
+export async function writeContractSnapshot(
+  output: CompilerOutput,
+  snapshot: ActionContractSnapshot = buildActionContractSnapshot(output),
+): Promise<string> {
   const { absolute, relative } = contractSnapshotPath(output);
-  const snapshot = buildActionContractSnapshot(output);
   await fs.mkdir(path.dirname(absolute), { recursive: true });
-  await fs.writeFile(absolute, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+  await fs.writeFile(absolute, serializeSnapshot(snapshot), "utf8");
   return relative;
 }

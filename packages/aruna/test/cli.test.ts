@@ -228,17 +228,138 @@ describe("store contract gate", () => {
     ]);
   });
 
-  it("rewrites the snapshot with contract update, after which check passes", () => {
+  it("refuses to record a store change that leaves saved records unreadable", () => {
     const root = copyFixtureInput("store-contract-incompatible");
-    const update = runCli(["contract", "update", "--project", root]);
+    const before = fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8");
+    const update = runCli(["contract", "update", "--no-color", "--project", root]);
+
+    expect(update.status).toBe(1);
+    const stderr = String(update.stderr);
+    expect(stderr).toContain("refusing to update aruna.contract.json");
+    expect(stderr).toContain("schema.coins narrowed");
+    expect(stderr).toContain("--accept-unreadable-records");
+    expect(stderr).not.toContain("contract update`");
+    expect(fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8")).toBe(before);
+    expect(runCli(["check", "--project", root]).status).toBe(1);
+  });
+
+  it("writes an unreadable change only with --accept-unreadable-records, loudly", () => {
+    const root = copyFixtureInput("store-contract-incompatible");
+    const update = runCli([
+      "contract",
+      "update",
+      "--accept-unreadable-records",
+      "--no-color",
+      "--project",
+      root,
+    ]);
 
     expect(update.status).toBe(0);
     expect(String(update.stdout)).toContain("wrote aruna.contract.json");
+    const stderr = String(update.stderr);
+    expect(stderr).toContain("WARNING: --accept-unreadable-records");
+    expect(stderr).toContain("UNREADABLE");
+    expect(stderr).toContain("schema.coins narrowed");
     const written = JSON.parse(fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8")) as {
       stores: Array<{ id: string; schema: { summary: string } }>;
     };
     expect(written.stores[0]?.schema.summary).toBe("object { coins: u8, gems: number }");
     expect(runCli(["check", "--project", root]).status).toBe(0);
+  });
+
+  it("records a compatible store change without the flag", () => {
+    const root = copyFixtureInput("store-contract-compatible");
+    const update = runCli(["contract", "update", "--project", root]);
+
+    expect(update.status).toBe(0);
+    expect(String(update.stderr)).toBe("");
+  });
+
+  it("refuses to overwrite an unreadable snapshot without the flag", () => {
+    const root = copyFixtureInput("store-contract-compatible");
+    fs.writeFileSync(path.join(root, "aruna.contract.json"), "{ not json", "utf8");
+
+    const refused = runCli(["contract", "update", "--no-color", "--project", root]);
+    expect(refused.status).toBe(1);
+    expect(String(refused.stderr)).toContain("could not compare against aruna.contract.json");
+    expect(fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8")).toBe("{ not json");
+
+    const accepted = runCli(["contract", "update", "--accept-unreadable-records", "--project", root]);
+    expect(accepted.status).toBe(0);
+    expect(String(accepted.stderr)).toContain("no store was checked");
+  });
+
+  it("creates a missing snapshot", () => {
+    const root = copyFixtureInput("store-contract-compatible");
+    fs.rmSync(path.join(root, "aruna.contract.json"));
+    const update = runCli(["contract", "update", "--project", root]);
+
+    expect(update.status).toBe(0);
+    expect(fs.existsSync(path.join(root, "aruna.contract.json"))).toBe(true);
+  });
+
+  it("exits 1 from contract update --check while the snapshot is out of date", () => {
+    const root = copyFixtureInput("store-contract-compatible");
+    const before = fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8");
+
+    const stale = runCli(["contract", "update", "--check", "--no-color", "--project", root]);
+    expect(stale.status).toBe(1);
+    expect(String(stale.stderr)).toContain("aruna.contract.json is out of date");
+    // --check never writes.
+    expect(fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8")).toBe(before);
+
+    expect(runCli(["contract", "update", "--project", root]).status).toBe(0);
+    const fresh = runCli(["contract", "update", "--check", "--json", "--project", root]);
+    expect(fresh.status).toBe(0);
+    expect(JSON.parse(String(fresh.stdout))).toMatchObject({ ok: true, outOfDate: false });
+
+    // Reformatting the file does not make it out of date.
+    const written = fs.readFileSync(path.join(root, "aruna.contract.json"), "utf8");
+    fs.writeFileSync(
+      path.join(root, "aruna.contract.json"),
+      JSON.stringify(JSON.parse(written)),
+      "utf8",
+    );
+    expect(runCli(["contract", "update", "--check", "--project", root]).status).toBe(0);
+  });
+
+  it("names the unreadable changes from contract update --check, and a missing snapshot", () => {
+    const root = copyFixtureInput("store-contract-incompatible");
+    const stale = runCli(["contract", "update", "--check", "--json", "--project", root]);
+
+    expect(stale.status).toBe(1);
+    const parsed = JSON.parse(String(stale.stdout)) as {
+      ok: boolean;
+      unreadableRecordChanges: string[];
+    };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.unreadableRecordChanges).toHaveLength(2);
+
+    fs.rmSync(path.join(root, "aruna.contract.json"));
+    const missing = runCli(["contract", "update", "--check", "--no-color", "--project", root]);
+    expect(missing.status).toBe(1);
+    expect(String(missing.stderr)).toContain("aruna.contract.json does not exist");
+  });
+
+  it("no longer suggests contract update for an unreadable store change", () => {
+    const result = runCli([
+      "check",
+      "--json",
+      "--project",
+      path.join(fixturesRoot, "store-contract-incompatible", "input"),
+    ]);
+    const parsed = JSON.parse(String(result.stdout)) as {
+      diagnostics: Array<{ code: string; suggestion?: string }>;
+    };
+    const suggestions = parsed.diagnostics
+      .filter((diagnostic) => diagnostic.code === "aruna::578")
+      .map((diagnostic) => diagnostic.suggestion ?? "");
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const suggestion of suggestions) {
+      expect(suggestion).toContain(".default(");
+      expect(suggestion).toContain("migrate()");
+      expect(suggestion).not.toContain("contract update");
+    }
   });
 
   it("refuses to write a snapshot from a project that does not compile", () => {

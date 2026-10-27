@@ -21,7 +21,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna inspect modules` | Print how each file is classified (client/server/shared). |
 | `aruna inspect graph` | Print the import graph. |
 | `aruna contract diff` | Compare contract snapshots — actions, signals, and stores (`--baseline`, `--from`, `--to`; with none, the committed snapshot). |
-| `aruna contract update` | Write the current contract to the committed snapshot (`contract.snapshot`). |
+| `aruna contract update` | Write the current contract to the committed snapshot (`contract.snapshot`); refuses a store change that leaves saved records unreadable. `--check` writes nothing and exits 1 when the snapshot is out of date. |
 
 ## The check vs build distinction
 
@@ -46,17 +46,59 @@ error by default, and `build` stops before vendoring or compiling. `strict.store
 lowers it to `"warning"` or turns it `"off"`. An unreadable snapshot file is
 `aruna::579 contract-snapshot-invalid`. Without a snapshot there is no gate.
 
-The rules are in [Stores](./stores.md#the-compatibility-gate). Once a change is
-intended — you gave the new field a default, or bumped the version and wrote a
-`migrate` — record it:
+The rules are in [Stores](./stores.md#the-compatibility-gate). There are only two ways
+to make a breaking store change safe: give the new field a `.default(...)`, or bump the
+store's version and write a `migrate()` that converts the old records. Once you have,
+record the change:
 
 ```bash
 aruna contract update      # rewrites aruna.contract.json from the current code
 aruna contract diff        # what changed against the committed snapshot
 ```
 
-`contract update` refuses to write from a project that does not compile. Commit the
-snapshot with the change, so the next build is gated against what this one ships.
+`contract update` refuses to write from a project that does not compile, and it refuses
+a store change that would still leave saved records unreadable: it diffs the committed
+snapshot against the current code first, lists those changes, and exits 1. Meaning the
+change does not make the old records readable, so rewriting the snapshot would only
+switch the gate off. `--accept-unreadable-records` writes it anyway, with a warning, for
+the case where losing those records is the plan (a store nobody has shipped yet, a
+deliberate wipe). An unreadable snapshot file is refused the same way — restore it from
+version control — since there is nothing to compare against.
+
+Commit the snapshot with the change, so the next build is gated against what this one
+ships.
+
+### Keeping the snapshot current in CI
+
+`aruna contract update --check` writes nothing. It exits 1 when the committed snapshot is
+missing, unreadable, or different from what `contract update` would write (whitespace
+aside), and says whether `contract update` would refuse the difference. Run it next to
+`aruna check` so a pull request cannot change a contract without recording it:
+
+```yaml
+# .github/workflows/ci.yml
+jobs:
+  aruna:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Fails on a store change that saved records cannot survive (aruna::578).
+      - run: pnpm exec aruna check
+      # Fails when the PR changed a contract without running `aruna contract update`.
+      - run: pnpm exec aruna contract update --check
+```
+
+`check` and `update --check` catch different things: `check` fails on an unreadable store
+change whether or not the snapshot was touched, and `update --check` fails on any
+contract change — an action's input, a signal's payload, a compatible store change — that
+was not recorded. `--json` prints `{ ok, snapshot, outOfDate, committed,
+unreadableRecordChanges }`.
 
 `aruna build` tracks the files it emits in a `.aruna-build.json` ledger inside `generatedDir`
 and **prunes stale artifacts** it no longer emits (e.g. flat `*.generated.ts` and a flat

@@ -310,9 +310,14 @@ new schema must accept everything the old one did.
 
 A breaking change fails the build as `aruna::578 store-incompatible-change`
 (`strict.storeCompatibility` sets its severity; `"error"` by default). `aruna contract diff`
-with no arguments shows the full comparison, warnings included. When the change is
-intended, make it safe — a `.default(...)`, or a version bump with a `migrate` — then
-run `aruna contract update` and commit the new snapshot alongside it.
+with no arguments shows the full comparison, warnings included. Intending the change
+does not make the old records readable; only two things do — a `.default(...)` on the
+new field, or a version bump with a `migrate()` that converts the old records. Make one
+of them, then run `aruna contract update` and commit the new snapshot alongside it.
+`contract update` refuses to record a change that still leaves saved records unreadable
+(`--accept-unreadable-records` overrides it, loudly, when dropping those records is the
+plan), and `aruna contract update --check` fails CI when the snapshot was not updated
+([recipe](./cli.md#keeping-the-snapshot-current-in-ci)).
 
 The snapshot path is `contract.snapshot` in `aruna.config.ts` (default
 `aruna.contract.json`, relative to the project root). Without the file, there is no gate.

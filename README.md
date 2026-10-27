@@ -418,7 +418,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - `aruna inspect actions` lists client-callable actions, input/output schema summaries, serialization policy metadata, rate-limit metadata, whether the action is `idempotent`, and basic authority notes
 - `aruna inspect contract` emits a deterministic JSON snapshot of the contract surface: actions (ids, source paths, generated export names, schema metadata and summaries, serialization policy, rate limits, `idempotent`, authority notes, and warnings), signals, and stores
 - `aruna contract diff` compares two contract snapshots, or a snapshot file against the current project (with no arguments, the committed `aruna.contract.json`), and reports breaking, warning, non-breaking, and info-level changes
-- `aruna contract update` writes the committed snapshot; while one exists, `aruna check` and `aruna build` fail on a store change that saved records cannot survive (`aruna::578`)
+- `aruna contract update` writes the committed snapshot (refusing a store change saved records cannot survive; `--check` for CI); while one exists, `aruna check` and `aruna build` fail on a store change that saved records cannot survive (`aruna::578`)
 - generated action files are snapshot-tested in the fixture suite
 - application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
 - `aruna build` writes deterministic `src/.aruna/shared/actions.client.generated.ts` and `src/.aruna/server/actions.server.generated.ts`
