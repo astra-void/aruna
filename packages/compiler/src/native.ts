@@ -11,12 +11,24 @@ import {
   type NativeTarget,
 } from "./native-platform.js";
 
+// A long-lived compiler session (crates/aruna_compiler/src/session.rs). `check`
+// and `inspect` run on the libuv thread pool and resolve to the compiler output
+// as a JSON string.
+export type NativeCompilerSession = {
+  update(changedPaths: string[]): void;
+  check(): Promise<string>;
+  inspect(): Promise<string>;
+  dispose(): void;
+};
+
 export type NativeCompiler = {
   checkProject: (input: unknown) => unknown;
   inspectProject: (input: unknown) => unknown;
   // The compiler's registered primitives (crates/aruna_compiler/src/primitives).
   // Optional so a binary built before it existed still loads.
   primitiveDescriptors?: () => unknown;
+  // Optional for the same reason.
+  CompilerSession?: new (input: unknown) => NativeCompilerSession;
 };
 
 const NATIVE_MODULE_SHAPE_ERROR =

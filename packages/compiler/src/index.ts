@@ -24,10 +24,6 @@ type NativeCompilerInput = {
   warningsAsErrors: boolean;
 };
 
-type NativeCompiler = {
-  checkProject: (input: NativeCompilerInput) => unknown;
-  inspectProject: (input: NativeCompilerInput) => unknown;
-};
 
 function resolveProjectRoot(input: CompilerInput): string {
   return path.resolve(input.root ?? process.cwd());
@@ -62,31 +58,74 @@ function buildNativeInput(
   };
 }
 
-async function runNative<T extends keyof NativeCompiler>(
-  method: T,
+// What a run does: `check` writes the manifest, `build` also writes the
+// generated files, `inspect` writes nothing.
+export type CompilerRunMode = "check" | "build" | "inspect";
+
+// A compiler kept alive across runs: the project's files and every per-file
+// fact are cached in the native session, and `update` names what changed, so a
+// run after a one-file edit costs a fraction of a cold one. Runs execute off the
+// main thread. Config is read once, when the session is created — start a new
+// session when aruna.config.ts or tsconfig.json changes.
+export type CompilerSessionHandle = {
+  // Paths edited, created, deleted, or (directories) moved since the last run;
+  // absolute or relative to the project root.
+  readonly update: (changedPaths: readonly string[]) => void;
+  readonly run: () => Promise<CompilerOutput>;
+  readonly dispose: () => void;
+};
+
+export function createCompilerSession(
   input: CompilerInput,
-  writeManifest: boolean,
-  writeGenerated: boolean,
-): Promise<CompilerOutput> {
+  mode: CompilerRunMode,
+): CompilerSessionHandle {
   const native = loadNativeCompiler();
-  return native[method](
-    buildNativeInput(input, writeManifest, writeGenerated),
-  ) as CompilerOutput;
+  const nativeInput = buildNativeInput(input, mode !== "inspect", mode === "build");
+  const Session = native.CompilerSession;
+  if (Session === undefined) {
+    // A binary from before sessions: every run is a full one-shot check.
+    return {
+      update: () => undefined,
+      run: async () =>
+        (mode === "inspect"
+          ? native.inspectProject(nativeInput)
+          : native.checkProject(nativeInput)) as CompilerOutput,
+      dispose: () => undefined,
+    };
+  }
+  const session = new Session(nativeInput);
+  return {
+    update: (changedPaths) => session.update([...changedPaths]),
+    run: async () =>
+      JSON.parse(await (mode === "inspect" ? session.inspect() : session.check())) as CompilerOutput,
+    dispose: () => session.dispose(),
+  };
+}
+
+// The one-shot entry points: a session used once, so the work still runs off
+// the main thread.
+async function runOnce(input: CompilerInput, mode: CompilerRunMode): Promise<CompilerOutput> {
+  const session = createCompilerSession(input, mode);
+  try {
+    return await session.run();
+  } finally {
+    session.dispose();
+  }
 }
 
 export async function checkProject(input: CompilerInput): Promise<CompilerOutput> {
-  return runNative("checkProject", input, true, false);
+  return runOnce(input, "check");
 }
 
 export async function buildProject(input: CompilerInput): Promise<CompilerOutput> {
-  return runNative("checkProject", input, true, true);
+  return runOnce(input, "build");
 }
 
 export async function inspectProject(input: CompilerInput): Promise<CompilerOutput> {
-  return runNative("inspectProject", input, false, false);
+  return runOnce(input, "inspect");
 }
 
-export { loadNativeCompiler } from "./native.js";
+export { loadNativeCompiler, type NativeCompilerSession } from "./native.js";
 export {
   loadProjectConfig,
   normalizeDevConfig,

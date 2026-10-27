@@ -1,6 +1,10 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createRebuildScheduler, shouldRebuildOnChange } from "../src/cli/watch.js";
+import {
+  createRebuildScheduler,
+  isCompilerInputChange,
+  shouldRebuildOnChange,
+} from "../src/cli/watch.js";
 
 const GENERATED = { generatedDir: "src/.aruna" };
 
@@ -38,6 +42,17 @@ describe("shouldRebuildOnChange", () => {
 
   it("ignores empty paths", () => {
     expect(shouldRebuildOnChange("", GENERATED)).toBe(false);
+  });
+});
+
+describe("isCompilerInputChange", () => {
+  it("flags the config and tsconfig files a session reads once", () => {
+    expect(isCompilerInputChange("aruna.config.ts")).toBe(true);
+    expect(isCompilerInputChange("aruna.config.mjs")).toBe(true);
+    expect(isCompilerInputChange("tsconfig.json")).toBe(true);
+    expect(isCompilerInputChange("tsconfig.build.json")).toBe(true);
+    expect(isCompilerInputChange(path.join("src", "domains", "shop", "actions.ts"))).toBe(false);
+    expect(isCompilerInputChange("src/aruna.config.notes.md")).toBe(false);
   });
 });
 

@@ -7,8 +7,8 @@ use crate::diagnostics::{
     DiagnosticSeverity,
 };
 use crate::domains::{DomainIndex, PublicSurface, DOMAIN_PRIVATE_SEGMENTS};
-use crate::files::discover_source_files;
-use crate::graph::{build_project_graph, ArunaImportEdge, GraphImportRecord};
+use crate::cache::GraphCache;
+use crate::graph::{build_project_graph_cached, ArunaImportEdge, GraphImportRecord};
 use crate::manifest::{create_manifest, ArunaManifest, ArunaModuleRecord};
 use crate::module_kind::ModuleKind;
 use crate::resolver::{
@@ -66,7 +66,7 @@ pub struct CompilerOutput {
     pub manifest_path: Option<String>,
 }
 
-fn resolve_project_root(input: &CompilerInput) -> PathBuf {
+pub(crate) fn resolve_project_root(input: &CompilerInput) -> PathBuf {
     PathBuf::from(&input.project_root)
 }
 
@@ -477,17 +477,21 @@ fn write_generated_files(project_root: &Path, generated_files: &[GeneratedFile])
     Ok(())
 }
 
-fn run_project_inner(
+/// One check over an already-discovered file list, reading per-file facts
+/// through `cache` (see crate::session).
+pub(crate) fn run_project_with_files(
     input: &CompilerInput,
     write_manifest: bool,
+    files: &[PathBuf],
+    cache: &mut GraphCache,
 ) -> Result<CompilerOutput, String> {
     let project_root = resolve_project_root(input);
-    let files = discover_source_files(&project_root, &input.config)?;
-    let graph = build_project_graph(
+    let graph = build_project_graph_cached(
         &project_root,
         &input.config,
-        &files,
+        files,
         &input.tsconfig_options,
+        cache,
     )?;
 
     let ignore = &input.config.diagnostics.ignore;
@@ -570,7 +574,7 @@ fn run_project_inner(
         }
     }
 
-    let final_manifest = create_manifest(
+    let mut final_manifest = create_manifest(
         ".",
         &graph.modules,
         &graph
@@ -584,6 +588,7 @@ fn run_project_inner(
         &graph.runtimes,
         &mutable_diagnostics,
     );
+    let diagnostics_before_write = mutable_diagnostics.len();
 
     let mut manifest_path = None;
     let mut generated_files = generated_output;
@@ -633,20 +638,25 @@ fn run_project_inner(
         }
     }
 
-    let final_manifest = create_manifest(
-        ".",
-        &graph.modules,
-        &graph
-            .imports
-            .iter()
-            .map(|edge| edge.edge.clone())
-            .collect::<Vec<ArunaImportEdge>>(),
-        &graph.actions,
-        &graph.signals,
-        &graph.stores,
-        &graph.runtimes,
-        &mutable_diagnostics,
-    );
+    // Built again only when writing the manifest reported a failure: the
+    // returned manifest carries every diagnostic, and building it is a
+    // project-sized copy.
+    if mutable_diagnostics.len() != diagnostics_before_write {
+        final_manifest = create_manifest(
+            ".",
+            &graph.modules,
+            &graph
+                .imports
+                .iter()
+                .map(|edge| edge.edge.clone())
+                .collect::<Vec<ArunaImportEdge>>(),
+            &graph.actions,
+            &graph.signals,
+            &graph.stores,
+            &graph.runtimes,
+            &mutable_diagnostics,
+        );
+    }
     let summary = summarize_diagnostics(&mutable_diagnostics, warnings_as_errors);
 
     Ok(CompilerOutput {
@@ -668,16 +678,10 @@ fn run_project_inner(
     })
 }
 
-fn run_project(input: CompilerInput, write_manifest: bool) -> CompilerOutput {
-    run_project_with(input, write_manifest, |input, write_manifest| {
-        run_project_inner(input, write_manifest)
-    })
-}
-
-fn run_project_with(
+pub(crate) fn run_project_with(
     input: CompilerInput,
     write_manifest: bool,
-    runner: impl FnOnce(&CompilerInput, bool) -> Result<CompilerOutput, String> + std::panic::UnwindSafe,
+    runner: impl FnOnce(&CompilerInput, bool) -> Result<CompilerOutput, String>,
 ) -> CompilerOutput {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runner(&input, write_manifest))) {
         Ok(Ok(output)) => output,
@@ -695,12 +699,14 @@ fn run_project_with(
     }
 }
 
+// The one-shot entry points: a session used once (its cache starts empty, so
+// this is a full check).
 pub fn check_project(input: CompilerInput) -> CompilerOutput {
-    run_project(input, true)
+    crate::session::CompilerSession::new(input).check()
 }
 
 pub fn inspect_project(input: CompilerInput) -> CompilerOutput {
-    run_project(input, false)
+    crate::session::CompilerSession::new(input).inspect()
 }
 
 #[cfg(test)]

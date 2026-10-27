@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod codegen;
 pub mod compiler;
 pub mod config;
@@ -14,9 +15,11 @@ pub mod raw_remote;
 pub mod resolver;
 pub mod rules;
 pub mod schema_metadata;
+pub mod session;
 pub mod spans;
 pub mod static_literals;
 
+pub use session::CompilerSession;
 pub use compiler::{
     check_project, inspect_project, CompilerInput, CompilerOutput, CompilerSummary,
 };

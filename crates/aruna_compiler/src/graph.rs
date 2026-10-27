@@ -1,8 +1,8 @@
-use oxc_allocator::Allocator;
+use crate::cache::GraphCache;
 use crate::config::{ArunaConfig, EntriesMode, StrictSeverity};
 use crate::primitives::{
-    parse_source, ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord,
-    FinalizeStage, ParsedFile, PrimitiveFiles, PrimitiveRecords,
+    ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord, FinalizeStage,
+    PrimitiveFiles, PrimitiveRecords,
 };
 use crate::codegen::{
     EntryHooks, HookModuleRecord, RECOGNIZED_CLIENT_HOOKS, RECOGNIZED_SERVER_HOOKS,
@@ -10,16 +10,14 @@ use crate::codegen::{
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
 use crate::files::{normalize_path, project_absolute, project_relative};
 use crate::manifest::ArunaModuleRecord;
-use crate::module_kind::{classify_module, entry_side_for_path, EntrySide, ModuleKind, ModuleReason};
-use crate::parser::{collect_module_exports, collect_static_imports};
-use crate::raw_remote::{collect_raw_remote_usages, create_raw_remote_usage_diagnostic};
+use crate::module_kind::{entry_side_for_path, EntrySide, ModuleKind, ModuleReason};
+use crate::raw_remote::create_raw_remote_usage_diagnostic;
 use crate::resolver::{
-    resolve_import_specifier, TsconfigResolverOptions, VirtualGeneratedActionModule,
+    TsconfigResolverOptions, VirtualGeneratedActionModule,
     VirtualGeneratedSignalModule, GENERATED_CLIENT_ENTRY_FILE, GENERATED_SERVER_ENTRY_FILE,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -209,6 +207,25 @@ pub fn build_project_graph(
     files: &[PathBuf],
     resolver_options: &TsconfigResolverOptions,
 ) -> Result<BuildGraphResult, String> {
+    build_project_graph_cached(
+        project_root,
+        config,
+        files,
+        resolver_options,
+        &mut GraphCache::default(),
+    )
+}
+
+/// `build_project_graph` with every per-file fact read through `cache`, so a
+/// check after an edit recomputes only what the edit invalidated. The cache must
+/// not outlive `config` or `resolver_options`.
+pub fn build_project_graph_cached(
+    project_root: &Path,
+    config: &ArunaConfig,
+    files: &[PathBuf],
+    resolver_options: &TsconfigResolverOptions,
+    cache: &mut GraphCache,
+) -> Result<BuildGraphResult, String> {
     let mut module_records = Vec::new();
     let mut module_map = BTreeMap::new();
     let mut diagnostics = Vec::new();
@@ -217,9 +234,10 @@ pub fn build_project_graph(
         .iter()
         .map(|path| project_relative(project_root, path))
         .collect();
+    cache.set_file_set(&discovered_files);
 
     for absolute_path in files {
-        let classification = classify_module(project_root, absolute_path, config);
+        let classification = cache.classify(project_root, absolute_path, config);
         let relative_path = project_relative(project_root, absolute_path);
         let reason = if classification.kind == ModuleKind::Unknown
             && classification.matched_kinds.is_empty()
@@ -273,7 +291,7 @@ pub fn build_project_graph(
             continue;
         }
 
-        let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
+        let source = cache.source(absolute_path)?;
 
         // Hook-module discovery (entries: "generated"): the recommended entry
         // files become plain hook modules whose value-level exports drive the
@@ -281,7 +299,7 @@ pub fn build_project_graph(
         if config.entries == EntriesMode::Generated {
             let relative_path = project_relative(project_root, absolute_path);
             if let Some(side) = entry_side_for_path(&config.root, &relative_path) {
-                match collect_module_exports(absolute_path, &source_text) {
+                match cache.module_exports(absolute_path, &source) {
                     Ok(exports) => {
                         let recognized: &[&str] = match side {
                             EntrySide::Server => &RECOGNIZED_SERVER_HOOKS,
@@ -319,16 +337,11 @@ pub fn build_project_graph(
 
         // Every registered primitive's discovery, over one parse of the file.
         let relative_path = project_relative(project_root, absolute_path);
-        let allocator = Allocator::default();
-        match parse_source(&allocator, absolute_path, &source_text) {
-            Ok(program) => {
-                let parsed = ParsedFile::new(absolute_path, &program);
-                primitives.discover_file(
-                    &mut primitive_files,
-                    &relative_path,
-                    &parsed,
-                    &mut diagnostics,
-                );
+        match cache.discovery(absolute_path, &relative_path, &source) {
+            Ok(discovery) => {
+                primitives.append(&discovery.records);
+                primitive_files.append(&discovery.files);
+                diagnostics.extend(discovery.diagnostics.iter().cloned());
             }
             Err(error) => {
                 push_parse_failed_diagnostic(
@@ -344,7 +357,7 @@ pub fn build_project_graph(
         // the generated dir, vendored runtime included, is never discovered, so
         // only the project's own code is checked.
         if !matches!(config.strict.raw_remote_usage, StrictSeverity::Off) {
-            if let Ok(usages) = collect_raw_remote_usages(absolute_path, &source_text) {
+            if let Ok(usages) = cache.raw_remote_usages(absolute_path, &source) {
                 let relative_path = project_relative(project_root, absolute_path);
                 diagnostics.extend(usages.iter().filter_map(|usage| {
                     create_raw_remote_usage_diagnostic(
@@ -411,8 +424,8 @@ pub fn build_project_graph(
     for absolute_path in files {
         let relative_from = project_relative(project_root, absolute_path);
         let importer_record = module_map.get(&relative_from);
-        let source_text = fs::read_to_string(absolute_path).map_err(|error| error.to_string())?;
-        let static_imports = match collect_static_imports(absolute_path, &source_text) {
+        let source = cache.source(absolute_path)?;
+        let static_imports = match cache.static_imports(absolute_path, &source) {
             Ok(imports) => imports,
             Err(error) => {
                 push_parse_failed_diagnostic(
@@ -425,22 +438,23 @@ pub fn build_project_graph(
             }
         };
 
-        for entry in static_imports {
-            let resolved = resolve_import_specifier(
-                project_root,
-                absolute_path,
-                &config.generated_dir,
-                &entry.specifier,
-                resolver_options,
-                &discovered_files,
-            );
+        let resolutions = cache.resolutions(
+            project_root,
+            absolute_path,
+            &source,
+            &config.generated_dir,
+            &static_imports,
+            resolver_options,
+            &discovered_files,
+        );
+        for (entry, resolved) in static_imports.iter().zip(resolutions.iter()) {
 
             if !resolved.resolved {
                 imports.push(GraphImportRecord {
                     edge: ArunaImportEdge {
                         from: relative_from.clone(),
                         to: None,
-                        specifier: entry.specifier,
+                        specifier: entry.specifier.clone(),
                         resolved: false,
                         kind: Some(ImportKind::Static),
                     },
@@ -461,6 +475,7 @@ pub fn build_project_graph(
 
             let imported_absolute_path = resolved
                 .absolute_path
+                .as_ref()
                 .map(|path| normalize_path(&path.to_string_lossy()));
             let imported_relative = imported_absolute_path
                 .as_ref()
@@ -479,7 +494,7 @@ pub fn build_project_graph(
                 edge: ArunaImportEdge {
                     from: relative_from.clone(),
                     to: Some(imported_relative.clone()),
-                    specifier: entry.specifier,
+                    specifier: entry.specifier.clone(),
                     resolved: true,
                     kind: Some(ImportKind::Static),
                 },

@@ -45,6 +45,15 @@ export function shouldRebuildOnChange(
   return true;
 }
 
+// Whether a change at `relPath` (relative to the project root) touches what a
+// compiler session reads once, at creation: the Aruna config and the tsconfig
+// (its baseUrl/paths drive import resolution). Such a change needs a new session
+// rather than an `update`.
+export function isCompilerInputChange(relPath: string): boolean {
+  const name = path.basename(relPath);
+  return /^aruna\.config\.[cm]?[jt]s$/.test(name) || /^tsconfig.*\.json$/.test(name);
+}
+
 export type RebuildScheduler = {
   // Report a (filtered) change. Coalesces bursts within the debounce window and
   // queues at most one follow-up run while a build is in flight, so a save storm

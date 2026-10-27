@@ -16,7 +16,7 @@
 use crate::diagnostics::ArunaDiagnostic;
 use crate::files::project_relative;
 use crate::module_kind::ModuleKind;
-use crate::schema_metadata::SchemaScope;
+use crate::schema_metadata::{FsSourceReader, SchemaScope, SourceReader};
 use crate::spans::source_type_for_path;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -96,23 +96,43 @@ pub struct PrimitiveDescriptor {
 pub struct ParsedFile<'a> {
     path: &'a Path,
     program: &'a Program<'a>,
+    reader: &'a dyn SourceReader,
     // Built on first use: most files define nothing, and building it resolves
-    // the file's relative imports from disk.
+    // the file's relative imports through `reader`.
     schema_scope: OnceCell<SchemaScope<'a>>,
 }
 
 impl<'a> ParsedFile<'a> {
+    /// A file whose schema imports are read from disk.
     pub fn new(path: &'a Path, program: &'a Program<'a>) -> Self {
+        Self::with_reader(path, program, &FsSourceReader)
+    }
+
+    pub fn with_reader(
+        path: &'a Path,
+        program: &'a Program<'a>,
+        reader: &'a dyn SourceReader,
+    ) -> Self {
         ParsedFile {
             path,
             program,
+            reader,
             schema_scope: OnceCell::new(),
         }
     }
 
     pub(crate) fn schema_scope(&self) -> &SchemaScope<'a> {
         self.schema_scope
-            .get_or_init(|| SchemaScope::for_program(self.path, self.program))
+            .get_or_init(|| SchemaScope::for_program(self.path, self.program, self.reader))
+    }
+
+    /// The other files discovery read, if it read any: what its result depends
+    /// on besides this file's own contents.
+    pub fn dependencies(&self) -> Vec<std::path::PathBuf> {
+        self.schema_scope
+            .get()
+            .map(|scope| scope.dependencies())
+            .unwrap_or_default()
     }
 }
 
@@ -315,7 +335,19 @@ macro_rules! register_primitives {
             }
         }
 
+        impl PrimitiveRecords {
+            /// Appends another set's records after this one's, per primitive.
+            pub fn append(&mut self, other: &PrimitiveRecords) {
+                $(self.$field.extend(other.$field.iter().cloned());)+
+            }
+        }
+
         impl PrimitiveFiles {
+            /// Adds another set's defining files, per primitive.
+            pub fn append(&mut self, other: &PrimitiveFiles) {
+                $(self.$field.extend(other.$field.iter().cloned());)+
+            }
+
             /// The module kind `path` becomes because of what it defines: the
             /// earliest-registered primitive it defines that has one.
             pub fn defining_module(&self, path: &str) -> Option<$crate::primitives::DefiningModule> {

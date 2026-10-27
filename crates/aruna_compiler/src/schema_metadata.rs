@@ -13,7 +13,7 @@ use oxc_parser::Parser;
 use oxc_span::GetSpan;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use crate::spans::*;
 use crate::static_literals::*;
 
@@ -197,17 +197,69 @@ pub(crate) struct SchemaScope<'a> {
     imported: HashMap<String, ImportedSchemaResolution>,
     // The file's source, for hashing a schema's constraint chain.
     source: &'a str,
+    // Per imported local name, every path the import hop consulted for it: each
+    // candidate up to and including the one it read. What the binding resolved
+    // to depends on exactly these files (and on whether the earlier candidates
+    // exist).
+    import_paths: HashMap<String, Vec<PathBuf>>,
+    // The import paths of the bindings a schema expression actually looked up:
+    // the files this scope's results depend on. A named import never used as a
+    // schema (a helper from ./model) is not one, so editing that file does not
+    // invalidate this one.
+    used_import_paths: std::cell::RefCell<Vec<PathBuf>>,
+}
+
+/// Reads another project file during analysis — the one-hop schema import. The
+/// one-shot compiler reads the disk; an incremental session reads through its
+/// cache, so a check sees the same contents its invalidation tracks.
+pub trait SourceReader {
+    fn read_source(&self, path: &Path) -> Option<String>;
+}
+
+pub struct FsSourceReader;
+
+impl SourceReader for FsSourceReader {
+    fn read_source(&self, path: &Path) -> Option<String> {
+        std::fs::read_to_string(path).ok()
+    }
 }
 
 impl<'a> SchemaScope<'a> {
     /// The schemas `program` can name: its own module-level consts, and its
     /// relative imports resolved one hop.
-    pub(crate) fn for_program(path: &Path, program: &'a oxc_ast::ast::Program<'a>) -> Self {
+    pub(crate) fn for_program(
+        path: &Path,
+        program: &'a oxc_ast::ast::Program<'a>,
+        reader: &dyn SourceReader,
+    ) -> Self {
+        let mut import_paths = HashMap::new();
+        let imported = resolve_imported_schema_bindings(path, program, reader, &mut import_paths);
         SchemaScope {
             env: collect_schema_bindings(program),
-            imported: resolve_imported_schema_bindings(path, program),
+            imported,
             source: program.source_text,
+            import_paths,
+            used_import_paths: std::cell::RefCell::new(Vec::new()),
         }
+    }
+
+    /// An imported schema binding, recording the files it was resolved from as
+    /// a dependency.
+    fn lookup_imported(&self, name: &str) -> Option<&ImportedSchemaResolution> {
+        let resolution = self.imported.get(name)?;
+        if let Some(paths) = self.import_paths.get(name) {
+            let mut used = self.used_import_paths.borrow_mut();
+            for path in paths {
+                if !used.contains(path) {
+                    used.push(path.clone());
+                }
+            }
+        }
+        Some(resolution)
+    }
+
+    pub(crate) fn dependencies(&self) -> Vec<PathBuf> {
+        self.used_import_paths.borrow().clone()
     }
 }
 
@@ -218,6 +270,8 @@ impl<'a> SchemaScope<'a> {
 pub(crate) fn resolve_imported_schema_bindings(
     current_path: &Path,
     program: &oxc_ast::ast::Program<'_>,
+    reader: &dyn SourceReader,
+    import_paths: &mut HashMap<String, Vec<PathBuf>>,
 ) -> HashMap<String, ImportedSchemaResolution> {
     let mut resolved: HashMap<String, ImportedSchemaResolution> = HashMap::new();
     let Some(base_dir) = current_path.parent() else {
@@ -250,6 +304,7 @@ pub(crate) fn resolve_imported_schema_bindings(
             continue;
         }
 
+        let mut consulted = Vec::new();
         let mut target: Option<(std::path::PathBuf, String)> = None;
         for candidate in [
             base_dir.join(format!("{specifier}.ts")),
@@ -257,10 +312,14 @@ pub(crate) fn resolve_imported_schema_bindings(
             base_dir.join(specifier).join("index.ts"),
             base_dir.join(specifier).join("index.tsx"),
         ] {
-            if let Ok(contents) = std::fs::read_to_string(&candidate) {
+            consulted.push(candidate.clone());
+            if let Some(contents) = reader.read_source(&candidate) {
                 target = Some((candidate, contents));
                 break;
             }
+        }
+        for (local, _) in &requested {
+            import_paths.insert(local.clone(), consulted.clone());
         }
         let Some((target_path, source_text)) = target else {
             for (local, _) in requested {
@@ -295,6 +354,8 @@ pub(crate) fn resolve_imported_schema_bindings(
             env: collect_schema_bindings(&parsed.program),
             imported: HashMap::new(),
             source: parsed.program.source_text,
+            import_paths: HashMap::new(),
+            used_import_paths: std::cell::RefCell::new(Vec::new()),
         };
         for (local, exported_name) in requested {
             let Some(expression) = target_scope.env.get(exported_name.as_str()).copied() else {
@@ -430,7 +491,7 @@ pub(crate) fn parse_schema_expression<'a>(
                 let Some(resolved) = scope.env.get(name).copied() else {
                     // Not a local const — check the pre-resolved import map
                     // (single hop into the module that exports the schema).
-                    match scope.imported.get(name) {
+                    match scope.lookup_imported(name) {
                         Some(ImportedSchemaResolution::Resolved(metadata)) => {
                             return Some(metadata.clone());
                         }

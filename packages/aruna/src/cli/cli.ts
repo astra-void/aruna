@@ -9,8 +9,10 @@ import type { CompilerOutput, Diagnostic, Manifest } from "@arunajs/core";
 import {
   buildProject,
   checkProject,
+  createCompilerSession,
   inspectProject,
   loadProjectConfig,
+  type CompilerSessionHandle,
 } from "@arunajs/compiler";
 import {
   formatDiagnostics,
@@ -53,7 +55,7 @@ import {
   collectLayoutDesyncDiagnostics,
   reconcileOwnedArtifacts,
 } from "./owned-artifacts.js";
-import { createRebuildScheduler, shouldRebuildOnChange } from "./watch.js";
+import { createRebuildScheduler, isCompilerInputChange, shouldRebuildOnChange } from "./watch.js";
 import {
   createLinePrefixer,
   resolveRojoServePlan,
@@ -419,9 +421,14 @@ export type BuildRunResult = {
   readonly pruned: string[];
 };
 
-async function runBuild(options: BuildCliOptions): Promise<BuildRunResult> {
+// `session`, when given, is the watch loop's incremental compiler; a one-shot
+// build compiles from scratch.
+async function runBuild(
+  options: BuildCliOptions,
+  session?: CompilerSessionHandle,
+): Promise<BuildRunResult> {
   const input = compilerInput(options);
-  const compiled = await buildProject(input);
+  const compiled = session !== undefined ? await session.run() : await buildProject(input);
   // A store change that would leave saved records unreadable stops the build
   // before anything is vendored or compiled to Luau.
   const output = compiled.ok
@@ -631,9 +638,10 @@ type DevCliOptions = CliOptions & {
 async function executeBuildPass(
   options: BuildCliOptions,
   mode: "compile" | "codegen-only" = "compile",
+  session?: CompilerSessionHandle,
 ): Promise<{ ok: boolean; generatedDir: string; manifest?: Manifest | undefined }> {
   const startedAt = Date.now();
-  const { output, pruned } = await runBuild(options);
+  const { output, pruned } = await runBuild(options, session);
   const projectRoot = compilerInput(options).root;
   let rbxtsc: RbxtscResult | undefined;
   if (output.ok && options.emitLuau !== false && mode === "compile") {
@@ -783,16 +791,26 @@ async function runWatchSession(
   // change makes watch mode no faster than repeated one-shot builds.
   const resident = startResidentLuauWatch(options, colors);
 
+  // One incremental compiler for the whole session: each pass tells it what
+  // changed instead of re-reading and re-parsing the project. A config change
+  // (aruna.config.ts, tsconfig.json) is part of its input, so it starts over.
+  let session = createCompilerSession(compilerInput(options), "build");
+  const pendingChanges = new Set<string>();
+
   // One pass of the loop. Codegen runs first; the Luau compile is either handed
   // to the resident watcher or, when that is unavailable, done inline.
   const runPass = async (): Promise<{ generatedDir: string }> => {
     const useResident = resident?.active() === true;
-    const pass = await executeBuildPass(options, useResident ? "codegen-only" : "compile");
+    const pass = await executeBuildPass(
+      options,
+      useResident ? "codegen-only" : "compile",
+      session,
+    );
     if (useResident && pass.manifest !== undefined) {
       // A resident watcher that fails to start leaves this pass without Luau
       // output, so redo it as a one-shot compile.
       if (!resident.stage(pass.manifest, pass.generatedDir)) {
-        await executeBuildPass(options, "compile");
+        await executeBuildPass(options, "compile", session);
       }
     }
     return { generatedDir: pass.generatedDir };
@@ -809,6 +827,14 @@ async function runWatchSession(
       writeText("");
       writeText(formatMuted("change detected — rebuilding…", colors));
     }
+    const changed = [...pendingChanges];
+    pendingChanges.clear();
+    if (changed.some((file) => isCompilerInputChange(path.relative(projectRoot, file)))) {
+      session.dispose();
+      session = createCompilerSession(compilerInput(options), "build");
+    } else {
+      session.update(changed);
+    }
     await runPass();
     if (!options.quiet) {
       writeText(formatMuted("watching for changes… (ctrl+c to stop)", colors));
@@ -820,6 +846,7 @@ async function runWatchSession(
       return;
     }
     if (shouldRebuildOnChange(fileName, { generatedDir })) {
+      pendingChanges.add(path.join(projectRoot, fileName));
       scheduler.notify();
     }
   });
@@ -834,6 +861,7 @@ async function runWatchSession(
   await new Promise<void>((resolve) => {
     const stop = (): void => {
       watcher.close();
+      session.dispose();
       resident?.stop();
       cleanup?.();
       resolve();

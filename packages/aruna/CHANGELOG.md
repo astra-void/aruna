@@ -17,6 +17,14 @@ the game build like any other module.
 
 ### Added
 
+- **`aruna dev` and `aruna build --watch` recompile incrementally.** The watch
+  loop keeps one compiler session for its lifetime and tells it which files
+  changed, so a rebuild re-reads and re-parses only those files; on a 3,000-file
+  project a one-file edit rechecks in ~40 ms instead of ~800 ms. Changing
+  `aruna.config.*` or a `tsconfig*.json` starts a fresh session. The compiler
+  also runs off the main thread now, so the watcher, the rojo child, and the
+  resident rbxtsc keep running while it works.
+
 - **`idempotent: true` on `defineAction`, and server-side de-duplication of
   retried calls.** Declaring an action idempotent says running it twice has the
   same effect as running it once. The compiler reads it (a boolean literal,
@@ -205,6 +213,10 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **One-shot `check`, `build`, and `inspect` are ~3× faster** (about 800 → 240 ms
+  at 3,000 files): module classification compiled each convention's glob set
+  again for every file it matched.
 
 - **Breaking: the `aruna/*` runtime subpaths are type-only, and their types are
   the native runtime's.** `aruna/server`, `aruna/client`, `aruna/roblox`,
