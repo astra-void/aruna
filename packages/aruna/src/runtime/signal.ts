@@ -45,7 +45,10 @@ export function assertPublishableSignalPayload(
   payload: unknown,
 ): void {
   // Server-authored, so not held to the node budget that bounds a client's input.
-  assertSerializableActionValue(payload, "output", signal.id, { maxNodes: Infinity });
+  assertSerializableActionValue(payload, "output", signal.id, {
+    maxNodes: Infinity,
+    ...(signal.payload !== undefined ? { schema: signal.payload } : {}),
+  });
 
   if (signal.payload !== undefined) {
     assertSchema(signal.payload, payload, { actionId: signal.id, role: "output" });

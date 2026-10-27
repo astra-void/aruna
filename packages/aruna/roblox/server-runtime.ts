@@ -218,8 +218,9 @@ export function createActionRegistry<TPlayer>(
 		progress: { ran: boolean } | undefined,
 	): Promise<ActionDispatchResult> => {
 		return new Promise<ActionDispatchResult>((resolve) => {
-			// Reject non-wire-safe input before anything else reads it.
-			if (!isWireSafe(input)) {
+			// Reject non-wire-safe input before anything else reads it. The input
+			// schema decides where an Instance may appear.
+			if (!isWireSafe(input, undefined, definition.input)) {
 				resolve({
 					ok: false,
 					error: "non-serializable action input",
@@ -315,7 +316,7 @@ export function createActionRegistry<TPlayer>(
 					}
 					// Server-authored, so not held to the node budget that bounds a
 					// client's input.
-					if (!isWireSafe(output, math.huge)) {
+					if (!isWireSafe(output, math.huge, definition.output)) {
 						const failure = actionError("ActionSerializationError", "non-serializable action output");
 						outputFailures.add(failure);
 						throw failure;

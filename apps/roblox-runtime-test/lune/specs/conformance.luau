@@ -6,6 +6,7 @@
 -- The wire payload is the `registry.dispatch` result, which the native binder
 -- fires as is, and nothing at all for a fireAndForget action.
 local fs = require("@lune/fs")
+local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
 
 return function(ctx)
@@ -24,6 +25,8 @@ return function(ctx)
 			base = if descriptor.format == "f32" then schema.f32() else schema.number()
 		elseif descriptor.type == "boolean" then
 			base = schema.boolean()
+		elseif descriptor.type == "instance" then
+			base = schema.instance()
 		elseif descriptor.type == "object" then
 			local fields = {}
 			for key, field in descriptor.fields or {} do
@@ -55,6 +58,10 @@ return function(ctx)
 		end
 		if value["$function"] == true then
 			return function() end
+		end
+		local className = value["$instance"]
+		if type(className) == "string" then
+			return roblox.Instance.new(className)
 		end
 		local repeated = value["$array"]
 		if type(repeated) == "table" then

@@ -4,6 +4,7 @@ local roblox = require("@lune/roblox")
 return function(ctx)
 	local t = ctx.t
 	local isWireSafe = ctx.load("serialization").isWireSafe
+	local schema = ctx.load("schema").schema
 
 	t.describe("serialization (plain-data-v1)", function()
 		t.it("accepts wire-safe primitives", function()
@@ -58,6 +59,23 @@ return function(ctx)
 			flat[2048] = 0
 			t.isFalse(isWireSafe(flat), "2049 values")
 			t.isTrue(isWireSafe(flat, math.huge), "unbounded for a server-authored value")
+		end)
+
+		t.it("accepts an Instance only where the schema declares schema.instance()", function()
+			local part = roblox.Instance.new("Part")
+			t.isFalse(isWireSafe(part), "no schema")
+			t.isFalse(isWireSafe({ part = part }), "no schema, nested")
+			t.isTrue(isWireSafe(part, nil, schema.instance()))
+			t.isTrue(isWireSafe(part, nil, schema.optional(schema.instance())))
+
+			local shape = schema.object({ part = schema.instance(), name = schema.string() })
+			t.isTrue(isWireSafe({ part = part, name = "a" }, nil, shape))
+			t.isFalse(isWireSafe({ part = "a", name = part }, nil, shape), "in the wrong field")
+			t.isFalse(isWireSafe({ part = part, extra = part }, nil, shape), "in an undeclared field")
+			t.isTrue(isWireSafe({ part, part }, nil, schema.array(schema.instance())))
+			t.isTrue(isWireSafe({ "a", part }, nil, schema.tuple({ schema.string(), schema.instance() })))
+			t.isFalse(isWireSafe({ part, "a" }, nil, schema.tuple({ schema.string(), schema.instance() })))
+			t.isTrue(isWireSafe(part, nil, schema.union({ schema.string(), schema.instance() })))
 		end)
 
 		t.it("rejects functions and threads", function()

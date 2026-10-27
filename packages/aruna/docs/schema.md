@@ -78,6 +78,15 @@ schema.color3()   // { r: number; g: number; b: number }
 schema.cframe()   // { components: readonly number[] }  (12 floats)
 ```
 
+Every numeric component must be finite: a `Vector3` with a NaN component fails
+validation and the wire-safety check, like a bare NaN does.
+
+`schema.instance()` is the one way an `Instance` (a `Player` included) crosses the action
+boundary. An Instance is a reference into the DataModel, not data, so it is accepted only
+where the schema declares `schema.instance()` — an action with no input schema, or an
+undeclared field, rejects it as `ActionSerializationError`. It cannot travel on a
+`wire: "binary"` signal.
+
 ## Inference
 
 `Infer<typeof s>` turns a schema into its TypeScript type. Define a schema once and

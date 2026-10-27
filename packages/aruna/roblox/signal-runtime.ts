@@ -122,7 +122,7 @@ function resolveSignal(
 
 function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload: unknown): void {
 	// Server-authored, so not held to the node budget that bounds a client's input.
-	if (!isWireSafe(payload, math.huge)) {
+	if (!isWireSafe(payload, math.huge, signal.payload)) {
 		throw `non-serializable signal payload: ${signal.id}`;
 	}
 	const payloadSchema = signal.payload;

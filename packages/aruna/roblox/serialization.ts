@@ -1,10 +1,14 @@
 // Aruna roblox-ts native runtime — plain-data-v1 serialization boundary.
 //
 // Action input/output must be wire-safe plain data. Functions, threads, cyclic
-// tables, and most userdata (Instance, ...) are rejected; strings, finite
-// numbers, booleans, nil, plain tables, and the Roblox value types that
-// RemoteEvents serialize natively (Vector3, Vector2, Color3, CFrame, UDim, UDim2,
-// with finite components) are allowed.
+// tables, and other userdata are rejected; strings, finite numbers, booleans,
+// nil, plain tables, and the Roblox value types that RemoteEvents serialize
+// natively (Vector3, Vector2, Color3, CFrame, UDim, UDim2 with finite
+// components; DateTime; BrickColor) are allowed. An Instance is allowed only
+// where the value's schema declares `schema.instance()`: it is a reference into
+// the DataModel, not data, so it must be asked for.
+
+import type { Schema } from "./schema";
 
 const MAX_DEPTH = 32;
 // Values a single walk may visit. Depth alone does not bound the work: a flat
@@ -15,6 +19,54 @@ interface WalkState {
 	readonly seen: Set<object>;
 	readonly maxNodes: number;
 	nodes: number;
+}
+
+// The schema a value is checked against once optional / default wrappers are
+// peeled, and a union narrowed to the member that accepts it.
+function resolveSchema(schema: Schema | undefined, value: unknown): Schema | undefined {
+	let current = schema;
+	while (current !== undefined) {
+		const typeName = current.typeName;
+		if (typeName === "optional" || typeName === "default") {
+			current = current.inner;
+		} else if (typeName === "union") {
+			const members = current.members;
+			let chosen: Schema | undefined;
+			if (members !== undefined) {
+				for (const member of members) {
+					if (member.validate(value)) {
+						chosen = member;
+						break;
+					}
+				}
+			}
+			current = chosen;
+		} else {
+			return current;
+		}
+	}
+	return undefined;
+}
+
+// The schema for one entry of a table checked against `schema`. Undefined for
+// a key the schema does not declare, which is where an Instance is refused.
+function childSchema(schema: Schema | undefined, key: unknown): Schema | undefined {
+	if (schema === undefined) {
+		return undefined;
+	}
+	const typeName = schema.typeName;
+	if (typeName === "object") {
+		const fields = schema.fields;
+		return fields !== undefined && typeIs(key, "string") ? fields[key] : undefined;
+	}
+	if (typeName === "array" || typeName === "record") {
+		return schema.item;
+	}
+	if (typeName === "tuple") {
+		const items = schema.items;
+		return items !== undefined && typeIs(key, "number") ? items[key - 1] : undefined;
+	}
+	return undefined;
 }
 
 // NaN, math.huge and -math.huge are numbers to `typeIs`, and they pass any
@@ -69,7 +121,12 @@ export function hasFiniteComponents(value: unknown): boolean {
 	return true;
 }
 
-function checkWireSafe(value: unknown, depth: number, state: WalkState): boolean {
+function checkWireSafe(
+	value: unknown,
+	depth: number,
+	state: WalkState,
+	schema: Schema | undefined,
+): boolean {
 	if (depth > MAX_DEPTH) {
 		return false;
 	}
@@ -100,17 +157,18 @@ function checkWireSafe(value: unknown, depth: number, state: WalkState): boolean
 	) {
 		return hasFiniteComponents(value);
 	}
-	if (
-		typeIs(value, "DateTime") ||
-		typeIs(value, "BrickColor") ||
-		typeIs(value, "Instance")
-	) {
+	if (typeIs(value, "DateTime") || typeIs(value, "BrickColor")) {
 		return true;
 	}
+	if (typeIs(value, "Instance")) {
+		const resolved = resolveSchema(schema, value);
+		return resolved !== undefined && resolved.typeName === "instance";
+	}
 	if (!typeIs(value, "table")) {
-		// Other userdata (Instance, function, thread, ...) remain forbidden.
+		// Other userdata, functions, and threads remain forbidden.
 		return false;
 	}
+	const tableSchema = resolveSchema(schema, value);
 
 	const seen = state.seen;
 	const tableValue = value as object;
@@ -125,7 +183,7 @@ function checkWireSafe(value: unknown, depth: number, state: WalkState): boolean
 			safe = false;
 			break;
 		}
-		if (!checkWireSafe(entry, depth + 1, state)) {
+		if (!checkWireSafe(entry, depth + 1, state, childSchema(tableSchema, key))) {
 			safe = false;
 			break;
 		}
@@ -137,11 +195,18 @@ function checkWireSafe(value: unknown, depth: number, state: WalkState): boolean
 
 // `maxNodes` bounds the values visited (default DEFAULT_MAX_WIRE_NODES), so a
 // client's input costs at most that much to check. Pass `math.huge` for a
-// server-authored value (an action's output, a signal payload).
-export function isWireSafe(value: unknown, maxNodes?: number): boolean {
-	return checkWireSafe(value, 0, {
-		seen: new Set<object>(),
-		maxNodes: maxNodes !== undefined ? maxNodes : DEFAULT_MAX_WIRE_NODES,
-		nodes: 0,
-	});
+// server-authored value (an action's output, a signal payload). `schema` is the
+// value's declared schema, if any: it is what lets an Instance through, and only
+// where it says `schema.instance()`.
+export function isWireSafe(value: unknown, maxNodes?: number, schema?: Schema): boolean {
+	return checkWireSafe(
+		value,
+		0,
+		{
+			seen: new Set<object>(),
+			maxNodes: maxNodes !== undefined ? maxNodes : DEFAULT_MAX_WIRE_NODES,
+			nodes: 0,
+		},
+		schema,
+	);
 }

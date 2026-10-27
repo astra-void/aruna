@@ -18,7 +18,7 @@ import {
 } from "../src/server.js";
 
 type SchemaDescriptor = {
-  readonly type: "string" | "number" | "boolean" | "object";
+  readonly type: "string" | "number" | "boolean" | "object" | "instance";
   readonly fields?: Readonly<Record<string, SchemaDescriptor>>;
   readonly format?: "f32";
   readonly default?: unknown;
@@ -84,6 +84,8 @@ function toSchema(descriptor: SchemaDescriptor): Schema {
         return descriptor.format === "f32" ? schema.f32() : schema.number();
       case "boolean":
         return schema.boolean();
+      case "instance":
+        return schema.instance();
       case "object":
         return schema.object(
           Object.fromEntries(
@@ -115,6 +117,15 @@ function materialize(value: unknown): unknown {
   if (typeof value === "object" && value !== null) {
     if ((value as { $function?: unknown }).$function === true) {
       return () => undefined;
+    }
+    const className = (value as { $instance?: unknown }).$instance;
+    if (typeof className === "string") {
+      // The Node runtime recognizes an Instance by shape: IsA plus ClassName.
+      return {
+        ClassName: className,
+        Name: className,
+        IsA: (queried: string) => queried === className || queried === "Instance",
+      };
     }
     const repeated = (value as { $array?: { length?: unknown; of?: unknown } }).$array;
     if (repeated !== undefined) {

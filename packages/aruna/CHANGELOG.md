@@ -204,6 +204,17 @@ the game build like any other module.
   action's output and a signal payload are server-authored and not held to the
   limit.
 
+- **Breaking: an Instance crosses the action boundary only where the schema
+  says `schema.instance()`.** The native wire-safety check accepted any
+  Instance anywhere, although its own comment and the README said Instances
+  were rejected; the Node runtime rejected every Instance, even where the
+  schema asked for one. Both now walk the value against its schema (input,
+  output, or signal payload) and accept an Instance — a `Player` included —
+  only where that schema declares `schema.instance()`. An action with no input
+  schema, or a field the schema does not declare, rejects one as
+  `ActionSerializationError`; an action that does declare `schema.instance()`
+  now works in the Node runtime too.
+
 - **Breaking: the default client retry no longer retries a timeout, unless the
   action is idempotent.** `withRetry` (and `createClientApp({ retry })`) used to
   retry `ActionTimeoutError` for every action. A timeout does not mean the server

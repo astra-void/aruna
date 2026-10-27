@@ -129,6 +129,56 @@
       "trace": ["run"]
     },
     {
+      "name": "an Instance is accepted where the input schema declares schema.instance()",
+      "actions": [
+        {
+          "id": "pick",
+          "behavior": "returnConstant",
+          "value": "picked",
+          "input": { "type": "object", "fields": { "part": { "type": "instance" } } }
+        }
+      ],
+      "steps": [
+        {
+          "dispatch": "pick",
+          "input": { "part": { "$instance": "Part" } },
+          "expect": { "ok": true, "output": "picked" }
+        }
+      ],
+      "trace": ["run"]
+    },
+    {
+      "name": "an Instance into an action with no input schema is not wire-safe",
+      "actions": [{ "id": "echo", "behavior": "echoInput" }],
+      "steps": [
+        {
+          "dispatch": "echo",
+          "input": { "part": { "$instance": "Part" } },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": []
+    },
+    {
+      "name": "an Instance in a field the input schema does not declare is not wire-safe",
+      "actions": [
+        {
+          "id": "named",
+          "behavior": "returnConstant",
+          "value": "named",
+          "input": { "type": "object", "fields": { "name": { "type": "string" } } }
+        }
+      ],
+      "steps": [
+        {
+          "dispatch": "named",
+          "input": { "name": "a", "extra": { "$instance": "Part" } },
+          "expect": { "ok": false, "errorName": "ActionSerializationError" }
+        }
+      ],
+      "trace": []
+    },
+    {
       "name": "invalid input is rejected before the handler and not reported",
       "actions": [
         {

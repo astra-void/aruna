@@ -64,7 +64,7 @@ of `registry.dispatch` natively).
 Optional: `input` and `output` schema descriptors, `rateLimit`
 (`{ windowMs, max }`), `fireAndForget`.
 
-A schema descriptor is `{ "type": "string" | "number" | "boolean" }` or
+A schema descriptor is `{ "type": "string" | "number" | "boolean" | "instance" }` or
 `{ "type": "object", "fields": { name: descriptor } }`. A number descriptor can
 add `"format": "f32"` for `schema.f32()`. Any of them can add
 `"default": value`.
@@ -77,6 +77,9 @@ them anywhere in an input value, and each runner swaps them before dispatch:
   `math.huge`, `-math.huge` in Luau)
 - `{ "$array": { "length": n, "of": value } }` becomes an array of `n` copies
   of `value` (itself materialized), for inputs too large to write out
+- `{ "$instance": "Part" }` becomes an Instance of that class (a real one under
+  Lune; in Node, an object with `IsA` and `ClassName`, which is how the Node
+  runtime recognizes one)
 
 That is how a case sends input that can't cross the wire.
 

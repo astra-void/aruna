@@ -415,9 +415,10 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 
 - server action discovery exists in Rust
 - action manifest records now include basic schema metadata when `input` or `output` is declared
-- `aruna inspect actions` lists client-callable actions, input/output schema summaries, serialization policy metadata, rate-limit metadata, and basic authority notes
-- `aruna inspect contract` emits a deterministic JSON snapshot of the action contract surface, including ids, source paths, generated export names, schema metadata and summaries, serialization policy, rate limits, authority notes, and warnings
-- `aruna contract diff` compares two action contract snapshots or a snapshot file against the current project and reports breaking, non-breaking, and info-level changes
+- `aruna inspect actions` lists client-callable actions, input/output schema summaries, serialization policy metadata, rate-limit metadata, whether the action is `idempotent`, and basic authority notes
+- `aruna inspect contract` emits a deterministic JSON snapshot of the contract surface: actions (ids, source paths, generated export names, schema metadata and summaries, serialization policy, rate limits, `idempotent`, authority notes, and warnings), signals, and stores
+- `aruna contract diff` compares two contract snapshots, or a snapshot file against the current project (with no arguments, the committed `aruna.contract.json`), and reports breaking, warning, non-breaking, and info-level changes
+- `aruna contract update` writes the committed snapshot; while one exists, `aruna check` and `aruna build` fail on a store change that saved records cannot survive (`aruna::578`)
 - generated action files are snapshot-tested in the fixture suite
 - application code should import generated actions through `$aruna/actions/client` and `$aruna/actions/server`
 - `aruna build` writes deterministic `src/.aruna/shared/actions.client.generated.ts` and `src/.aruna/server/actions.server.generated.ts`
@@ -433,11 +434,13 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - `@rbxts/types` and `@rbxts/compiler-types` are used at typecheck time for Roblox-facing runtime types
 - runtime schema validation now runs on action input and output at dispatch time
 - runtime serialization policy now runs on action input and output at dispatch time using the default `plain-data-v1` boundary
-- action input/output rejects `Instance`, `Player`, function, class-instance, cyclic, non-finite, and other non-plain values by default
+- action input/output rejects function, class-instance, cyclic, non-finite (NaN, ±inf, also inside Roblox value types), and other non-plain values, in both runtimes; an `Instance` (a `Player` included) is accepted only where the schema declares `schema.instance()`, so an action without an input schema rejects one
+- client input is checked for wire safety before anything else reads it, and the walk stops at 2048 values as well as at depth 32
 - basic fixed-window action rate limiting now runs per action and player/key before `run()`
-- invalid input and serialization failures do not consume quota
+- invalid input and serialization failures do not consume per-action quota; every envelope is charged to a per-player request budget (60 burst, 30 per second) before it is read, and a player's dispatches in flight are capped (32), so malformed payloads are not free
+- the default client retry retries a timeout only for an action declared `idempotent: true`, and every attempt of a call carries one idempotency key, so the server runs it once
 - manifest action records now include serialization policy metadata and optional `rateLimit` metadata
-- the contract snapshot foundation is implemented through `aruna inspect contract`, and `aruna contract diff` now serves as the compatibility gate for action contract snapshots
+- the contract snapshot foundation is implemented through `aruna inspect contract`; `aruna contract diff` is the compatibility gate for contract snapshots, and the committed snapshot gates stores in `check` and `build`
 - the schema helpers cover strings, numbers (with `u8`..`i32`/`f32` width hints), booleans, literals, arrays, objects, optionals, records, tuples, enums, unions, discriminated unions, `.default(...)`, constraint chains and `refine`, and the Roblox value types (`vector3`, `vector2`, `color3`, `cframe`, `udim`, `udim2`, `dateTime`, `brickColor`, `instance`); see [docs/schema.md](packages/aruna/docs/schema.md)
 - the schema DSL has TypeScript inference for all of them
 - the generated files are safe to delete and regenerate
@@ -488,6 +491,7 @@ connection.disconnect();
 - Both runtimes ship turnkey default-transport helpers `createSignalPublisher(signals)` / `createSignalSubscriber(signals)` over a dedicated signal RemoteEvent, distinct from the action remote. They ensure / wait for the remote on call, so no hand-written boot-order plumbing is needed; `createServerApp({ signals, createPublisher })` can own the publisher so the remote is created at boot.
 - An app-owned publisher is injected into every action's `ctx`, so an action's `run` can publish signals directly (`ctx.publisher?.toAll(...)`). Bind a `defineAction` with `createActionDefiner<Signals, Player>()` for a non-optional, registry-checked `ctx.publisher` — no plumbing module. See [docs/signals.md](packages/aruna/docs/signals.md#publishing-from-inside-an-action).
 - Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. Contract `diff` gates signal changes too: a removed signal or a removed/retyped payload field is breaking, an added signal or payload field is non-breaking (output compatibility rules — payloads travel server → client).
+- `wire: "binary"` sends a signal's payload as an `encodeBinary` frame (see [Binary serialization](#binary-serialization)). The compiler records the largest encoding a payload allows (`maxEncodedBytes`) and checks unreliable signals against Roblox's 900-byte limit: an unbounded payload warns (`aruna::510`), one that can exceed it fails the build (`aruna::511`).
 
 ## Stores (DataStore persistence)
 
@@ -529,7 +533,12 @@ const app = createServerApp({ actions, transport: robloxRemoteEvent(), playerSto
   heartbeat doubles as the autosave, and `createServerApp` flushes everything on
   `BindToClose`.
 - **Versioned payloads.** Every write carries a version, so an older record is handed to
-  `migrate` rather than silently reinterpreted.
+  `migrate` rather than silently reinterpreted. A record from a *newer* version — an old
+  server still running after an update — is refused (`StoreVersionAheadError`), never
+  migrated or written back.
+- **Compatibility gate.** With a committed contract snapshot, `aruna check` / `aruna build`
+  fail on a store change that records already saved cannot survive: a new required field
+  without `.default()`, a narrowed type, a version bump without `migrate`.
 - **App-owned lifecycle.** `createServerApp({ playerStore })` loads on join, releases on
   leave, and injects the open document into every action as `ctx.store` — optional by
   design, because a document that has not loaded must not be replaced by a default.
@@ -652,10 +661,11 @@ const value = decodeBinary(hit, bytes); // { amount: 12, source: "trap" }
   ```
 
 - Encoding assumes the value already matches the schema (the action and signal boundaries validate first); a mismatch throws rather than emitting a corrupt buffer.
+- Signals use it on the wire with `defineSignal({ wire: "binary" })`: the publisher sends the frame, the subscriber decodes it, and a frame with another schema's fingerprint is dropped like a schema mismatch. See [docs/signals.md](packages/aruna/docs/signals.md#binary-wire).
 
 ## Spec Cutline
 
-Serialization boundary, fixed-window rate limits, the contract snapshot, contract diff, and package-consumption validation are all implemented. The cutline stays on stabilization, not more transport expansion or a policy/capability system:
+Serialization boundary, fixed-window rate limits, the pre-dispatch request budget, the contract snapshot, contract diff (with the store compatibility gate), and package-consumption validation are all implemented. The binary signal wire puts the existing codec on the existing signal transport rather than adding a transport. The cutline stays on stabilization, not new transports or a policy/capability system:
 
 1. Stabilize current compiler, action, runtime, and package-consumption behavior. (Ongoing.)
 2. Done: runtime execution tests for the roblox-ts-native runtime. CI compiles it and runs it under Lune (`apps/roblox-runtime-test`), and one dispatch conformance table (`packages/aruna/test/conformance/`) runs against both runtimes.

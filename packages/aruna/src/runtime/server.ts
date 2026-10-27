@@ -331,7 +331,13 @@ async function dispatchDefinedAction<TPlayer>(
   options: DispatchActionOptions<TPlayer> | undefined,
   progress?: { ran: boolean },
 ): Promise<unknown> {
-  assertSerializableActionValue(input, "input", actionId);
+  // The input schema decides where an Instance may appear.
+  assertSerializableActionValue(
+    input,
+    "input",
+    actionId,
+    action.input !== undefined ? { schema: action.input } : undefined,
+  );
 
   // Fill `.default(...)` values before validation and before the handler runs,
   // so an omitted defaulted field arrives populated. No-op when the schema has
@@ -420,7 +426,10 @@ async function dispatchDefinedAction<TPlayer>(
 
       // Server-authored, so not held to the node budget that bounds a
       // client's input.
-      assertSerializableActionValue(output, "output", actionId, { maxNodes: Infinity });
+      assertSerializableActionValue(output, "output", actionId, {
+        maxNodes: Infinity,
+        ...(action.output !== undefined ? { schema: action.output } : {}),
+      });
     } catch (error) {
       outputFailures.add(error);
       throw error;

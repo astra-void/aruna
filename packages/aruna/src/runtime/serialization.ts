@@ -1,3 +1,5 @@
+import { validateSchema, type Schema } from "../schema/index.js";
+
 const DEFAULT_MAX_DEPTH = 32;
 const DEFAULT_MAX_VIOLATIONS = 20;
 // Values a single walk may visit. Depth alone does not bound the work: a flat
@@ -31,7 +33,48 @@ export type SerializationPolicyOptions = {
   // Total values visited before the walk gives up and rejects. Default
   // DEFAULT_MAX_WIRE_NODES; pass Infinity for a server-authored value.
   readonly maxNodes?: number;
+  // The value's declared schema. An Instance is a reference into the
+  // DataModel, not data, so it is accepted only where this says
+  // `schema.instance()`; without a schema, never.
+  readonly schema?: Schema;
 };
+
+// The schema a value is checked against once optional / default wrappers are
+// peeled, and a union narrowed to the member that accepts it. Mirrors the
+// native runtime.
+function resolveSchema(schema: Schema | undefined, value: unknown): Schema | undefined {
+  let current = schema;
+  while (current !== undefined) {
+    if (current.kind === "optional" || current.kind === "default") {
+      current = current.inner;
+    } else if (current.kind === "union") {
+      current = current.members.find((member) => validateSchema(member, value).ok);
+    } else {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+// The schema for one entry of a container checked against `schema`. Undefined
+// for a key the schema does not declare, which is where an Instance is refused.
+function childSchema(schema: Schema | undefined, key: string | number): Schema | undefined {
+  if (schema === undefined) {
+    return undefined;
+  }
+  switch (schema.kind) {
+    case "object":
+      return typeof key === "string" ? schema.shape[key] : undefined;
+    case "array":
+      return schema.item;
+    case "record":
+      return schema.value;
+    case "tuple":
+      return typeof key === "number" ? schema.items[key] : undefined;
+    default:
+      return undefined;
+  }
+}
 
 export class ActionSerializationError extends Error {
   override readonly name = "ActionSerializationError";
@@ -161,6 +204,7 @@ function sortObjectKeys(value: Record<string, unknown>): string[] {
 
 function validateValue(
   value: unknown,
+  schema: Schema | undefined,
   path: string,
   state: {
     readonly maxDepth: number;
@@ -253,6 +297,7 @@ function validateValue(
   }
 
   if (Array.isArray(value)) {
+    const arraySchema = resolveSchema(schema, value);
     if (depth >= state.maxDepth) {
       addViolation(state.violations, state.maxViolations, path, "max depth exceeded", value);
       return;
@@ -265,7 +310,13 @@ function validateValue(
 
     state.seen.add(value);
     for (let index = 0; index < value.length; index += 1) {
-      validateValue(value[index], appendArrayPath(path, index), state, depth + 1);
+      validateValue(
+        value[index],
+        childSchema(arraySchema, index),
+        appendArrayPath(path, index),
+        state,
+        depth + 1,
+      );
       if (state.exhausted || state.violations.length >= state.maxViolations) {
         break;
       }
@@ -276,6 +327,9 @@ function validateValue(
 
   if (typeof value === "object") {
     if (isRobloxInstanceLike(value)) {
+      if (resolveSchema(schema, value)?.kind === "instance") {
+        return;
+      }
       addViolation(
         state.violations,
         state.maxViolations,
@@ -307,9 +361,16 @@ function validateValue(
       return;
     }
 
+    const objectSchema = resolveSchema(schema, value);
     state.seen.add(value);
     for (const key of sortObjectKeys(value)) {
-      validateValue(value[key], appendObjectPath(path, key), state, depth + 1);
+      validateValue(
+        value[key],
+        childSchema(objectSchema, key),
+        appendObjectPath(path, key),
+        state,
+        depth + 1,
+      );
       if (state.exhausted || state.violations.length >= state.maxViolations) {
         break;
       }
@@ -356,6 +417,7 @@ export function validateSerializableActionValue(
 
   validateValue(
     value,
+    options?.schema,
     "$",
     {
       maxDepth,
