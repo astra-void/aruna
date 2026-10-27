@@ -21,39 +21,45 @@ interface WalkState {
 	nodes: number;
 }
 
-// The schema a value is checked against once optional / default wrappers are
-// peeled, and a union narrowed to the member that accepts it.
-function resolveSchema(schema: Schema | undefined, value: unknown): Schema | undefined {
-	let current = schema;
-	while (current !== undefined) {
+// The schemas a value at one position may be checked against: optional and
+// default wrappers peeled, and every member of a union. A union is never
+// narrowed by validating the value against its members — `validate` walks the
+// value's whole subtree outside the node budget, and over again for each nested
+// union — so all of them stay candidates, and the validation that runs after
+// this walk enforces the exact shape.
+function expandCandidates(schemas: ReadonlyArray<Schema>): Array<Schema> {
+	const expanded = new Array<Schema>();
+	const visited = new Set<Schema>();
+	const pending = [...schemas];
+	while (pending.size() > 0) {
+		const current = pending.pop() as Schema;
+		if (visited.has(current)) {
+			continue;
+		}
+		visited.add(current);
 		const typeName = current.typeName;
 		if (typeName === "optional" || typeName === "default") {
-			current = current.inner;
+			const inner = current.inner;
+			if (inner !== undefined) {
+				pending.push(inner);
+			}
 		} else if (typeName === "union") {
 			const members = current.members;
-			let chosen: Schema | undefined;
 			if (members !== undefined) {
 				for (const member of members) {
-					if (member.validate(value)) {
-						chosen = member;
-						break;
-					}
+					pending.push(member);
 				}
 			}
-			current = chosen;
 		} else {
-			return current;
+			expanded.push(current);
 		}
 	}
-	return undefined;
+	return expanded;
 }
 
 // The schema for one entry of a table checked against `schema`. Undefined for
-// a key the schema does not declare, which is where an Instance is refused.
-function childSchema(schema: Schema | undefined, key: unknown): Schema | undefined {
-	if (schema === undefined) {
-		return undefined;
-	}
+// a key the schema does not declare.
+function childSchema(schema: Schema, key: unknown): Schema | undefined {
 	const typeName = schema.typeName;
 	if (typeName === "object") {
 		const fields = schema.fields;
@@ -67,6 +73,19 @@ function childSchema(schema: Schema | undefined, key: unknown): Schema | undefin
 		return items !== undefined && typeIs(key, "number") ? items[key - 1] : undefined;
 	}
 	return undefined;
+}
+
+// The schemas for one entry, from every candidate that declares it. Empty for a
+// key none of them declares, which is where an Instance is refused.
+function childCandidates(schemas: ReadonlyArray<Schema>, key: unknown): Array<Schema> {
+	const children = new Array<Schema>();
+	for (const candidate of schemas) {
+		const child = childSchema(candidate, key);
+		if (child !== undefined) {
+			children.push(child);
+		}
+	}
+	return children;
 }
 
 // NaN, math.huge and -math.huge are numbers to `typeIs`, and they pass any
@@ -125,7 +144,7 @@ function checkWireSafe(
 	value: unknown,
 	depth: number,
 	state: WalkState,
-	schema: Schema | undefined,
+	schemas: ReadonlyArray<Schema>,
 ): boolean {
 	if (depth > MAX_DEPTH) {
 		return false;
@@ -161,21 +180,24 @@ function checkWireSafe(
 		return true;
 	}
 	if (typeIs(value, "Instance")) {
-		const resolved = resolveSchema(schema, value);
-		return resolved !== undefined && resolved.typeName === "instance";
+		for (const candidate of expandCandidates(schemas)) {
+			if (candidate.typeName === "instance") {
+				return true;
+			}
+		}
+		return false;
 	}
 	if (!typeIs(value, "table")) {
 		// Other userdata, functions, and threads remain forbidden.
 		return false;
 	}
-	const tableSchema = resolveSchema(schema, value);
-
 	const seen = state.seen;
 	const tableValue = value as object;
 	if (seen.has(tableValue)) {
 		return false;
 	}
 	seen.add(tableValue);
+	const tableSchemas = expandCandidates(schemas);
 
 	let safe = true;
 	for (const [key, entry] of pairs(value as Record<string, unknown>)) {
@@ -183,7 +205,7 @@ function checkWireSafe(
 			safe = false;
 			break;
 		}
-		if (!checkWireSafe(entry, depth + 1, state, childSchema(tableSchema, key))) {
+		if (!checkWireSafe(entry, depth + 1, state, childCandidates(tableSchemas, key))) {
 			safe = false;
 			break;
 		}
@@ -207,6 +229,6 @@ export function isWireSafe(value: unknown, maxNodes?: number, schema?: Schema): 
 			maxNodes: maxNodes !== undefined ? maxNodes : DEFAULT_MAX_WIRE_NODES,
 			nodes: 0,
 		},
-		schema,
+		schema !== undefined ? [schema] : [],
 	);
 }

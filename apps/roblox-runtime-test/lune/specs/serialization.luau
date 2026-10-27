@@ -78,6 +78,77 @@ return function(ctx)
 			t.isTrue(isWireSafe(part, nil, schema.union({ schema.string(), schema.instance() })))
 		end)
 
+		-- Wraps a schema's validate so the test can count the calls to it.
+		local function spied(target)
+			local calls = 0
+			local original = target.validate
+			target.validate = function(...)
+				calls += 1
+				return original(...)
+			end
+			return target, function()
+				return calls
+			end
+		end
+
+		t.it("keeps the walk inside the node budget when a field is a union", function()
+			local member, calls = spied(schema.array(schema.number()))
+			local other, otherCalls = spied(schema.string())
+			local shape = schema.object({ data = schema.union({ member, other }) })
+			local big = {}
+			for index = 1, 5000 do
+				big[index] = 0
+			end
+			t.isFalse(isWireSafe({ data = big }, nil, shape))
+			t.eq(calls(), 0, "no member validate during the walk")
+			t.eq(otherCalls(), 0, "no member validate during the walk")
+
+			local createActionRegistry = ctx.load("server-runtime").createActionRegistry
+			local registry = createActionRegistry({
+				save = {
+					id = "save",
+					input = shape,
+					run = function()
+						return "ran"
+					end,
+				},
+			})
+			local _, _, value = t.await(registry.dispatch({ UserId = 1 }, "save", { data = big }))
+			t.isFalse(value.ok)
+			t.eq(value.errorName, "ActionSerializationError")
+			t.eq(calls(), 0, "nor during the dispatch that refused it")
+		end)
+
+		t.it("does not narrow nested unions by validating them", function()
+			local leaf, calls = spied(schema.array(schema.number()))
+			local nested = schema.union({ leaf, schema.string() })
+			for _ = 1, 6 do
+				nested = schema.union({ schema.object({ next = nested }), schema.array(nested) })
+			end
+			local value = {}
+			for index = 1, 100 do
+				value[index] = 0
+			end
+			for _ = 1, 6 do
+				value = { next = value }
+			end
+			t.isTrue(isWireSafe(value, nil, nested))
+			t.eq(calls(), 0)
+		end)
+
+		t.it("accepts an Instance where any union member at that position is schema.instance()", function()
+			local part = roblox.Instance.new("Part")
+			local shape = schema.union({
+				schema.object({ kind = schema.literal("part"), target = schema.instance() }),
+				schema.object({ kind = schema.literal("name"), target = schema.string() }),
+			})
+			t.isTrue(isWireSafe({ kind = "part", target = part }, nil, shape))
+			-- The walk accepts it on either branch; validation then picks the member.
+			t.isTrue(isWireSafe({ kind = "name", target = part }, nil, shape))
+			t.isFalse(isWireSafe({ kind = "part", other = part }, nil, shape), "a field no member declares")
+			t.isFalse(isWireSafe(part, nil, schema.union({ schema.string(), schema.number() })))
+		end)
+
 		t.it("rejects functions and threads", function()
 			t.isFalse(isWireSafe(function() end))
 			t.isFalse(isWireSafe(coroutine.create(function() end)))
