@@ -8,10 +8,10 @@ return function(ctx)
 	-- One call in its own wire frame (docs/wire-protocol.md), as a raw client
 	-- would fire it.
 	local function call(requestId, actionId, input, idempotencyKey)
-		return { 1, { i = requestId, a = actionId, d = input, k = idempotencyKey } }
+		return { 1, { t = 1, i = requestId, a = actionId, d = input, k = idempotencyKey } }
 	end
 
-	-- The responses a frame carries.
+	-- The items a frame carries (here, only ever responses).
 	local function countItems(counter)
 		return function(frame)
 			counter.count += #frame - 1
@@ -146,7 +146,7 @@ return function(ctx)
 		})
 
 		t.it("fires onVersionMismatch but still invokes when warn-only", function()
-			local binding = transport.bindActions(registry, "server-hash")
+			local binding = transport.bindActions(registry, { contractHash = "server-hash" })
 			local mismatches = {}
 			local invoke = transport.createActionInvoker({
 				expectedContractHash = "client-hash",
@@ -167,7 +167,7 @@ return function(ctx)
 		end)
 
 		t.it("rejects invokes when rejectOnMismatch is set", function()
-			local binding = transport.bindActions(registry, "server-hash")
+			local binding = transport.bindActions(registry, { contractHash = "server-hash" })
 			local invoke = transport.createActionInvoker({
 				expectedContractHash = "client-hash",
 				rejectOnMismatch = true,
@@ -181,7 +181,7 @@ return function(ctx)
 		end)
 
 		t.it("does nothing when the client and server hashes match", function()
-			local binding = transport.bindActions(registry, "same-hash")
+			local binding = transport.bindActions(registry, { contractHash = "same-hash" })
 			local mismatches = {}
 			local invoke = transport.createActionInvoker({
 				expectedContractHash = "same-hash",
@@ -328,7 +328,7 @@ return function(ctx)
 
 		t.it("ignores a key that is too long or not a string", function()
 			local binding = transport.bindActions(registry)
-			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local remote = fakes.storage:FindFirstChild("ArunaRemoteEvent")
 			local before = runs.count
 			local tooLong = string.rep("x", 65)
 			remote:FireServer(call("r1", "buy", nil, tooLong))
@@ -366,8 +366,8 @@ return function(ctx)
 				return "ok"
 			end, abuse)
 			-- Unbatched, so a response is on the wire as soon as dispatch settles.
-			local binding = transport.bindActions(registry, nil, { batching = false })
-			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local binding = transport.bindActions(registry, { channel = transport.createRemoteEventChannel({ batching = false }) })
+			local remote = fakes.storage:FindFirstChild("ArunaRemoteEvent")
 			local responses = { count = 0 }
 			local connection = remote.OnClientEvent:Connect(countItems(responses))
 
@@ -442,7 +442,7 @@ return function(ctx)
 				end,
 			})
 			local binding = transport.bindActions(registry)
-			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local remote = fakes.storage:FindFirstChild("ArunaRemoteEvent")
 			local fires = { count = 0 }
 			local spy = remote.OnServerEvent:Connect(function()
 				fires.count += 1
@@ -461,7 +461,7 @@ return function(ctx)
 			remote:FireServer({ 2, call("r1", "buy") })
 			local oversize = { 1 }
 			for index = 1, 65 do
-				table.insert(oversize, { i = `o{index}`, a = "buy" })
+				table.insert(oversize, { t = 1, i = `o{index}`, a = "buy" })
 			end
 			remote:FireServer(oversize)
 			t.eq(runs.count, 3, "no call in a dropped frame ran")
@@ -496,8 +496,8 @@ return function(ctx)
 		t.it("drops an envelope that arrives after the player left, and creates no state for it", function()
 			local runs, abuse, clock = { count = 0 }, {}, { ms = 0 }
 			local registry = clockedRegistry({ burst = 1, perSecond = 1 }, runs, abuse, clock)
-			local binding = transport.bindActions(registry, nil, { batching = false })
-			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local binding = transport.bindActions(registry, { channel = transport.createRemoteEventChannel({ batching = false }) })
+			local remote = fakes.storage:FindFirstChild("ArunaRemoteEvent")
 			local player = remote._fakePlayer
 			local responses = { count = 0 }
 			local connection = remote.OnClientEvent:Connect(countItems(responses))

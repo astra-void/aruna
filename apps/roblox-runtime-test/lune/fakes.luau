@@ -71,9 +71,11 @@ local function makeRemoteEvent(className)
 
 	return setmetatable({}, {
 		__index = fields,
-		__newindex = function(_t, key, value)
+		__newindex = function(instance, key, value)
+			-- The container holds the instance itself, so FindFirstChild returns
+			-- the same object Instance.new did, as Roblox does.
 			if key == "Parent" and value ~= nil and value._addChild ~= nil then
-				value:_addChild(fields)
+				value:_addChild(instance)
 			end
 			fields[key] = value
 		end,

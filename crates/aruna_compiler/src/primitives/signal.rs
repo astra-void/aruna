@@ -1,4 +1,4 @@
-// `defineSignal`: server -> client pushes over the signal remotes.
+// `defineSignal`: server -> client pushes over the reliable channel or the unreliable remote.
 
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
 use crate::files::project_relative;

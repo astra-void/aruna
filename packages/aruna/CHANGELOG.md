@@ -229,19 +229,37 @@ the game build like any other module.
 ### Changed
 
 - **Breaking: wire protocol v1.** Every remote fire carries one frame,
-  `[1, ...items]`: calls `{ i, a, d?, k? }`, responses `{ i, r }`, signals
-  `{ s, d? }` (docs/wire-protocol.md). Calls, responses and reliable signals
-  are batched and flushed once per frame at `RunService.Heartbeat`, at most 64
-  items a frame; unreliable signals are never batched. `batching: false` on
-  `createActionInvoker`, `robloxRemoteEvent`/`bindActions` and the publishers
-  fires each item on its own. The server drops a frame with an unknown protocol
-  version or over 64 calls whole, before reading a call, charging one request
-  and reporting `unknown-protocol-version` / `oversize-batch` through
-  `onAbuse`; every call in a frame is charged on its own. A client drops such a
-  frame with a Studio warning (`onProtocolError`). The unreliable size checks
-  (`aruna::511`/`513`, the publisher's) use the new 58-byte frame overhead
-  (was 55). `SignalServerLike`/`SignalClientLike` carry frames;
+  `[1, ...items]`, and every item names its kind in `t`: calls
+  `{ t = 1, i, a, d?, k? }`, responses `{ t = 2, i, r }`, signals
+  `{ t = 3, s, d? }`; `t = 4` is reserved for resource patches
+  (docs/wire-protocol.md). Calls, responses and reliable signals are batched and
+  flushed once per frame at `RunService.Heartbeat`, at most 64 items a frame;
+  unreliable signals are never batched. The server drops a frame with an unknown
+  protocol version or over 64 items whole, before reading an item, charging one
+  request and reporting `unknown-protocol-version` / `oversize-batch` through
+  `onAbuse`; every item in a frame is charged on its own, and one that is not a
+  call is `malformed-envelope`. A client drops such a frame with a Studio
+  warning (`onProtocolError`). The unreliable size checks (`aruna::511`/`513`,
+  the publisher's) use a 75-byte frame overhead (was 55).
   `RemoteSignalMessage` and `SIGNAL_ENVELOPE_OVERHEAD_BYTES` are gone.
+
+- **Breaking: one ordered reliable channel per player.** Action responses and
+  reliable signals now share one RemoteEvent, `ArunaRemoteEvent` (`REMOTE_NAME`),
+  and one per-player outbox, so a client reads them in the order the server
+  produced them: a signal published inside an action's `run()` is handled before
+  that action's response settles, broadcasts included. `ArunaActionRemoteEvent` /
+  `ArunaSignalRemoteEvent` and `ACTION_REMOTE_NAME` / `SIGNAL_REMOTE_NAME` are
+  gone; calls travel the same remote. The two ends are `ServerChannel`
+  (`createServerChannel`) and `ClientChannel` (`createClientChannel`); the
+  default wiring shares one per remote, and `createRemoteEventChannel` makes a
+  separately batched one over the default remote. Batching options moved from
+  the producers to the server channel: `createRemoteSignalPublisher(channel,
+  signals, unreliableRemote?)`, `createRemoteSignalSubscriber(channel, signals,
+  unreliableRemote?, options?)`, `bindActions(registry, { contractHash?,
+  channel? })`, `robloxRemoteEvent({ contractHash?, channel? })`.
+  `bindRemoteActions` and `createRemoteActionInvoker` bind a remote of your own.
+  `createTestServerApp({ batching: true })` runs the wire as a game does, with a
+  `step()` that flushes one frame, so a spec can assert cross-kind order.
 
 - **Breaking: store records use persisted format v1.** `{ "$aruna": 1, v, d, t,
   m?, l? }`: an explicit marker carrying the envelope format version, a

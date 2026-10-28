@@ -1,20 +1,27 @@
 // Aruna roblox-ts native runtime — wire protocol v1 (docs/wire-protocol.md).
 //
 // Every remote fire carries one frame: an array whose first element is the
-// protocol version and whose remaining elements are items — action calls
-// (client → server), action responses (server → client), or signals (server →
-// client), depending on the remote and the direction. A side queues the items
-// it produces during a frame and fires them together once per frame, at
-// RunService.Heartbeat; `batching: false` fires each item in its own frame as
-// it is produced instead. Either way the receiver sees the same frames.
+// protocol version and whose remaining elements are items. Every item names its
+// kind in `t`, so one remote carries several kinds in one ordered stream:
 //
-//   [1, { i, a, d?, k? }, ...]   calls      (action remote, client → server)
-//   [1, { i, r }, ...]           responses  (action remote, server → client)
-//   [1, { s, d? }, ...]          signals    (signal remotes, server → client)
+//   [1, { t = 1, i, a, d?, k? }, ...]          calls      (client → server)
+//   [1, { t = 2, i, r }, { t = 3, s, d? }, ...] responses and signals, interleaved
+//                                                         in production order (server → client)
 //
-// Unreliable signals are never batched: each goes out in its own frame as soon
-// as it is published, so the 900-byte limit applies to one signal, which the
-// compiler can check (aruna::510/511/513) and the publisher can measure.
+// The server end of the reliable remote is one `ServerChannel`: action
+// responses and reliable signals for a player share its outbox, so the client
+// reads them in the order the server produced them — a signal published inside
+// an action's run() always arrives before that action's response. The client
+// end is one `ClientChannel`: a single connection that hands each item to the
+// handler for its kind, in frame order.
+//
+// A side queues the items it produces during a frame and fires them together
+// once per frame, at RunService.Heartbeat; `batching: false` fires each item in
+// its own frame as it is produced instead. Either way the receiver sees the same
+// items in the same order. Unreliable signals are never batched: each goes out
+// in its own frame on the UnreliableRemoteEvent as soon as it is published, so
+// the 900-byte limit applies to one signal, which the compiler can check
+// (aruna::510/511/513) and the publisher can measure.
 
 import type { ActionDispatchResult } from "./server-runtime";
 
@@ -27,8 +34,18 @@ export const WIRE_PROTOCOL_VERSION = 1;
 // from a client whole, before reading any item.
 export const WIRE_MAX_FRAME_ITEMS = 64;
 
+// Every item's kind, in its `t` field. One numbering for both directions, so a
+// value never means two things; a value is never reused for another kind.
+export const WIRE_ITEM_CALL = 1;
+export const WIRE_ITEM_RESPONSE = 2;
+export const WIRE_ITEM_SIGNAL = 3;
+// Reserved for resource patches (server → client). Nothing sends it yet; a
+// client with no handler for a kind skips its items.
+export const WIRE_ITEM_RESOURCE_PATCH = 4;
+
 // An action call: request id, action id, input, idempotency key.
 export interface WireCall {
+	readonly t: typeof WIRE_ITEM_CALL;
 	readonly i: string;
 	readonly a: string;
 	readonly d?: unknown;
@@ -37,12 +54,14 @@ export interface WireCall {
 
 // An action response: the request id it answers and the dispatch result.
 export interface WireResponse {
+	readonly t: typeof WIRE_ITEM_RESPONSE;
 	readonly i: string;
 	readonly r: ActionDispatchResult;
 }
 
 // A signal: its id and its payload (an `encodeBinary` buffer for a binary signal).
 export interface WireSignal {
+	readonly t: typeof WIRE_ITEM_SIGNAL;
 	readonly s: string;
 	readonly d?: unknown;
 }
@@ -283,4 +302,143 @@ export function defaultWireProtocolErrorHandler(channel: string, reason: WireFra
 	warn(
 		`Aruna wire: dropped a frame on ${channel} (${reason}); this client speaks protocol ${WIRE_PROTOCOL_VERSION}.`,
 	);
+}
+
+// The server end of a reliable remote: anything with FireClient/FireAllClients
+// taking a frame (a RemoteEvent behind an adapter, or a test double).
+export interface WireServerRemote<TPlayer> {
+	readonly FireClient: (player: TPlayer, frame: WireFrame) => void;
+	readonly FireAllClients: (frame: WireFrame) => void;
+}
+
+// The server end of the one ordered reliable channel: every server → client
+// item for a player — action responses, reliable signals, and later resource
+// patches — goes through its outbox, so the player reads them in the order they
+// were produced. Use one per remote: two channels on one remote each keep their
+// own order, but not each other's.
+export type ServerChannel<TPlayer> = WireOutbox<TPlayer>;
+
+export function createServerChannel<TPlayer>(
+	remote: WireServerRemote<TPlayer>,
+	options?: WireBatchOptions,
+): ServerChannel<TPlayer> {
+	return createWireOutbox<TPlayer>(
+		(player, frame) => {
+			remote.FireClient(player, frame);
+		},
+		(frame) => {
+			remote.FireAllClients(frame);
+		},
+		options,
+	);
+}
+
+// The client's sending end of a remote: anything with FireServer taking a frame.
+export interface WireCallSender {
+	readonly FireServer: (frame: WireFrame) => void;
+}
+
+// The server's receiving end of a remote: anything whose OnServerEvent hands over
+// the sender and each frame. Disconnected with a plain field call, like
+// WireClientRemote.
+export interface WireCallReceiver<TPlayer> {
+	readonly OnServerEvent: {
+		readonly Connect: (callback: (player: TPlayer, frame: unknown) => void) => {
+			readonly Disconnect: () => void;
+		};
+	};
+}
+
+// The client end of a remote: anything whose OnClientEvent hands over each
+// frame. The connection is disconnected with a plain field call, so a real
+// RBXScriptConnection goes behind an adapter.
+export interface WireClientRemote {
+	readonly OnClientEvent: {
+		readonly Connect: (callback: (frame: unknown) => void) => { readonly Disconnect: () => void };
+	};
+}
+
+// What the client reads a remote through: one connection that checks each frame
+// and hands every item to the handlers for its kind, in frame order. Handlers
+// run synchronously while the frame is read, so a handler for an earlier item
+// has returned before a later item — of any kind — is looked at.
+export interface ClientChannel {
+	// Hands each item of `kind` (a WIRE_ITEM_* value) to `handler`. Returns a
+	// function that removes the handler. An item whose kind has no handler is
+	// skipped.
+	readonly on: (kind: number, handler: (item: object) => void) => () => void;
+	// Adds a handler for the frames this channel drops. While there is none, a
+	// dropped frame goes to `defaultWireProtocolErrorHandler`. Returns a function
+	// that removes the handler.
+	readonly onProtocolError: (handler: WireProtocolErrorHandler) => () => void;
+	readonly dispose: () => void;
+}
+
+function removeFrom<T extends defined>(list: Array<T>, value: T): void {
+	const at = list.indexOf(value);
+	if (at !== -1) {
+		list.remove(at);
+	}
+}
+
+// `name` is what a protocol error reports the channel as.
+export function createClientChannel(remote: WireClientRemote, name: string): ClientChannel {
+	const handlersByKind = new Map<number, Array<(item: object) => void>>();
+	const errorHandlers = new Array<WireProtocolErrorHandler>();
+
+	const connection = remote.OnClientEvent.Connect((frame) => {
+		const read = readWireFrame(frame);
+		if (!read.ok) {
+			if (errorHandlers.size() === 0) {
+				defaultWireProtocolErrorHandler(name, read.reason);
+			}
+			for (const handler of [...errorHandlers]) {
+				handler(name, read.reason);
+			}
+			return;
+		}
+		for (const item of read.items) {
+			if (!typeIs(item, "table")) {
+				continue;
+			}
+			const kind = (item as { readonly t?: unknown }).t;
+			if (!typeIs(kind, "number")) {
+				continue;
+			}
+			const handlers = handlersByKind.get(kind);
+			if (handlers === undefined) {
+				continue;
+			}
+			// A copy: a handler may remove itself (or another) mid-item.
+			for (const handler of [...handlers]) {
+				handler(item);
+			}
+		}
+	});
+
+	return {
+		on: (kind, handler) => {
+			let handlers = handlersByKind.get(kind);
+			if (handlers === undefined) {
+				handlers = new Array<(item: object) => void>();
+				handlersByKind.set(kind, handlers);
+			}
+			handlers.push(handler);
+			const list = handlers;
+			return () => {
+				removeFrom(list, handler);
+			};
+		},
+		onProtocolError: (handler) => {
+			errorHandlers.push(handler);
+			return () => {
+				removeFrom(errorHandlers, handler);
+			};
+		},
+		dispose: () => {
+			connection.Disconnect();
+			handlersByKind.clear();
+			errorHandlers.clear();
+		},
+	};
 }

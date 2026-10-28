@@ -8,14 +8,14 @@
 // real action RemoteEvent in ReplicatedStorage: when a case plays the server, it
 // connects to `OnServerEvent` itself and answers with `FireClient`; when it plays
 // the client, it fires raw frames. Every fire carries one wire frame
-// (docs/wire-protocol.md): `FireServer([1, { i, a, d, k }, ...])` and
-// `FireClient(player, [1, { i, r }, ...])`. The invoker unit cases run with
+// (docs/wire-protocol.md): `FireServer([1, { t = 1, i, a, d, k }, ...])` and
+// `FireClient(player, [1, { t = 2, i, r }, ...])`. The invoker unit cases run with
 // `batching: false`, so a call is on the wire the moment it is made; the server
 // and round-trip cases batch, as a game does.
 // There is no injectable timer scheduler (`task` is a frozen library under Lune),
 // so timeouts are observed with real, short timers.
 import {
-  ACTION_REMOTE_NAME,
+  REMOTE_NAME,
   CONTRACT_HASH_ATTRIBUTE_NAME,
   DEFAULT_ACTION_REQUEST_TIMEOUT_MS,
   bindActions,
@@ -61,10 +61,10 @@ function runCleanups(): void {
 
 // The shared action remote, created the way a server creates it.
 function actionRemote(): RemoteEvent {
-  if (ReplicatedStorage.FindFirstChild(ACTION_REMOTE_NAME) === undefined) {
+  if (ReplicatedStorage.FindFirstChild(REMOTE_NAME) === undefined) {
     bindActions(createActionRegistry<Player>({})).disconnect();
   }
-  return ReplicatedStorage.FindFirstChild(ACTION_REMOTE_NAME) as RemoteEvent;
+  return ReplicatedStorage.FindFirstChild(REMOTE_NAME) as RemoteEvent;
 }
 
 type ResponsePayload = {
@@ -89,15 +89,16 @@ function fakeServer(options?: {
     if (options !== undefined && options.throwOnFire !== undefined) {
       throw options.throwOnFire;
     }
-    const items = frame as Array<{ i: unknown; a: unknown; d?: unknown; k?: unknown }>;
+    const items = frame as Array<{ t: unknown; i: unknown; a: unknown; d?: unknown; k?: unknown }>;
     expect(items[0]).toBe(1);
     for (let index = 1; index < items.size(); index += 1) {
       const call = items[index]!;
+      expect(call.t).toBe(1);
       requests.push(call.k !== undefined ? [call.i, call.a, call.d, call.k] : [call.i, call.a, call.d]);
       if (options !== undefined && options.autoRespond !== undefined) {
         remote.FireClient(Players.LocalPlayer, [
           1,
-          { i: call.i, r: options.autoRespond(call.i, call.a, call.d) },
+          { t: 2, i: call.i, r: options.autoRespond(call.i, call.a, call.d) },
         ]);
       }
     }
@@ -107,7 +108,7 @@ function fakeServer(options?: {
     remote,
     requests,
     respond: (requestId: unknown, payload: ResponsePayload) => {
-      remote.FireClient(Players.LocalPlayer, [1, { i: requestId, r: payload }]);
+      remote.FireClient(Players.LocalPlayer, [1, { t: 2, i: requestId, r: payload }]);
     },
   };
 }

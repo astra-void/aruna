@@ -6,7 +6,9 @@ export interface CreateTestPlayerOptions {
     readonly userId?: number;
 }
 
-export type CreateTestServerAppOptions<TPlayer extends defined = Player, TSignals extends SignalMap = SignalMap, TSession = unknown> = Omit<CreateServerAppOptions<TPlayer, TSignals, TSession>, "transport" | "createPublisher" | "players">;
+export type CreateTestServerAppOptions<TPlayer extends defined = Player, TSignals extends SignalMap = SignalMap, TSession = unknown> = Omit<CreateServerAppOptions<TPlayer, TSignals, TSession>, "transport" | "createPublisher" | "players"> & {
+    readonly batching?: boolean;
+};
 
 export interface Expectation extends NegatableExpectation {
     readonly rejects: RejectsExpectation;
@@ -66,6 +68,7 @@ export interface TestServerApp<TPlayer extends defined = Player, TSignals extend
     readonly takePublished: () => ReadonlyArray<TestSignalRecord<TPlayer>>;
     readonly advance: (milliseconds: number) => void;
     readonly client: (player: TPlayer) => ClientApp<TSignals>;
+    readonly step: () => void;
     readonly dispose: () => void;
 }
 

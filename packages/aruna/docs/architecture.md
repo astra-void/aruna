@@ -92,13 +92,14 @@ userdata kinds (vector3/color3/cframe encoded as f32 components).
 
 ## Transport
 
-Actions use a single multiplexed RemoteEvent: `ReplicatedStorage/ArunaActionRemoteEvent`
-carries request/response pairs keyed by request id. `createActionInvoker()` (client) and
-`bindActions()` (server) wire this up for you — in the normal flow `createClientApp()` /
-`createServerApp()` own that wiring. Signals travel over their own dedicated
-`ReplicatedStorage/ArunaSignalRemoteEvent` via the turnkey `createSignalPublisher` /
-`createSignalSubscriber` helpers. There is no transport to select: the RemoteEvent
-transport is the transport.
+One multiplexed RemoteEvent, `ReplicatedStorage/ArunaRemoteEvent`, carries action calls
+to the server and, back to each player, one ordered stream of action responses (keyed by
+request id) and reliable signals: every item names its kind, and a player reads them in
+the order the server produced them. `createActionInvoker()` / `createSignalSubscriber()`
+(client) and `robloxRemoteEvent()` / `createSignalPublisher()` (server) share that remote's
+channel — in the normal flow `createClientApp()` / `createServerApp()` own the wiring.
+Unreliable signals use their own `UnreliableRemoteEvent`. There is no transport to
+select: the RemoteEvent transport is the transport ([wire protocol](../../../docs/wire-protocol.md)).
 
 ## Common traps
 

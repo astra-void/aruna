@@ -4,8 +4,8 @@
 // exercised the same contract through the (now retired) Node runtime.
 import { clearActionInvoker, createClientApp, invokeAction } from "aruna/client";
 import {
-  ACTION_REMOTE_NAME,
-  SIGNAL_REMOTE_NAME,
+  REMOTE_NAME,
+  SIGNAL_UNRELIABLE_REMOTE_NAME,
   bindActions,
   createActionInvoker,
   defineAction as defineActionRoblox,
@@ -71,8 +71,8 @@ describe("public exports", () => {
   });
 
   it("exposes the default Roblox action remote helpers", () => {
-    expect(ACTION_REMOTE_NAME).toBe("ArunaActionRemoteEvent");
-    expect(SIGNAL_REMOTE_NAME).toBe("ArunaSignalRemoteEvent");
+    expect(REMOTE_NAME).toBe("ArunaRemoteEvent");
+    expect(SIGNAL_UNRELIABLE_REMOTE_NAME).toBe("ArunaSignalUnreliableRemoteEvent");
     expect(typeIs(robloxRemoteEvent, "function")).toBe(true);
     expect(typeIs(createActionInvoker, "function")).toBe(true);
     expect(typeIs(bindActions, "function")).toBe(true);

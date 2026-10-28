@@ -12,19 +12,19 @@ pub const UNRELIABLE_PAYLOAD_LIMIT_BYTES: u64 = 900;
 
 // What an unreliable signal's wire frame costs on top of its payload
 // (docs/wire-protocol.md). An unreliable signal goes out alone in its frame,
-// `[1, { s = signalId, d = payload }]`, so the limit applies to that frame, not
-// the payload alone. Roblox does not document its remote encoding; a value there
-// costs a type tag plus a length or count, and 8 bytes each covers a tag and a
-// length prefix of up to 7 bytes with room to spare. The frame holds seven
-// values (the frame array, the protocol version, the item table, the keys "s"
-// and "d", the signal id, the payload), plus the two one-byte key strings and
-// the signal id's own bytes (added per signal). Erring high only means warning a
-// little early. Mirrored by the runtime's publisher
+// `[1, { t = 3, s = signalId, d = payload }]`, so the limit applies to that
+// frame, not the payload alone. Roblox does not document its remote encoding; a
+// value there costs a type tag plus a length or count, and 8 bytes each covers a
+// tag and a length prefix of up to 7 bytes with room to spare. The frame holds
+// nine values (the frame array, the protocol version, the item table, the keys
+// "t", "s" and "d", the item kind, the signal id, the payload), plus the three
+// one-byte key strings and the signal id's own bytes (added per signal). Erring
+// high only means warning a little early. Mirrored by the runtime's publisher
 // (SIGNAL_FRAME_OVERHEAD_BYTES), which checks a binary frame against the same
 // total before firing it.
 pub const WIRE_VALUE_ALLOWANCE_BYTES: u64 = 8;
-pub const WIRE_SIGNAL_FRAME_VALUES: u64 = 7;
-pub const WIRE_SIGNAL_FRAME_KEY_BYTES: u64 = 2;
+pub const WIRE_SIGNAL_FRAME_VALUES: u64 = 9;
+pub const WIRE_SIGNAL_FRAME_KEY_BYTES: u64 = 3;
 pub const WIRE_SIGNAL_FRAME_OVERHEAD_BYTES: u64 =
     WIRE_SIGNAL_FRAME_VALUES * WIRE_VALUE_ALLOWANCE_BYTES + WIRE_SIGNAL_FRAME_KEY_BYTES;
 

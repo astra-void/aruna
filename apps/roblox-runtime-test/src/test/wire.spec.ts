@@ -4,8 +4,18 @@
 // The runner fires RunService.Heartbeat once per scheduler frame, which is where
 // a batching side flushes; cases that need to step frames by hand pass their own
 // frame scheduler instead.
-import { bindActions, createActionInvoker, defineAction } from "aruna/roblox";
-import { createActionRegistry, defineSignal, type ActionMap } from "aruna/server";
+import {
+  bindActions,
+  createActionInvoker,
+  createActionDefiner,
+  createRemoteEventChannel,
+  createSignalPublisher,
+  createSignalSubscriber,
+  defineAction,
+  robloxRemoteEvent,
+} from "aruna/roblox";
+import { clearActionInvoker, createClientApp } from "aruna/client";
+import { createActionRegistry, createServerApp, defineSignal, type ActionMap } from "aruna/server";
 import { schema } from "aruna/schema";
 import { afterEach, describe, expect, it } from "aruna/testing";
 import {
@@ -15,6 +25,8 @@ import {
 import {
   WIRE_MAX_FRAME_ITEMS,
   WIRE_PROTOCOL_VERSION,
+  createClientChannel,
+  createServerChannel,
   readWireFrame,
   type WireFrame,
   type WireFrameRejection,
@@ -95,10 +107,12 @@ function bindServer(options?: {
       abuse.push(info.reason);
     },
   });
-  const binding = bindActions(registry, undefined, {
+  const channel = createRemoteEventChannel({
     ...(options?.batching !== undefined ? { batching: options.batching } : {}),
     ...(options?.frameScheduler !== undefined ? { frameScheduler: options.frameScheduler } : {}),
   });
+  track(() => channel.dispose());
+  const binding = bindActions(registry, { channel });
   track(() => binding.disconnect());
   const wire = wireRemote();
   track(() => wire.dispose());
@@ -129,7 +143,7 @@ describe("wire frames", () => {
 
   it("carries the protocol version first and bounds the item count", () => {
     expect(WIRE_PROTOCOL_VERSION).toBe(1);
-    expect(readWireFrame([1, { s: "a" }])).toEqual({ ok: true, items: [{ s: "a" }] });
+    expect(readWireFrame([1, { t: 3, s: "a" }])).toEqual({ ok: true, items: [{ t: 3, s: "a" }] });
     expect(readWireFrame(undefined)).toEqual({ ok: false, reason: "malformed-frame" });
     expect(readWireFrame("text")).toEqual({ ok: false, reason: "malformed-frame" });
     expect(readWireFrame([1])).toEqual({ ok: false, reason: "malformed-frame" });
@@ -241,13 +255,13 @@ describe("wire frames", () => {
         },
       };
       const received = new Array<string>();
-      const subscriber = createRemoteSignalSubscriber(remote, signals);
+      const subscriber = createRemoteSignalSubscriber(createClientChannel(remote, "signals"), signals);
       subscriber.on("fx.hit", (payload) => received.push(`hit ${payload.hp}`));
       subscriber.on("fx.note", (payload) => received.push(`note ${payload}`));
-      const publisher = createRemoteSignalPublisher<typeof signals, string>(remote, signals, undefined, {
-        batching,
-        frameScheduler: frames,
-      });
+      const publisher = createRemoteSignalPublisher<typeof signals, string>(
+        createServerChannel(remote, { batching, frameScheduler: frames }),
+        signals,
+      );
 
       publisher.to("ada", "fx.hit", { hp: 1 });
       publisher.toAll("fx.note", "everyone");
@@ -316,9 +330,9 @@ describe("wire frames", () => {
     const pending = settle(invoke("shop.missing", {}));
     wire.remote.FireClient(game.GetService("Players").LocalPlayer, [
       2,
-      { i: "r-unknown", r: { ok: true, output: "from the future" } },
+      { t: 2, i: "r-unknown", r: { ok: true, output: "from the future" } },
     ]);
-    expect(reported).toEqual(["ArunaActionRemoteEvent unknown-protocol-version"]);
+    expect(reported).toEqual(["ArunaRemoteEvent unknown-protocol-version"]);
     // The future frame resolved nothing; the real (v1) answer still does.
     expect(await pending).toEqual({ ok: false, value: "ActionNotFoundError" });
 
@@ -332,15 +346,15 @@ describe("wire frames", () => {
         },
       },
     };
-    const subscriber = createRemoteSignalSubscriber(client, signals, undefined, {
+    const subscriber = createRemoteSignalSubscriber(createClientChannel(client, "signals"), signals, undefined, {
       onProtocolError: (channel, reason) => {
         reported.push(`${channel} ${reason}`);
       },
     });
     const notes = new Array<string>();
     subscriber.on("fx.note", (payload) => notes.push(payload));
-    deliver?.([2, { s: "fx.note", d: "future" }]);
-    deliver?.([1, { s: "fx.note", d: "now" }]);
+    deliver?.([2, { t: 3, s: "fx.note", d: "future" }]);
+    deliver?.([1, { t: 3, s: "fx.note", d: "now" }]);
     expect(notes).toEqual(["now"]);
     expect(reported[1]).toBe("signals unknown-protocol-version");
     subscriber.dispose();
@@ -411,11 +425,12 @@ describe("wire frames", () => {
       },
     };
     const received = new Array<defined>();
-    const subscriber = createRemoteSignalSubscriber(remote, signals);
+    const subscriber = createRemoteSignalSubscriber(createClientChannel(remote, "signals"), signals);
     subscriber.on("fx.hit", (payload) => received.push(payload as defined));
-    const publisher = createRemoteSignalPublisher<typeof signals, string>(remote, signals, undefined, {
-      frameScheduler: frames,
-    });
+    const publisher = createRemoteSignalPublisher<typeof signals, string>(
+      createServerChannel(remote, { frameScheduler: frames }),
+      signals,
+    );
 
     publisher.to("ada", "fx.hit", { hp: 300, crit: true });
     publisher.to("ada", "fx.hit", { hp: 7, crit: false });
@@ -442,15 +457,17 @@ describe("wire frames", () => {
       FireClient: (_player: string, frame: WireFrame) => fired.push(frame),
       FireAllClients: (frame: WireFrame) => fired.push(frame),
     };
-    const publisher = createRemoteSignalPublisher<typeof signals, string>(remote, signals, remote, {
-      frameScheduler: frames,
-    });
+    const publisher = createRemoteSignalPublisher<typeof signals, string>(
+      createServerChannel(remote, { frameScheduler: frames }),
+      signals,
+      remote,
+    );
     publisher.to("ada", "fx.move", 1);
     publisher.to("ada", "fx.move", 2);
     // Out at once, one signal per frame, without waiting for the flush.
     expect(fired).toEqual([
-      [1, { s: "fx.move", d: 1 }],
-      [1, { s: "fx.move", d: 2 }],
+      [1, { t: 3, s: "fx.move", d: 1 }],
+      [1, { t: 3, s: "fx.move", d: 2 }],
     ]);
   });
 
@@ -460,5 +477,64 @@ describe("wire frames", () => {
     // The frame is never flushed (the scheduler is never stepped).
     const reason = await rejectionOf(invoke("shop.buy", { item: "sword" }));
     expect(reason.name).toBe("ActionTimeoutError");
+  });
+});
+
+describe("one ordered reliable channel", () => {
+  afterEach(() => {
+    runCleanups();
+    clearActionInvoker();
+  });
+
+  const signals = {
+    "shop.sold": defineSignal({ id: "shop.sold", payload: schema.string() }),
+  };
+  const define = createActionDefiner<typeof signals>();
+  const actions = {
+    "shop.sell": define({
+      id: "shop.sell",
+      input: schema.string(),
+      run(ctx, input) {
+        ctx.publisher.to(ctx.player, "shop.sold", `to ${input}`);
+        ctx.publisher.toAll("shop.sold", `all ${input}`);
+        return input;
+      },
+    }),
+  } as unknown as ActionMap<Player>;
+
+  it("delivers what run() published before the response, over the default wiring at Heartbeat", async () => {
+    // The generated entries' wiring: the transport and the publisher share the
+    // remote's server channel, the invoker and the subscriber its client channel.
+    const serverApp = createServerApp<Player, typeof signals>({
+      actions,
+      signals,
+      transport: robloxRemoteEvent(),
+      createPublisher: createSignalPublisher,
+    });
+    track(() => serverApp.dispose());
+    const clientApp = createClientApp({
+      transport: createActionInvoker(),
+      signals,
+      createSubscriber: createSignalSubscriber,
+    });
+    track(() => clientApp.dispose());
+
+    const log = new Array<string>();
+    clientApp.subscriber?.on("shop.sold", (payload) => log.push(`signal ${payload}`));
+    const sold = Promise.all(
+      ["a", "b"].map((item) => clientApp.invoke("shop.sell", item).then(() => log.push(`response ${item}`))),
+    );
+    await sold;
+
+    // Each action's signals (targeted, then broadcast) ahead of its response,
+    // and the two actions in the order they were called.
+    expect(log).toEqual([
+      "signal to a",
+      "signal all a",
+      "response a",
+      "signal to b",
+      "signal all b",
+      "response b",
+    ]);
   });
 });

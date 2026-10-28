@@ -7,19 +7,30 @@ import {
   createActionDefiner,
   createSignalPublisher,
   createSignalSubscriber,
+  REMOTE_NAME,
   robloxRemoteEvent,
-  SIGNAL_REMOTE_NAME,
 } from "aruna/roblox";
 import { schema } from "aruna/schema";
 import { createServerApp, defineSignal } from "aruna/server";
 import { afterEach, describe, expect, it } from "aruna/testing";
 import {
-  createRemoteSignalPublisher,
-  createRemoteSignalSubscriber,
+  createRemoteSignalPublisher as createChannelPublisher,
+  createRemoteSignalSubscriber as createChannelSubscriber,
   type SignalClientLike,
+  type SignalMap,
   type SignalServerLike,
 } from "aruna/internal/signal-runtime";
+import { createClientChannel, createServerChannel } from "aruna/internal/wire";
 import { waitUntil, wireRemote } from "./support";
+
+// The two ends of an unbatched reliable channel over a fake remote.
+function createRemoteSignalPublisher<TSignals extends SignalMap>(remote: FakeSignalRemote, registry: TSignals) {
+  return createChannelPublisher(createServerChannel(remote, { batching: false }), registry);
+}
+
+function createRemoteSignalSubscriber<TSignals extends SignalMap>(remote: FakeSignalRemote, registry: TSignals) {
+  return createChannelSubscriber(createClientChannel(remote, "signals"), registry);
+}
 
 type FakeSignalRemote = SignalServerLike<unknown> & SignalClientLike;
 
@@ -89,7 +100,7 @@ describe("createServerApp signal publisher ownership", () => {
     const serverApp = createServerApp({
       actions: {},
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
     track(() => serverApp.dispose());
 
@@ -120,7 +131,7 @@ describe("createClientApp signal subscriber ownership", () => {
     const serverApp = createServerApp({
       actions: {},
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
     track(() => serverApp.dispose());
 
@@ -150,7 +161,7 @@ describe("createClientApp signal subscriber ownership", () => {
     const serverApp = createServerApp({
       actions: {},
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
     track(() => serverApp.dispose());
 
@@ -230,7 +241,7 @@ describe("action ctx.publisher injection", () => {
     const serverApp = createServerApp<Player, typeof signals>({
       actions: { "score.bump": bumpAction() },
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
     });
     track(() => serverApp.dispose());
 
@@ -242,18 +253,12 @@ describe("action ctx.publisher injection", () => {
   });
 
   it("threads the publisher through the wire transport (createServerApp owns dispatch)", async () => {
-    const signalRemote = createFakeSignalRemote();
-    const received = new Array<{ score: number }>();
-    const subscriber = createRemoteSignalSubscriber(signalRemote, signals);
-    track(() => subscriber.dispose());
-    subscriber.on("scoreChanged", (payload) => received.push(payload));
-
-    // The real action RemoteEvent the transport binds, driven with a raw
-    // frame from the client end.
+    // The real RemoteEvent the transport binds and the publisher publishes on,
+    // driven with a raw frame from the client end.
     const serverApp = createServerApp<Player, typeof signals>({
       actions: { "score.bump": bumpAction() },
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(signalRemote, registry),
+      createPublisher: createSignalPublisher,
       transport: robloxRemoteEvent(),
     });
     track(() => serverApp.dispose());
@@ -262,7 +267,9 @@ describe("action ctx.publisher injection", () => {
 
     await wire.send("r1", "score.bump", { score: 9 });
 
-    expect(received).toEqual([{ score: 9 }]);
+    expect(wire.signals()).toEqual([{ signalId: "scoreChanged", payload: { score: 9 } }]);
+    // Published inside run(), so ahead of the response on the one channel.
+    expect(wire.order()).toEqual(["signal scoreChanged", "response r1"]);
     const first = wire.responses()[0];
     expect(first).toBeDefined();
     expect(first?.requestId).toBe("r1");
@@ -278,12 +285,12 @@ describe("turnkey signal helpers are part of the public surface", () => {
     expect(typeIs(createSignalSubscriber, "function")).toBe(true);
 
     // The native runtime has no exported `ensureSignalRemote` /
-    // `waitForSignalRemote`: `createSignalPublisher` ensures the signal remote
-    // itself, and `createSignalSubscriber` waits for it. Asserted as that
-    // behavior: the remote exists after the publisher is built, and a
-    // subscriber built from it receives what the publisher sends.
+    // `waitForSignalRemote`: `createSignalPublisher` ensures the remote itself,
+    // and `createSignalSubscriber` waits for it. Asserted as that behavior: the
+    // remote exists after the publisher is built, and a subscriber built from it
+    // receives what the publisher sends.
     const publisher = createSignalPublisher(signals);
-    const remote = game.GetService("ReplicatedStorage").FindFirstChild(SIGNAL_REMOTE_NAME);
+    const remote = game.GetService("ReplicatedStorage").FindFirstChild(REMOTE_NAME);
     expect(remote).toBeDefined();
     expect(remote !== undefined && remote.IsA("RemoteEvent")).toBe(true);
 
@@ -299,6 +306,6 @@ describe("turnkey signal helpers are part of the public surface", () => {
 
     // Built again, the publisher reuses the remote rather than adding one.
     createSignalPublisher(signals);
-    expect(game.GetService("ReplicatedStorage").FindFirstChild(SIGNAL_REMOTE_NAME)).toBe(remote);
+    expect(game.GetService("ReplicatedStorage").FindFirstChild(REMOTE_NAME)).toBe(remote);
   });
 });

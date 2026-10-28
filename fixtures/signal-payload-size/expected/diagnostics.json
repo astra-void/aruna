@@ -14,9 +14,9 @@
   },
   {
     "code": "aruna::511",
-    "details": "Largest binary frame (2312 bytes, 4-byte header included) plus its wire frame (66 bytes) (export name: trail).",
+    "details": "Largest binary frame (2312 bytes, 4-byte header included) plus its wire frame (83 bytes) (export name: trail).",
     "file": "src/shared/signals.ts",
-    "message": "Unreliable signal fx.trail can carry up to 2378 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+    "message": "Unreliable signal fx.trail can carry up to 2395 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
     "name": "unreliable-signal-payload-too-large",
     "severity": "error",
     "span": {
@@ -27,9 +27,9 @@
   },
   {
     "code": "aruna::511",
-    "details": "Largest binary frame (868 bytes, 4-byte header included) plus its wire frame (66 bytes) (export name: burst).",
+    "details": "Largest binary frame (868 bytes, 4-byte header included) plus its wire frame (83 bytes) (export name: burst).",
     "file": "src/shared/signals.ts",
-    "message": "Unreliable signal fx.burst can carry up to 934 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+    "message": "Unreliable signal fx.burst can carry up to 951 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
     "name": "unreliable-signal-payload-too-large",
     "severity": "error",
     "span": {
@@ -40,9 +40,9 @@
   },
   {
     "code": "aruna::513",
-    "details": "Largest payload by the binary layout (620 bytes) plus its wire frame (65 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+    "details": "Largest payload by the binary layout (620 bytes) plus its wire frame (82 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
     "file": "src/shared/signals.ts",
-    "message": "Unreliable signal fx.near is at least 685 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+    "message": "Unreliable signal fx.near is at least 702 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
     "name": "unreliable-signal-payload-near-limit",
     "severity": "warning",
     "span": {

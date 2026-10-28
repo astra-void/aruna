@@ -23,7 +23,7 @@ export interface ServerAppBinding {
 export type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>) => ServerAppBinding;
 
 // Builds a server-side signal publisher from a signal registry, ensuring the
-// signal remote exists at call time. `createSignalPublisher` from `aruna/roblox`
+// remote exists at call time. `createSignalPublisher` from `aruna/roblox`
 // is the canonical implementation.
 export type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = (
 	signals: TSignals,
@@ -53,7 +53,7 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// Present when a `transport` was supplied to `createServerApp`.
 	readonly binding?: ServerAppBinding;
 	// Present when both `signals` and `createPublisher` were supplied. Built
-	// eagerly so the signal remote exists at boot.
+	// eagerly so the remote exists at boot.
 	readonly publisher?: SignalPublisher<TSignals, TPlayer>;
 	// Present when a `playerStore` was supplied. The app drives its lifecycle
 	// (load on join, flush and release on leave and at shutdown); this handle is
@@ -93,7 +93,7 @@ export interface CreateServerAppOptions<
 	// the app binds the transport eagerly at creation.
 	readonly transport?: ServerTransport<TPlayer>;
 	// The generated signal registry (`$aruna/signals`). When paired with
-	// `createPublisher`, the app builds the publisher at boot so the signal remote
+	// `createPublisher`, the app builds the publisher at boot so the remote
 	// is replicated before any client subscribes.
 	readonly signals?: TSignals;
 	// Builds the publisher from `signals`. Pass `createSignalPublisher` from
@@ -169,7 +169,7 @@ export function createServerApp<
 	TSession = unknown,
 >(options: CreateServerAppOptions<TPlayer, TSignals, TSession>): ServerApp<TPlayer, TSignals> {
 	// Build the publisher first so it can be injected into every action ctx via
-	// the registry (and so the signal remote exists at boot).
+	// the registry (and so the remote exists at boot).
 	const publisher =
 		options.signals !== undefined && options.createPublisher !== undefined
 			? options.createPublisher(options.signals)

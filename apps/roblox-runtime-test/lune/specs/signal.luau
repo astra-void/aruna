@@ -9,6 +9,7 @@ return function(ctx)
 	local schema = ctx.load("schema").schema
 	local defineSignal = ctx.load("signal").defineSignal
 	local signalRuntime = ctx.load("signal-runtime")
+	local wire = ctx.load("wire")
 
 	-- A minimal shared remote: FireClient/FireAllClients fan out to every
 	-- OnClientEvent handler in-process. FireClient/FireAllClients/Connect are
@@ -47,14 +48,28 @@ return function(ctx)
 	end
 
 	-- Wire frames (docs/wire-protocol.md) pass through the remote as is. The
-	-- publishers here are unbatched, so a signal is on the wire when `to` returns.
+	-- publishers here go through an unbatched server channel, so a signal is on
+	-- the wire when `to` returns.
 	local function unbatchedPublisher(remote, signals, unreliableRemote)
-		return signalRuntime.createRemoteSignalPublisher(remote, signals, unreliableRemote, { batching = false })
+		return signalRuntime.createRemoteSignalPublisher(
+			wire.createServerChannel(remote, { batching = false }),
+			signals,
+			unreliableRemote
+		)
+	end
+
+	-- A subscriber reading `remote` through a client channel of its own.
+	local function subscriberOver(remote, signals, unreliableRemote)
+		return signalRuntime.createRemoteSignalSubscriber(
+			wire.createClientChannel(remote, "signals"),
+			signals,
+			unreliableRemote
+		)
 	end
 
 	-- One signal in its own frame, as a raw server would fire it.
 	local function frameOf(signalId, payload)
-		return { 1, { s = signalId, d = payload } }
+		return { 1, { t = 3, s = signalId, d = payload } }
 	end
 
 	local function makeSignals()
@@ -72,7 +87,7 @@ return function(ctx)
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
 			local publisher = unbatchedPublisher(remote, signals)
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local received = nil
 			subscriber.on("combat.damaged", function(payload)
@@ -91,7 +106,7 @@ return function(ctx)
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
 			local publisher = unbatchedPublisher(remote, signals)
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local count = 0
 			subscriber.on("combat.damaged", function()
@@ -107,7 +122,7 @@ return function(ctx)
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
 			local publisher = unbatchedPublisher(remote, signals)
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local count = 0
 			local connection = subscriber.on("combat.damaged", function()
@@ -137,7 +152,7 @@ return function(ctx)
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
 			local publisher = unbatchedPublisher(remote, signals)
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local count = 0
 			subscriber.on("combat.damaged", function()
@@ -157,7 +172,7 @@ return function(ctx)
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
 			local publisher = unbatchedPublisher(remote, signals)
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local received = {}
 			subscriber.on("combat.damaged", function(payload)
@@ -201,7 +216,7 @@ return function(ctx)
 			local publisher =
 				unbatchedPublisher(reliableRemote, signals, unreliableRemote)
 			local subscriber =
-				signalRuntime.createRemoteSignalSubscriber(reliableRemote, signals, unreliableRemote)
+				subscriberOver(reliableRemote, signals, unreliableRemote)
 
 			local reliableCount, movedCount = 0, 0
 			subscriber.on("combat.damaged", function()
@@ -219,7 +234,7 @@ return function(ctx)
 
 			-- Prove the routing: a subscriber without the unreliable channel
 			-- never sees the unreliable signal.
-			local reliableOnly = signalRuntime.createRemoteSignalSubscriber(reliableRemote, signals)
+			local reliableOnly = subscriberOver(reliableRemote, signals)
 			local missed = 0
 			reliableOnly.on("player.moved", function()
 				missed += 1
@@ -234,7 +249,7 @@ return function(ctx)
 			local remote = makeSignalRemote()
 			local signals = { ["player.moved"] = { id = "player.moved", unreliable = true } }
 			local publisher = unbatchedPublisher(remote, signals)
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local count = 0
 			subscriber.on("player.moved", function()
@@ -250,7 +265,7 @@ return function(ctx)
 			-- validation to assert the subscriber-side schema guard independently.
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+			local subscriber = subscriberOver(remote, signals)
 
 			local count = 0
 			subscriber.on("combat.damaged", function()
@@ -361,7 +376,7 @@ return function(ctx)
 				}
 				local remote, sent = recordingRemote()
 				local received = {}
-				local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
+				local subscriber = subscriberOver(remote, signals)
 				subscriber.on("fx.hit", function(payload)
 					table.insert(received, payload)
 				end)
@@ -384,7 +399,7 @@ return function(ctx)
 			local v2 = { ["fx.hit"] = defineSignal({ id = "fx.hit", payload = schema.object({ hp = schema.u16() }), wire = "binary" }) }
 			local remote, sent = recordingRemote()
 			local received = { count = 0 }
-			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, v2)
+			local subscriber = subscriberOver(remote, v2)
 			subscriber.on("fx.hit", function()
 				received.count += 1
 			end)
@@ -400,14 +415,14 @@ return function(ctx)
 
 		-- An unbounded array, so only the runtime can catch an oversized frame.
 		-- Binary frame: 4-byte header + 4-byte count + 1 per u8. Wire frame:
-		-- "fx.burst" (8) + SIGNAL_FRAME_OVERHEAD_BYTES (58).
+		-- "fx.burst" (8) + SIGNAL_FRAME_OVERHEAD_BYTES (75).
 		local function items(count)
 			local list = table.create(count, 1)
 			return list
 		end
 
 		t.it("refuses a binary unreliable frame that is over the limit with its wire frame", function()
-			t.eq(signalRuntime.SIGNAL_FRAME_OVERHEAD_BYTES, 58)
+			t.eq(signalRuntime.SIGNAL_FRAME_OVERHEAD_BYTES, 75)
 			local signals = {
 				["fx.burst"] = defineSignal({
 					id = "fx.burst",
@@ -419,20 +434,20 @@ return function(ctx)
 			local remote, sent = recordingRemote()
 			local publisher = unbatchedPublisher(remote, signals, remote)
 
-			-- 834 + 66 = 900 fits; 835 + 66 = 901 does not.
-			publisher.to({}, "fx.burst", items(826))
+			-- 817 + 83 = 900 fits; 818 + 83 = 901 does not.
+			publisher.to({}, "fx.burst", items(809))
 			t.eq(#sent, 1)
 
-			local ok, err = pcall(publisher.to, {}, "fx.burst", items(827))
+			local ok, err = pcall(publisher.to, {}, "fx.burst", items(810))
 			t.isFalse(ok)
 			-- Luau prefixes a thrown string with its position.
 			t.contains(
 				err,
 				"Unreliable signal fx.burst carries 901 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error."
 			)
-			t.isFalse((pcall(publisher.toAll, "fx.burst", items(827))))
-			t.isFalse((pcall(publisher.toMany, { {} }, "fx.burst", items(827))))
-			local settled, resolved, reason = t.await(publisher.toBatched({}, "fx.burst", { items(1), items(827) }))
+			t.isFalse((pcall(publisher.toAll, "fx.burst", items(810))))
+			t.isFalse((pcall(publisher.toMany, { {} }, "fx.burst", items(810))))
+			local settled, resolved, reason = t.await(publisher.toBatched({}, "fx.burst", { items(1), items(810) }))
 			t.isTrue(settled)
 			t.isFalse(resolved)
 			t.contains(tostring(reason), "fx.burst carries 901 bytes")

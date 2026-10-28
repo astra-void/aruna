@@ -427,7 +427,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - `createServerApp(...).dispatch` is the in-process action path for tests (the `aruna/testing` harness wraps it)
 - thin client/server app bootstrap helpers at `aruna/client` and `aruna/server` wire the runtime invoker and server action registry
 - the bootstrap helpers are functional, disposable, and intentionally do not scan modules or register services
-- Roblox-facing default action remote helpers bind to the flat `ReplicatedStorage/ArunaActionRemoteEvent` (matching the native runtime; the RemoteFunction transport was removed — the RemoteEvent request/response transport is the transport)
+- Roblox-facing default action remote helpers bind to the flat `ReplicatedStorage/ArunaRemoteEvent` (matching the native runtime; the RemoteFunction transport was removed — the RemoteEvent request/response transport is the transport)
 - there is one runtime: the roblox-ts-native one at `packages/aruna/roblox/`, which games compile from their vendored copy; `packages/aruna/src` is the CLI and the root `aruna` entry
 - the runtime subpaths are type-only: each ships the native runtime's declarations, so a project sees the same types with or without the doctor aliases
 - `@rbxts/types` and `@rbxts/compiler-types` are used at typecheck time for Roblox-facing runtime types
@@ -460,7 +460,7 @@ export const damaged = defineSignal({
 ```
 
 Server — publish to one player, several players, or everyone via the turnkey publisher
-(it ensures the default `ReplicatedStorage/ArunaSignalRemoteEvent` at call time):
+(it ensures the default `ReplicatedStorage/ArunaRemoteEvent` at call time):
 
 ```ts
 import { createSignalPublisher } from "aruna/roblox";
@@ -487,7 +487,7 @@ connection.disconnect();
 ```
 
 - Payloads are validated against the `plain-data-v1` serialization boundary and the declared schema on publish (the server throws on a violation) and dropped on schema mismatch on delivery (the client never invokes a handler with a malformed payload).
-- Both runtimes ship turnkey default-transport helpers `createSignalPublisher(signals)` / `createSignalSubscriber(signals)` over a dedicated signal RemoteEvent, distinct from the action remote. They ensure / wait for the remote on call, so no hand-written boot-order plumbing is needed; `createServerApp({ signals, createPublisher })` can own the publisher so the remote is created at boot.
+- Both runtimes ship turnkey default-transport helpers `createSignalPublisher(signals)` / `createSignalSubscriber(signals)` over the same RemoteEvent as actions: responses and reliable signals for a player travel one ordered channel, so a signal published inside an action reaches the client before that action's response. They ensure / wait for the remote on call, so no hand-written boot-order plumbing is needed; `createServerApp({ signals, createPublisher })` can own the publisher so the remote is created at boot.
 - An app-owned publisher is injected into every action's `ctx`, so an action's `run` can publish signals directly (`ctx.publisher?.toAll(...)`). Bind a `defineAction` with `createActionDefiner<Signals, Player>()` for a non-optional, registry-checked `ctx.publisher` — no plumbing module. See [docs/signals.md](packages/aruna/docs/signals.md#publishing-from-inside-an-action).
 - Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. Contract `diff` gates signal changes too: a removed signal or a removed/retyped payload field is breaking, an added signal or payload field is non-breaking (output compatibility rules — payloads travel server → client).
 - `wire: "binary"` sends a signal's payload as an `encodeBinary` frame (see [Binary serialization](#binary-serialization)). The compiler records the largest encoding a payload allows (`maxEncodedBytes`) and checks unreliable signals against Roblox's 900-byte limit: an unbounded payload warns (`aruna::510`), one that can exceed it fails the build (`aruna::511`).

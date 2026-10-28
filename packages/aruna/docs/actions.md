@@ -109,8 +109,10 @@ const serverApp = createServerApp<Player>({
 ```
 
 `robloxRemoteEvent()` (from `aruna/roblox`) is the default (and only) transport: it
-ensures the flat `ReplicatedStorage/ArunaActionRemoteEvent` exists and routes incoming
-requests through the registry with validation + rate limiting. `bindActions(registry)`
+ensures the flat `ReplicatedStorage/ArunaRemoteEvent` exists and routes incoming
+requests through the registry with validation + rate limiting. Responses go back through
+the same per-player channel as signals, so anything an action published reaches the
+client before its response ([wire protocol](../../../docs/wire-protocol.md#one-ordered-reliable-channel-per-player)). `bindActions(registry)`
 remains exported if you bind outside an app, but prefer the app-owned transport so
 `defaultRateLimit` and the publisher reach the wire.
 

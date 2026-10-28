@@ -45,10 +45,10 @@ import { signals } from "$aruna/signals";
 ## Server: publishing
 
 `createSignalPublisher(signals)` (from `aruna/roblox`) is the turnkey entry point: it
-ensures the default `ReplicatedStorage/ArunaSignalRemoteEvent` **at call time** and
-returns a typed publisher. Call it once at server boot — that single call creates the
-signal remote before any client subscribes, so you no longer need a hand-written
-lazy-singleton plumbing module. Payloads are validated before they go on the wire.
+ensures the default `ReplicatedStorage/ArunaRemoteEvent` **at call time** and returns a
+typed publisher. Call it once at server boot — that single call creates the remote before
+any client subscribes, so you no longer need a hand-written lazy-singleton plumbing
+module. Payloads are validated before they go on the wire.
 
 ```ts
 import { createSignalPublisher } from "aruna/roblox";
@@ -85,21 +85,25 @@ const serverApp = createServerApp<Player>({
   defaultRateLimit,
   transport: robloxRemoteEvent(),
   signals,
-  createPublisher: createSignalPublisher, // app ensures the signal remote at boot
+  createPublisher: createSignalPublisher, // app ensures the remote at boot
 });
 
 serverApp.publisher?.toAll("world.tick", undefined);
 ```
 
-> **Advanced:** `createRemoteSignalPublisher(remote, signals)` is the lower-level overload
-> when you supply your own RemoteEvent instead of the default Aruna signal remote.
+> **Advanced:** `createRemoteSignalPublisher(channel, signals, unreliableRemote?)` is the
+> lower-level form when you supply your own remote: wrap it in a server channel
+> (`createServerChannel(remote, batchOptions)`) and pass the same channel to your action
+> binding, so responses and signals stay in one order.
 
-Reliable signals leave **once per frame**: the publisher queues what you publish and
-fires it together at `RunService.Heartbeat`, keeping each player's order, so a burst of
+Reliable signals and action responses share **one ordered channel per player**: the
+publisher and the action transport queue into the same outbox on the same
+`ArunaRemoteEvent`, which fires once per frame at `RunService.Heartbeat`. A player reads
+everything in the order it was produced, so a signal published inside an action's `run()`
+is always handled on the client before that action's response settles — and a burst of
 `to` calls costs one remote fire per player rather than one per signal. Unreliable signals
-are never batched — each goes out at once, alone. `createSignalPublisher(signals,
-{ batching: false })` fires every signal as it is published.
-([Wire protocol](../../../docs/wire-protocol.md#batching).)
+are never batched and carry no ordering promise — each goes out at once, alone, on its own
+remote. ([Wire protocol](../../../docs/wire-protocol.md#one-ordered-reliable-channel-per-player).)
 
 ## Publishing from inside an action
 
@@ -161,7 +165,7 @@ clientApp.subscriber?.on("combat.playerDamaged", (p) => updateHud(p)); // typed
 ```
 
 Standalone, `createSignalSubscriber(signals)` (from `aruna/roblox`) is the turnkey
-subscriber: it waits for the default signal remote and returns a typed subscriber.
+subscriber: it waits for the default remote and returns a typed subscriber.
 `.on(id, handler)` is the subscribe API; it returns a disconnectable handle.
 
 ```ts
@@ -228,10 +232,10 @@ size of its `encodeBinary` frame — and records it as `maxEncodedBytes` in the 
 | `aruna::513 unreliable-signal-payload-near-limit` | table encoding, and its size floor is over 75% of the limit | warning |
 
 The limit applies to the whole message, not the payload alone. An unreliable signal goes
-out alone in its wire frame, `[1, { s = signalId, d = payload }]`
+out alone in its wire frame, `[1, { t = 3, s = signalId, d = payload }]`
 ([wire protocol](../../../docs/wire-protocol.md#size-accounting)), so the compared size is
-the payload plus the signal id's bytes plus a fixed 58-byte frame allowance: 8 bytes for
-each of the frame's seven values and the two one-byte keys. Roblox does not document its
+the payload plus the signal id's bytes plus a fixed 75-byte frame allowance: 8 bytes for
+each of the frame's nine values and the three one-byte keys. Roblox does not document its
 remote encoding; 8 bytes covers a type tag and a length prefix with room to spare, and
 erring high only means a warning comes a little early.
 

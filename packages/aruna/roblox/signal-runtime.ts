@@ -1,24 +1,26 @@
 // Aruna roblox-ts native runtime — signal registry, publisher, and subscriber.
 //
-// One RemoteEvent multiplexes every signal by id, in wire frames
-// (docs/wire-protocol.md): reliable signals are batched once per frame,
-// unreliable ones go out one per frame as they are published. The server
-// validates payloads against the serialization boundary and the declared schema
-// before queueing them; the client drops payloads that fail schema validation
-// before invoking handlers.
+// Signals travel as wire items (docs/wire-protocol.md). A reliable signal joins
+// the server channel's outbox — the same one action responses use, so a player
+// reads both in the order they were produced; an unreliable one goes out at once,
+// alone in its frame, on the UnreliableRemoteEvent. The server validates payloads
+// against the serialization boundary and the declared schema before queueing
+// them; the client drops payloads that fail schema validation before invoking
+// handlers.
 
 import { firstSchemaIssue, type Schema } from "./schema";
 import type { InferSignalPayload, SignalDefinition } from "./signal";
 import { isWireSafe } from "./serialization";
 import { decodeBinary, encodeBinary } from "./binary";
 import {
+	createClientChannel,
 	createWireFrame,
-	createWireOutbox,
-	defaultWireProtocolErrorHandler,
-	readWireFrame,
-	type WireBatchOptions,
-	type WireFrame,
+	WIRE_ITEM_SIGNAL,
+	type ClientChannel,
+	type ServerChannel,
+	type WireClientRemote,
 	type WireProtocolErrorHandler,
+	type WireServerRemote,
 	type WireSignal,
 } from "./wire";
 
@@ -35,26 +37,16 @@ type SignalPayloadOf<TSignals extends SignalMap, TId extends SignalId<TSignals>>
 		? InferSignalPayload<TPayload>
 		: unknown;
 
-// A remote the publisher fires frames on: a RemoteEvent, an
-// UnreliableRemoteEvent, or a test double.
-export interface SignalServerLike<TPlayer> {
-	readonly FireClient: (player: TPlayer, frame: WireFrame) => void;
-	readonly FireAllClients: (frame: WireFrame) => void;
-}
+// The unreliable remote the publisher fires frames on: an UnreliableRemoteEvent
+// behind an adapter, or a test double.
+export type SignalServerLike<TPlayer> = WireServerRemote<TPlayer>;
 
-export interface SignalConnectionLike {
-	readonly Disconnect: () => void;
-}
-
-export interface SignalClientLike {
-	readonly OnClientEvent: {
-		readonly Connect: (callback: (frame: unknown) => void) => SignalConnectionLike;
-	};
-}
+// The unreliable remote the subscriber reads frames from.
+export type SignalClientLike = WireClientRemote;
 
 export interface SignalSubscriberOptions {
-	// Called for a frame this client drops (docs/wire-protocol.md). Defaults to a
-	// warning in Studio.
+	// Called for a frame this client drops (docs/wire-protocol.md), on either
+	// remote. Without it, the channel's default: a warning in Studio.
 	readonly onProtocolError?: WireProtocolErrorHandler;
 }
 
@@ -152,13 +144,13 @@ function assertPublishable(signal: SignalDefinition<Schema | undefined>, payload
 
 // Roblox drops an unreliable message over this size without an error.
 export const UNRELIABLE_PAYLOAD_LIMIT_BYTES = 900;
-// What an unreliable signal's frame, `[1, { s, d }]`, costs on top of the
-// payload and the signal id's own bytes: 8 bytes for each of its seven values
-// (the frame, the version, the item, two keys, the id, the payload) plus the
-// two one-byte keys. docs/wire-protocol.md has the accounting; the compiler's
-// WIRE_SIGNAL_FRAME_OVERHEAD_BYTES (crates/aruna_compiler/src/payload_size.rs)
-// is the same number.
-export const SIGNAL_FRAME_OVERHEAD_BYTES = 58;
+// What an unreliable signal's frame, `[1, { t = 3, s, d }]`, costs on top of the
+// payload and the signal id's own bytes: 8 bytes for each of its nine values
+// (the frame, the version, the item, three keys, the kind, the id, the payload)
+// plus the three one-byte keys. docs/wire-protocol.md has the accounting; the
+// compiler's WIRE_SIGNAL_FRAME_OVERHEAD_BYTES
+// (crates/aruna_compiler/src/payload_size.rs) is the same number.
+export const SIGNAL_FRAME_OVERHEAD_BYTES = 75;
 
 // The payload as it goes on the wire: an `encodeBinary` buffer for a binary
 // signal, the value itself otherwise. Validated first, so the encoder only ever
@@ -205,39 +197,26 @@ function readWirePayload(
 }
 
 export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(
-	remote: SignalServerLike<TPlayer>,
+	// The server end of the reliable channel. Reliable signals join its outbox,
+	// behind whatever the player was already sent this frame (an action
+	// response, another signal); its batching options decide when they leave.
+	channel: ServerChannel<TPlayer>,
 	signals: TSignals,
-	// The unreliable channel (an UnreliableRemoteEvent in the default wiring).
-	// Signals declared `unreliable: true` route here when present; otherwise
-	// they fall back to the reliable remote.
+	// The unreliable remote (an UnreliableRemoteEvent in the default wiring).
+	// Signals declared `unreliable: true` go out on it, never batched; without
+	// it they travel the reliable channel like any other signal.
 	unreliableRemote?: SignalServerLike<TPlayer>,
-	// `batching` (default true) queues reliable signals and fires them once per
-	// frame. Unreliable signals are never batched.
-	options?: WireBatchOptions,
 ): SignalPublisher<TSignals, TPlayer> {
 	const index = buildSignalIndex(signals);
-	const outbox = createWireOutbox<TPlayer>(
-		(player, frame) => {
-			remote.FireClient(player, frame);
-		},
-		(frame) => {
-			remote.FireAllClients(frame);
-		},
-		options,
-	);
-
-	// An unreliable signal goes out at once, alone in its frame: its size is
-	// then one signal's, which is what the 900-byte checks measure. A reliable
-	// one joins the frame's batch.
-	const unreliableWire = (signal: SignalDefinition<Schema | undefined>): SignalServerLike<TPlayer> | undefined =>
-		signal.unreliable === true ? (unreliableRemote !== undefined ? unreliableRemote : remote) : undefined;
 
 	const deliver = (
 		signal: SignalDefinition<Schema | undefined>,
 		players: ReadonlyArray<TPlayer> | undefined,
 		item: WireSignal,
 	): void => {
-		const wire = unreliableWire(signal);
+		// An unreliable signal goes out at once, alone in its frame: its size is
+		// then one signal's, which is what the 900-byte checks measure.
+		const wire = signal.unreliable === true ? unreliableRemote : undefined;
 		if (wire !== undefined) {
 			const frame = createWireFrame([item]);
 			if (players === undefined) {
@@ -250,17 +229,17 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 			return;
 		}
 		if (players === undefined) {
-			outbox.pushAll(item);
+			channel.pushAll(item);
 		} else {
 			for (const player of players) {
-				outbox.push(player, item);
+				channel.push(player, item);
 			}
 		}
 	};
 
 	const itemFor = (signal: SignalDefinition<Schema | undefined>, signalId: string, payload: unknown): WireSignal => {
 		assertPublishable(signal, payload);
-		return { s: signalId, d: wirePayload(signal, signalId, payload) };
+		return { t: WIRE_ITEM_SIGNAL, s: signalId, d: wirePayload(signal, signalId, payload) };
 	};
 
 	// Implemented against loose signatures and re-typed on the way out:
@@ -319,25 +298,20 @@ export function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>
 }
 
 export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
-	remote: SignalClientLike,
+	// The client end of the reliable channel, shared with the action invoker so
+	// signals and responses are handled in the order they were sent.
+	channel: ClientChannel,
 	signals: TSignals,
-	// The unreliable channel; unreliable signals arrive here in the default
-	// wiring. The same handler fan-out serves both remotes.
+	// The unreliable remote; unreliable signals arrive here in the default
+	// wiring. The same handler fan-out serves both.
 	unreliableRemote?: SignalClientLike,
 	options?: SignalSubscriberOptions,
 ): SignalSubscriber<TSignals> {
 	const index = buildSignalIndex(signals);
 	const handlersBySignal = new Map<string, Set<SignalHandler>>();
 	let disposed = false;
-	const onProtocolError =
-		options !== undefined && options.onProtocolError !== undefined
-			? options.onProtocolError
-			: defaultWireProtocolErrorHandler;
 
-	const onSignal = (item: unknown): void => {
-		if (!typeIs(item, "table")) {
-			return;
-		}
+	const onSignal = (item: object): void => {
 		const message = item as Partial<WireSignal>;
 		const signalId = message.s;
 		if (!typeIs(signalId, "string")) {
@@ -366,23 +340,21 @@ export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 		}
 	};
 
-	// A frame's signals reach their handlers in the order they were published.
-	const onFrame = (channel: string) => (frame: unknown): void => {
-		const read = readWireFrame(frame);
-		if (!read.ok) {
-			onProtocolError(channel, read.reason);
-			return;
+	// The unreliable remote carries nothing but signals; it is read through a
+	// channel of its own, owned (and disposed) by this subscriber.
+	const unreliableChannel =
+		unreliableRemote !== undefined ? createClientChannel(unreliableRemote, "unreliable signals") : undefined;
+	const cleanups = new Array<() => void>();
+	cleanups.push(channel.on(WIRE_ITEM_SIGNAL, onSignal));
+	if (unreliableChannel !== undefined) {
+		cleanups.push(unreliableChannel.on(WIRE_ITEM_SIGNAL, onSignal));
+	}
+	if (options !== undefined && options.onProtocolError !== undefined) {
+		cleanups.push(channel.onProtocolError(options.onProtocolError));
+		if (unreliableChannel !== undefined) {
+			cleanups.push(unreliableChannel.onProtocolError(options.onProtocolError));
 		}
-		for (const item of read.items) {
-			onSignal(item);
-		}
-	};
-
-	const connection = remote.OnClientEvent.Connect(onFrame("signals"));
-	const unreliableConnection =
-		unreliableRemote !== undefined
-			? unreliableRemote.OnClientEvent.Connect(onFrame("unreliable signals"))
-			: undefined;
+	}
 
 	const subscriber = {
 		on: (signalId: string, handler: SignalHandler) => {
@@ -411,9 +383,12 @@ export function createRemoteSignalSubscriber<TSignals extends SignalMap>(
 				return;
 			}
 			disposed = true;
-			connection.Disconnect();
-			if (unreliableConnection !== undefined) {
-				unreliableConnection.Disconnect();
+			for (const cleanup of cleanups) {
+				cleanup();
+			}
+			cleanups.clear();
+			if (unreliableChannel !== undefined) {
+				unreliableChannel.dispose();
 			}
 			handlersBySignal.clear();
 		},

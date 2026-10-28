@@ -1,4 +1,4 @@
-// `defineAction`: server actions the client invokes over the action remote.
+// `defineAction`: server actions the client invokes over the reliable remote.
 
 use crate::diagnostics::{create_diagnostic, ArunaDiagnostic, DiagnosticSpan};
 use crate::files::project_relative;

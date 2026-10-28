@@ -16,6 +16,7 @@ import {
   describe,
   expect,
   it,
+  type TestServerApp,
 } from "aruna/testing";
 
 const signals = {
@@ -285,6 +286,158 @@ describe("TestServerApp.client", () => {
     await harness.invoke(other, "shop.buy", { item: "lamp", quantity: 1 });
     expect(received).toEqual([{ item: "rope" }]);
 
+    harness.dispose();
+  });
+});
+
+// Batched, the harness runs the wire as a game does: a client's calls travel the
+// action binding, and its responses come back through the one server channel
+// that signals use, flushed by `step()`. These cases assert what a client
+// actually reads, and in what order, across kinds.
+const announce = defineAction({
+  id: "shop.announce",
+  input: schema.object({ item: schema.string() }),
+  run(ctx, input) {
+    ctx.publisher?.toAll("shop.purchased", { item: input.item });
+    return { announced: input.item };
+  },
+});
+
+describe("createTestServerApp batched", () => {
+  afterEach(() => {
+    clearActionInvoker();
+  });
+
+  // A client of `harness` that logs, in the order they happen, the signals its
+  // subscriber gets and the responses its invokes settle with.
+  function loggingClient(harness: TestServerApp<Player, typeof signals>, player: Player) {
+    const log = new Array<string>();
+    const client = harness.client(player);
+    client.subscriber?.on("shop.purchased", (payload) => {
+      log.push(`signal ${payload.item}`);
+    });
+    const invoke = (actionId: string, input: unknown, label: string) =>
+      client.invoke(actionId, input).then(() => {
+        log.push(`response ${label}`);
+      });
+    return { log, invoke };
+  }
+
+  it("sends nothing until a step, then answers a call in the step that sends it", () => {
+    const harness = createTestServerApp({ actions, signals, batching: true });
+    const player = createTestPlayer();
+    const { log, invoke } = loggingClient(harness, player);
+
+    void invoke("shop.buy", { item: "rope", quantity: 1 }, "rope");
+    expect(log).toEqual([]);
+    expect(harness.published()).toEqual([]);
+
+    harness.step();
+    expect(log).toEqual(["signal rope", "response rope"]);
+    expect(harness.takePublished()).toEqual([{ signalId: "shop.purchased", payload: { item: "rope" }, player }]);
+    harness.dispose();
+  });
+
+  it("delivers a signal published inside run() before that action's response", () => {
+    const harness = createTestServerApp({ actions, signals, batching: true });
+    const player = createTestPlayer();
+    const { log, invoke } = loggingClient(harness, player);
+
+    void invoke("shop.buy", { item: "lamp", quantity: 1 }, "lamp");
+    harness.step();
+
+    expect(log).toEqual(["signal lamp", "response lamp"]);
+    harness.dispose();
+  });
+
+  it("delivers a toAll broadcast published inside run() before that action's response", () => {
+    const harness = createTestServerApp({
+      actions: { ...actions, "shop.announce": announce },
+      signals,
+      batching: true,
+    });
+    const player = createTestPlayer();
+    const bystander = createTestPlayer();
+    const { log, invoke } = loggingClient(harness, player);
+    const watching = loggingClient(harness, bystander);
+
+    void invoke("shop.announce", { item: "sale" }, "announce");
+    harness.step();
+
+    expect(log).toEqual(["signal sale", "response announce"]);
+    // Everyone gets the broadcast; only the caller gets the response.
+    expect(watching.log).toEqual(["signal sale"]);
+    expect(harness.takePublished()).toEqual([{ signalId: "shop.purchased", payload: { item: "sale" } }]);
+    harness.dispose();
+  });
+
+  it("keeps every action's signal ahead of its response across actions dispatched in one frame", () => {
+    const harness = createTestServerApp({
+      actions: { ...actions, "shop.announce": announce },
+      signals,
+      batching: true,
+    });
+    const player = createTestPlayer();
+    const { log, invoke } = loggingClient(harness, player);
+
+    void invoke("shop.buy", { item: "a", quantity: 1 }, "a");
+    void invoke("shop.announce", { item: "b" }, "b");
+    void invoke("shop.buy", { item: "c", quantity: 1 }, "c");
+    harness.step();
+
+    expect(log).toEqual(["signal a", "response a", "signal b", "response b", "signal c", "response c"]);
+    harness.dispose();
+  });
+
+  it("answers an action that settles later in the step after it settles", async () => {
+    let release: (() => void) | undefined;
+    const slow = defineAction({
+      id: "shop.slow",
+      run(ctx) {
+        return new Promise<string>((resolve) => {
+          release = () => {
+            ctx.publisher?.to(ctx.player, "shop.purchased", { item: "late" });
+            resolve("done");
+          };
+        });
+      },
+    });
+    const harness = createTestServerApp({ actions: { "shop.slow": slow }, signals, batching: true });
+    const player = createTestPlayer();
+    const { log, invoke } = loggingClient(harness, player);
+
+    const settled = invoke("shop.slow", undefined, "slow");
+    harness.step();
+    expect(log).toEqual([]);
+    release?.();
+    expect(log).toEqual([]);
+    harness.step();
+    await settled;
+    expect(log).toEqual(["signal late", "response slow"]);
+    harness.dispose();
+  });
+});
+
+describe("createTestServerApp unbatched (the default)", () => {
+  afterEach(() => {
+    clearActionInvoker();
+  });
+
+  it("delivers as things happen, with no step needed", async () => {
+    const harness = createTestServerApp({ actions, signals });
+    const player = createTestPlayer();
+    const client = harness.client(player);
+    const log = new Array<string>();
+    client.subscriber?.on("shop.purchased", (payload) => log.push(`signal ${payload.item}`));
+
+    const output = await client.invoke("shop.buy", { item: "rope", quantity: 1 });
+    log.push("response rope");
+    expect(output).toEqual({ ok: true });
+    expect(log).toEqual(["signal rope", "response rope"]);
+    expect(harness.takePublished()).toEqual([{ signalId: "shop.purchased", payload: { item: "rope" }, player }]);
+    // Nothing is queued, so a step sends nothing.
+    harness.step();
+    expect(harness.published()).toEqual([]);
     harness.dispose();
   });
 });

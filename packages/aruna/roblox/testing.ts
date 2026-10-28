@@ -5,10 +5,14 @@
 // the wire uses — with no RemoteEvent, no Players service, and no DataStore.
 //
 // Everything is assembled from the shipping runtime rather than re-implemented:
-// the publisher is the real `createRemoteSignalPublisher` over a recording
-// remote, so a payload that would fail validation in production fails here too.
-// It sends unbatched (each signal in its own wire frame, as it is published), so
-// `published()` and a client's handlers see a signal without waiting a frame.
+// the publisher is the real `createRemoteSignalPublisher` over a server channel
+// on a recording remote, so a payload that would fail validation in production
+// fails here too. By default the channel sends unbatched (each item in its own
+// wire frame, as it is produced), so `published()` and a client's handlers see a
+// signal without waiting a frame. With `batching: true` the harness runs the
+// wire as a game does — calls and the server channel both queue until `step()`,
+// and a client's calls travel the real action binding — so a spec can assert the
+// order a client reads responses and signals in.
 
 import {
 	createServerApp,
@@ -16,14 +20,24 @@ import {
 	type CreateServerAppOptions,
 	type ServerApp,
 } from "./server-app";
-import { createClientApp, type ClientApp } from "./client";
-import type { ActionMap } from "./server-runtime";
+import { createClientApp, type ClientApp, type ClientTransport } from "./client";
+import { bindRemoteActions, createRemoteActionInvoker } from "./roblox";
+import type { ActionMap, ActionRegistry } from "./server-runtime";
 import {
 	createRemoteSignalPublisher,
 	createRemoteSignalSubscriber,
 	type SignalMap,
 } from "./signal-runtime";
-import { readWireFrame, type WireFrame, type WireSignal } from "./wire";
+import {
+	createClientChannel,
+	createServerChannel,
+	readWireFrame,
+	WIRE_ITEM_SIGNAL,
+	type ClientChannel,
+	type WireFrame,
+	type WireFrameScheduler,
+	type WireSignal,
+} from "./wire";
 
 // The shape of the player double: only the two fields the runtime reads. `UserId`
 // is what the default rate-limit key buckets on, `Name` is what test output
@@ -94,7 +108,16 @@ export interface TestServerApp<TPlayer extends defined = Player, TSignals extend
 	// whose subscriber receives the signals published to that player. Installs the
 	// module-global action invoker, so generated `$aruna/actions/client` stubs
 	// work — which means only the most recently created client serves the global.
+	// Batched, its calls travel the wire binding and its responses come back
+	// through the same server channel as signals, so the client reads both in
+	// the order the server produced them.
 	readonly client: (player: TPlayer) => ClientApp<TSignals>;
+	// One frame, with `batching: true`: every client sends the calls it queued
+	// (the server dispatches them), then the server channel sends what it queued
+	// — the responses to calls that settled, and the signals published since the
+	// last step. A call to an action that settles at once is answered in the step
+	// that sends it. A no-op unbatched, where nothing waits for a frame.
+	readonly step: () => void;
 	readonly dispose: () => void;
 }
 
@@ -107,23 +130,53 @@ export type CreateTestServerAppOptions<
 > = Omit<
 	CreateServerAppOptions<TPlayer, TSignals, TSession>,
 	"transport" | "createPublisher" | "players"
->;
+> & {
+	// Queue wire items until `step()`, as a game queues them until Heartbeat
+	// (default false: everything goes out as it is produced).
+	readonly batching?: boolean;
+};
 
-interface SignalSink<TPlayer extends defined> {
+interface FrameSink<TPlayer extends defined> {
 	readonly player: TPlayer;
 	readonly deliver: (frame: WireFrame) => void;
 }
 
-// The signals a frame carries, as the harness records them.
+// The signals a frame carries, as the harness records them. A batched frame also
+// carries responses, which are not emits.
 function signalsIn(frame: WireFrame): Array<WireSignal> {
 	const read = readWireFrame(frame);
 	const signals = new Array<WireSignal>();
 	if (read.ok) {
 		for (const item of read.items) {
-			signals.push(item as WireSignal);
+			if ((item as { readonly t?: unknown }).t === WIRE_ITEM_SIGNAL) {
+				signals.push(item as WireSignal);
+			}
 		}
 	}
 	return signals;
+}
+
+// A frame scheduler stepped by the harness.
+function manualFrames(): WireFrameScheduler & { readonly step: () => void } {
+	const listeners = new Array<() => void>();
+	return {
+		connect: (onFrame) => {
+			listeners.push(onFrame);
+			return {
+				Disconnect: () => {
+					const at = listeners.indexOf(onFrame);
+					if (at !== -1) {
+						listeners.remove(at);
+					}
+				},
+			};
+		},
+		step: () => {
+			for (const listener of [...listeners]) {
+				listener();
+			}
+		},
+	};
 }
 
 export function createTestServerApp<
@@ -134,9 +187,14 @@ export function createTestServerApp<
 	options: CreateTestServerAppOptions<TPlayer, TSignals, TSession>,
 ): TestServerApp<TPlayer, TSignals> {
 	const published = new Array<TestSignalRecord<TPlayer>>();
-	// Client-side sinks, so a signal published to a player reaches the subscriber
-	// of the client app the harness built for that player.
-	const sinks = new Array<SignalSink<TPlayer>>();
+	// Client-side sinks, so a frame sent to a player reaches the client app the
+	// harness built for that player.
+	const sinks = new Array<FrameSink<TPlayer>>();
+	const batching = options.batching === true;
+	// Clients send before the server does, as a call reaches the server within
+	// the frame that its response leaves in.
+	const clientFrames = manualFrames();
+	const serverFrames = manualFrames();
 
 	const recordingRemote = {
 		FireClient: (player: TPlayer, frame: WireFrame) => {
@@ -179,7 +237,15 @@ export function createTestServerApp<
 		}
 	};
 
+	const channel = createServerChannel<TPlayer>(
+		recordingRemote,
+		batching ? { frameScheduler: serverFrames } : { batching: false },
+	);
+	// Batched, a client's calls arrive here, as frames on the action binding.
+	const callHandlers = new Array<(player: TPlayer, frame: unknown) => void>();
+
 	const signals = options.signals;
+	// `batching` rides along in the spread; createServerApp has no such option.
 	const app = createServerApp<TPlayer, TSignals, TSession>({
 		...options,
 		// A spec wants the real failure, not the masked one a client would get.
@@ -188,9 +254,31 @@ export function createTestServerApp<
 		...(signals !== undefined
 			? {
 					createPublisher: (registry: TSignals) =>
-						createRemoteSignalPublisher<TSignals, TPlayer>(recordingRemote, registry, undefined, {
-							batching: false,
-						}),
+						createRemoteSignalPublisher<TSignals, TPlayer>(channel, registry),
+				}
+			: {}),
+		...(batching
+			? {
+					transport: (registry: ActionRegistry<TPlayer>) =>
+						bindRemoteActions<TPlayer>(
+							registry,
+							{
+								OnServerEvent: {
+									Connect: (callback: (player: TPlayer, frame: unknown) => void) => {
+										callHandlers.push(callback);
+										return {
+											Disconnect: () => {
+												const at = callHandlers.indexOf(callback);
+												if (at !== -1) {
+													callHandlers.remove(at);
+												}
+											},
+										};
+									},
+								},
+							},
+							channel,
+						),
 				}
 			: {}),
 		players: {
@@ -219,6 +307,7 @@ export function createTestServerApp<
 	});
 
 	const clients = new Array<ClientApp<TSignals>>();
+	const clientChannels = new Array<ClientChannel>();
 	let disposed = false;
 
 	return {
@@ -262,45 +351,66 @@ export function createTestServerApp<
 			return taken;
 		},
 		client: (player) => {
+			// The player's end of the reliable channel: what the server sends this
+			// player, read in order by the invoker and the subscriber alike.
+			const clientChannel = createClientChannel(
+				{
+					OnClientEvent: {
+						Connect: (callback: (frame: unknown) => void) => {
+							const sink: FrameSink<TPlayer> = { player, deliver: callback };
+							sinks.push(sink);
+							return {
+								Disconnect: () => {
+									const at = sinks.indexOf(sink);
+									if (at !== -1) {
+										sinks.remove(at);
+									}
+								},
+							};
+						},
+					},
+				},
+				"test client",
+			);
+			clientChannels.push(clientChannel);
+			const transport: ClientTransport = batching
+				? createRemoteActionInvoker(
+						{
+							FireServer: (frame) => {
+								for (const handler of [...callHandlers]) {
+									handler(player, frame);
+								}
+							},
+						},
+						clientChannel,
+						{ frameScheduler: clientFrames },
+					)
+				: // The key `withRetry` minted travels on, as it would over the wire.
+					(actionId, input, invokeOptions) =>
+						app.dispatch(
+							actionId,
+							{ player },
+							input,
+							invokeOptions !== undefined && invokeOptions.idempotencyKey !== undefined
+								? { idempotencyKey: invokeOptions.idempotencyKey }
+								: undefined,
+						);
 			const clientApp = createClientApp<TSignals>({
-				// The key `withRetry` minted travels on, as it would over the wire.
-				transport: (actionId, input, invokeOptions) =>
-					app.dispatch(
-						actionId,
-						{ player },
-						input,
-						invokeOptions !== undefined && invokeOptions.idempotencyKey !== undefined
-							? { idempotencyKey: invokeOptions.idempotencyKey }
-							: undefined,
-					),
+				transport,
 				...(signals !== undefined
 					? {
 							signals,
 							createSubscriber: (registry: TSignals) =>
-								createRemoteSignalSubscriber<TSignals>(
-									{
-										OnClientEvent: {
-											Connect: (callback: (frame: unknown) => void) => {
-												const sink: SignalSink<TPlayer> = { player, deliver: callback };
-												sinks.push(sink);
-												return {
-													Disconnect: () => {
-														const at = sinks.indexOf(sink);
-														if (at !== -1) {
-															sinks.remove(at);
-														}
-													},
-												};
-											},
-										},
-									},
-									registry,
-								),
+								createRemoteSignalSubscriber<TSignals>(clientChannel, registry),
 						}
 					: {}),
 			});
 			clients.push(clientApp);
 			return clientApp;
+		},
+		step: () => {
+			clientFrames.step();
+			serverFrames.step();
 		},
 		dispose: () => {
 			if (disposed) {
@@ -311,8 +421,13 @@ export function createTestServerApp<
 				clientApp.dispose();
 			}
 			clients.clear();
+			for (const clientChannel of clientChannels) {
+				clientChannel.dispose();
+			}
+			clientChannels.clear();
 			sinks.clear();
 			app.dispose();
+			channel.dispose();
 		},
 	};
 }

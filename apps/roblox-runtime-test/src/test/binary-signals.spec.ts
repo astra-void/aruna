@@ -7,14 +7,15 @@
 import { schema, type Schema } from "aruna/schema";
 import { defineSignal } from "aruna/server";
 import {
-  createRemoteSignalPublisher as createBatchingPublisher,
-  createRemoteSignalSubscriber,
+  createRemoteSignalPublisher as createChannelPublisher,
+  createRemoteSignalSubscriber as createChannelSubscriber,
+  type SignalClientLike,
   type SignalMap,
   type SignalServerLike,
 } from "aruna/internal/signal-runtime";
-import type { WireFrame } from "aruna/internal/wire";
+import { createClientChannel, createServerChannel, type WireFrame } from "aruna/internal/wire";
 
-// One signal as the wire carries it: the item `{ s, d }` of a frame.
+// One signal as the wire carries it: the item `{ t = 3, s, d }` of a frame.
 interface RemoteSignalMessage {
   readonly signalId: string;
   readonly payload: unknown;
@@ -26,7 +27,11 @@ function createRemoteSignalPublisher<TSignals extends SignalMap>(
   remote: SignalServerLike<unknown>,
   registry: TSignals,
 ) {
-  return createBatchingPublisher(remote, registry, undefined, { batching: false });
+  return createChannelPublisher(createServerChannel(remote, { batching: false }), registry);
+}
+
+function createRemoteSignalSubscriber<TSignals extends SignalMap>(remote: SignalClientLike, registry: TSignals) {
+  return createChannelSubscriber(createClientChannel(remote, "signals"), registry);
 }
 import { describe, expect, it } from "aruna/testing";
 
@@ -93,7 +98,7 @@ function loopback() {
       FireAllClients: (frame: WireFrame) => record(frame),
     },
     // A raw signal in its own frame, as a misbehaving server would send it.
-    fireRaw: (message: RemoteSignalMessage) => record([1, { s: message.signalId, d: message.payload }]),
+    fireRaw: (message: RemoteSignalMessage) => record([1, { t: 3, s: message.signalId, d: message.payload }]),
     client: {
       OnClientEvent: {
         Connect: (callback: (frame: unknown) => void) => {

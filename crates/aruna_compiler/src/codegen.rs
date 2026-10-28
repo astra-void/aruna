@@ -556,7 +556,7 @@ fn render_server_file(
     lines.push(String::new());
     lines.push(render_default_rate_limit(default_rate_limit));
 
-    // The server's contract hash, advertised on the action remote (via
+    // The server's contract hash, advertised on the remote (via
     // `robloxRemoteEvent({ contractHash })`) so clients can detect a deploy skew.
     lines.push(String::new());
     lines.push(format!("export const contractHash = \"{contract_hash}\";"));

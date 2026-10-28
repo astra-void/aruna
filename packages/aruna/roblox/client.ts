@@ -46,7 +46,7 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap>
 	extends ContractHandshakeOptions {
 	// The wire connection used to invoke actions — the client counterpart of
 	// `createServerApp({ transport })`. When omitted, the app builds the default
-	// Roblox invoker (`createActionInvoker()`), which waits for the action remote
+	// Roblox invoker (`createActionInvoker()`), which waits for the remote
 	// the server transport creates. Contract-handshake options apply only to this
 	// owned default invoker, not a caller-supplied `transport`.
 	readonly transport?: ClientTransport;

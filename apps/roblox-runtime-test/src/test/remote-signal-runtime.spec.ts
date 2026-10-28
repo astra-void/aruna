@@ -1,40 +1,50 @@
 // Port of packages/aruna/test/remote-signal-runtime.test.ts: the signal
 // publisher/subscriber over structural remotes, batching, and the unreliable
 // channel. The native `createRemoteSignalPublisher` / `createRemoteSignalSubscriber`
-// take the same structural remote shapes as the Node runtime, so the fake remote
-// below records exactly what reaches the wire: wire frames
+// take the two ends of a reliable channel over a structural remote, so the fake
+// remote below records exactly what reaches the wire: wire frames
 // (docs/wire-protocol.md), recorded one entry per signal they carry. The
-// publishers here are unbatched, so a signal is on the wire when `to` returns;
+// channels here are unbatched, so a signal is on the wire when `to` returns;
 // batching is covered in wire.spec.ts.
 import { defineSignal } from "aruna/server";
 import { schema } from "aruna/schema";
 import { describe, expect, it } from "aruna/testing";
 import {
-  createRemoteSignalPublisher as createBatchingPublisher,
-  createRemoteSignalSubscriber,
+  createRemoteSignalPublisher as createChannelPublisher,
+  createRemoteSignalSubscriber as createChannelSubscriber,
   type SignalClientLike,
   type SignalMap,
   type SignalServerLike,
 } from "aruna/internal/signal-runtime";
-import type { WireFrame } from "aruna/internal/wire";
+import { createClientChannel, createServerChannel, type WireFrame } from "aruna/internal/wire";
 
-// A signal as these cases spell it; on the wire it is the item `{ s, d }`.
+// A signal as these cases spell it; on the wire it is the item `{ t = 3, s, d }`.
 interface RemoteSignalMessage {
   readonly signalId: string;
   readonly payload: unknown;
 }
 
 function frameOf(message: RemoteSignalMessage | undefined): unknown {
-  return message === undefined ? undefined : [1, { s: message.signalId, d: message.payload }];
+  return message === undefined ? undefined : [1, { t: 3, s: message.signalId, d: message.payload }];
 }
 
-// Unbatched, so a case can assert on the wire right after publishing.
+// Over an unbatched channel on `remote`, so a case can assert on the wire right
+// after publishing.
 function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(
   remote: SignalServerLike<TPlayer>,
   registry: TSignals,
   unreliableRemote?: SignalServerLike<TPlayer>,
 ) {
-  return createBatchingPublisher(remote, registry, unreliableRemote, { batching: false });
+  return createChannelPublisher(createServerChannel(remote, { batching: false }), registry, unreliableRemote);
+}
+
+// Over a client channel on `remote`, which the case keeps no handle to.
+function createRemoteSignalSubscriber<TSignals extends SignalMap>(
+  remote: SignalClientLike,
+  registry: TSignals,
+  unreliableRemote?: SignalClientLike,
+) {
+  return createChannelSubscriber(createClientChannel(remote, "signals"), registry, unreliableRemote);
 }
 
 interface FakeSignal {
@@ -88,7 +98,8 @@ function messagesIn(frame: WireFrame): Array<RemoteSignalMessage> {
   const messages = new Array<RemoteSignalMessage>();
   expect(frame[0]).toBe(1);
   for (let index = 1; index < frame.size(); index += 1) {
-    const item = frame[index] as { s: string; d?: unknown };
+    const item = frame[index] as { t: number; s: string; d?: unknown };
+    expect(item.t).toBe(3);
     messages.push({ signalId: item.s, payload: item.d });
   }
   return messages;
@@ -367,17 +378,27 @@ describe("createRemoteSignalSubscriber", () => {
     subscriber.dispose();
   });
 
-  it("dispose disconnects from the client signal and rejects further subscriptions", () => {
+  it("dispose stops delivery and rejects further subscriptions, leaving the shared channel", () => {
     const remote = createFakeRemote<string>();
-    const subscriber = createRemoteSignalSubscriber(remote, signals);
-
+    const channel = createClientChannel(remote, "signals");
+    const subscriber = createChannelSubscriber(channel, signals);
+    let calls = 0;
+    subscriber.on("world.tick", () => {
+      calls += 1;
+    });
+    // One connection, the channel's, however many readers it has.
     expect(remote.clientSignal.listenerCount()).toBe(1);
 
     subscriber.dispose();
     subscriber.dispose();
+    remote.clientSignal.emit({ signalId: "world.tick", payload: undefined });
 
-    expect(remote.clientSignal.listenerCount()).toBe(0);
+    expect(calls).toBe(0);
     expect(() => subscriber.on("world.tick", () => {})).toThrow("disposed");
+    // The channel belongs to whoever created it; disposing it disconnects.
+    expect(remote.clientSignal.listenerCount()).toBe(1);
+    channel.dispose();
+    expect(remote.clientSignal.listenerCount()).toBe(0);
   });
 
   it("round-trips publisher to subscriber over one remote", () => {

@@ -1,6 +1,6 @@
 // Helpers shared by the runtime specs. Not a spec itself: the runner loads every
 // compiled module under the test tree, and this one registers no tests.
-import { ACTION_REMOTE_NAME } from "aruna/roblox";
+import { REMOTE_NAME } from "aruna/roblox";
 
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 
@@ -24,7 +24,13 @@ export interface WireResponse {
   readonly result: unknown;
 }
 
-// One call as the wire carries it (docs/wire-protocol.md): `{ i, a, d, k }`.
+// A signal the server sent, as the client end of the remote saw it.
+export interface WireSignalItem {
+  readonly signalId: unknown;
+  readonly payload: unknown;
+}
+
+// One call as the wire carries it (docs/wire-protocol.md): `{ t = 1, i, a, d, k }`.
 export function wireCall(
   requestId: unknown,
   actionId: unknown,
@@ -32,6 +38,7 @@ export function wireCall(
   idempotencyKey?: unknown,
 ): object {
   return {
+    t: 1,
     i: requestId,
     a: actionId,
     ...(input !== undefined ? { d: input } : {}),
@@ -39,27 +46,44 @@ export function wireCall(
   };
 }
 
-// The client end of the action RemoteEvent a server app bound: sends raw frames
-// (`[1, ...calls]`) and records every response the server fires back, one entry
-// per response item.
+// The client end of the RemoteEvent a server app bound: sends raw frames
+// (`[1, ...calls]`) and records what the server fires back — every response
+// item, every signal item, and the order of both (`order()`: "response <id>" /
+// "signal <id>").
 export function wireRemote() {
-  const remote = ReplicatedStorage.FindFirstChild(ACTION_REMOTE_NAME) as RemoteEvent | undefined;
+  const remote = ReplicatedStorage.FindFirstChild(REMOTE_NAME) as RemoteEvent | undefined;
   if (remote === undefined) {
-    throw `${ACTION_REMOTE_NAME} does not exist; bind a server app first`;
+    throw `${REMOTE_NAME} does not exist; bind a server app first`;
   }
   const responses = new Array<WireResponse>();
+  const signals = new Array<WireSignalItem>();
+  const order = new Array<string>();
   const frames = new Array<defined>();
   const connection = remote.OnClientEvent.Connect((frame: unknown) => {
     frames.push(frame as defined);
-    const items = frame as Array<{ readonly i: unknown; readonly r: unknown }>;
+    const items = frame as Array<{
+      readonly t: unknown;
+      readonly i: unknown;
+      readonly r: unknown;
+      readonly s: unknown;
+      readonly d: unknown;
+    }>;
     for (let index = 1; index < items.size(); index += 1) {
       const item = items[index]!;
-      responses.push({ requestId: item.i, result: item.r });
+      if (item.t === 2) {
+        responses.push({ requestId: item.i, result: item.r });
+        order.push(`response ${tostring(item.i)}`);
+      } else if (item.t === 3) {
+        signals.push({ signalId: item.s, payload: item.d });
+        order.push(`signal ${tostring(item.s)}`);
+      }
     }
   });
   return {
     remote,
     responses: () => responses,
+    signals: () => signals,
+    order: () => order,
     // Every response frame, as fired.
     frames: () => frames,
     // Sends one call in its own frame and waits for its response (or gives up
