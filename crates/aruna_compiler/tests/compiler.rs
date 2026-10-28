@@ -1139,7 +1139,7 @@ fn rejects_a_runtime_after_edge_that_names_no_runtime() {
 #[test]
 fn defaults_the_contract_gate_settings() {
     // The JS side always sends the normalized config, but a config without the
-    // section (an older CLI, direct crate use) must still mean "gate on, error".
+    // section (direct crate use) must still mean "gate on, error".
     let config: aruna_compiler::ArunaConfig = serde_json::from_str("{}").unwrap();
 
     assert_eq!(config.contract.snapshot, "aruna.contract.json");

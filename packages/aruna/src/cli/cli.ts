@@ -230,9 +230,8 @@ async function runInspect(options: CliOptions): Promise<CompilerOutput> {
 type BuildCliOptions = CliOptions & {
   // Runtime vendoring and the rbxtsc compile are both on by default so a bare
   // `aruna build` is turnkey (stubs + vendored Roblox runtime + Luau). The flags
-  // are opt-outs (`--no-emit-runtime` / `--no-emit-luau`); the legacy
-  // `--emit-runtime` is still accepted as a redundant explicit-on. Commander
-  // leaves these undefined by default, so callers gate on `!== false`.
+  // are opt-outs (`--no-emit-runtime` / `--no-emit-luau`). Commander leaves
+  // these undefined by default, so callers gate on `!== false`.
   emitRuntime?: boolean;
   emitLuau?: boolean;
   watch?: boolean;
@@ -1212,9 +1211,6 @@ export async function main(): Promise<number> {
     .description(
       "generate action stubs and the manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc",
     )
-    // Accepted for backward compatibility; vendoring is now the default, so this
-    // is a redundant explicit-on. Disable vendoring with --no-emit-runtime.
-    .option("--emit-runtime", "vendor the Roblox-targeted runtime (default; kept for compatibility)")
     .option(
       "--no-emit-runtime",
       "skip vendoring the Roblox-targeted runtime into the generated dir",
@@ -1393,7 +1389,7 @@ export async function main(): Promise<number> {
     .option("--fix", "write the required tsconfig path aliases")
     .option(
       "--emit-runtime",
-      "also alias the Roblox aruna/* subpaths to the vendored runtime (pairs with build --emit-runtime)",
+      "also alias the Roblox aruna/* subpaths to the vendored runtime (pairs with the runtime build vendors)",
     );
 
   doctor.action(async () => {

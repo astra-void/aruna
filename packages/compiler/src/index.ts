@@ -81,19 +81,7 @@ export function createCompilerSession(
 ): CompilerSessionHandle {
   const native = loadNativeCompiler();
   const nativeInput = buildNativeInput(input, mode !== "inspect", mode === "build");
-  const Session = native.CompilerSession;
-  if (Session === undefined) {
-    // A binary from before sessions: every run is a full one-shot check.
-    return {
-      update: () => undefined,
-      run: async () =>
-        (mode === "inspect"
-          ? native.inspectProject(nativeInput)
-          : native.checkProject(nativeInput)) as CompilerOutput,
-      dispose: () => undefined,
-    };
-  }
-  const session = new Session(nativeInput);
+  const session = new native.CompilerSession(nativeInput);
   return {
     update: (changedPaths) => session.update([...changedPaths]),
     run: async () =>
@@ -120,16 +108,8 @@ export type CodemodReport = {
   }[];
 };
 
-function nativeMigrate() {
-  const native = loadNativeCompiler();
-  if (native.listCodemods === undefined || native.runCodemod === undefined) {
-    throw new Error("This build of the Aruna compiler has no codemods; rebuild or upgrade it.");
-  }
-  return { list: native.listCodemods, run: native.runCodemod };
-}
-
 export function listCodemods(): CodemodInfo[] {
-  return nativeMigrate().list() as CodemodInfo[];
+  return loadNativeCompiler().listCodemods() as CodemodInfo[];
 }
 
 // Runs codemod `name` over the TypeScript sources under `root` (skipping build
@@ -140,7 +120,7 @@ export function runCodemod(options: {
   readonly excludeDirs?: readonly string[];
   readonly dryRun: boolean;
 }): CodemodReport {
-  return nativeMigrate().run({
+  return loadNativeCompiler().runCodemod({
     name: options.name,
     projectRoot: options.root,
     excludeDirs: [...(options.excludeDirs ?? [])],

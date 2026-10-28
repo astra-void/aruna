@@ -60,8 +60,8 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 - To publish a signal from inside an action, use `ctx.publisher` (injected when
   `createServerApp` owns a publisher). Bind `createActionDefiner<Signals, Player>()`
   in a shared module for a non-optional, registry-checked `ctx.publisher`.
-- If `aruna check` reports `aruna::110`/`aruna::111` (stale artifact / alias desync),
-  run `aruna build` (prunes stale output) and `aruna doctor --fix --emit-runtime`
-  (realigns tsconfig aliases). Generated output under `generatedDir` is fully owned.
+- If `aruna check` reports `aruna::111`/`aruna::112` (alias desync), run
+  `aruna doctor --fix --emit-runtime` (realigns tsconfig aliases). Generated output
+  under `generatedDir` is fully owned.
 - Schemas are plain immutable objects with zero runtime cost; compose by spreading
   `.shape`, never mutate.

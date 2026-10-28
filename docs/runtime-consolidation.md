@@ -13,7 +13,7 @@ Aruna implements its runtime twice:
   `tsconfig.json` into `dist/` and validated by vitest;
 - the **native runtime** — `packages/aruna/roblox/*.ts`, roblox-ts source shipped in the
   package's `files`, vendored into a consumer's `<generatedDir>/shared/runtime/` by
-  `aruna build --emit-runtime`, and executed under Lune by `apps/roblox-runtime-test` and
+  `aruna build`, and executed under Lune by `apps/roblox-runtime-test` and
   `aruna test`.
 
 The CLI (`src/cli/**`, `src/cli.ts`, `src/format.ts`, `src/theme.ts`) lives in the same
@@ -61,7 +61,7 @@ type-checked against the Node runtime (`tsconfig.type-tests.json`).
 
 | Consumer | How `aruna/*` resolves |
 | --- | --- |
-| `apps/package-consumption-harness` | Vendored aliases (`aruna build --emit-runtime`); `tsc` and `rbxtsc` both see native source. |
+| `apps/package-consumption-harness` | Vendored aliases (`aruna build`); `tsc` and `rbxtsc` both see native source. |
 | `apps/rbxts-harness` | Vendored aliases; `"build": "aruna build"`, `"test": "aruna test"` (Lune). |
 | `apps/roblox-runtime-test` | Compiles `packages/aruna/roblox/*` directly with `rbxtsc`, runs `lune/specs/*.luau`. Never touches `src/`. |
 | `create-aruna-app` template | Vendored aliases installed by the first `aruna build`/`doctor --fix`. |

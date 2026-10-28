@@ -642,7 +642,7 @@ function parseActionContractSnapshotJsonAtPath(
     throw new Error(`${location}.project.manifest must be a string.`);
   }
   // A required primitive's array is checked up front, before its records; an
-  // optional one (omitted from snapshots that predate it) only when present.
+  // optional one (the writer omits it when empty) only when present.
   const primitives = contractPrimitives();
   for (const primitive of primitives) {
     if (primitive.required && !Array.isArray(value[primitive.key])) {

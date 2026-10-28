@@ -21,14 +21,14 @@ describe("primitive registry", () => {
   });
 
   it("lists the compiler's primitives in the compiler's order", () => {
-    const descriptors = native.primitiveDescriptors?.() as Descriptor[];
+    const descriptors = native.primitiveDescriptors() as Descriptor[];
     expect(PRIMITIVES.map((primitive) => primitive.name)).toEqual(
       descriptors.map((descriptor) => descriptor.name),
     );
   });
 
   it("puts exactly the IN_CONTRACT primitives in the contract", () => {
-    const descriptors = native.primitiveDescriptors?.() as Descriptor[];
+    const descriptors = native.primitiveDescriptors() as Descriptor[];
     for (const descriptor of descriptors) {
       const registration = PRIMITIVES.find((primitive) => primitive.name === descriptor.name);
       expect({ name: descriptor.name, inContract: registration?.contract !== undefined }).toEqual({
@@ -39,7 +39,7 @@ describe("primitive registry", () => {
   });
 
   it("reports the callees and module kinds the docs describe", () => {
-    const descriptors = native.primitiveDescriptors?.() as Descriptor[];
+    const descriptors = native.primitiveDescriptors() as Descriptor[];
     expect(descriptors).toEqual([
       {
         name: "action",

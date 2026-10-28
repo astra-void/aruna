@@ -27,7 +27,7 @@ Initial setup today:
    the Recommended Layout v0 (`domains/**/actions.ts` etc.), so every real project
    restates 8+ globs in `aruna.config.ts` — the in-repo harness included.
 5. First-build ordering is folklore: tsconfig aliases point at files that only exist
-   after `aruna build --emit-runtime`, so a fresh checkout needs the
+   after `aruna build`, so a fresh checkout needs the
    `doctor --fix --emit-runtime` → `build` dance in the right order.
 
 Everyday friction today:
@@ -197,7 +197,7 @@ per [create-app-plan.md](create-app-plan.md):
 - `.gitignore` (with an explicit stance: `src/.aruna/` is regenerable; committed or
   ignored both work because the ledger prunes and build regenerates), `rokit.toml`
   for rojo, VS Code settings.
-- Post-scaffold it runs install + `aruna build --emit-runtime`, so the project
+- Post-scaffold it runs install + `aruna build`, so the project
   typechecks green before the user opens it. No doctor dance, no ordering folklore.
 
 `aruna init` remains the adopt-into-existing-project path and is updated to scaffold

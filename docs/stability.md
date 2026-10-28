@@ -4,6 +4,25 @@ Aruna is a framework people build games on. A game outlives the release it was s
 on, so what a release may change, and how a project gets across a change, is written down
 here rather than left to each CHANGELOG entry.
 
+## Before the first public release (now)
+
+The [Versioning](#versioning) and [Deprecation](#deprecation) rules below take effect at
+the **first public release**.
+
+> **TODO:** the first public release is not defined yet (which version, and what makes a
+> release "public"). Define it here before it ships.
+
+Until then Aruna has no users to keep working, so compatibility has no value:
+
+- **Any breaking change is allowed**, with no deprecation period, warning release, shim,
+  alias, or migration notes. The CHANGELOG records each change briefly.
+- **The API report is a review aid, not a gate on breaking changes.** CI still fails when
+  `api/` is stale, so every change to the public surface shows up as a diff in review, but
+  a diff that removes or changes a name is not a reason to block the change.
+- **Diagnostic codes are still never reused** ([below](#diagnostic-codes-are-never-reused)).
+  Keeping a retired code out of circulation costs nothing and keeps old references from
+  pointing at the wrong condition.
+
 ## What is public API
 
 Everything below is public. A change to any of it is a user-visible change: it gets a
@@ -36,7 +55,9 @@ when no TypeScript signature changes; `contract diff` and the store compatibilit
 
 Aruna follows [Semantic Versioning](https://semver.org/).
 
-**Before 1.0** (now): a **minor** release (`0.x.0`) may contain breaking changes, each
+From the first public release.
+
+**Before 1.0**: a **minor** release (`0.x.0`) may contain breaking changes, each
 marked **Breaking** in the CHANGELOG with migration notes, and a codemod when the
 migration is mechanical. A **patch** release (`0.x.y`) contains no breaking changes. A
 project that wants no surprises pins the minor (`~0.7.0`).
@@ -47,13 +68,13 @@ below. Minors add; patches fix. A bug fix that changes behavior someone could de
 with a CHANGELOG entry, never in a patch.
 
 **Canary releases** (`x.y.(z+1)-canary.<sha7>.<run>`, npm tag `canary`) are published
-from every push to `main` (and from manual runs of the publish workflow), with no
-guarantees beyond "built from main". They exist to try a change before it is released —
+from manual runs of the publish workflow (`workflow_dispatch`, channel `canary`), with no
+guarantees beyond "built from the commit it was run on". They exist to try a change before it is released —
 `npm install @arunajs/aruna@canary` — never to depend on from a project you ship.
 
 ## Deprecation
 
-Before a public API is removed or changed incompatibly:
+From the first public release. Before a public API is removed or changed incompatibly:
 
 1. **Warn first.** It keeps working for **at least one minor release** in which using it
    produces a warning: a compiler diagnostic for something the compiler can see (a config

@@ -105,7 +105,7 @@
   },
   {
     "code": "aruna::560",
-    "details": "export name: legacyLimit\nrateLimit.limit is not supported in the pre-public final API. Use max instead.",
+    "details": "export name: legacyLimit\nrateLimit does not support the limit key.",
     "file": "src/domains/shop/actions.ts",
     "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
     "name": "invalid-action-rate-limit",

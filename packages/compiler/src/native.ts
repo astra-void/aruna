@@ -22,20 +22,16 @@ export type NativeCompilerSession = {
 };
 
 export type NativeCompiler = {
-  checkProject: (input: unknown) => unknown;
-  inspectProject: (input: unknown) => unknown;
+  CompilerSession: new (input: unknown) => NativeCompilerSession;
   // The compiler's registered primitives (crates/aruna_compiler/src/primitives).
-  // Optional so a binary built before it existed still loads.
-  primitiveDescriptors?: () => unknown;
-  // Optional for the same reason.
-  CompilerSession?: new (input: unknown) => NativeCompilerSession;
-  // `aruna migrate` (crates/aruna_migrate). Optional for the same reason.
-  listCodemods?: () => unknown;
-  runCodemod?: (input: unknown) => unknown;
+  primitiveDescriptors: () => unknown;
+  // `aruna migrate` (crates/aruna_migrate).
+  listCodemods: () => unknown;
+  runCodemod: (input: unknown) => unknown;
 };
 
 const NATIVE_MODULE_SHAPE_ERROR =
-  "Loaded native compiler module did not expose checkProject and inspectProject functions.";
+  "Loaded native compiler module did not expose CompilerSession, primitiveDescriptors, listCodemods, and runCodemod.";
 
 let cachedCompiler: NativeCompiler | null = null;
 
@@ -101,8 +97,10 @@ function validateNativeCompiler(value: unknown): asserts value is NativeCompiler
   }
   const candidate = value as Partial<NativeCompiler>;
   if (
-    typeof candidate.checkProject !== "function" ||
-    typeof candidate.inspectProject !== "function"
+    typeof candidate.CompilerSession !== "function" ||
+    typeof candidate.primitiveDescriptors !== "function" ||
+    typeof candidate.listCodemods !== "function" ||
+    typeof candidate.runCodemod !== "function"
   ) {
     throw new Error(NATIVE_MODULE_SHAPE_ERROR);
   }

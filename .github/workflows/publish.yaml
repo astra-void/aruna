@@ -5,10 +5,10 @@ name: publish
 #
 #   - stable: a pushed v* tag publishes the version in package.json under the
 #     `latest` dist-tag.
-#   - canary: a push to main, or a manual run (channel: canary, the default),
+#   - canary: a manual run (workflow_dispatch, channel: canary, the default)
 #     publishes `<next patch>-canary.<sha7>.<run>` under the `canary` dist-tag
 #     (scripts/canary-version.ts sets it in every job). No guarantees beyond
-#     "built from main" — see docs/stability.md.
+#     "built from the commit it was run on" — see docs/stability.md.
 #
 # The 8 native targets are built in parallel, one job per target, each on the
 # cheapest runner that can build it:
@@ -28,8 +28,6 @@ on:
   push:
     tags:
       - "v*"
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       channel:
@@ -49,9 +47,8 @@ permissions:
   id-token: write # required for npm provenance + OIDC trusted publishing
 
 env:
-  # canary for a push to main or a manual canary run; stable for a v* tag or a
-  # manual stable run.
-  CHANNEL: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary')) && 'canary' || 'stable' }}
+  # canary for a manual canary run; stable for a v* tag or a manual stable run.
+  CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary') && 'canary' || 'stable' }}
 
 jobs:
   build-native:

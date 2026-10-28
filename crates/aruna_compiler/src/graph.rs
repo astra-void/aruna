@@ -63,12 +63,11 @@ pub struct BuildGraphResult {
     pub actions: Vec<ArunaActionRecord>,
     #[serde(default)]
     pub signals: Vec<ArunaSignalRecord>,
-    // Omitted when empty so graphs without stores stay byte-stable with
-    // pre-store snapshots.
+    // Omitted when empty: a project without stores carries no `stores` key.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub stores: Vec<ArunaStoreRecord>,
-    // In resolved boot order, not discovery order. Omitted when empty so a
-    // project without domain runtimes stays byte-stable with older snapshots.
+    // In resolved boot order, not discovery order. Omitted when empty, like
+    // `stores`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub runtimes: Vec<ArunaRuntimeRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]

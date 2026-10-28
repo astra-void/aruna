@@ -31,11 +31,10 @@ writes nothing. `aruna build` is what regenerates `$aruna/actions/*`, `$aruna/si
 the manifest, and the vendored runtime. **After changing any action or signal you must
 run `aruna build`** — otherwise the generated client stubs reference the old contract.
 
-`check` also flags **layout desync** so an upgrade can't pass silently: `aruna::110` for a
-stale generated artifact still on disk from a previous codegen layout, and `aruna::111` for
-a tsconfig alias pointing at a path that no longer matches the current emit layout. Fix them
-with `aruna build` (prunes stale output) and `aruna doctor --fix --emit-runtime` (realigns
-aliases).
+`check` also flags **layout desync**: `aruna::111` for a tsconfig alias pointing at a path
+that does not match the current emit layout (or a missing or stale generated tsconfig
+fragment), and `aruna::112` for inline `compilerOptions.paths` that shadow the fragment.
+Fix them with `aruna doctor --fix --emit-runtime` (realigns aliases).
 
 ## The store compatibility gate
 
@@ -102,8 +101,8 @@ was not recorded. `--json` prints `{ ok, snapshot, outOfDate, committed,
 unreadableRecordChanges }`.
 
 `aruna build` tracks the files it emits in a `.aruna-build.json` ledger inside `generatedDir`
-and **prunes stale artifacts** it no longer emits (e.g. flat `*.generated.ts` and a flat
-`runtime/` left by the split-tree migration). Pruning is confined to the `generatedDir` and
+and **prunes stale artifacts** a previous build emitted and this one does not (a removed
+signal's generated file, for example). Pruning is confined to the `generatedDir` and
 the owned ledger, so hand-written files are never touched.
 
 ## Global flags
@@ -125,7 +124,6 @@ Available on every command:
 ```
 --no-emit-runtime   skip vendoring the Roblox-targeted runtime into the generated dir
 --no-emit-luau      only generate stubs + vendor the runtime; skip the rbxtsc Luau compile
---emit-runtime      explicit-on (now the default; kept for backward compatibility)
 --watch             stay running and rebuild on source changes
 ```
 

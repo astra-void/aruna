@@ -326,10 +326,10 @@ warning aruna::304 cross-domain-private-import
 - source discovery, entry classification, module classification, import graph construction, action discovery, boundary validation, diagnostics, and manifest generation in Rust
 - OXC-based TS/TSX import parsing in the Rust core (replaces the earlier SWC parser path)
 - deterministic compiler output
-- `aruna check` (also flags layout desync: stale generated artifacts `aruna::110`, tsconfig aliases pointing at an old emit path `aruna::111`)
+- `aruna check` (also flags layout desync: tsconfig aliases pointing at a path the current layout does not emit, `aruna::111` / `aruna::112`)
 - `aruna inspect`
 - running `aruna` with no subcommand aliases to `aruna check`
-- `aruna build` prunes stale artifacts from a previous codegen layout (tracked in `.aruna-build.json`, confined to `generatedDir`)
+- `aruna build` prunes artifacts a previous build emitted and this one does not (tracked in `.aruna-build.json`, confined to `generatedDir`)
 - fixture-based tests without Roblox Studio
 - `packages/compiler` loads the Rust native compiler
 - no TypeScript analyzer fallback
@@ -676,18 +676,18 @@ Serialization boundary, fixed-window rate limits, the pre-dispatch request budge
 
 `apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
 It imports `defineConfig` from the root package for config only, and uses the runtime-safe public subpaths `aruna/server`, `aruna/client`, `aruna/roblox`, and `aruna/schema` for Roblox-facing code.
-It validates `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build --emit-runtime`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
+It validates `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
 It is not `create-aruna-app` output.
 
 Package consumption uses a vendored-runtime model rather than direct `node_modules` imports of Roblox-facing code:
 
 - The roblox-ts-native runtime lives at `packages/aruna/roblox/` and ships in the package via `files`; its declarations (`dist/native/`) are what the `aruna/*` subpaths resolve to.
-- `aruna build --emit-runtime` vendors that native runtime into the consumer as project source under `src/.aruna/shared/runtime/`.
-- `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig path aliases that pair with `build --emit-runtime`.
+- `aruna build` vendors that native runtime into the consumer as project source under `src/.aruna/shared/runtime/`.
+- `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig path aliases that pair with `build`.
 - `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer — including the vendored runtime — to Luau without the "modules directly under node_modules" rejection.
 
 `pnpm verify:package-consumption` builds local tarballs and installs the packed Aruna dependency graph without contacting the npm registry for `aruna`, `@arunajs/core`, or `@arunajs/compiler`.
-The packed package-style tarball smoke runs `doctor --fix --emit-runtime` and `build --emit-runtime`, generates `src/.aruna` action files and the vendored runtime, passes TypeScript, and compiles to Luau with `rbxtsc`. This is package-layout and rbxtsc compile validation, not production Studio validation.
+The packed package-style tarball smoke runs `doctor --fix --emit-runtime` and `build`, generates `src/.aruna` action files and the vendored runtime, passes TypeScript, and compiles to Luau with `rbxtsc`. This is package-layout and rbxtsc compile validation, not production Studio validation.
 
 See [docs/package-consumption.md](docs/package-consumption.md) for the final package-consumption model and remaining follow-ups.
 

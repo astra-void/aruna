@@ -139,7 +139,7 @@ export function buildConsumerPackageJson(
     scripts: {
       doctor: "aruna doctor --fix --emit-runtime --project .",
       check: "aruna check --project .",
-      build: "aruna build --emit-runtime --project .",
+      build: "aruna build --project .",
       inspect: "aruna inspect actions --project .",
       contract: "aruna inspect contract --project . --json",
       typecheck: "tsc -p tsconfig.typecheck.json --noEmit",
@@ -506,25 +506,12 @@ export async function assertGeneratedActionImports(projectRoot: string): Promise
   }
 }
 
-// Regression for the silent-oncompile bug: a project upgraded from the flat
-// codegen layout must (1) have `aruna check` surface the desync, (2) have
-// `aruna build` prune the stale flat artifacts, and (3) have `aruna doctor --fix`
-// realign the tsconfig aliases onto the split-tree layout. Runs last, against the
-// already-built smoke project.
-export async function assertLayoutTransitionRegression(projectRoot: string): Promise<void> {
-  // 1. Simulate the upgrade: plant flat-layout artifacts and point the aliases
-  // back at them, exactly the state a pre-split-tree project lands in.
-  const flatArtifacts = [
-    "src/.aruna/actions.client.generated.ts",
-    "src/.aruna/actions.server.generated.ts",
-    "src/.aruna/signals.generated.ts",
-    "src/.aruna/runtime/client.ts",
-    "src/.aruna/runtime/server.ts",
-  ];
-  for (const relativePath of flatArtifacts) {
-    await writeText(path.join(projectRoot, relativePath), "// stale flat-layout artifact\n");
-  }
-
+// Regression for the silent-oncompile bug: tsconfig aliases that point at paths
+// the current layout does not emit must (1) be surfaced by `aruna check` and (2)
+// be realigned by `aruna doctor --fix`. Runs last, against the already-built
+// smoke project.
+export async function assertAliasDesyncRegression(projectRoot: string): Promise<void> {
+  // 1. Point the aliases at paths the build does not emit.
   const tsconfigPath = path.join(projectRoot, "tsconfig.json");
   const tsconfig = await readJson<TsconfigJson>(tsconfigPath);
   const compilerOptions = (
@@ -542,52 +529,26 @@ export async function assertLayoutTransitionRegression(projectRoot: string): Pro
 
   // 2. `aruna check` must surface the desync (it exits 0 with warnings).
   await runCommand(
-    "aruna check (stale layout)",
+    "aruna check (stale aliases)",
     "pnpm",
     ["exec", "aruna", "check", "--project", "."],
     projectRoot,
     "13-check-stale.log",
   );
   const checkLog = await fs.readFile(path.join(logsRoot, "13-check-stale.log"), "utf8");
-  // Match diagnostic codes, not prose — the alias half is reported as 111
-  // (inline aliases point at the old layout) or 112 (inline aliases shadow the
-  // generated fragment), depending on whether the tsconfig extends the fragment.
-  const flaggedStaleArtifact = checkLog.includes("aruna::110");
-  const flaggedAliasDesync = checkLog.includes("aruna::111") || checkLog.includes("aruna::112");
-  if (!flaggedStaleArtifact || !flaggedAliasDesync) {
+  // Match diagnostic codes, not prose: 111 (inline aliases point elsewhere) or
+  // 112 (inline aliases shadow the generated fragment), depending on whether the
+  // tsconfig extends the fragment.
+  if (!checkLog.includes("aruna::111") && !checkLog.includes("aruna::112")) {
     throw new Error(
       [
-        "`aruna check` did not flag the flat-layout desync (expected aruna::110 + aruna::111/112).",
+        "`aruna check` did not flag the alias desync (expected aruna::111 or aruna::112).",
         `See ${path.join(logsRoot, "13-check-stale.log")}`,
       ].join("\n"),
     );
   }
 
-  // 3. `aruna build` must prune the stale flat artifacts.
-  await runCommand(
-    "aruna build (prune stale)",
-    "pnpm",
-    ["exec", "aruna", "build", "--emit-runtime", "--no-emit-luau", "--project", "."],
-    projectRoot,
-    "14-build-prune.log",
-  );
-  for (const relativePath of [
-    "src/.aruna/actions.client.generated.ts",
-    "src/.aruna/actions.server.generated.ts",
-    "src/.aruna/signals.generated.ts",
-    "src/.aruna/runtime",
-  ]) {
-    if (await exists(path.join(projectRoot, relativePath))) {
-      throw new Error(
-        [
-          `aruna build did not prune the stale artifact ${relativePath}.`,
-          `See ${path.join(logsRoot, "14-build-prune.log")}`,
-        ].join("\n"),
-      );
-    }
-  }
-
-  // 4. `aruna doctor --fix` must realign every alias onto the split-tree layout.
+  // 3. `aruna doctor --fix` must realign every alias onto the emit layout.
   await runCommand(
     "aruna doctor --fix (realign)",
     "pnpm",
@@ -1194,7 +1155,7 @@ async function runChecks(): Promise<void> {
   await runCommand(
     "aruna build",
     "pnpm",
-    ["exec", "aruna", "build", "--emit-runtime", "--project", "."],
+    ["exec", "aruna", "build", "--project", "."],
     tempRoot,
     "08-build.log",
   );
@@ -1245,7 +1206,7 @@ async function runChecks(): Promise<void> {
     await runCommand(
       "aruna build (luau compile)",
       "pnpm",
-      ["exec", "aruna", "build", "--emit-runtime", "--project", "."],
+      ["exec", "aruna", "build", "--project", "."],
       tempRoot,
       "12-rbxtsc.log",
     );
@@ -1311,7 +1272,7 @@ async function runChecks(): Promise<void> {
   // Last, exercise the flat -> split-tree layout transition (stale prune + check
   // desync + doctor realign). Runs after the main flow so it can perturb the
   // already-validated project without disturbing the earlier assertions.
-  await assertLayoutTransitionRegression(tempRoot);
+  await assertAliasDesyncRegression(tempRoot);
 }
 
 function getRegistryLookupsForLocalPackages(

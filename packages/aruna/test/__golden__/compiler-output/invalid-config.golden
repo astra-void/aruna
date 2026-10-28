@@ -4,11 +4,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "summary": {
@@ -27,11 +27,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "summary": {
@@ -50,11 +50,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "summary": {
@@ -79,11 +79,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "generatedAt": null
@@ -95,11 +95,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "summary": {
@@ -118,11 +118,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "summary": {
@@ -205,11 +205,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "manifest": {
@@ -217,11 +217,11 @@
     "diagnostics": [
       {
         "code": "aruna::100",
+        "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
         "file": "aruna.config.ts",
-        "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+        "message": "Invalid Aruna configuration in aruna.config.ts.",
         "name": "invalid-config",
-        "severity": "error",
-        "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+        "severity": "error"
       }
     ],
     "imports": [],
@@ -312,11 +312,11 @@
   "diagnostics": [
     {
       "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
       "file": "aruna.config.ts",
-      "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
       "name": "invalid-config",
-      "severity": "error",
-      "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+      "severity": "error"
     }
   ],
   "generatedFiles": [
@@ -329,7 +329,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [],\n  \"imports\": [],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::100\",\n      \"name\": \"invalid-config\",\n      \"severity\": \"error\",\n      \"message\": \"Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).\",\n      \"file\": \"aruna.config.ts\",\n      \"suggestion\": \"import { defineConfig } from \\\"aruna\\\";\\n\\nexport default defineConfig({\\n  root: \\\"src\\\",\\n  compiler: {\\n    generatedDir: \\\"src/.aruna\\\",\\n    manifest: \\\"src/.aruna/manifest.json\\\",\\n    preserveGeneratedComments: true,\\n  },\\n  actions: {\\n    defaultRateLimit: {\\n      key: \\\"player\\\",\\n      windowMs: 1000,\\n      max: 20,\\n    },\\n  },\\n  // Only the globs the built-in conventions do not already cover.\\n  conventions: {\\n    shared: [\\\"src/domains/**/policy.ts\\\"],\\n  },\\n  strict: {\\n    sharedSafety: true,\\n    rawRemoteUsage: \\\"warning\\\",\\n    unresolvedImports: \\\"warning\\\",\\n  },\\n});\"\n    }\n  ]\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [],\n  \"imports\": [],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::100\",\n      \"name\": \"invalid-config\",\n      \"severity\": \"error\",\n      \"message\": \"Invalid Aruna configuration in aruna.config.ts.\",\n      \"file\": \"aruna.config.ts\",\n      \"details\": \"Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -338,11 +338,11 @@
     "diagnostics": [
       {
         "code": "aruna::100",
+        "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
         "file": "aruna.config.ts",
-        "message": "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
+        "message": "Invalid Aruna configuration in aruna.config.ts.",
         "name": "invalid-config",
-        "severity": "error",
-        "suggestion": "import { defineConfig } from \"aruna\";\n\nexport default defineConfig({\n  root: \"src\",\n  compiler: {\n    generatedDir: \"src/.aruna\",\n    manifest: \"src/.aruna/manifest.json\",\n    preserveGeneratedComments: true,\n  },\n  actions: {\n    defaultRateLimit: {\n      key: \"player\",\n      windowMs: 1000,\n      max: 20,\n    },\n  },\n  // Only the globs the built-in conventions do not already cover.\n  conventions: {\n    shared: [\"src/domains/**/policy.ts\"],\n  },\n  strict: {\n    sharedSafety: true,\n    rawRemoteUsage: \"warning\",\n    unresolvedImports: \"warning\",\n  },\n});"
+        "severity": "error"
       }
     ],
     "imports": [],

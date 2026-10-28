@@ -60,7 +60,9 @@ impl ArunaDiagnostic {
 // meaning gets a new code, and the ranges marked reserved in docs/init-spec.md
 // §12 are not allocated for anything else.
 //
-// Retired codes (never reuse): none yet.
+// Retired codes (never reuse):
+// - aruna::110 stale-generated-artifact (emitted by the CLI; flagged leftovers of
+//   the flat codegen layout, removed with that layout's migration path).
 pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)> {
     match code {
         "aruna::100" => Some(("invalid-config", DiagnosticSeverity::Error)),

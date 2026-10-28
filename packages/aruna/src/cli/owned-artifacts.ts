@@ -31,21 +31,6 @@ export type OwnedArtifactManifest = {
   readonly runtime: string[];
 };
 
-// Artifacts from the pre-split-tree (flat) codegen layout. These names and
-// locations are unambiguously Aruna-owned *within the generatedDir* — a project
-// never hand-authors a `actions.client.generated.ts` or a `runtime/` tree under
-// its generated dir — so they are safe to prune even on the first build after
-// upgrading, before any owned-file ledger exists. Mirrors the new split-tree
-// targets in tsconfig-paths.ts (shared/*, server/*, shared/runtime/*).
-const LEGACY_FLAT_GENERATED_FILES = [
-  "actions.client.generated.ts",
-  "actions.server.generated.ts",
-  "signals.generated.ts",
-] as const;
-// The runtime used to vendor flat at `<gen>/runtime/`; it now lives at
-// `<gen>/shared/runtime/`. The two never collide, so removing the flat one is safe.
-const LEGACY_RUNTIME_DIR = "runtime";
-
 function toPosix(value: string): string {
   return value.split(path.sep).join("/");
 }
@@ -103,23 +88,6 @@ async function pathExists(absolutePath: string): Promise<boolean> {
   }
 }
 
-// Scans the generatedDir for artifacts left behind by the pre-split-tree layout:
-// the flat `*.generated.ts` stubs at the root and the flat `runtime/` directory.
-// Returns generatedDir-relative posix paths that actually exist. Used both to
-// prune (build) and to report desync (check).
-export async function detectLegacyArtifacts(generatedDirAbs: string): Promise<string[]> {
-  const found: string[] = [];
-  for (const name of LEGACY_FLAT_GENERATED_FILES) {
-    if (await pathExists(path.join(generatedDirAbs, name))) {
-      found.push(name);
-    }
-  }
-  if (await pathExists(path.join(generatedDirAbs, LEGACY_RUNTIME_DIR))) {
-    found.push(LEGACY_RUNTIME_DIR);
-  }
-  return found;
-}
-
 // Removes directories left empty after pruning, walking up from each pruned path
 // toward (but never including or past) the generatedDir.
 async function removeEmptyParents(generatedDirAbs: string, prunedRel: readonly string[]): Promise<void> {
@@ -159,8 +127,8 @@ export type ReconcileResult = {
 };
 
 // Reconciles the generatedDir against what this build emitted: prunes any file a
-// previous build owned (or any known legacy-layout artifact) that is no longer
-// emitted, then rewrites the owned-file ledger. Only ever touches paths inside
+// previous build owned that is no longer emitted, then rewrites the owned-file
+// ledger. Only ever touches paths inside
 // the generatedDir. Returns the pruned paths (generatedDir-relative) for reporting.
 export async function reconcileOwnedArtifacts(options: {
   generatedDirAbs: string;
@@ -184,11 +152,6 @@ export async function reconcileOwnedArtifacts(options: {
       if (!keep.has(rel)) {
         staleCandidates.add(rel);
       }
-    }
-  }
-  for (const rel of await detectLegacyArtifacts(generatedDirAbs)) {
-    if (!keep.has(rel)) {
-      staleCandidates.add(rel);
     }
   }
 
@@ -244,9 +207,9 @@ function aliasTarget(paths: Record<string, unknown>, alias: string): string | un
   return undefined;
 }
 
-// Collects layout-desync diagnostics for `aruna check`: stale generated artifacts
-// still on disk, and tsconfig aliases whose targets no longer match the current
-// emit layout. Best-effort — any failure to load config/tsconfig yields no
+// Collects layout-desync diagnostics for `aruna check`: tsconfig aliases whose
+// targets do not match the current emit layout, and a missing or stale generated
+// tsconfig fragment. Best-effort — any failure to load config/tsconfig yields no
 // diagnostics (those problems are already reported by the compiler/doctor).
 export async function collectLayoutDesyncDiagnostics(options: {
   projectRoot: string;
@@ -264,21 +227,6 @@ export async function collectLayoutDesyncDiagnostics(options: {
 
   const diagnostics: Diagnostic[] = [];
   const generatedDirAbs = path.resolve(options.projectRoot, generatedDir);
-
-  const legacy = await detectLegacyArtifacts(generatedDirAbs);
-  for (const rel of legacy) {
-    diagnostics.push({
-      code: "aruna::110",
-      name: "stale-generated-artifact",
-      severity: "warning",
-      message: `Stale generated artifact ${toPosix(path.join(generatedDir, rel))} from a previous codegen layout.`,
-      file: toPosix(path.join(generatedDir, rel)),
-      details:
-        "This path is no longer emitted under the current split-tree layout. " +
-        "An out-of-date alias pointing here can silently shadow the current generated output.",
-      suggestion: "Run `aruna build` to prune stale artifacts, or delete the path manually.",
-    });
-  }
 
   const tsconfig = await readTsconfigObject(tsconfigPath);
   const tsconfigPaths = tsconfig !== undefined ? tsconfigPathsOf(tsconfig) : undefined;

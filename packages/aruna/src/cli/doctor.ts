@@ -54,7 +54,7 @@ export type DoctorReport = {
   tsconfigDiagnostics: Diagnostic[];
   // "extends": the tsconfig references the generated fragment and inherits all
   // aruna aliases from it. "inline": aliases are managed inside the tsconfig
-  // itself (legacy layout, or a project with its own compilerOptions.paths).
+  // itself (a project with its own compilerOptions.paths).
   aliasMode: "extends" | "inline";
   fragment: {
     // Project-relative posix path of <generatedDir>/tsconfig.aruna.json.
@@ -469,7 +469,7 @@ export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
   };
 }
 
-// Realigns the aruna aliases inside compilerOptions.paths (legacy inline
+// Realigns the aruna aliases inside compilerOptions.paths (inline alias
 // management). Used when the project keeps its own path aliases, which shadow
 // the generated fragment under `extends` — the aruna aliases must then live
 // inline alongside them.

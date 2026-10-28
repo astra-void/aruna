@@ -214,37 +214,6 @@ function isStrictSeverity(
   return value === "off" || value === "warning" || value === "error";
 }
 
-function flatConfigSuggestion(): string {
-  return [
-    'import { defineConfig } from "aruna";',
-    "",
-    "export default defineConfig({",
-    '  root: "src",',
-    "  compiler: {",
-    '    generatedDir: "src/.aruna",',
-    '    manifest: "src/.aruna/manifest.json",',
-    "    preserveGeneratedComments: true,",
-    "  },",
-    "  actions: {",
-    "    defaultRateLimit: {",
-    '      key: "player",',
-    "      windowMs: 1000,",
-    "      max: 20,",
-    "    },",
-    "  },",
-    "  // Only the globs the built-in conventions do not already cover.",
-    "  conventions: {",
-    '    shared: ["src/domains/**/policy.ts"],',
-    "  },",
-    "  strict: {",
-    "    sharedSafety: true,",
-    '    rawRemoteUsage: "warning",',
-    '    unresolvedImports: "warning",',
-    "  },",
-    "});",
-  ].join("\n");
-}
-
 function mergeStringArray(
   base: readonly string[] | undefined,
   override: readonly string[] | undefined,
@@ -415,7 +384,6 @@ function validateUnsupportedKeys(
 function normalizeConfigObject(value: unknown): {
   config?: Config;
   error?: string;
-  flatShape?: boolean;
 } {
   if (!isRecord(value)) {
     return { error: "configuration module did not export an object" };
@@ -427,23 +395,6 @@ function normalizeConfigObject(value: unknown): {
   }
 
   const candidateRecord = candidate as RawConfigObject;
-  // `diagnostics` was a flat-shape field too, but it is a nested section again
-  // (`diagnostics: { ignore }`), so it no longer marks a flat config. A flat
-  // config still trips on the fields it always carried alongside it.
-  if (
-    candidateRecord["generatedDir"] !== undefined ||
-    candidateRecord["manifest"] !== undefined ||
-    candidateRecord["source"] !== undefined ||
-    candidateRecord["security"] !== undefined ||
-    candidateRecord["tsconfig"] !== undefined
-  ) {
-    return {
-      flatShape: true,
-      error:
-        "Flat Aruna config fields are no longer supported. Use defineConfig({ compiler: { generatedDir, manifest }, conventions }).",
-    };
-  }
-
   const diagnostics: string[] = [];
   const config: MutableConfig = {};
   const allowedTopLevel = [
@@ -944,15 +895,15 @@ function loadUserConfigFile(
     const evaluated = evaluateCommonJs(sourceText, configFile);
     const normalized = normalizeConfigObject(evaluated);
     if (normalized.error) {
-      const message = normalized.flatShape
-        ? normalized.error
-        : `Invalid Aruna configuration in ${path.basename(configFile)}.`;
       return {
-        diagnostic: createDiagnostic("aruna::100", message, {
-          file: formatProjectRelativePath(projectRoot, configFile),
-          details: normalized.flatShape ? undefined : normalized.error,
-          suggestion: normalized.flatShape ? flatConfigSuggestion() : undefined,
-        }),
+        diagnostic: createDiagnostic(
+          "aruna::100",
+          `Invalid Aruna configuration in ${path.basename(configFile)}.`,
+          {
+            file: formatProjectRelativePath(projectRoot, configFile),
+            details: normalized.error,
+          },
+        ),
       };
     }
 

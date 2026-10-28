@@ -26,8 +26,8 @@ the game build like any other module.
   `name` against the old `"SchemaValidationError"` to `"ActionValidationError"`
   (see the stabilization round's rename). docs/codemods.md covers writing one.
 
-- **Canary releases.** Every push to `main` publishes the whole package graph
-  as `<next patch>-canary.<sha>.<run>` under the npm `canary` tag
+- **Canary releases.** A manual run of the publish workflow publishes the whole
+  package graph as `<next patch>-canary.<sha>.<run>` under the npm `canary` tag
   (`npm install @arunajs/aruna@canary`), next to the tag-triggered stable
   release. Canaries carry no stability guarantees (docs/stability.md).
 
@@ -228,6 +228,11 @@ the game build like any other module.
 
 ### Changed
 
+- **Pre-release policy.** Until the first public release, breaking changes need
+  no deprecation, shim, or migration notes, and the API report is a review aid
+  rather than a gate (docs/stability.md). Diagnostic codes are still never
+  reused.
+
 - **One-shot `check`, `build`, and `inspect` are ~3× faster** (about 800 → 240 ms
   at 3,000 files): module classification compiled each convention's glob set
   again for every file it matched.
@@ -416,6 +421,14 @@ the game build like any other module.
   text has to change.
 
 ### Removed
+
+- **Compatibility-only code.** `aruna build --emit-runtime` (vendoring is the
+  default; `--no-emit-runtime` remains); the dedicated messages for a flat
+  (pre-`defineConfig`) config and for `rateLimit.limit` (both now get the
+  generic unsupported-field diagnostic); pruning of the flat codegen layout's
+  leftovers and `aruna::110 stale-generated-artifact` (retired, never reused);
+  the native compiler's one-shot `checkProject`/`inspectProject` exports (every
+  check goes through a `CompilerSession`).
 
 - **Breaking: the Node runtime.** The package carried two implementations of
   the runtime: the roblox-ts one games compile, and a Node one under

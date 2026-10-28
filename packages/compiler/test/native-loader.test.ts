@@ -23,6 +23,16 @@ vi.mock("node:module", () => ({
   createRequire: () => mockRequire,
 }));
 
+// The shape the loader checks for; the functions are never called.
+function fakeNativeCompiler() {
+  return {
+    CompilerSession: vi.fn(),
+    primitiveDescriptors: vi.fn(),
+    listCodemods: vi.fn(),
+    runCodemod: vi.fn(),
+  };
+}
+
 describe("loadNativeCompiler", () => {
   let loadNativeCompiler: typeof import("../src/native.ts").loadNativeCompiler;
 
@@ -77,7 +87,7 @@ describe("loadNativeCompiler", () => {
   it("loads the staged native artifact before package resolution", () => {
     const target = resolveNativeTarget();
     const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
-    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+    const loadedCompiler = fakeNativeCompiler();
 
     vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) =>
       candidate.endsWith(stagedPackagePath),
@@ -97,7 +107,7 @@ describe("loadNativeCompiler", () => {
     const target = resolveNativeTarget();
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
-    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+    const loadedCompiler = fakeNativeCompiler();
 
     mockRequire.mockImplementationOnce((specifier: string) => {
       expect(specifier).toBe(expectedPackage);
@@ -118,7 +128,7 @@ describe("loadNativeCompiler", () => {
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const installedPackagePath = `node_modules/${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const debugFallback = `target/debug/${buildOutputName}`;
-    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+    const loadedCompiler = fakeNativeCompiler();
 
     mockRequire
       .mockImplementationOnce(() => {
@@ -148,7 +158,7 @@ describe("loadNativeCompiler", () => {
     const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
     const debugFallback = `target/debug/${buildOutputName}`;
-    const loadedCompiler = { checkProject: vi.fn(), inspectProject: vi.fn() };
+    const loadedCompiler = fakeNativeCompiler();
 
     mockRequire
       .mockImplementationOnce(() => {

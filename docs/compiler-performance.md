@@ -104,12 +104,12 @@ pool, session checks at 2999 files, median of 5, ms (measured together, before t
 The JSON string is faster (V8's `JSON.parse` beats building the same objects through
 napi calls one property at a time) and is what `CompilerSession.check()` returns. The
 string is serialized from a `serde_json::Value`, not straight from the structs: a
-`Value`'s maps order keys alphabetically, and that is the key order the CLI's `--json`
-output has always had (the one-shot napi functions hand JS a `Value`). Serializing the
-structs directly emits declaration order, which the output guard flagged on all 40
-fixtures. The detour costs a few milliseconds at 3000 files. The one-shot
-`checkProject` / `inspectProject` napi functions still return a `Value`, for
-compatibility; the `@arunajs/compiler` wrappers use a session instead.
+`Value`'s maps order keys alphabetically, so the CLI's `--json` output does not move
+when a struct field is reordered. Serializing the structs directly emits declaration
+order, which the output guard flagged on all 40 fixtures. The detour costs a few
+milliseconds at 3000 files. The session is the only napi entry point for a check: the
+one-shot `checkProject` / `inspectProject` in `@arunajs/compiler` are a session used
+once.
 
 ### What is left in a warm check, and what would lower it
 

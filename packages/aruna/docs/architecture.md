@@ -75,7 +75,7 @@ layout — if you hand-edit it, keep the service separation.
 ## The runtime
 
 There is one runtime: the roblox-ts native one in `roblox/`, which compiles to Luau and
-runs in-game. `aruna build --emit-runtime` (the default) vendors it into
+runs in-game. `aruna build` vendors it into
 `shared/runtime/`, and the game compiles that copy. The package does not run it under
 Node: the `aruna/*` runtime subpaths are type-only, and their declarations
 (`dist/native/`) are emitted from the same source, so a project gets the same types with

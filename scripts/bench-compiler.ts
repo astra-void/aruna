@@ -9,12 +9,12 @@
 //   schema edit   one action's input schema changes a field type
 //
 // It drives the native compiler directly with a prebuilt input, so it measures
-// the compiler (config loading happens once, as it does in `aruna dev`). When the
-// binary exposes `CompilerSession`, the incremental path is measured; otherwise
-// every check is a one-shot `checkProject`, which is the baseline.
+// the compiler (config loading happens once, as it does in `aruna dev`). By
+// default one session serves every check (the incremental path); --one-shot
+// gives each check a fresh session, which is the baseline.
 //
 // Flags: --sizes 200,1000 (default 200,1000,3000), --runs N (default 5),
-//        --one-shot (measure the one-shot path even when a session exists),
+//        --one-shot (a fresh session per check),
 //        --json (machine-readable output).
 import fs from "node:fs";
 import os from "node:os";
@@ -168,15 +168,8 @@ function generateProject(root: string, files: number): number {
   return domains;
 }
 
-type NativeSession = {
-  update(changedPaths: string[]): void;
-  check(): Promise<string>;
-  dispose(): void;
-};
-
-type BenchNative = ReturnType<typeof loadNativeCompiler> & {
-  CompilerSession?: new (input: unknown) => NativeSession;
-};
+type BenchNative = ReturnType<typeof loadNativeCompiler>;
+type NativeSession = InstanceType<BenchNative["CompilerSession"]>;
 
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
@@ -207,8 +200,7 @@ async function benchSize(native: BenchNative, files: number): Promise<SizeResult
       writeGenerated: false,
       warningsAsErrors: false,
     };
-    const useSession = native.CompilerSession !== undefined && !forceOneShot;
-    const mode = useSession ? "session" : "one-shot";
+    const mode = forceOneShot ? "one-shot" : "session";
 
     // The file each edit touches, in the middle domain so it is not special.
     const target = domainName(Math.floor(domains / 2));
@@ -217,26 +209,31 @@ async function benchSize(native: BenchNative, files: number): Promise<SizeResult
     const schemaPath = path.join(root, `src/domains/${target}/schema.ts`);
 
     let session: NativeSession | undefined;
-    const check = async (changed: string[]): Promise<unknown> => {
-      if (session !== undefined) {
-        session.update(changed);
-        return JSON.parse(await session.check());
+    const freshCheck = async (): Promise<unknown> => {
+      const once = new native.CompilerSession(input);
+      try {
+        return JSON.parse(await once.check());
+      } finally {
+        once.dispose();
       }
-      return native.checkProject(input);
+    };
+    const check = async (changed: string[]): Promise<unknown> => {
+      if (session === undefined) {
+        return freshCheck();
+      }
+      session.update(changed);
+      return JSON.parse(await session.check());
     };
 
     const cold: number[] = [];
     for (let run = 0; run < Math.min(runs, 3); run += 1) {
       session?.dispose();
-      cold.push(
-        await time(async () => {
-          if (useSession) {
-            session = new native.CompilerSession!(input);
-            return check([]);
-          }
-          return native.checkProject(input);
-        }),
-      );
+      session = undefined;
+      cold.push(await time(() => freshCheck()));
+    }
+    if (!forceOneShot) {
+      session = new native.CompilerSession(input);
+      await check([]);
     }
 
     const warm: number[] = [];

@@ -1,4 +1,3 @@
-use aruna_compiler::{check_project as run_check_project, inspect_project as run_inspect_project};
 use aruna_compiler::{CompilerInput, CompilerOutput, CompilerSession};
 use napi::bindgen_prelude::{AsyncTask, Error, Result};
 use napi::{Env, JsString, Task};
@@ -12,18 +11,6 @@ fn parse_input(input: Value) -> Result<CompilerInput> {
 
 fn serialize_output(output: CompilerOutput) -> Result<Value> {
     serde_json::to_value(output).map_err(|error| Error::from_reason(error.to_string()))
-}
-
-#[napi]
-pub fn check_project(input: Value) -> Result<Value> {
-    let input = parse_input(input)?;
-    serialize_output(run_check_project(input))
-}
-
-#[napi]
-pub fn inspect_project(input: Value) -> Result<Value> {
-    let input = parse_input(input)?;
-    serialize_output(run_inspect_project(input))
 }
 
 // The compiler's registered primitives as a table, for tooling that must agree
@@ -128,10 +115,9 @@ impl Task for SessionTask {
 
     fn compute(&mut self) -> Result<Self::Output> {
         let output = run_session(&self.state, self.run)?;
-        // Through a `Value` first: its maps order keys alphabetically, which is
-        // the key order the CLI's --json output has always had (the one-shot
-        // functions hand JS a `Value`). Serializing the structs directly would
-        // emit declaration order instead.
+        // Through a `Value` first: its maps order keys alphabetically, so the
+        // CLI's --json output does not depend on struct field declaration order
+        // (a reordered field would otherwise show up as an output change).
         let value = serialize_output(output)?;
         serde_json::to_string(&value).map_err(|error| Error::from_reason(error.to_string()))
     }
@@ -172,8 +158,9 @@ impl JsCompilerSession {
         Ok(())
     }
 
-    /// `checkProject` through the session's cache, off the main thread. Resolves
-    /// to the output as a JSON string.
+    /// A check (writes the manifest, and the generated files when the input asks)
+    /// through the session's cache, off the main thread. Resolves to the output
+    /// as a JSON string.
     #[napi(ts_return_type = "Promise<string>")]
     pub fn check(&self) -> AsyncTask<SessionTask> {
         AsyncTask::new(SessionTask {
@@ -182,7 +169,7 @@ impl JsCompilerSession {
         })
     }
 
-    /// `inspectProject` through the session's cache, off the main thread.
+    /// A check that writes nothing, otherwise like `check`.
     #[napi(ts_return_type = "Promise<string>")]
     pub fn inspect(&self) -> AsyncTask<SessionTask> {
         AsyncTask::new(SessionTask {

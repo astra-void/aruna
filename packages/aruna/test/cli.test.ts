@@ -559,7 +559,7 @@ describe("cli integration", () => {
     expect(result.stdout).toContain("9 actions discovered");
     expect(result.stdout).toContain("shop.legacyLimit");
     expect(result.stdout).toContain("rate limit: none");
-    expect(result.stdout).toContain("rateLimit.limit is not supported in the pre-public final API");
+    expect(result.stdout).toContain("rateLimit does not support the limit key");
     expect(result.stdout).toContain('key: "player"');
     expect(result.stdout).toContain("aruna::560");
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
@@ -829,14 +829,9 @@ describe("cli integration", () => {
     expect(skipped.status).toBe(0);
     expect(fs.existsSync(runtimeMarker)).toBe(false);
 
-    // The legacy --emit-runtime flag is still accepted (redundant explicit-on).
-    fs.rmSync(path.dirname(runtimeMarker), { recursive: true, force: true });
-    const explicit = runBuild(["--emit-runtime"]);
-    expect(explicit.status).toBe(0);
-    expect(fs.existsSync(runtimeMarker)).toBe(true);
   });
 
-  it("explains defineConfig when the legacy flat config is used", () => {
+  it("rejects config fields outside defineConfig's shape", () => {
     expect(fs.existsSync(builtCliPath)).toBe(true);
 
     const env = { ...process.env };
@@ -859,8 +854,7 @@ describe("cli integration", () => {
     );
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("defineConfig");
-    expect(result.stdout).toContain("generatedDir");
+    expect(result.stdout).toContain("Unsupported top-level config field: generatedDir");
     expect(result.stdout).not.toMatch(ANSI_PATTERN);
     expect(result.stderr).toBe("");
   });
@@ -905,7 +899,7 @@ export default defineConfig({
     expect(result.stderr).toBe("");
   });
 
-  it("points the rateLimit legacy limit diagnostic at max/windowMs/key", () => {
+  it("points an invalid rateLimit diagnostic at max/windowMs/key", () => {
     expect(fs.existsSync(builtCliPath)).toBe(true);
 
     const env = { ...process.env };
@@ -928,7 +922,7 @@ export default defineConfig({
     );
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain("rateLimit.limit is not supported in the pre-public final API");
+    expect(result.stdout).toContain("rateLimit does not support the limit key");
     expect(result.stdout).toContain('rateLimit.key must be "player", "global", or a key function');
     expect(result.stdout).toContain('Use rateLimit: { key: "player", windowMs: 1000, max: 5 }');
     expect(result.stdout).not.toMatch(ANSI_PATTERN);

@@ -211,12 +211,7 @@ pub(crate) fn parse_rate_limit_object(
                 }
             }
             _ => {
-                let details = if property_name == "limit" {
-                    "rateLimit.limit is not supported in the pre-public final API. Use max instead."
-                        .to_string()
-                } else {
-                    format!("rateLimit does not support the {property_name} key.")
-                };
+                let details = format!("rateLimit does not support the {property_name} key.");
                 diagnostics.push(rate_limit_invalid_diagnostic(
                     file,
                     action_id,
