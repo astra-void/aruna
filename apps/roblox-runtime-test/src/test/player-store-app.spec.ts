@@ -211,13 +211,13 @@ describe("createServerApp with a player store", () => {
     // The release is fire-and-forget from the lifecycle hook; wait for the
     // queued write to land.
     await waitUntil(() => {
-      const stored = backend.snapshot().get("player_7") as { lock?: unknown } | undefined;
-      return stored !== undefined && stored.lock === undefined;
+      const stored = backend.snapshot().get("player_7") as { l?: unknown } | undefined;
+      return stored !== undefined && stored.l === undefined;
     });
 
-    const stored = backend.snapshot().get("player_7") as { d: Profile; lock?: unknown };
+    const stored = backend.snapshot().get("player_7") as { d: Profile; l?: unknown };
     expect(stored.d).toEqual({ coins: 1 });
-    expect(stored.lock).toBeUndefined();
+    expect(stored.l).toBeUndefined();
     expect(playerStore.get(player)).toBeUndefined();
     app.dispose();
   });
@@ -225,7 +225,7 @@ describe("createServerApp with a player store", () => {
   it("refuses a record from a newer version and lets the game kick from onLoadFailed", async () => {
     // Mixed-version servers after an update: this server is at v1, the player
     // was last saved at v2 by an updated server.
-    const newer = { v: 2, t: 0, d: { coins: 900 } };
+    const newer = { "$aruna": 1, v: 2, t: 0, d: { coins: 900 } };
     const backend = createMemoryStoreBackend(entries({ player_7: newer }));
     const players = createFakePlayers();
     const kicked = new Array<string>();

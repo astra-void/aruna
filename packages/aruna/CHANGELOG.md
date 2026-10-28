@@ -228,6 +228,17 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: store records use persisted format v1.** `{ "$aruna": 1, v, d, t,
+  m?, l? }`: an explicit marker carrying the envelope format version, a
+  framework metadata slot `m` (receipt ids, handoff token, erasure marker; never
+  validated or migrated), and the lock as `l: { o, h }`. A value without the
+  marker is adopted as raw data at version 0, however envelope-like; a newer
+  envelope format is refused with `StoreVersionAheadError`. The lock stays in
+  the record; an idle document refreshes it only at half the TTL. See
+  docs/stores.md, "Persisted format v1". `StoreSnapshot` gains `meta`;
+  `readStoreRecord`, `recordStoreReceipt`, `hasStoreReceipt` are new;
+  `isStoreLockState` is gone.
+
 - **Pre-release policy.** Until the first public release, breaking changes need
   no deprecation, shim, or migration notes, and the API report is a review aid
   rather than a gate (docs/stability.md). Diagnostic codes are still never

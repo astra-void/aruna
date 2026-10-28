@@ -104,9 +104,11 @@ if (loaded.ok) {
 await store.update("global", (current) => ({ ...current, doubleCoinsEnabled: true }));
 ```
 
-`save` and `update` both go through `UpdateAsync`, so an existing session lock is carried
-forward rather than clobbered. `overwrite` uses `SetAsync` and ignores locks — it exists
-for admin and migration tooling, not for game code.
+`save` and `update` both go through `UpdateAsync`, so an existing session lock and the
+record's [framework metadata](#persisted-format-v1) are carried forward rather than
+clobbered. `overwrite` uses `SetAsync` and ignores the current record entirely — the lock
+and the metadata (processed receipts among it) are not carried over. It exists for admin
+and migration tooling, not for game code.
 
 ## Player stores and the session lock
 
@@ -130,8 +132,11 @@ The lifecycle:
 1. **Load** claims the lock and reads the record in one `UpdateAsync`. A lock held by
    another live server refuses the load (retried `acquireAttempts` times); a lock whose
    heartbeat aged past `lockTtlMs` is stale and is taken over.
-2. **Heartbeat** (`heartbeatMs`, default 30s) refreshes the lock *and* flushes pending
-   changes. It is the autosave: an unclean shutdown loses at most one interval.
+2. **Heartbeat** (`heartbeatMs`, default 30s) flushes pending changes, refreshing the lock
+   with the same write. It is the autosave: an unclean shutdown loses at most one
+   interval. A tick with nothing to flush writes only once the lock is half `lockTtlMs`
+   old, since then the write's only job is keeping the lock alive
+   ([cost](#where-the-session-lock-lives)).
 3. **Release** writes one final time and clears the lock, so the player's next server can
    load immediately instead of waiting out the TTL.
 
@@ -338,6 +343,78 @@ The snapshot path is `contract.snapshot` in `aruna.config.ts` (default
 | `aruna::577` | `store-version-without-migrate` | warning |
 | `aruna::578` | `store-incompatible-change` | error (`strict.storeCompatibility`) |
 | `aruna::579` | `contract-snapshot-invalid` | error |
+
+## Persisted format v1
+
+Every record a store writes is wrapped in this envelope:
+
+```json
+{ "$aruna": 1, "v": 2, "d": { "coins": 40 }, "t": 1767225600000, "m": { "r": ["…"] }, "l": { "o": "…", "h": 1767225600000 } }
+```
+
+**This format is permanent.** Records outlive every build that wrote them, so once a game
+has saved one, v1 is read for as long as Aruna exists. It evolves only through the
+envelope format version (`$aruna`): a new format gets a new number, and a reader keeps
+reading every format that was ever written. Fields not in the table below are not part
+of v1: a v1 writer never writes them, and a v1 reader drops them on its next write.
+
+| Field | Type and bounds | Meaning |
+| --- | --- | --- |
+| `$aruna` | integer ≥ 1 | The marker, and the **envelope format version**: `1` for this format. Owned by Aruna, independent of the store's `version`. |
+| `v` | number ≥ 0 | The **store's schema version** (`version` in `defineStore`, default 1) the data was written at. Drives `migrate`. |
+| `d` | any DataStore-storable value | The data: validated against the store's schema on every read and write. |
+| `t` | number | When the record was last written, in ms since the Unix epoch. |
+| `m` | table, optional; omitted when empty | **Framework metadata.** Never validated against the store's schema, never passed to `migrate`, and carried through every write unchanged unless the framework changes it. Each field below is optional. |
+| `m.r` | array of at most **100** strings, each 1–128 UTF-8 bytes | Processed purchase receipt ids, oldest first. Recording the 101st evicts the oldest. For the planned `ProcessReceipt` support: a grant and its receipt id land in the same write. |
+| `m.h` | `{ k: string of 1–128 bytes, x: number }` | A session handoff token (`k`) and its expiry in ms (`x`). For the planned teleport handoff: the destination server presents it to take the lock without waiting out the TTL. |
+| `m.e` | number | Erasure marker: when the record's data was erased on a right-to-erasure request, in ms. |
+| `l` | `{ o: string, h: number }`, optional | The **session lock** of a player store: the owner (`${JobId}:${PlaceId}`, a `studio-…` id in Studio) and its last heartbeat in ms. Absent when no server holds the record. |
+
+Worst case the envelope adds about 13.5 KB to the data: 100 receipt ids of 128 bytes
+(~13.2 KB), a handoff token (~160 bytes), the lock (~100 bytes), and the fixed fields.
+The 4 MB size check counts the whole envelope.
+
+### Reading a stored value
+
+| The key holds | Read as | Then |
+| --- | --- | --- |
+| nothing | absent | the store's default; `existed: false` |
+| a table whose `$aruna` is `1` and whose fields fit the table above | an **envelope v1** | `v` above the store's version → `StoreVersionAheadError`; below → `migrate(d, v)`; equal → validated |
+| a table whose `$aruna` is `1` but a field does not fit (`v` not a number, `t` missing, `m.r` not an array, …) | a malformed envelope | `StoreValidationError`; never treated as raw data |
+| a table whose `$aruna` is an integer above `1` | an envelope from a newer Aruna | `StoreVersionAheadError`; never migrated, never written back |
+| anything else, **including** a table that looks like an envelope but fails the marker check (`{ v: 1, t: 2 }`, `$aruna: "1"`, `$aruna: 0`) | a **raw legacy value**: data from before this store owned the key | adopted at version 0: `migrate(value, 0)`, the whole value as the data, no metadata, no lock; the next write wraps it in a v1 envelope |
+
+The marker is an explicit field rather than a shape test because a game adopting an
+existing DataStore can hold anything, including tables with numeric `v` and `t` fields.
+
+### Where the session lock lives
+
+The lock stays **in the record**, as `l`. Claiming it and reading the data are then one
+`UpdateAsync`, and every later write checks the lock in the same `UpdateAsync` that
+writes the data, so a server that lost its lock cannot write. The cost is that refreshing
+the lock rewrites the whole record. For a 50-player server, with the defaults
+(`heartbeatMs` 30 s, `lockTtlMs` 120 s):
+
+| | per minute | share of the write budget |
+| --- | ---: | ---: |
+| DataStore write budget per server (`60 + 10 × players`; `UpdateAsync` counts against it) | 560 | 100% |
+| Heartbeats, every player's document changed every tick (2 per player) | 100 | 17.9% |
+| Heartbeats, every player idle (lock refresh at half the TTL: 1 per player) | 50 | 8.9% |
+| Joins and leaves (1 lock write + 1 release per session) | per session, not per minute | — |
+
+That leaves at least 460 writes a minute to the game's own stores. Per key, one write per
+30 s is five times under the 6-second write cooldown. The bytes matter only for large
+records: each refresh writes the whole record, and at 2 writes a minute the per-key write
+throughput limit (4 MB per minute) is reached by a record of 2 MB, so a record that large
+should raise `heartbeatMs`.
+
+Moving the lock to a MemoryStore would save only the idle refreshes — at most those 50
+writes a minute, since a changed document still needs its autosave write — and would
+cost the atomicity the lock exists for. The claim and the read would be two services, so
+the record would need a fencing token written on every acquire anyway, and every write
+would depend on a second service with its own quota and outages, where an expired or
+evicted MemoryStore lock lets a second server in while the first still writes. Under 10%
+of the budget does not pay for that.
 
 ## Limits the runtime enforces locally
 

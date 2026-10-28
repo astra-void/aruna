@@ -127,9 +127,11 @@ function entries(initial: Record<string, unknown>): Map<string, unknown> {
   return map;
 }
 
+// The persisted lock (`l: { o, h }`), in the runtime's long-name form.
 function storedLock(backend: MemoryStoreBackend, key = "player_42"): unknown {
-  const stored = backend.snapshot().get(key) as { lock?: unknown } | undefined;
-  return stored !== undefined ? stored.lock : undefined;
+  const stored = backend.snapshot().get(key) as { l?: { o: string; h: number } } | undefined;
+  const lock = stored !== undefined ? stored.l : undefined;
+  return lock !== undefined ? { owner: lock.o, heartbeatMs: lock.h } : undefined;
 }
 
 function storedCoins(backend: MemoryStoreBackend, key = "player_42"): number {
@@ -228,7 +230,7 @@ describe("session locking", () => {
 
   it("reports a failed load instead of handing out a default document", async () => {
     const backend = createMemoryStoreBackend(
-      entries({ player_42: { v: 1, t: 0, d: { coins: "junk" } } }),
+      entries({ player_42: { "$aruna": 1, v: 1, t: 0, d: { coins: "junk" } } }),
     );
     const failures = new Array<string>();
     const store = createPlayerStore(definition(), {
@@ -247,7 +249,7 @@ describe("session locking", () => {
 
   it("treats a record from a newer version as a failed load: no default, no lock, no write", async () => {
     // A player saved at v3 by an updated server joins an old v2 server.
-    const newer = { v: 3, t: 0, d: { coins: 500, name: "ada" } };
+    const newer = { "$aruna": 1, v: 3, t: 0, d: { coins: 500, name: "ada" } };
     const backend = createMemoryStoreBackend(entries({ player_42: newer }));
     const failures = new Array<string>();
     let migrateCalls = 0;
@@ -475,6 +477,66 @@ describe("heartbeat", () => {
     await nextFrame();
 
     expect(storedLock(backend)).toEqual({ owner: "server-a", heartbeatMs: 6_000 });
+  });
+
+  it("skips an idle tick until the lock is half the TTL old", async () => {
+    const backend = createMemoryStoreBackend();
+    const scheduler = manualScheduler();
+    let clock = 1_000;
+    const store = createPlayerStore(definition(), {
+      backend,
+      scheduler,
+      owner: "server-a",
+      nowMs: () => clock,
+    });
+
+    await store.load(player);
+    // TTL 10s: an unchanged document at 4s past the lock write has no reason to
+    // write yet.
+    clock = 5_000;
+    scheduler.runAll();
+    await nextFrame();
+    expect(storedLock(backend)).toEqual({ owner: "server-a", heartbeatMs: 1_000 });
+    expect(scheduler.pending()).toBe(1);
+
+    // At half the TTL the refresh goes out.
+    clock = 6_000;
+    scheduler.runAll();
+    await nextFrame();
+    expect(storedLock(backend)).toEqual({ owner: "server-a", heartbeatMs: 6_000 });
+  });
+
+  it("carries the framework metadata through the lock, heartbeat, and release", async () => {
+    const meta = { r: ["receipt-1"], h: { k: "token", x: 50 } };
+    const backend = createMemoryStoreBackend(
+      entries({ player_42: { "$aruna": 1, v: 1, t: 0, d: { coins: 3, name: "ada" }, m: meta } }),
+    );
+    const scheduler = manualScheduler();
+    let clock = 1_000;
+    const store = createPlayerStore(definition(), {
+      backend,
+      scheduler,
+      owner: "server-a",
+      nowMs: () => clock,
+    });
+
+    const loaded = await store.load(player);
+    expect(loaded.ok && loaded.value.snapshot.meta.receipts).toEqual(["receipt-1"]);
+    expect((backend.snapshot().get("player_42") as { m: unknown }).m).toEqual(meta);
+
+    if (loaded.ok) {
+      loaded.value.update((current) => ({ ...current, coins: 4 }));
+    }
+    clock = 2_000;
+    scheduler.runAll();
+    await nextFrame();
+    expect((backend.snapshot().get("player_42") as { m: unknown }).m).toEqual(meta);
+
+    await store.release(player);
+    const stored = backend.snapshot().get("player_42") as { d: Profile; m: unknown; l?: unknown };
+    expect(stored.d.coins).toBe(4);
+    expect(stored.m).toEqual(meta);
+    expect(stored.l).toBeUndefined();
   });
 
   it("stops the heartbeat once the document is released", async () => {

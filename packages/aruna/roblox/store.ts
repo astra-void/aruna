@@ -203,11 +203,33 @@ export function validateStoreKey(key: string): StoreResult<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Envelope
+// Envelope: persisted format v1 (docs/stores.md, "Persisted format v1")
 // ---------------------------------------------------------------------------
+//
+// Every record Aruna writes is wrapped in this envelope. It is permanent: once a
+// game has saved records, it changes only through STORE_ENVELOPE_FORMAT, and a
+// reader handles every format it ever wrote. Short field names because the
+// wrapper is pure overhead against the 4 MB per-key budget.
+//
+//   { "$aruna": 1, v, d, t, m?, l? }
+//
+// The marker is an explicit field rather than a shape test: any table whose
+// marker is not a positive integer is a raw value the store is adopting, however
+// much it looks like an envelope.
+
+// The marker field. Its value is the envelope format version.
+export const STORE_ENVELOPE_MARKER = "$aruna";
+// The envelope format this runtime writes, and the newest it reads.
+export const STORE_ENVELOPE_FORMAT = 1;
+// Processed purchase receipt ids kept per record: the most recent N, oldest
+// evicted first.
+export const STORE_MAX_RECEIPTS = 100;
+// Upper bound on a receipt id and on a handoff token, in UTF-8 bytes.
+export const STORE_MAX_META_ID_BYTES = 128;
 
 // The session lock a player store writes alongside the data. It lives inside
-// the record so claiming it and reading the data are one atomic UpdateAsync.
+// the record so claiming it and reading the data are one atomic UpdateAsync
+// (docs/stores.md, "Where the session lock lives").
 export interface StoreLockState {
 	// `${JobId}:${PlaceId}` for a live server.
 	readonly owner: string;
@@ -216,29 +238,153 @@ export interface StoreLockState {
 	readonly heartbeatMs: number;
 }
 
-// The persisted shape. Single-character fields because this wrapper is pure
-// overhead against the 4 MB per-key budget.
+// A one-time token a server leaves for the server a player is teleporting to,
+// so that server can take the session lock without waiting out the TTL.
+export interface StoreHandoff {
+	readonly token: string;
+	readonly expiresAtMs: number;
+}
+
+// Framework-owned metadata. Never validated against the store's schema, never
+// passed to `migrate`, and carried through every write unchanged unless the
+// framework itself changes it.
+export interface StoreMeta {
+	// Processed purchase receipt ids, oldest first, at most STORE_MAX_RECEIPTS.
+	readonly receipts: ReadonlyArray<string>;
+	readonly handoff?: StoreHandoff;
+	// When the record's data was erased on a right-to-erasure request.
+	readonly erasedAtMs?: number;
+}
+
+// The persisted forms. `StoreLockState`/`StoreMeta` are what the runtime works
+// with; these are what a DataStore holds.
+export interface StoreEnvelopeLock {
+	readonly o: string;
+	readonly h: number;
+}
+
+export interface StoreEnvelopeMeta {
+	readonly r?: Array<string>;
+	readonly h?: { readonly k: string; readonly x: number };
+	readonly e?: number;
+}
+
 export interface StoreEnvelope {
+	readonly "$aruna": number;
 	readonly v: number;
 	readonly d: unknown;
 	readonly t: number;
-	readonly lock?: StoreLockState;
+	readonly m?: StoreEnvelopeMeta;
+	readonly l?: StoreEnvelopeLock;
 }
 
-export function isStoreLockState(value: unknown): value is StoreLockState {
-	if (!typeIs(value, "table")) {
-		return false;
-	}
-	const candidate = value as { readonly owner?: unknown; readonly heartbeatMs?: unknown };
-	return typeIs(candidate.owner, "string") && typeIs(candidate.heartbeatMs, "number");
+export function emptyStoreMeta(): StoreMeta {
+	return { receipts: [] };
 }
 
-export function isStoreEnvelope(value: unknown): value is StoreEnvelope {
-	if (!typeIs(value, "table")) {
-		return false;
+function isMetaId(value: unknown): value is string {
+	return typeIs(value, "string") && value.size() > 0 && value.size() <= STORE_MAX_META_ID_BYTES;
+}
+
+function isFiniteValue(value: unknown): value is number {
+	return typeIs(value, "number") && isFiniteNumber(value);
+}
+
+// Records a processed receipt id, evicting the oldest beyond STORE_MAX_RECEIPTS.
+// An id already recorded leaves the metadata as it was.
+export function recordStoreReceipt(meta: StoreMeta, receiptId: string): StoreResult<StoreMeta> {
+	if (!isMetaId(receiptId)) {
+		return storeFail(
+			"StoreValidationError",
+			`A receipt id must be a non-empty string of at most ${STORE_MAX_META_ID_BYTES} bytes.`,
+		);
 	}
-	const candidate = value as { readonly v?: unknown; readonly t?: unknown };
-	return typeIs(candidate.v, "number") && typeIs(candidate.t, "number");
+	if (meta.receipts.includes(receiptId)) {
+		return storeOk(meta);
+	}
+	const receipts = [...meta.receipts, receiptId];
+	while (receipts.size() > STORE_MAX_RECEIPTS) {
+		receipts.shift();
+	}
+	return storeOk({ ...meta, receipts });
+}
+
+export function hasStoreReceipt(meta: StoreMeta, receiptId: string): boolean {
+	return meta.receipts.includes(receiptId);
+}
+
+function readEnvelopeMeta(raw: unknown): StoreMeta | string {
+	if (raw === undefined) {
+		return emptyStoreMeta();
+	}
+	if (!typeIs(raw, "table")) {
+		return "m must be a table";
+	}
+	const candidate = raw as { readonly r?: unknown; readonly h?: unknown; readonly e?: unknown };
+	const receipts: Array<string> = [];
+	if (candidate.r !== undefined) {
+		if (!typeIs(candidate.r, "table")) {
+			return "m.r must be an array";
+		}
+		for (const id of candidate.r as Array<unknown>) {
+			if (!isMetaId(id)) {
+				return `m.r holds an id that is not a string of 1..${STORE_MAX_META_ID_BYTES} bytes`;
+			}
+			receipts.push(id);
+		}
+		// Bounds are enforced on read as well as on write.
+		while (receipts.size() > STORE_MAX_RECEIPTS) {
+			receipts.shift();
+		}
+	}
+	let handoff: StoreHandoff | undefined;
+	if (candidate.h !== undefined) {
+		const token = typeIs(candidate.h, "table") ? (candidate.h as { k?: unknown; x?: unknown }) : undefined;
+		if (token === undefined || !isMetaId(token.k) || !isFiniteValue(token.x)) {
+			return "m.h must be { k: token, x: expiry ms }";
+		}
+		handoff = { token: token.k, expiresAtMs: token.x };
+	}
+	if (candidate.e !== undefined && !isFiniteValue(candidate.e)) {
+		return "m.e must be a number";
+	}
+	return {
+		receipts,
+		...(handoff !== undefined ? { handoff } : {}),
+		...(candidate.e !== undefined ? { erasedAtMs: candidate.e as number } : {}),
+	};
+}
+
+function writeEnvelopeMeta(meta: StoreMeta | undefined): StoreEnvelopeMeta | undefined {
+	if (meta === undefined) {
+		return undefined;
+	}
+	const receipts = [...meta.receipts];
+	while (receipts.size() > STORE_MAX_RECEIPTS) {
+		receipts.shift();
+	}
+	// Empty metadata is omitted, so a record without any reads back the same.
+	if (receipts.size() === 0 && meta.handoff === undefined && meta.erasedAtMs === undefined) {
+		return undefined;
+	}
+	return {
+		...(receipts.size() > 0 ? { r: receipts } : {}),
+		...(meta.handoff !== undefined
+			? { h: { k: meta.handoff.token, x: meta.handoff.expiresAtMs } }
+			: {}),
+		...(meta.erasedAtMs !== undefined ? { e: meta.erasedAtMs } : {}),
+	};
+}
+
+function readEnvelopeLock(raw: unknown): StoreLockState | undefined | string {
+	if (raw === undefined) {
+		return undefined;
+	}
+	const candidate = typeIs(raw, "table") ? (raw as { o?: unknown; h?: unknown }) : undefined;
+	if (candidate === undefined || !typeIs(candidate.o, "string") || !isFiniteValue(candidate.h)) {
+		return "l must be { o: owner, h: heartbeat ms }";
+	}
+	return { owner: candidate.o, heartbeatMs: candidate.h };
 }
 
 export function createStoreEnvelope(
@@ -246,24 +392,100 @@ export function createStoreEnvelope(
 	data: unknown,
 	nowMs: number,
 	lock?: StoreLockState,
+	meta?: StoreMeta,
 ): StoreEnvelope {
+	const m = writeEnvelopeMeta(meta);
 	return {
+		"$aruna": STORE_ENVELOPE_FORMAT,
 		v: version,
 		d: data,
 		t: nowMs,
-		...(lock !== undefined ? { lock } : {}),
+		...(m !== undefined ? { m } : {}),
+		...(lock !== undefined ? { l: { o: lock.owner, h: lock.heartbeatMs } } : {}),
 	};
+}
+
+// What a stored value turned out to be.
+export type StoreRecord =
+	// Nothing at the key.
+	| { readonly kind: "absent" }
+	// A value with no valid marker: data from before this store owned the key
+	// (or written by hand). Adopted at version 0 and sent to `migrate`.
+	| { readonly kind: "legacy"; readonly data: unknown }
+	| {
+			readonly kind: "envelope";
+			readonly version: number;
+			readonly data: unknown;
+			readonly updatedAtMs: number;
+			readonly meta: StoreMeta;
+			readonly lock: StoreLockState | undefined;
+	  }
+	// Marked with a format this runtime does not read.
+	| { readonly kind: "format-ahead"; readonly format: number }
+	// Marked as a v1 envelope, with fields that do not fit it.
+	| { readonly kind: "malformed"; readonly reason: string };
+
+export function readStoreRecord(raw: unknown): StoreRecord {
+	if (raw === undefined) {
+		return { kind: "absent" };
+	}
+	if (!typeIs(raw, "table")) {
+		return { kind: "legacy", data: raw };
+	}
+	const candidate = raw as {
+		readonly "$aruna"?: unknown;
+		readonly v?: unknown;
+		readonly d?: unknown;
+		readonly t?: unknown;
+		readonly m?: unknown;
+		readonly l?: unknown;
+	};
+	const format = candidate["$aruna"];
+	// The marker check: a positive integer, or this is not an envelope at all.
+	if (!isFiniteValue(format) || format < 1 || math.floor(format) !== format) {
+		return { kind: "legacy", data: raw };
+	}
+	if (format > STORE_ENVELOPE_FORMAT) {
+		return { kind: "format-ahead", format };
+	}
+	if (!isFiniteValue(candidate.v) || candidate.v < 0) {
+		return { kind: "malformed", reason: "v must be a non-negative number" };
+	}
+	if (!isFiniteValue(candidate.t)) {
+		return { kind: "malformed", reason: "t must be a number" };
+	}
+	const meta = readEnvelopeMeta(candidate.m);
+	if (typeIs(meta, "string")) {
+		return { kind: "malformed", reason: meta };
+	}
+	const lock = readEnvelopeLock(candidate.l);
+	if (typeIs(lock, "string")) {
+		return { kind: "malformed", reason: lock };
+	}
+	return {
+		kind: "envelope",
+		version: candidate.v,
+		data: candidate.d,
+		updatedAtMs: candidate.t,
+		meta,
+		lock,
+	};
+}
+
+export function isStoreEnvelope(value: unknown): value is StoreEnvelope {
+	return readStoreRecord(value).kind === "envelope";
 }
 
 export interface StoreSnapshot<TValue> {
 	readonly value: TValue;
 	// False when the key held nothing and `value` is the store's default.
 	readonly existed: boolean;
-	// The version the record was stored at (0 for a pre-Aruna raw value).
+	// The version the record was stored at (0 for an adopted raw value).
 	readonly version: number;
 	readonly migrated: boolean;
 	readonly updatedAtMs: number | undefined;
 	readonly lock: StoreLockState | undefined;
+	readonly meta: StoreMeta;
 }
 
 // ---------------------------------------------------------------------------
@@ -620,7 +842,9 @@ export function decodeStoreValue(
 ): StoreResult<StoreSnapshot<unknown>> {
 	const currentVersion = resolveStoreVersion(definition);
 
-	if (raw === undefined) {
+	const record = readStoreRecord(raw);
+
+	if (record.kind === "absent") {
 		return storeOk({
 			value: resolveStoreDefault(definition),
 			existed: false,
@@ -628,17 +852,34 @@ export function decodeStoreValue(
 			migrated: false,
 			updatedAtMs: undefined,
 			lock: undefined,
+			meta: emptyStoreMeta(),
 		});
 	}
 
-	const envelope = isStoreEnvelope(raw) ? raw : undefined;
-	// A value that is not an Aruna envelope predates the store (a hand-rolled
-	// DataStore this store is adopting). Treat it as version 0 so `migrate` gets a
-	// chance at it instead of failing validation outright.
-	const storedVersion = envelope !== undefined ? envelope.v : 0;
-	const storedData = envelope !== undefined ? envelope.d : raw;
-	const lock = envelope !== undefined && isStoreLockState(envelope.lock) ? envelope.lock : undefined;
-	const updatedAtMs = envelope !== undefined ? envelope.t : undefined;
+	// Written by a newer runtime. Reading it as a raw value would hand the whole
+	// envelope to `migrate`, and a save would bury it inside a v1 envelope.
+	if (record.kind === "format-ahead") {
+		return storeFail(
+			"StoreVersionAheadError",
+			`Store ${definition.id} read a record in envelope format ${record.format}; this server reads format ${STORE_ENVELOPE_FORMAT}. This server is running an older version of Aruna.`,
+		);
+	}
+
+	if (record.kind === "malformed") {
+		return storeFail(
+			"StoreValidationError",
+			`Store ${definition.id} read a record whose envelope is malformed (${record.reason}).`,
+		);
+	}
+
+	// A raw value predates the store (a hand-rolled DataStore this store is
+	// adopting). It is version 0, so `migrate` gets a chance at it instead of
+	// failing validation outright.
+	const storedVersion = record.kind === "envelope" ? record.version : 0;
+	const storedData = record.data;
+	const lock = record.kind === "envelope" ? record.lock : undefined;
+	const updatedAtMs = record.kind === "envelope" ? record.updatedAtMs : undefined;
+	const meta = record.kind === "envelope" ? record.meta : emptyStoreMeta();
 
 	// A record from the future. Handing it to `migrate` would let a permissive
 	// migration pass newer data through, which this server would then save under
@@ -700,16 +941,19 @@ export function decodeStoreValue(
 		migrated,
 		updatedAtMs,
 		lock,
+		meta,
 	});
 }
 
 // Gates every outbound value: schema first (so the caller sees the precise
-// field), then storability, then size.
+// field), then storability, then size. The size counts the whole envelope,
+// metadata and lock included.
 export function encodeStoreValue(
 	definition: { readonly id: string; readonly schema: Schema; readonly version?: number },
 	value: unknown,
 	nowMs: number,
 	lock?: StoreLockState,
+	meta?: StoreMeta,
 ): StoreResult<StoreEnvelope> {
 	if (!definition.schema.validate(value)) {
 		const issue = firstSchemaIssue(definition.schema, value);
@@ -728,7 +972,7 @@ export function encodeStoreValue(
 		);
 	}
 
-	const envelope = createStoreEnvelope(resolveStoreVersion(definition), value, nowMs, lock);
+	const envelope = createStoreEnvelope(resolveStoreVersion(definition), value, nowMs, lock, meta);
 	const bytes = measureStoreValueBytes(envelope);
 	if (bytes > STORE_MAX_VALUE_BYTES) {
 		return storeFail(
@@ -771,7 +1015,7 @@ export interface Store<TSchema extends Schema = Schema> {
 	// Reads a key, filling defaults and migrating as needed. A missing key
 	// resolves to the default; a corrupt one resolves to an error.
 	readonly load: (key: string) => Promise<StoreResult<Infer<TSchema>>>;
-	// `load` plus the record metadata (existed, version, lock, timestamp).
+	// `load` plus the record metadata (existed, version, lock, timestamp, meta).
 	readonly loadSnapshot: (key: string) => Promise<StoreResult<StoreSnapshot<Infer<TSchema>>>>;
 	// Writes through UpdateAsync so a session lock is preserved, not clobbered.
 	readonly save: (key: string, value: Infer<TSchema>) => Promise<StoreResult<Infer<TSchema>>>;
@@ -781,8 +1025,9 @@ export interface Store<TSchema extends Schema = Schema> {
 		transform: (current: Infer<TSchema>) => Infer<TSchema>,
 	) => Promise<StoreResult<Infer<TSchema>>>;
 	readonly remove: (key: string) => Promise<StoreResult<undefined>>;
-	// SetAsync, ignoring any session lock. For admin and migration tooling; game
-	// code should use `save`/`update`.
+	// SetAsync, ignoring the current record entirely: the session lock and the
+	// framework metadata (processed receipts among it) are not carried over. For
+	// admin and migration tooling; game code should use `save`/`update`.
 	readonly overwrite: (key: string, value: Infer<TSchema>) => Promise<StoreResult<Infer<TSchema>>>;
 }
 
@@ -842,8 +1087,8 @@ export function createStore<TSchema extends Schema>(
 	};
 
 	// Both `save` and `update` funnel here: one UpdateAsync that decodes the
-	// current record, computes the next value, and re-wraps it while carrying any
-	// existing lock forward.
+	// current record, computes the next value, and re-wraps it while carrying the
+	// existing lock and metadata forward.
 	const writeThrough = (
 		key: string,
 		operation: StoreOperation,
@@ -874,6 +1119,7 @@ export function createStore<TSchema extends Schema>(
 							computeNext(decoded.value.value, decoded.value),
 							nowMs(),
 							decoded.value.lock,
+							decoded.value.meta,
 						);
 						if (!encoded.ok) {
 							failure = encoded;

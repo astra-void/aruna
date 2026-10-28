@@ -12,8 +12,11 @@
 //     retry rather than handed a stale value it would later save over.
 //   * A lock whose heartbeat aged past the TTL is stale — the holder crashed or
 //     the server died — and may be taken over.
-//   * The heartbeat doubles as the autosave: every tick refreshes the lock and
-//     flushes pending changes, so an unclean shutdown loses at most one interval.
+//   * The heartbeat doubles as the autosave: a tick flushes pending changes, so
+//     an unclean shutdown loses at most one interval. An idle document (nothing
+//     to flush) writes only when its lock is half-way to the TTL — the lock
+//     refresh is the only reason to write it, and it is the bulk of the write
+//     cost (docs/stores.md, "Where the session lock lives").
 //   * Releasing writes one final time and clears the lock, so the player's next
 //     server can start immediately instead of waiting out the TTL.
 
@@ -37,6 +40,7 @@ import {
 	type StoreError,
 	type StoreFailure,
 	type StoreLockState,
+	type StoreMeta,
 	type StoreOperation,
 	type StoreRequestOptions,
 	type StoreResult,
@@ -51,9 +55,9 @@ export interface StoreSessionOptions {
 	// four intervals by default, so a couple of throttled writes cannot cost a
 	// player their lock while they are still playing.
 	readonly lockTtlMs?: number;
-	// How often the holder refreshes the lock and flushes pending changes. This
-	// is the autosave interval: an unclean shutdown loses at most one interval of
-	// progress.
+	// How often the holder flushes pending changes. This is the autosave
+	// interval: an unclean shutdown loses at most one interval of progress. A tick
+	// with nothing to flush still refreshes the lock once it is half the TTL old.
 	readonly heartbeatMs?: number;
 	// How many times to retry a load that lost the lock race before giving up.
 	readonly acquireAttempts?: number;
@@ -248,6 +252,12 @@ interface DocumentState {
 	value: unknown;
 	// The last value confirmed written, used for the dirty check.
 	persisted: string;
+	// The framework metadata as of the last read or write of the record. Writes
+	// carry the record's current metadata forward; this is the fallback when the
+	// current record cannot be decoded.
+	meta: StoreMeta;
+	// When our lock was last written, for the idle-heartbeat refresh rule.
+	lockWrittenAtMs: number;
 	active: boolean;
 	heartbeat: StoreSchedulerHandle | undefined;
 	// Serializes writes for this document so a heartbeat flush cannot interleave
@@ -345,12 +355,16 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 							return undefined;
 						}
 
-						// Rewrite the record with our lock. The data passes through
-						// unchanged — this write claims ownership, it does not save progress.
-						return createStoreEnvelope(version, decoded.value.value, at, {
-							owner,
-							heartbeatMs: at,
-						});
+						// Rewrite the record with our lock. The data and the metadata pass
+						// through unchanged — this write claims ownership, it does not save
+						// progress.
+						return createStoreEnvelope(
+							version,
+							decoded.value.value,
+							at,
+							{ owner, heartbeatMs: at },
+							decoded.value.meta,
+						);
 					},
 					definition.userIds !== undefined ? definition.userIds(key) : undefined,
 				),
@@ -374,13 +388,14 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		lock: StoreLockState | undefined,
 		operation: StoreOperation,
 	): Promise<StoreResult<unknown>> => {
-		const encoded = encodeStoreValue(definition, value, nowMs(), lock);
+		const encoded = encodeStoreValue(definition, value, nowMs(), lock, state.meta);
 		if (!encoded.ok) {
 			report(encoded.error, state.key, operation);
 			return Promise.resolve(encoded);
 		}
 
 		let failure: StoreFailure | undefined;
+		let writtenMeta = state.meta;
 
 		return runStoreRequest(
 			() =>
@@ -403,7 +418,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 							);
 							return undefined;
 						}
-						return createStoreEnvelope(version, value, at, lock);
+						writtenMeta = decoded.ok ? decoded.value.meta : state.meta;
+						return createStoreEnvelope(version, value, at, lock, writtenMeta);
 					},
 					definition.userIds !== undefined ? definition.userIds(state.key) : undefined,
 				),
@@ -425,6 +441,10 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 				return written;
 			}
 			state.persisted = fingerprint(value);
+			state.meta = writtenMeta;
+			if (lock !== undefined) {
+				state.lockWrittenAtMs = lock.heartbeatMs;
+			}
 			return storeOk(value);
 		});
 	};
@@ -438,6 +458,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			key,
 			value: snapshot.value,
 			persisted: fingerprint(snapshot.value),
+			meta: snapshot.meta,
+			lockWrittenAtMs: snapshot.lock !== undefined ? snapshot.lock.heartbeatMs : nowMs(),
 			active: true,
 			heartbeat: undefined,
 			queue: Promise.resolve(undefined),
@@ -484,16 +506,20 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			return storeOk(value);
 		};
 
-		// `force` separates the two flush reasons: an explicit `save` on an
-		// unchanged document is a no-op, while a heartbeat must write regardless —
-		// refreshing the lock is the write's real purpose, and skipping it would
-		// let the TTL lapse under an idle player.
-		const flush = (operation: StoreOperation, force: boolean): Promise<StoreResult<unknown>> =>
+		// An unchanged document skips an explicit `save`, and a heartbeat until its
+		// lock is half the TTL old: from then on the write is what keeps the lock
+		// alive, so it goes out even with nothing to flush. Half the TTL leaves a
+		// full half for a throttled refresh to retry before another server may take
+		// the lock over.
+		const flush = (operation: StoreOperation, heartbeat: boolean): Promise<StoreResult<unknown>> =>
 			enqueue(() => {
-				if (!force && fingerprint(state.value) === state.persisted) {
+				const at = nowMs();
+				const clean = fingerprint(state.value) === state.persisted;
+				const lockDue = heartbeat && at - state.lockWrittenAtMs >= session.lockTtlMs / 2;
+				if (clean && !lockDue) {
 					return Promise.resolve(storeOk(state.value));
 				}
-				return writeDocument(state, state.value, { owner, heartbeatMs: nowMs() }, operation);
+				return writeDocument(state, state.value, { owner, heartbeatMs: at }, operation);
 			});
 
 		const armHeartbeat = (): void => {

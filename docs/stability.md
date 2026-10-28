@@ -23,6 +23,10 @@ Until then Aruna has no users to keep working, so compatibility has no value:
   Keeping a retired code out of circulation costs nothing and keeps old references from
   pointing at the wrong condition.
 
+The persisted store format is the one thing even this freedom does not reach once a game
+has saved records with it: [Persisted format v1](../packages/aruna/docs/stores.md#persisted-format-v1)
+is permanent, and changes only through its envelope format version.
+
 ## What is public API
 
 Everything below is public. A change to any of it is a user-visible change: it gets a
@@ -38,7 +42,7 @@ CHANGELOG entry, and a breaking one follows the rules in [Versioning](#versionin
 | **Manifest format** (`manifest.json`, `version: 1`) | `crates/aruna_compiler/src/manifest.rs` and the record types in `primitives/` | the output guard |
 | **Contract snapshot format** (`aruna.contract.json`, `version: 1`) and `contract diff` severities | `packages/aruna/src/cli/action-contracts.ts`, `contract-diff.ts` | the output guard, `contract-diff` tests |
 | **Generated file locations**: `<generatedDir>/server/actions.server.generated.ts`, `<generatedDir>/shared/actions.client.generated.ts`, `shared/signals.generated.ts`, `shared/runtime/`, the generated entries, the virtual modules `$aruna/actions/client`, `$aruna/actions/server`, `$aruna/signals`, and the tsconfig aliases `aruna doctor --fix` writes | `crates/aruna_compiler/src/resolver.rs`, `packages/aruna/src/cli/tsconfig-paths.ts` | the output guard (build outputs), `verify:package-consumption` |
-| **Wire format**: the action and signal RemoteEvent envelopes, the binary codec layout and schema fingerprint, store envelopes in a DataStore | `packages/aruna/roblox/` | Lune specs (`apps/roblox-runtime-test`), golden frames in `conformance/` |
+| **Wire format**: the action and signal RemoteEvent envelopes, the binary codec layout and schema fingerprint, store envelopes in a DataStore ([Persisted format v1](../packages/aruna/docs/stores.md#persisted-format-v1)) | `packages/aruna/roblox/` | Lune specs (`apps/roblox-runtime-test`), golden frames in `conformance/` |
 
 Not public: anything under `aruna/internal/*`-style paths a spec reaches into, the
 `@arunajs/compiler` and `@arunajs/core` packages' own exports beyond what `aruna` re-exports,

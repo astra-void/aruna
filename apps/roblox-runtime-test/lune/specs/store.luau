@@ -98,7 +98,7 @@ return function(ctx)
 		t.it("fails instead of resetting when the stored record is corrupt", function()
 			local store = storeModule.createStore(definition(), { createBackend = backendFor })
 			local entries = fakes.dataStores.entriesFor("player.profile")
-			entries["corrupt"] = { v = 1, t = 0, d = { coins = "lots" } }
+			entries["corrupt"] = { ["$aruna"] = 1, v = 1, t = 0, d = { coins = "lots" } }
 
 			local _, _, result = t.await(store.load("corrupt"))
 			t.isFalse(result.ok, "load should fail")
@@ -124,7 +124,7 @@ return function(ctx)
 				{ createBackend = backendFor }
 			)
 			local entries = fakes.dataStores.entriesFor("player.profile")
-			entries["ahead"] = { v = 3, t = 0, d = { coins = 500, name = "future" } }
+			entries["ahead"] = { ["$aruna"] = 1, v = 3, t = 0, d = { coins = 500, name = "future" } }
 
 			local _, _, loaded = t.await(store.load("ahead"))
 			t.isFalse(loaded.ok, "load should fail")
@@ -227,7 +227,7 @@ return function(ctx)
 
 			local _, _, result = t.await(store.load(player))
 			t.isTrue(result.ok, "load should succeed")
-			t.eq(storedEntry("player_100").lock.owner, "server-a", "lock owner")
+			t.eq(storedEntry("player_100").l.o, "server-a", "lock owner")
 		end)
 
 		t.it("refuses a second server while the lock is live", function()
@@ -249,7 +249,7 @@ return function(ctx)
 		t.it("treats a record from a newer version as a failed load and writes no lock", function()
 			local player = { UserId = 109 }
 			local entries = fakes.dataStores.entriesFor("player.profile")
-			entries["player_109"] = { v = 3, t = 0, d = { coins = 500, name = "future" } }
+			entries["player_109"] = { ["$aruna"] = 1, v = 3, t = 0, d = { coins = 500, name = "future" } }
 			local failures = {}
 			local store = playerStoreModule.createPlayerStore(
 				definition({
@@ -275,7 +275,7 @@ return function(ctx)
 			t.eq(#failures, 1)
 			t.eq(failures[1], "StoreVersionAheadError")
 			t.eq(store.get(player), nil, "no document")
-			t.eq(entries["player_109"].lock, nil, "no lock written")
+			t.eq(entries["player_109"].l, nil, "no lock written")
 			t.eq(entries["player_109"].d.coins, 500, "record untouched")
 
 			t.await(store.release(player), 3)
@@ -296,7 +296,7 @@ return function(ctx)
 			local _, _, result = t.await(second.load(player), 3)
 
 			t.isTrue(result.ok, "stale lock should be taken over")
-			t.eq(storedEntry("player_102").lock.owner, "server-b", "new lock owner")
+			t.eq(storedEntry("player_102").l.o, "server-b", "new lock owner")
 		end)
 
 		t.it("flushes and clears the lock on release", function()
@@ -315,7 +315,7 @@ return function(ctx)
 
 			local entry = storedEntry("player_103")
 			t.eq(entry.d.coins, 5, "final value flushed")
-			t.eq(entry.lock, nil, "lock cleared")
+			t.eq(entry.l, nil, "lock cleared")
 		end)
 
 		t.it("refuses to write once another server has taken the lock", function()
@@ -367,7 +367,7 @@ return function(ctx)
 
 			local entry = storedEntry("player_106")
 			t.eq(entry.d.coins, 12, "pending changes flushed")
-			t.eq(entry.lock.heartbeatMs, 5_000, "lock refreshed")
+			t.eq(entry.l.h, 5_000, "lock refreshed")
 			t.await(store.release(player), 3)
 		end)
 
@@ -384,6 +384,147 @@ return function(ctx)
 			local late = loaded.value.set({ coins = 1, name = "ada" })
 			t.isFalse(late.ok, "late write should fail")
 			t.eq(late.error.name, "StoreClosedError", "error name")
+		end)
+	end)
+
+	-- Persisted format v1 through the real DataStore adapter
+	-- (docs/stores.md, "Persisted format v1").
+	t.describe("persisted format v1", function()
+		local function seed(key, value)
+			-- Writing through a store first creates the fake's entry table.
+			local store = storeModule.createStore(definition(), { createBackend = backendFor })
+			t.await(store.save("seed", { coins = 0, name = "seed" }))
+			fakes.dataStores.entriesFor("player.profile")[key] = value
+		end
+
+		t.it("round-trips an envelope v1", function()
+			local store = storeModule.createStore(definition({ version = 2 }), {
+				createBackend = backendFor,
+				nowMs = function()
+					return 77
+				end,
+			})
+			t.await(store.save("v1-trip", { coins = 4, name = "ada" }))
+
+			local entry = storedEntry("v1-trip")
+			t.eq(entry["$aruna"], 1, "marker carries the envelope format")
+			t.eq(entry.v, 2, "user version")
+			t.eq(entry.t, 77, "write time")
+			t.eq(entry.d.coins, 4, "data")
+			t.eq(entry.m, nil, "no metadata written when there is none")
+			t.eq(entry.l, nil, "no lock written by a keyed store")
+
+			local _, _, loaded = t.await(store.loadSnapshot("v1-trip"))
+			t.isTrue(loaded.ok, "load should succeed")
+			t.eq(loaded.value.version, 2, "version read back")
+			t.eq(loaded.value.value.coins, 4, "value read back")
+		end)
+
+		t.it("adopts a raw legacy value at version 0 and saves it as v1", function()
+			seed("legacy", { gold = 9 })
+			local seen = {}
+			local store = storeModule.createStore(
+				definition({
+					migrate = function(stored, from)
+						table.insert(seen, from)
+						return { coins = stored.gold, name = "adopted" }
+					end,
+				}),
+				{ createBackend = backendFor }
+			)
+
+			local _, _, loaded = t.await(store.loadSnapshot("legacy"))
+			t.isTrue(loaded.ok, "adopted load should succeed")
+			t.eq(loaded.value.version, 0, "legacy is version 0")
+			t.eq(seen[1], 0, "migrate saw version 0")
+
+			t.await(store.save("legacy", loaded.value.value))
+			local entry = storedEntry("legacy")
+			t.eq(entry["$aruna"], 1, "saved as v1")
+			t.eq(entry.v, 1, "at the store's version")
+			t.eq(entry.d.coins, 9, "with the adopted data")
+		end)
+
+		t.it("does not mistake { v = 1, t = 2 } for an envelope", function()
+			seed("lookalike", { v = 1, t = 2 })
+			t.eq(storeModule.readStoreRecord({ v = 1, t = 2 }).kind, "legacy", "classified as legacy")
+			local received = {}
+			local store = storeModule.createStore(
+				definition({
+					migrate = function(stored, from)
+						received.value = stored
+						received.from = from
+						return { coins = 0, name = "adopted" }
+					end,
+				}),
+				{ createBackend = backendFor }
+			)
+
+			local _, _, loaded = t.await(store.load("lookalike"))
+			t.isTrue(loaded.ok, "adopted through migrate")
+			t.eq(received.from, 0, "at version 0")
+			t.eq(received.value.v, 1, "migrate got the whole table")
+			t.eq(received.value.t, 2, "migrate got the whole table")
+		end)
+
+		t.it("keeps the metadata slot out of migrate and through the next write", function()
+			seed("meta", {
+				["$aruna"] = 1,
+				v = 1,
+				t = 0,
+				d = { coins = 7 },
+				m = { r = { "receipt-1", "receipt-2" }, h = { k = "token", x = 99 }, e = 3 },
+			})
+			local migrateInput = {}
+			local store = storeModule.createStore(
+				definition({
+					version = 2,
+					migrate = function(stored)
+						migrateInput.value = stored
+						return { coins = stored.coins, name = "v2" }
+					end,
+				}),
+				{ createBackend = backendFor }
+			)
+
+			local _, _, updated = t.await(store.update("meta", function(current)
+				return { coins = current.coins + 1, name = current.name }
+			end))
+			t.isTrue(updated.ok, "update should succeed")
+			t.eq(migrateInput.value.m, nil, "migrate never sees the metadata")
+			t.eq(migrateInput.value.coins, 7, "migrate sees the data")
+
+			local entry = storedEntry("meta")
+			t.eq(entry.v, 2, "migrated version written")
+			t.eq(entry.d.coins, 8, "updated data written")
+			t.eq(#entry.m.r, 2, "receipts kept")
+			t.eq(entry.m.r[2], "receipt-2", "receipts kept in order")
+			t.eq(entry.m.h.k, "token", "handoff token kept")
+			t.eq(entry.m.e, 3, "erasure marker kept")
+		end)
+
+		t.it("evicts the oldest receipt ids beyond the bound", function()
+			local meta = { receipts = {} }
+			local limit = storeModule.STORE_MAX_RECEIPTS
+			for index = 1, limit + 2 do
+				meta = storeModule.recordStoreReceipt(meta, "receipt-" .. index).value
+			end
+			t.eq(#meta.receipts, limit, "bounded")
+			t.eq(meta.receipts[1], "receipt-3", "oldest two evicted")
+			t.isFalse(storeModule.hasStoreReceipt(meta, "receipt-2"), "evicted id gone")
+			t.isTrue(storeModule.hasStoreReceipt(meta, "receipt-" .. (limit + 2)), "newest kept")
+		end)
+
+		t.it("refuses a record in a newer envelope format", function()
+			seed("format-ahead", { ["$aruna"] = 2, v = 1, t = 0, d = { coins = 1, name = "a" } })
+			local store = storeModule.createStore(definition(), { createBackend = backendFor })
+
+			local _, _, loaded = t.await(store.load("format-ahead"))
+			t.isFalse(loaded.ok, "load should fail")
+			t.eq(loaded.error.name, "StoreVersionAheadError", "error name")
+			local _, _, saved = t.await(store.save("format-ahead", { coins = 2, name = "a" }))
+			t.eq(saved.error.name, "StoreVersionAheadError", "save refused")
+			t.eq(storedEntry("format-ahead")["$aruna"], 2, "record untouched")
 		end)
 	end)
 

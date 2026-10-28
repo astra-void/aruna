@@ -316,9 +316,20 @@ interface StoreFailure {
     readonly error: StoreError;
 }
 
+interface StoreHandoff {
+    readonly token: string;
+    readonly expiresAtMs: number;
+}
+
 interface StoreLockState {
     readonly owner: string;
     readonly heartbeatMs: number;
+}
+
+interface StoreMeta {
+    readonly receipts: ReadonlyArray<string>;
+    readonly handoff?: StoreHandoff;
+    readonly erasedAtMs?: number;
 }
 
 type StoreMigrate<TSchema extends Schema> = (stored: unknown, fromVersion: number) => Infer<TSchema> | undefined;
@@ -346,6 +357,7 @@ interface StoreSnapshot<TValue> {
     readonly migrated: boolean;
     readonly updatedAtMs: number | undefined;
     readonly lock: StoreLockState | undefined;
+    readonly meta: StoreMeta;
 }
 
 interface StoreSuccess<TValue> {

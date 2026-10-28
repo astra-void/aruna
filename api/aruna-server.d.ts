@@ -218,7 +218,15 @@ export type PublishingActionDefinition<TInput extends Schema | undefined, TOutpu
     run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
 
+export declare const STORE_ENVELOPE_FORMAT = 1;
+
+export declare const STORE_ENVELOPE_MARKER = "$aruna";
+
 export declare const STORE_MAX_KEY_LENGTH = 50;
+
+export declare const STORE_MAX_META_ID_BYTES = 128;
+
+export declare const STORE_MAX_RECEIPTS = 100;
 
 export declare const STORE_MAX_VALUE_BYTES = 4194304;
 
@@ -315,10 +323,26 @@ export interface StoreDocument<TValue> {
 }
 
 export interface StoreEnvelope {
+    readonly "$aruna": number;
     readonly v: number;
     readonly d: unknown;
     readonly t: number;
-    readonly lock?: StoreLockState;
+    readonly m?: StoreEnvelopeMeta;
+    readonly l?: StoreEnvelopeLock;
+}
+
+export interface StoreEnvelopeLock {
+    readonly o: string;
+    readonly h: number;
+}
+
+export interface StoreEnvelopeMeta {
+    readonly r?: Array<string>;
+    readonly h?: {
+        readonly k: string;
+        readonly x: number;
+    };
+    readonly e?: number;
 }
 
 export interface StoreError {
@@ -358,14 +382,45 @@ export interface StoreFailure {
     readonly error: StoreError;
 }
 
+export interface StoreHandoff {
+    readonly token: string;
+    readonly expiresAtMs: number;
+}
+
 export interface StoreLockState {
     readonly owner: string;
     readonly heartbeatMs: number;
 }
 
+export interface StoreMeta {
+    readonly receipts: ReadonlyArray<string>;
+    readonly handoff?: StoreHandoff;
+    readonly erasedAtMs?: number;
+}
+
 export type StoreMigrate<TSchema extends Schema> = (stored: unknown, fromVersion: number) => Infer<TSchema> | undefined;
 
 export type StoreOperation = "load" | "save" | "update" | "remove" | "lock" | "release";
+
+export type StoreRecord = {
+    readonly kind: "absent";
+} | {
+    readonly kind: "legacy";
+    readonly data: unknown;
+} | {
+    readonly kind: "envelope";
+    readonly version: number;
+    readonly data: unknown;
+    readonly updatedAtMs: number;
+    readonly meta: StoreMeta;
+    readonly lock: StoreLockState | undefined;
+} | {
+    readonly kind: "format-ahead";
+    readonly format: number;
+} | {
+    readonly kind: "malformed";
+    readonly reason: string;
+};
 
 export interface StoreRequestOptions {
     readonly kind: StoreBackendRequestKind;
@@ -415,6 +470,7 @@ export interface StoreSnapshot<TValue> {
     readonly migrated: boolean;
     readonly updatedAtMs: number | undefined;
     readonly lock: StoreLockState | undefined;
+    readonly meta: StoreMeta;
 }
 
 export interface StoreSuccess<TValue> {
@@ -438,7 +494,7 @@ export declare function createServerApp<TPlayer = unknown, TSignals extends Sign
 
 export declare function createStore<TSchema extends Schema>(definition: StoreDefinition<TSchema>, options?: StoreRuntimeOptions): Store<TSchema>;
 
-export declare function createStoreEnvelope(version: number, data: unknown, nowMs: number, lock?: StoreLockState): StoreEnvelope;
+export declare function createStoreEnvelope(version: number, data: unknown, nowMs: number, lock?: StoreLockState, meta?: StoreMeta): StoreEnvelope;
 
 export declare function decodeStoreValue(definition: StoreCodecDefinition, raw: unknown): StoreResult<StoreSnapshot<unknown>>;
 
@@ -456,19 +512,25 @@ export declare function defineSignal<TId extends string, TPayload extends Schema
 
 export declare function defineStore<TSchema extends Schema>(definition: StoreDefinition<TSchema>): StoreDefinition<TSchema>;
 
+export declare function emptyStoreMeta(): StoreMeta;
+
 export declare function encodeStoreValue(definition: {
     readonly id: string;
     readonly schema: Schema;
     readonly version?: number;
-}, value: unknown, nowMs: number, lock?: StoreLockState): StoreResult<StoreEnvelope>;
+}, value: unknown, nowMs: number, lock?: StoreLockState, meta?: StoreMeta): StoreResult<StoreEnvelope>;
 
 export declare function findStoreValueViolation(value: unknown, path?: string, seen?: Set<object>): string | undefined;
 
+export declare function hasStoreReceipt(meta: StoreMeta, receiptId: string): boolean;
+
 export declare function isStoreEnvelope(value: unknown): value is StoreEnvelope;
 
-export declare function isStoreLockState(value: unknown): value is StoreLockState;
-
 export declare function measureStoreValueBytes(value: unknown): number;
+
+export declare function readStoreRecord(raw: unknown): StoreRecord;
+
+export declare function recordStoreReceipt(meta: StoreMeta, receiptId: string): StoreResult<StoreMeta>;
 
 export declare function resolveStoreDefault(definition: {
     readonly defaultValue: unknown;
