@@ -46,6 +46,17 @@ return function(ctx)
 		return remote
 	end
 
+	-- Wire frames (docs/wire-protocol.md) pass through the remote as is. The
+	-- publishers here are unbatched, so a signal is on the wire when `to` returns.
+	local function unbatchedPublisher(remote, signals, unreliableRemote)
+		return signalRuntime.createRemoteSignalPublisher(remote, signals, unreliableRemote, { batching = false })
+	end
+
+	-- One signal in its own frame, as a raw server would fire it.
+	local function frameOf(signalId, payload)
+		return { 1, { s = signalId, d = payload } }
+	end
+
 	local function makeSignals()
 		return {
 			["combat.damaged"] = defineSignal({
@@ -60,7 +71,7 @@ return function(ctx)
 		t.it("delivers a published payload to a dynamic subscriber", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local received = nil
@@ -79,7 +90,7 @@ return function(ctx)
 		t.it("broadcasts to all subscribers", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
@@ -95,7 +106,7 @@ return function(ctx)
 		t.it("stops delivering after disconnect", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
@@ -114,7 +125,7 @@ return function(ctx)
 		t.it("rejects an unknown signal id on publish", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 
 			local ok = pcall(function()
 				publisher.to("Ada", "combat.unknown", { amount = 1, source = "a" })
@@ -125,7 +136,7 @@ return function(ctx)
 		t.it("rejects a schema-invalid payload before the wire", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
@@ -145,7 +156,7 @@ return function(ctx)
 		t.it("toBatched sends every payload to one player, yielding between chunks", function()
 			local remote = makeSignalRemote()
 			local signals = makeSignals()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local received = {}
@@ -188,7 +199,7 @@ return function(ctx)
 				},
 			}
 			local publisher =
-				signalRuntime.createRemoteSignalPublisher(reliableRemote, signals, unreliableRemote)
+				unbatchedPublisher(reliableRemote, signals, unreliableRemote)
 			local subscriber =
 				signalRuntime.createRemoteSignalSubscriber(reliableRemote, signals, unreliableRemote)
 
@@ -222,7 +233,7 @@ return function(ctx)
 		t.it("falls back to the reliable remote when no unreliable remote is given", function()
 			local remote = makeSignalRemote()
 			local signals = { ["player.moved"] = { id = "player.moved", unreliable = true } }
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals)
+			local publisher = unbatchedPublisher(remote, signals)
 			local subscriber = signalRuntime.createRemoteSignalSubscriber(remote, signals)
 
 			local count = 0
@@ -246,8 +257,8 @@ return function(ctx)
 				count += 1
 			end)
 
-			-- Fire a raw malformed envelope straight onto the wire.
-			remote.FireAllClients({ signalId = "combat.damaged", payload = { amount = "nope" } })
+			-- Fire a raw signal with a malformed payload straight onto the wire.
+			remote.FireAllClients(frameOf("combat.damaged", { amount = "nope" }))
 			t.eq(count, 0)
 			subscriber.dispose()
 		end)
@@ -323,14 +334,19 @@ return function(ctx)
 		local sent = {}
 		local remote = makeSignalRemote()
 		local fireAll = remote.FireAllClients
+		-- One entry per signal a frame carries.
+		local function record(frame)
+			for index = 2, #frame do
+				table.insert(sent, { signalId = frame[index].s, payload = frame[index].d })
+			end
+			fireAll(frame)
+		end
 		local recording = {
-			FireClient = function(_player, message)
-				table.insert(sent, message)
-				fireAll(message)
+			FireClient = function(_player, frame)
+				record(frame)
 			end,
-			FireAllClients = function(message)
-				table.insert(sent, message)
-				fireAll(message)
+			FireAllClients = function(frame)
+				record(frame)
 			end,
 			OnClientEvent = remote.OnClientEvent,
 		}
@@ -350,7 +366,7 @@ return function(ctx)
 					table.insert(received, payload)
 				end)
 
-				signalRuntime.createRemoteSignalPublisher(remote, signals).to({}, "fx.hit", case.value)
+				unbatchedPublisher(remote, signals).to({}, "fx.hit", case.value)
 
 				t.eq(#sent, 1)
 				t.eq(typeof(sent[1].payload), "buffer", "a binary signal sends a buffer")
@@ -373,9 +389,9 @@ return function(ctx)
 				received.count += 1
 			end)
 
-			signalRuntime.createRemoteSignalPublisher(remote, v1).to({}, "fx.hit", { hp = 5 })
-			remote.FireAllClients({ signalId = "fx.hit", payload = { hp = 5 } })
-			remote.FireAllClients({ signalId = "fx.hit", payload = buffer.create(2) })
+			unbatchedPublisher(remote, v1).to({}, "fx.hit", { hp = 5 })
+			remote.FireAllClients(frameOf("fx.hit", { hp = 5 }))
+			remote.FireAllClients(frameOf("fx.hit", buffer.create(2)))
 
 			t.eq(#sent, 3)
 			t.eq(received.count, 0)
@@ -383,15 +399,15 @@ return function(ctx)
 		end)
 
 		-- An unbounded array, so only the runtime can catch an oversized frame.
-		-- Frame: 4-byte header + 4-byte count + 1 per u8. Envelope: "fx.burst"
-		-- (8) + SIGNAL_ENVELOPE_OVERHEAD_BYTES (55).
+		-- Binary frame: 4-byte header + 4-byte count + 1 per u8. Wire frame:
+		-- "fx.burst" (8) + SIGNAL_FRAME_OVERHEAD_BYTES (58).
 		local function items(count)
 			local list = table.create(count, 1)
 			return list
 		end
 
-		t.it("refuses a binary unreliable frame that is over the limit with its envelope", function()
-			t.eq(signalRuntime.SIGNAL_ENVELOPE_OVERHEAD_BYTES, 55)
+		t.it("refuses a binary unreliable frame that is over the limit with its wire frame", function()
+			t.eq(signalRuntime.SIGNAL_FRAME_OVERHEAD_BYTES, 58)
 			local signals = {
 				["fx.burst"] = defineSignal({
 					id = "fx.burst",
@@ -401,22 +417,22 @@ return function(ctx)
 				}),
 			}
 			local remote, sent = recordingRemote()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals, remote)
+			local publisher = unbatchedPublisher(remote, signals, remote)
 
-			-- 829 + 63 = 892 fits; 838 + 63 = 901 does not.
-			publisher.to({}, "fx.burst", items(821))
+			-- 834 + 66 = 900 fits; 835 + 66 = 901 does not.
+			publisher.to({}, "fx.burst", items(826))
 			t.eq(#sent, 1)
 
-			local ok, err = pcall(publisher.to, {}, "fx.burst", items(830))
+			local ok, err = pcall(publisher.to, {}, "fx.burst", items(827))
 			t.isFalse(ok)
 			-- Luau prefixes a thrown string with its position.
 			t.contains(
 				err,
 				"Unreliable signal fx.burst carries 901 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error."
 			)
-			t.isFalse((pcall(publisher.toAll, "fx.burst", items(830))))
-			t.isFalse((pcall(publisher.toMany, { {} }, "fx.burst", items(830))))
-			local settled, resolved, reason = t.await(publisher.toBatched({}, "fx.burst", { items(1), items(830) }))
+			t.isFalse((pcall(publisher.toAll, "fx.burst", items(827))))
+			t.isFalse((pcall(publisher.toMany, { {} }, "fx.burst", items(827))))
+			local settled, resolved, reason = t.await(publisher.toBatched({}, "fx.burst", { items(1), items(827) }))
 			t.isTrue(settled)
 			t.isFalse(resolved)
 			t.contains(tostring(reason), "fx.burst carries 901 bytes")
@@ -429,7 +445,7 @@ return function(ctx)
 				["fx.table"] = defineSignal({ id = "fx.table", payload = schema.array(schema.u8()), unreliable = true }),
 			}
 			local remote, sent = recordingRemote()
-			local publisher = signalRuntime.createRemoteSignalPublisher(remote, signals, remote)
+			local publisher = unbatchedPublisher(remote, signals, remote)
 			publisher.to({}, "fx.burst", items(2000))
 			publisher.to({}, "fx.table", items(2000))
 			t.eq(#sent, 2)

@@ -286,9 +286,28 @@ local function makeFakes()
 		},
 	}
 
+	-- Fires RunService.Heartbeat once per scheduler frame while specs run, as a
+	-- game does once per frame: the wire batching flushes on it.
+	local pumping = { active = false }
+	local function startHeartbeat()
+		pumping.active = true
+		task.spawn(function()
+			while pumping.active do
+				local elapsed = task.wait()
+				heartbeat:Fire(elapsed)
+			end
+		end)
+	end
+	local function stopHeartbeat()
+		pumping.active = false
+	end
+
 	return {
 		game = game,
 		Instance = Instance,
+		heartbeat = heartbeat,
+		startHeartbeat = startHeartbeat,
+		stopHeartbeat = stopHeartbeat,
 		DateTime = DateTime,
 		Enum = Enum,
 		clock = clock,

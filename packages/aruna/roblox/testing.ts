@@ -7,6 +7,8 @@
 // Everything is assembled from the shipping runtime rather than re-implemented:
 // the publisher is the real `createRemoteSignalPublisher` over a recording
 // remote, so a payload that would fail validation in production fails here too.
+// It sends unbatched (each signal in its own wire frame, as it is published), so
+// `published()` and a client's handlers see a signal without waiting a frame.
 
 import {
 	createServerApp,
@@ -19,9 +21,9 @@ import type { ActionMap } from "./server-runtime";
 import {
 	createRemoteSignalPublisher,
 	createRemoteSignalSubscriber,
-	type RemoteSignalMessage,
 	type SignalMap,
 } from "./signal-runtime";
+import { readWireFrame, type WireFrame, type WireSignal } from "./wire";
 
 // The shape of the player double: only the two fields the runtime reads. `UserId`
 // is what the default rate-limit key buckets on, `Name` is what test output
@@ -109,7 +111,19 @@ export type CreateTestServerAppOptions<
 
 interface SignalSink<TPlayer extends defined> {
 	readonly player: TPlayer;
-	readonly deliver: (message: RemoteSignalMessage) => void;
+	readonly deliver: (frame: WireFrame) => void;
+}
+
+// The signals a frame carries, as the harness records them.
+function signalsIn(frame: WireFrame): Array<WireSignal> {
+	const read = readWireFrame(frame);
+	const signals = new Array<WireSignal>();
+	if (read.ok) {
+		for (const item of read.items) {
+			signals.push(item as WireSignal);
+		}
+	}
+	return signals;
 }
 
 export function createTestServerApp<
@@ -125,18 +139,22 @@ export function createTestServerApp<
 	const sinks = new Array<SignalSink<TPlayer>>();
 
 	const recordingRemote = {
-		FireClient: (player: TPlayer, message: RemoteSignalMessage) => {
-			published.push({ signalId: message.signalId, payload: message.payload, player });
+		FireClient: (player: TPlayer, frame: WireFrame) => {
+			for (const signal of signalsIn(frame)) {
+				published.push({ signalId: signal.s, payload: signal.d, player });
+			}
 			for (const sink of sinks) {
 				if (sink.player === player) {
-					sink.deliver(message);
+					sink.deliver(frame);
 				}
 			}
 		},
-		FireAllClients: (message: RemoteSignalMessage) => {
-			published.push({ signalId: message.signalId, payload: message.payload });
+		FireAllClients: (frame: WireFrame) => {
+			for (const signal of signalsIn(frame)) {
+				published.push({ signalId: signal.s, payload: signal.d });
+			}
 			for (const sink of sinks) {
-				sink.deliver(message);
+				sink.deliver(frame);
 			}
 		},
 	};
@@ -170,7 +188,9 @@ export function createTestServerApp<
 		...(signals !== undefined
 			? {
 					createPublisher: (registry: TSignals) =>
-						createRemoteSignalPublisher<TSignals, TPlayer>(recordingRemote, registry),
+						createRemoteSignalPublisher<TSignals, TPlayer>(recordingRemote, registry, undefined, {
+							batching: false,
+						}),
 				}
 			: {}),
 		players: {
@@ -260,7 +280,7 @@ export function createTestServerApp<
 								createRemoteSignalSubscriber<TSignals>(
 									{
 										OnClientEvent: {
-											Connect: (callback: (message: RemoteSignalMessage) => void) => {
+											Connect: (callback: (frame: unknown) => void) => {
 												const sink: SignalSink<TPlayer> = { player, deliver: callback };
 												sinks.push(sink);
 												return {

@@ -12,6 +12,7 @@ import {
 	createDepartedPlayers,
 	createRequestGuard,
 	IN_FLIGHT_RETRY_AFTER_MS,
+	refuseFrame,
 	type RequestAbuseHandler,
 	type RequestBudgetOptions,
 } from "./request-guard";
@@ -67,6 +68,13 @@ export interface ActionRegistry<TPlayer = unknown> {
 	// request and action ids must be bounded strings, and the player's request
 	// budget must have a token. False means drop the envelope with no response.
 	readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
+	// The transport's report of a frame it dropped whole, before reading any call
+	// in it (docs/wire-protocol.md): charged one request and reported through
+	// `onAbuse`.
+	readonly refuseFrame: (
+		player: TPlayer,
+		reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch",
+	) => void;
 	// Drops what the registry remembers about a player: idempotency keys, the
 	// request budget, the in-flight count. `createServerApp` calls it on leave.
 	// The player is then marked departed for a short while
@@ -458,6 +466,7 @@ export function createActionRegistry<TPlayer>(
 		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
 		admitEnvelope: (player, requestId, actionId) =>
 			admitEnvelope(guard, player, requestId, actionId),
+		refuseFrame: (player, reason) => refuseFrame(guard, player, reason),
 		dispatch: (player, actionId, input, idempotencyKey) =>
 			withIdempotency(dispatchCapped, player, actionId, input, idempotencyKey),
 		dispatchInProcess: (player, actionId, input, idempotencyKey) =>

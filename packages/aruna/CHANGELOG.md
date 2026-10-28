@@ -228,6 +228,21 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: wire protocol v1.** Every remote fire carries one frame,
+  `[1, ...items]`: calls `{ i, a, d?, k? }`, responses `{ i, r }`, signals
+  `{ s, d? }` (docs/wire-protocol.md). Calls, responses and reliable signals
+  are batched and flushed once per frame at `RunService.Heartbeat`, at most 64
+  items a frame; unreliable signals are never batched. `batching: false` on
+  `createActionInvoker`, `robloxRemoteEvent`/`bindActions` and the publishers
+  fires each item on its own. The server drops a frame with an unknown protocol
+  version or over 64 calls whole, before reading a call, charging one request
+  and reporting `unknown-protocol-version` / `oversize-batch` through
+  `onAbuse`; every call in a frame is charged on its own. A client drops such a
+  frame with a Studio warning (`onProtocolError`). The unreliable size checks
+  (`aruna::511`/`513`, the publisher's) use the new 58-byte frame overhead
+  (was 55). `SignalServerLike`/`SignalClientLike` carry frames;
+  `RemoteSignalMessage` and `SIGNAL_ENVELOPE_OVERHEAD_BYTES` are gone.
+
 - **Breaking: store records use persisted format v1.** `{ "$aruna": 1, v, d, t,
   m?, l? }`: an explicit marker carrying the envelope format version, a
   framework metadata slot `m` (receipt ids, handoff token, erasure marker; never

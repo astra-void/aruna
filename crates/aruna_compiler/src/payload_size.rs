@@ -10,29 +10,31 @@ pub const BINARY_FRAME_HEADER_BYTES: u64 = 4;
 // error on either side, so the compiler checks it instead.
 pub const UNRELIABLE_PAYLOAD_LIMIT_BYTES: u64 = 900;
 
-// What a signal message costs on top of its payload. The remote carries
-// `{ signalId, payload }`, so the limit applies to that table, not the payload
-// alone: the two key strings ("signalId" + "payload", 15 bytes), the signal id
-// itself (added per signal), and an allowance for each of the five values the
-// table holds (the table, two keys, two values). Roblox does not document its
-// remote encoding; a value there costs a type tag plus a length or count, and
-// 8 bytes each covers a tag and a length prefix of up to 7 bytes with room to
-// spare. Erring high only means warning a little early. Mirrored by the
-// runtime's publisher (SIGNAL_ENVELOPE_OVERHEAD_BYTES), which checks a binary
-// frame against the same total before firing it.
-pub const SIGNAL_ENVELOPE_KEY_BYTES: u64 = 15;
-pub const SIGNAL_ENVELOPE_VALUE_ALLOWANCE_BYTES: u64 = 8;
-pub const SIGNAL_ENVELOPE_VALUES: u64 = 5;
-pub const SIGNAL_ENVELOPE_OVERHEAD_BYTES: u64 =
-    SIGNAL_ENVELOPE_KEY_BYTES + SIGNAL_ENVELOPE_VALUES * SIGNAL_ENVELOPE_VALUE_ALLOWANCE_BYTES;
+// What an unreliable signal's wire frame costs on top of its payload
+// (docs/wire-protocol.md). An unreliable signal goes out alone in its frame,
+// `[1, { s = signalId, d = payload }]`, so the limit applies to that frame, not
+// the payload alone. Roblox does not document its remote encoding; a value there
+// costs a type tag plus a length or count, and 8 bytes each covers a tag and a
+// length prefix of up to 7 bytes with room to spare. The frame holds seven
+// values (the frame array, the protocol version, the item table, the keys "s"
+// and "d", the signal id, the payload), plus the two one-byte key strings and
+// the signal id's own bytes (added per signal). Erring high only means warning a
+// little early. Mirrored by the runtime's publisher
+// (SIGNAL_FRAME_OVERHEAD_BYTES), which checks a binary frame against the same
+// total before firing it.
+pub const WIRE_VALUE_ALLOWANCE_BYTES: u64 = 8;
+pub const WIRE_SIGNAL_FRAME_VALUES: u64 = 7;
+pub const WIRE_SIGNAL_FRAME_KEY_BYTES: u64 = 2;
+pub const WIRE_SIGNAL_FRAME_OVERHEAD_BYTES: u64 =
+    WIRE_SIGNAL_FRAME_VALUES * WIRE_VALUE_ALLOWANCE_BYTES + WIRE_SIGNAL_FRAME_KEY_BYTES;
 
 // For the table encoding the compiler knows only a floor; past this share of the
 // limit, the real size is likely over it, so binary is recommended.
 pub const UNRELIABLE_TABLE_ENCODING_WARN_PERCENT: u64 = 75;
 
-// A signal message's size: the payload plus its `{ signalId, payload }` envelope.
+// An unreliable signal's size on the wire: the payload plus its frame.
 pub fn signal_message_bytes(signal_id: &str, payload_bytes: u64) -> u64 {
-    payload_bytes + signal_id.len() as u64 + SIGNAL_ENVELOPE_OVERHEAD_BYTES
+    payload_bytes + signal_id.len() as u64 + WIRE_SIGNAL_FRAME_OVERHEAD_BYTES
 }
 
 // The largest payload `encodeBinary` can produce for a schema, frame header

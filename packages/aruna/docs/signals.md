@@ -94,6 +94,13 @@ serverApp.publisher?.toAll("world.tick", undefined);
 > **Advanced:** `createRemoteSignalPublisher(remote, signals)` is the lower-level overload
 > when you supply your own RemoteEvent instead of the default Aruna signal remote.
 
+Reliable signals leave **once per frame**: the publisher queues what you publish and
+fires it together at `RunService.Heartbeat`, keeping each player's order, so a burst of
+`to` calls costs one remote fire per player rather than one per signal. Unreliable signals
+are never batched — each goes out at once, alone. `createSignalPublisher(signals,
+{ batching: false })` fires every signal as it is published.
+([Wire protocol](../../../docs/wire-protocol.md#batching).)
+
 ## Publishing from inside an action
 
 When `createServerApp` owns the publisher, it is **injected into every action's `ctx`**, so
@@ -220,25 +227,26 @@ size of its `encodeBinary` frame — and records it as `maxEncodedBytes` in the 
 | `aruna::511 unreliable-signal-payload-too-large` | its largest message is over 900 bytes | error |
 | `aruna::513 unreliable-signal-payload-near-limit` | table encoding, and its size floor is over 75% of the limit | warning |
 
-The limit applies to the whole message, and the remote carries `{ signalId, payload }`,
-not the payload alone. So the compared size is the payload plus the signal id's bytes
-plus a fixed 55-byte envelope allowance: the two key strings (`"signalId"` and
-`"payload"`, 15 bytes) and 8 bytes for each of the table's five values. Roblox does not
-document its remote encoding; 8 bytes covers a type tag and a length prefix with room to
-spare, and erring high only means a warning comes a little early.
+The limit applies to the whole message, not the payload alone. An unreliable signal goes
+out alone in its wire frame, `[1, { s = signalId, d = payload }]`
+([wire protocol](../../../docs/wire-protocol.md#size-accounting)), so the compared size is
+the payload plus the signal id's bytes plus a fixed 58-byte frame allowance: 8 bytes for
+each of the frame's seven values and the two one-byte keys. Roblox does not document its
+remote encoding; 8 bytes covers a type tag and a length prefix with room to spare, and
+erring high only means a warning comes a little early.
 
 For a `wire: "binary"` signal the 4-byte frame header counts, and the size is exact. For
 the default table encoding the binary size is a floor — Roblox adds a type tag and key per
 value on top — so an error there is certain, while staying under it is not a guarantee.
-That is what `aruna::513` is for: once the floor plus the envelope is past 75% of the
+That is what `aruna::513` is for: once the floor plus the frame is past 75% of the
 limit, the real size may well be over it, and the fix is `wire: "binary"`, whose size the
 compiler and the publisher both know exactly. String lengths are counted in UTF-8 bytes,
 as `.maxLength` is.
 
 The compiler can only check a bounded schema. When it cannot (`aruna::510`), a binary
-unreliable signal is still checked at runtime: the publisher measures each frame plus the
-envelope before firing and throws instead of sending one Roblox would drop — `Unreliable
-signal fx.burst carries 931 bytes, over Roblox's 900-byte unreliable limit; …`
+unreliable signal is still checked at runtime: the publisher measures each binary frame
+plus its wire frame before firing and throws instead of sending one Roblox would drop —
+`Unreliable signal fx.burst carries 934 bytes, over Roblox's 900-byte unreliable limit; …`
 (`toBatched` rejects with it). A table-encoded payload has no size the runtime
 can measure, so it is not checked.
 

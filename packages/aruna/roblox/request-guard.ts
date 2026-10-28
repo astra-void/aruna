@@ -87,7 +87,16 @@ export function createDepartedPlayers<TPlayer>(nowMs?: () => number): DepartedPl
 	};
 }
 
-export type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight";
+export type RequestAbuseReason =
+	| "budget-exhausted"
+	| "malformed-envelope"
+	| "too-many-in-flight"
+	// A frame whose protocol version this server does not speak
+	// (docs/wire-protocol.md). Dropped whole.
+	| "unknown-protocol-version"
+	// A frame with more than WIRE_MAX_FRAME_ITEMS calls. Dropped whole, before
+	// any call in it is read.
+	| "oversize-batch";
 
 export type RequestAbuseHandler<TPlayer = unknown> = (
 	player: TPlayer,
@@ -207,6 +216,22 @@ export function isValidEnvelopeIds(requestId: unknown, actionId: unknown): boole
 		typeIs(actionId, "string") &&
 		actionId.size() <= MAX_ACTION_ID_LENGTH
 	);
+}
+
+// The transport's gate for a frame it drops whole (not a frame, an unknown
+// protocol version, too many calls): charged one request, like a malformed
+// envelope, and reported. A frame from a player who already left is dropped
+// without a report.
+export function refuseFrame<TPlayer>(
+	guard: RequestGuard<TPlayer>,
+	player: TPlayer,
+	reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch",
+): void {
+	if (guard.hasDeparted(player)) {
+		return;
+	}
+	guard.admit(player);
+	guard.report(player, { reason: reason === "malformed-frame" ? "malformed-envelope" : reason });
 }
 
 // The transport's gate, before it reads anything else from an envelope: the

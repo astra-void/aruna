@@ -7,10 +7,27 @@
 import { schema, type Schema } from "aruna/schema";
 import { defineSignal } from "aruna/server";
 import {
-  createRemoteSignalPublisher,
+  createRemoteSignalPublisher as createBatchingPublisher,
   createRemoteSignalSubscriber,
-  type RemoteSignalMessage,
+  type SignalMap,
+  type SignalServerLike,
 } from "aruna/internal/signal-runtime";
+import type { WireFrame } from "aruna/internal/wire";
+
+// One signal as the wire carries it: the item `{ s, d }` of a frame.
+interface RemoteSignalMessage {
+  readonly signalId: string;
+  readonly payload: unknown;
+}
+
+// Unbatched, so a case can assert on the wire right after publishing. Binary
+// signals in batched frames are covered in wire.spec.ts.
+function createRemoteSignalPublisher<TSignals extends SignalMap>(
+  remote: SignalServerLike<unknown>,
+  registry: TSignals,
+) {
+  return createBatchingPublisher(remote, registry, undefined, { batching: false });
+}
 import { describe, expect, it } from "aruna/testing";
 
 interface BinaryCase {
@@ -61,20 +78,25 @@ const cases: Array<BinaryCase> = [
 // method's implicit `self` would shift every argument.
 function loopback() {
   const sent = new Array<RemoteSignalMessage>();
-  let deliver: ((message: RemoteSignalMessage) => void) | undefined;
-  const record = (message: RemoteSignalMessage) => {
-    sent.push(message);
-    deliver?.(message);
+  let deliver: ((frame: unknown) => void) | undefined;
+  const record = (frame: WireFrame) => {
+    for (let index = 1; index < frame.size(); index += 1) {
+      const item = frame[index] as { s: string; d?: unknown };
+      sent.push({ signalId: item.s, payload: item.d });
+    }
+    deliver?.(frame);
   };
   return {
     sent,
     server: {
-      FireClient: (_player: unknown, message: RemoteSignalMessage) => record(message),
-      FireAllClients: (message: RemoteSignalMessage) => record(message),
+      FireClient: (_player: unknown, frame: WireFrame) => record(frame),
+      FireAllClients: (frame: WireFrame) => record(frame),
     },
+    // A raw signal in its own frame, as a misbehaving server would send it.
+    fireRaw: (message: RemoteSignalMessage) => record([1, { s: message.signalId, d: message.payload }]),
     client: {
       OnClientEvent: {
-        Connect: (callback: (message: RemoteSignalMessage) => void) => {
+        Connect: (callback: (frame: unknown) => void) => {
           deliver = callback;
           return { Disconnect: () => undefined };
         },
@@ -165,8 +187,8 @@ describe("binary signal wire (Node)", () => {
       received.push(payload as defined);
     });
 
-    remote.server.FireAllClients({ signalId: "fx.hit", payload: { hp: 5 } });
-    remote.server.FireAllClients({ signalId: "fx.hit", payload: bytesOf([1, 2]) });
+    remote.fireRaw({ signalId: "fx.hit", payload: { hp: 5 } });
+    remote.fireRaw({ signalId: "fx.hit", payload: bytesOf([1, 2]) });
 
     expect(remote.sent).toHaveLength(2);
     expect(received).toEqual([]);

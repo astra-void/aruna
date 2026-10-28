@@ -13,9 +13,10 @@ export interface ActionError {
 
 export declare const CONTRACT_HASH_ATTRIBUTE_NAME = "ArunaContractHash";
 
-export interface CreateActionInvokerOptions extends ContractHandshakeOptions {
+export interface CreateActionInvokerOptions extends ContractHandshakeOptions, WireBatchOptions {
     readonly createRequestId?: () => string;
     readonly requestTimeoutMs?: number;
+    readonly onProtocolError?: WireProtocolErrorHandler;
 }
 
 export declare const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10000;
@@ -31,7 +32,7 @@ export interface RobloxDataStoreBackendOptions {
     readonly onFallback?: (reason: string) => void;
 }
 
-export interface RobloxRemoteEventOptions {
+export interface RobloxRemoteEventOptions extends WireBatchOptions {
     readonly contractHash?: string;
 }
 
@@ -39,21 +40,80 @@ export declare const SIGNAL_REMOTE_NAME = "ArunaSignalRemoteEvent";
 
 export declare const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemoteEvent";
 
+export declare const WIRE_MAX_FRAME_ITEMS = 64;
+
+export declare const WIRE_PROTOCOL_VERSION = 1;
+
+export interface WireBatchOptions {
+    readonly batching?: boolean;
+    readonly frameScheduler?: WireFrameScheduler;
+}
+
+export interface WireCall {
+    readonly i: string;
+    readonly a: string;
+    readonly d?: unknown;
+    readonly k?: string;
+}
+
+export type WireFrame = Array<defined>;
+
+export type WireFrameRead = {
+    readonly ok: true;
+    readonly items: ReadonlyArray<defined>;
+} | {
+    readonly ok: false;
+    readonly reason: WireFrameRejection;
+};
+
+export type WireFrameRejection = "malformed-frame" | "unknown-protocol-version" | "oversize-batch";
+
+export interface WireFrameScheduler {
+    readonly connect: (onFrame: () => void) => {
+        readonly Disconnect: () => void;
+    };
+}
+
+export interface WireOutbox<TTarget> {
+    readonly push: (target: TTarget, item: defined) => void;
+    readonly pushAll: (item: defined) => void;
+    readonly flush: () => void;
+    readonly dispose: () => void;
+}
+
+export type WireProtocolErrorHandler = (channel: string, reason: WireFrameRejection) => void;
+
+export interface WireResponse {
+    readonly i: string;
+    readonly r: ActionDispatchResult;
+}
+
+export interface WireSignal {
+    readonly s: string;
+    readonly d?: unknown;
+}
+
 export declare function actionError(name: string, message: string): PublicActionError;
 
-export declare function bindActions<TPlayer>(registry: ActionRegistry<TPlayer>, contractHash?: string): ServerAppBinding;
+export declare function bindActions<TPlayer>(registry: ActionRegistry<TPlayer>, contractHash?: string, options?: WireBatchOptions): ServerAppBinding;
 
 export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals>;
 
 export declare function createActionInvoker(options?: CreateActionInvokerOptions): ActionInvoker;
 
-export declare function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(remote: SignalServerLike<TPlayer>, signals: TSignals, unreliableRemote?: SignalServerLike<TPlayer>): SignalPublisher<TSignals, TPlayer>;
+export declare function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(remote: SignalServerLike<TPlayer>, signals: TSignals, unreliableRemote?: SignalServerLike<TPlayer>, options?: WireBatchOptions): SignalPublisher<TSignals, TPlayer>;
 
-export declare function createRemoteSignalSubscriber<TSignals extends SignalMap>(remote: SignalClientLike, signals: TSignals, unreliableRemote?: SignalClientLike): SignalSubscriber<TSignals>;
+export declare function createRemoteSignalSubscriber<TSignals extends SignalMap>(remote: SignalClientLike, signals: TSignals, unreliableRemote?: SignalClientLike, options?: SignalSubscriberOptions): SignalSubscriber<TSignals>;
 
 export declare function createSignalPublisher<TSignals extends SignalMap>(signals: TSignals): SignalPublisher<TSignals, Player>;
 
 export declare function createSignalSubscriber<TSignals extends SignalMap>(signals: TSignals): SignalSubscriber<TSignals>;
+
+export declare function createWireFrame(items: ReadonlyArray<defined>): WireFrame;
+
+export declare function createWireOutbox<TTarget>(send: (target: TTarget, frame: WireFrame) => void, sendAll: ((frame: WireFrame) => void) | undefined, options?: WireBatchOptions): WireOutbox<TTarget>;
+
+export declare function defaultWireProtocolErrorHandler(channel: string, reason: WireFrameRejection): void;
 
 export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = Player, TSignals extends SignalMap = SignalMap>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals>): ActionDefinition<TInput, TOutput, TPlayer, TSignals>;
 
@@ -62,6 +122,10 @@ export declare function definePlayerStore<TSchema extends Schema, TPlayer = Play
 export declare function defineSignal<TId extends string, TPayload extends Schema | undefined = undefined>(definition: SignalDefinition<TPayload, TId>): SignalDefinition<TPayload, TId>;
 
 export declare function defineStore<TSchema extends Schema>(definition: StoreDefinition<TSchema>): StoreDefinition<TSchema>;
+
+export declare const heartbeatFrameScheduler: WireFrameScheduler;
+
+export declare function readWireFrame(frame: unknown): WireFrameRead;
 
 export declare function robloxDataStore(options?: RobloxDataStoreBackendOptions): (target: StoreBackendTarget) => StoreBackend;
 
@@ -127,6 +191,7 @@ interface ActionRegistry<TPlayer = unknown> {
     readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
     readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
     readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
+    readonly refuseFrame: (player: TPlayer, reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch") => void;
     readonly forgetPlayer: (player: TPlayer) => void;
     readonly readmitPlayer: (player: TPlayer) => void;
     readonly isFireAndForget: (actionId: string) => boolean;
@@ -177,11 +242,6 @@ interface RemoteSignalConnection {
     readonly disconnect: () => void;
 }
 
-interface RemoteSignalMessage {
-    readonly signalId: string;
-    readonly payload: unknown;
-}
-
 interface Schema<T = unknown> {
     readonly typeName: SchemaTypeName;
     readonly validate: (value: unknown) => boolean;
@@ -218,7 +278,7 @@ interface SignalBatchOptions {
 
 interface SignalClientLike {
     readonly OnClientEvent: {
-        readonly Connect: (callback: (message: RemoteSignalMessage) => void) => SignalConnectionLike;
+        readonly Connect: (callback: (frame: unknown) => void) => SignalConnectionLike;
     };
 }
 
@@ -251,13 +311,17 @@ interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
 }
 
 interface SignalServerLike<TPlayer> {
-    readonly FireClient: (player: TPlayer, message: RemoteSignalMessage) => void;
-    readonly FireAllClients: (message: RemoteSignalMessage) => void;
+    readonly FireClient: (player: TPlayer, frame: WireFrame) => void;
+    readonly FireAllClients: (frame: WireFrame) => void;
 }
 
 interface SignalSubscriber<TSignals extends SignalMap> {
     readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
     readonly dispose: () => void;
+}
+
+interface SignalSubscriberOptions {
+    readonly onProtocolError?: WireProtocolErrorHandler;
 }
 
 interface StoreBackend {

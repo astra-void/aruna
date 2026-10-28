@@ -158,10 +158,12 @@ end)
 
 -- Pump the scheduler until the run settles. Lune's main thread has to keep
 -- yielding for the Promise chain — and any task.wait() a spec performs — to make
--- progress.
+-- progress. Each pass is a frame: RunService.Heartbeat fires once per pass, as
+-- it does once per frame in a game.
 local deadline = os.clock() + 120
 while report == nil and failed == nil and os.clock() < deadline do
-	task.wait()
+	local elapsed = task.wait()
+	fakes.heartbeat:Fire(elapsed)
 end
 
 if failed ~= nil then

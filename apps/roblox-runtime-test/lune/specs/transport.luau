@@ -5,6 +5,19 @@ return function(ctx)
 	local fakes = ctx.fakes
 	local createActionRegistry = ctx.load("server-runtime").createActionRegistry
 
+	-- One call in its own wire frame (docs/wire-protocol.md), as a raw client
+	-- would fire it.
+	local function call(requestId, actionId, input, idempotencyKey)
+		return { 1, { i = requestId, a = actionId, d = input, k = idempotencyKey } }
+	end
+
+	-- The responses a frame carries.
+	local function countItems(counter)
+		return function(frame)
+			counter.count += #frame - 1
+		end
+	end
+
 	t.describe("RemoteEvent transport", function()
 		local fired = { count = 0 }
 		local registry = createActionRegistry({
@@ -301,7 +314,7 @@ return function(ctx)
 			},
 		})
 
-		t.it("carries the key as the 4th argument, so a retried call runs once", function()
+		t.it("carries the key in the call, so a retried call runs once", function()
 			local binding = transport.bindActions(registry)
 			local invoke = transport.createActionInvoker()
 			local _, ok1, first = t.await(invoke("buy", {}, { idempotencyKey = "k1" }))
@@ -318,10 +331,10 @@ return function(ctx)
 			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
 			local before = runs.count
 			local tooLong = string.rep("x", 65)
-			remote:FireServer("r1", "buy", nil, tooLong)
-			remote:FireServer("r2", "buy", nil, tooLong)
-			remote:FireServer("r3", "buy", nil, 42)
-			remote:FireServer("r4", "buy", nil, 42)
+			remote:FireServer(call("r1", "buy", nil, tooLong))
+			remote:FireServer(call("r2", "buy", nil, tooLong))
+			remote:FireServer(call("r3", "buy", nil, 42))
+			remote:FireServer(call("r4", "buy", nil, 42))
 			t.eq(runs.count, before + 4)
 			binding.disconnect()
 		end)
@@ -352,19 +365,18 @@ return function(ctx)
 				runs.count += 1
 				return "ok"
 			end, abuse)
-			local binding = transport.bindActions(registry)
+			-- Unbatched, so a response is on the wire as soon as dispatch settles.
+			local binding = transport.bindActions(registry, nil, { batching = false })
 			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
 			local responses = { count = 0 }
-			local connection = remote.OnClientEvent:Connect(function()
-				responses.count += 1
-			end)
+			local connection = remote.OnClientEvent:Connect(countItems(responses))
 
 			-- Malformed: a non-string action id, an over-long request id. Charged
 			-- and dropped.
-			remote:FireServer("r0", 42, nil)
-			remote:FireServer(string.rep("r", 65), "buy", nil)
+			remote:FireServer(call("r0", 42, nil))
+			remote:FireServer(call(string.rep("r", 65), "buy", nil))
 			for index = 1, 3 do
-				remote:FireServer(`r{index}`, "buy", nil)
+				remote:FireServer(call(`r{index}`, "buy", nil))
 			end
 
 			t.eq(runs.count, 1, "two tokens went to the malformed envelopes")
@@ -412,6 +424,54 @@ return function(ctx)
 		end)
 	end)
 
+	t.describe("RemoteEvent transport frames", function()
+		t.it("batches a frame's calls into one fire and drops a bad frame whole", function()
+			local abuse = {}
+			local runs = { count = 0 }
+			local registry = createActionRegistry({
+				buy = {
+					id = "buy",
+					run = function()
+						runs.count += 1
+						return "ok"
+					end,
+				},
+			}, {
+				onAbuse = function(_player, info)
+					table.insert(abuse, info.reason)
+				end,
+			})
+			local binding = transport.bindActions(registry)
+			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
+			local fires = { count = 0 }
+			local spy = remote.OnServerEvent:Connect(function()
+				fires.count += 1
+			end)
+
+			-- Three invokes in one frame leave in one fire, flushed at Heartbeat.
+			local invoke = transport.createActionInvoker()
+			local all = ctx.Promise.all({ invoke("buy"), invoke("buy"), invoke("buy") })
+			t.eq(fires.count, 0, "nothing leaves before the frame's Heartbeat")
+			local settled, ok = t.await(all)
+			t.isTrue(settled and ok, "all three resolved")
+			t.eq(fires.count, 1, "one fire for the frame")
+			t.eq(runs.count, 3)
+
+			-- An unknown version and an oversize batch are dropped whole.
+			remote:FireServer({ 2, call("r1", "buy") })
+			local oversize = { 1 }
+			for index = 1, 65 do
+				table.insert(oversize, { i = `o{index}`, a = "buy" })
+			end
+			remote:FireServer(oversize)
+			t.eq(runs.count, 3, "no call in a dropped frame ran")
+			t.eq(abuse[1], "unknown-protocol-version")
+			t.eq(abuse[2], "oversize-batch")
+			spy.Disconnect()
+			binding.disconnect()
+		end)
+	end)
+
 	t.describe("RemoteEvent transport after leave", function()
 		local function clockedRegistry(budget, runs, abuse, clock)
 			return createActionRegistry({
@@ -436,16 +496,14 @@ return function(ctx)
 		t.it("drops an envelope that arrives after the player left, and creates no state for it", function()
 			local runs, abuse, clock = { count = 0 }, {}, { ms = 0 }
 			local registry = clockedRegistry({ burst = 1, perSecond = 1 }, runs, abuse, clock)
-			local binding = transport.bindActions(registry)
+			local binding = transport.bindActions(registry, nil, { batching = false })
 			local remote = fakes.storage:FindFirstChild("ArunaActionRemoteEvent")
 			local player = remote._fakePlayer
 			local responses = { count = 0 }
-			local connection = remote.OnClientEvent:Connect(function()
-				responses.count += 1
-			end)
+			local connection = remote.OnClientEvent:Connect(countItems(responses))
 
 			registry.forgetPlayer(player)
-			remote:FireServer("late", "buy", nil)
+			remote:FireServer(call("late", "buy", nil))
 			t.eq(runs.count, 0, "the late envelope is dropped")
 			t.eq(responses.count, 0, "without a response")
 			t.eq(#abuse, 0, "late, not abusive: nothing is reported")
@@ -453,7 +511,7 @@ return function(ctx)
 			-- Had the late envelope created a budget, it would have spent the
 			-- only token, and this one would be dropped.
 			registry.readmitPlayer(player)
-			remote:FireServer("back", "buy", nil)
+			remote:FireServer(call("back", "buy", nil))
 			t.eq(runs.count, 1)
 			connection.Disconnect()
 			binding.disconnect()

@@ -231,6 +231,9 @@ local function makeFakes(services)
 	return {
 		game = game,
 		Instance = Instance,
+		-- RunService.Heartbeat. The runner fires it once per scheduler frame, so
+		-- what flushes once per frame in a game (the wire batching) does here too.
+		heartbeat = heartbeat,
 		players = players,
 		playerList = playerList,
 		closeHandlers = closeHandlers,

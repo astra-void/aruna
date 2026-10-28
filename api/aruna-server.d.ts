@@ -64,6 +64,7 @@ export interface ActionRegistry<TPlayer = unknown> {
     readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
     readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
     readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
+    readonly refuseFrame: (player: TPlayer, reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch") => void;
     readonly forgetPlayer: (player: TPlayer) => void;
     readonly readmitPlayer: (player: TPlayer) => void;
     readonly isFireAndForget: (actionId: string) => boolean;
@@ -572,7 +573,7 @@ type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: {
     readonly actionId?: string;
 }) => void;
 
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight";
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch";
 
 interface RequestBudgetOptions {
     readonly burst?: number;

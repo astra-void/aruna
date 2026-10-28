@@ -2,26 +2,60 @@
 // publisher/subscriber over structural remotes, batching, and the unreliable
 // channel. The native `createRemoteSignalPublisher` / `createRemoteSignalSubscriber`
 // take the same structural remote shapes as the Node runtime, so the fake remote
-// below records exactly what reaches the wire.
+// below records exactly what reaches the wire: wire frames
+// (docs/wire-protocol.md), recorded one entry per signal they carry. The
+// publishers here are unbatched, so a signal is on the wire when `to` returns;
+// batching is covered in wire.spec.ts.
 import { defineSignal } from "aruna/server";
 import { schema } from "aruna/schema";
 import { describe, expect, it } from "aruna/testing";
 import {
-  createRemoteSignalPublisher,
+  createRemoteSignalPublisher as createBatchingPublisher,
   createRemoteSignalSubscriber,
-  type RemoteSignalMessage,
   type SignalClientLike,
+  type SignalMap,
   type SignalServerLike,
 } from "aruna/internal/signal-runtime";
+import type { WireFrame } from "aruna/internal/wire";
+
+// A signal as these cases spell it; on the wire it is the item `{ s, d }`.
+interface RemoteSignalMessage {
+  readonly signalId: string;
+  readonly payload: unknown;
+}
+
+function frameOf(message: RemoteSignalMessage | undefined): unknown {
+  return message === undefined ? undefined : [1, { s: message.signalId, d: message.payload }];
+}
+
+// Unbatched, so a case can assert on the wire right after publishing.
+function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(
+  remote: SignalServerLike<TPlayer>,
+  registry: TSignals,
+  unreliableRemote?: SignalServerLike<TPlayer>,
+) {
+  return createBatchingPublisher(remote, registry, unreliableRemote, { batching: false });
+}
 
 interface FakeSignal {
   readonly signal: SignalClientLike["OnClientEvent"];
+  // Delivers one signal in its own frame.
   readonly emit: (message: RemoteSignalMessage) => void;
+  readonly emitFrame: (frame: unknown) => void;
   readonly listenerCount: () => number;
 }
 
 function createFakeSignal(): FakeSignal {
-  const listeners = new Set<(message: RemoteSignalMessage) => void>();
+  const listeners = new Set<(frame: unknown) => void>();
+  const emitFrame = (frame: unknown): void => {
+    const snapshot = new Array<(frame: unknown) => void>();
+    for (const listener of listeners) {
+      snapshot.push(listener);
+    }
+    for (const listener of snapshot) {
+      listener(frame);
+    }
+  };
   return {
     signal: {
       Connect: (callback) => {
@@ -38,15 +72,8 @@ function createFakeSignal(): FakeSignal {
         };
       },
     },
-    emit: (message) => {
-      const snapshot = new Array<(message: RemoteSignalMessage) => void>();
-      for (const listener of listeners) {
-        snapshot.push(listener);
-      }
-      for (const listener of snapshot) {
-        listener(message);
-      }
-    },
+    emit: (message) => emitFrame(frameOf(message)),
+    emitFrame,
     listenerCount: () => listeners.size(),
   };
 }
@@ -55,6 +82,16 @@ interface SentEntry<TPlayer> {
   readonly target: "client" | "all";
   readonly player?: TPlayer;
   readonly message: RemoteSignalMessage;
+}
+
+function messagesIn(frame: WireFrame): Array<RemoteSignalMessage> {
+  const messages = new Array<RemoteSignalMessage>();
+  expect(frame[0]).toBe(1);
+  for (let index = 1; index < frame.size(); index += 1) {
+    const item = frame[index] as { s: string; d?: unknown };
+    messages.push({ signalId: item.s, payload: item.d });
+  }
+  return messages;
 }
 
 type FakeRemote<TPlayer> = SignalServerLike<TPlayer> &
@@ -70,13 +107,17 @@ function createFakeRemote<TPlayer>(): FakeRemote<TPlayer> {
     clientSignal,
     sent,
     OnClientEvent: clientSignal.signal,
-    FireClient: (player, message) => {
-      sent.push({ target: "client", player, message });
-      clientSignal.emit(message);
+    FireClient: (player, frame) => {
+      for (const message of messagesIn(frame)) {
+        sent.push({ target: "client", player, message });
+      }
+      clientSignal.emitFrame(frame);
     },
-    FireAllClients: (message) => {
-      sent.push({ target: "all", message });
-      clientSignal.emit(message);
+    FireAllClients: (frame) => {
+      for (const message of messagesIn(frame)) {
+        sent.push({ target: "all", message });
+      }
+      clientSignal.emitFrame(frame);
     },
   };
 }
@@ -319,7 +360,7 @@ describe("createRemoteSignalSubscriber", () => {
     });
 
     // Node passes `null`; nil is the Luau equivalent.
-    remote.clientSignal.emit(undefined as unknown as RemoteSignalMessage);
+    remote.clientSignal.emitFrame(undefined);
     remote.clientSignal.emit({ signalId: "world.tick", payload: undefined });
 
     expect(calls).toBe(0);

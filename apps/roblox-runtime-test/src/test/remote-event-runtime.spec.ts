@@ -7,9 +7,11 @@
 // The Node suite drove a structural fake remote. Here every case runs over the
 // real action RemoteEvent in ReplicatedStorage: when a case plays the server, it
 // connects to `OnServerEvent` itself and answers with `FireClient`; when it plays
-// the client, it fires raw envelopes. Envelopes are positional on this runtime —
-// `FireServer(requestId, actionId, input[, idempotencyKey])` and
-// `FireClient(player, requestId, { ok, output } | { ok: false, error, errorName })`.
+// the client, it fires raw frames. Every fire carries one wire frame
+// (docs/wire-protocol.md): `FireServer([1, { i, a, d, k }, ...])` and
+// `FireClient(player, [1, { i, r }, ...])`. The invoker unit cases run with
+// `batching: false`, so a call is on the wire the moment it is made; the server
+// and round-trip cases batch, as a game does.
 // There is no injectable timer scheduler (`task` is a frozen library under Lune),
 // so timeouts are observed with real, short timers.
 import {
@@ -81,18 +83,23 @@ function fakeServer(options?: {
   readonly throwOnFire?: string;
 }) {
   const remote = actionRemote();
+  // Each call as a positional list: [requestId, actionId, input(, key)].
   const requests = new Array<Array<unknown>>();
-  const connection = remote.OnServerEvent.Connect((_player: Player, ...args: Array<unknown>) => {
+  const connection = remote.OnServerEvent.Connect((_player: Player, frame: unknown) => {
     if (options !== undefined && options.throwOnFire !== undefined) {
       throw options.throwOnFire;
     }
-    requests.push(args);
-    if (options !== undefined && options.autoRespond !== undefined) {
-      remote.FireClient(
-        Players.LocalPlayer,
-        args[0],
-        options.autoRespond(args[0], args[1], args[2]),
-      );
+    const items = frame as Array<{ i: unknown; a: unknown; d?: unknown; k?: unknown }>;
+    expect(items[0]).toBe(1);
+    for (let index = 1; index < items.size(); index += 1) {
+      const call = items[index]!;
+      requests.push(call.k !== undefined ? [call.i, call.a, call.d, call.k] : [call.i, call.a, call.d]);
+      if (options !== undefined && options.autoRespond !== undefined) {
+        remote.FireClient(Players.LocalPlayer, [
+          1,
+          { i: call.i, r: options.autoRespond(call.i, call.a, call.d) },
+        ]);
+      }
     }
   });
   track(() => connection.Disconnect());
@@ -100,7 +107,7 @@ function fakeServer(options?: {
     remote,
     requests,
     respond: (requestId: unknown, payload: ResponsePayload) => {
-      remote.FireClient(Players.LocalPlayer, requestId, payload);
+      remote.FireClient(Players.LocalPlayer, [1, { i: requestId, r: payload }]);
     },
   };
 }
@@ -141,7 +148,7 @@ describe("createRemoteEventActionInvoker", () => {
 
   it("sends request envelopes with the action id and input", async () => {
     const server = fakeServer({ autoRespond: () => ({ ok: true, output: { ok: true } }) });
-    const invoker = createActionInvoker({ createRequestId: () => "request-1" });
+    const invoker = createActionInvoker({ batching: false, createRequestId: () => "request-1" });
 
     const output = await invoker("shop.purchaseItem", { itemId: "sword" });
     expect(output).toEqual({ ok: true });
@@ -150,7 +157,7 @@ describe("createRemoteEventActionInvoker", () => {
 
   it("resolves matching ok responses", async () => {
     const server = fakeServer();
-    const invoker = createActionInvoker({ createRequestId: () => "request-1" });
+    const invoker = createActionInvoker({ batching: false, createRequestId: () => "request-1" });
 
     const promise = invoker("shop.purchaseItem", { itemId: "sword" });
     expect(server.requests).toEqual([["request-1", "shop.purchaseItem", { itemId: "sword" }]]);
@@ -161,7 +168,7 @@ describe("createRemoteEventActionInvoker", () => {
 
   it("rejects matching error responses", async () => {
     const server = fakeServer();
-    const invoker = createActionInvoker({ createRequestId: () => "request-1" });
+    const invoker = createActionInvoker({ batching: false, createRequestId: () => "request-1" });
 
     const promise = invoker("shop.purchaseItem", { itemId: "sword" });
     server.respond("request-1", { ok: false, error: "boom", errorName: "CustomError" });
@@ -173,7 +180,7 @@ describe("createRemoteEventActionInvoker", () => {
 
   it("ignores responses for unknown request ids", async () => {
     const server = fakeServer();
-    const invoker = createActionInvoker({ createRequestId: () => "request-1" });
+    const invoker = createActionInvoker({ batching: false, createRequestId: () => "request-1" });
 
     const promise = invoker("shop.purchaseItem", { itemId: "sword" });
     const state = settledFlag(promise);
@@ -188,7 +195,7 @@ describe("createRemoteEventActionInvoker", () => {
 
   it("removes the pending request when FireServer throws", async () => {
     const server = fakeServer({ throwOnFire: "boom" });
-    const invoker = createActionInvoker({ createRequestId: () => "request-1" });
+    const invoker = createActionInvoker({ batching: false, createRequestId: () => "request-1" });
 
     await expect(invoker("shop.purchaseItem", { itemId: "sword" })).rejects.toThrow("boom");
 
@@ -200,14 +207,15 @@ describe("createRemoteEventActionInvoker", () => {
   it("fire-and-forget resolves immediately without registering a pending request", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       requestTimeoutMs: 20,
     });
 
     expect(await invoker("spray.paint", { at: 1 }, { fireAndForget: true })).toBeUndefined();
 
-    // The request was fired as a three-argument envelope, and nothing waits on
-    // it: past the timeout there is still nothing to reject.
+    // The call went out without an idempotency key, and nothing waits on it:
+    // past the timeout there is still nothing to reject.
     expect(server.requests).toEqual([["request-1", "spray.paint", { at: 1 }]]);
     await sleepSeconds(0.05);
 
@@ -217,7 +225,7 @@ describe("createRemoteEventActionInvoker", () => {
 
   it("fire-and-forget rejects when FireServer throws", async () => {
     fakeServer({ throwOnFire: "network down" });
-    const invoker = createActionInvoker();
+    const invoker = createActionInvoker({ batching: false });
 
     // Native: the invoke throws synchronously (the retired Node runtime returned a rejected promise).
     expect(() => invoker("spray.paint", { at: 1 }, { fireAndForget: true })).toThrow(
@@ -233,6 +241,7 @@ describe("createRemoteEventActionInvoker request timeout", () => {
     const server = fakeServer();
     let counter = 0;
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => {
         counter += 1;
         return `default-timeout-${counter}`;
@@ -254,6 +263,7 @@ describe("createRemoteEventActionInvoker request timeout", () => {
   it("does not arm a timer when requestTimeoutMs is 0 (explicit opt-out)", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "no-timeout-1",
       requestTimeoutMs: 0,
     });
@@ -271,6 +281,7 @@ describe("createRemoteEventActionInvoker request timeout", () => {
   it("clears the timer and resolves when a response arrives", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       requestTimeoutMs: 30,
     });
@@ -289,6 +300,7 @@ describe("createRemoteEventActionInvoker request timeout", () => {
   it("rejects with TimeoutError and clears the pending entry on timeout", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       requestTimeoutMs: 30,
     });
@@ -314,6 +326,7 @@ describe("createRemoteEventActionInvoker cancellation", () => {
   it("cancelling before invoke rejects immediately without touching the wire", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       requestTimeoutMs: 20,
     });
@@ -332,6 +345,7 @@ describe("createRemoteEventActionInvoker cancellation", () => {
   it("cancelling a pending invoke rejects, clears the timer, and drops late responses", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       requestTimeoutMs: 30,
     });
@@ -357,6 +371,7 @@ describe("createRemoteEventActionInvoker cancellation", () => {
   it("a normal response unsubscribes the cancel listener (later cancel is inert)", async () => {
     const server = fakeServer();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       requestTimeoutMs: 1000,
     });
@@ -376,7 +391,7 @@ describe("createRemoteEventActionInvoker cancellation", () => {
 
   it("fire-and-forget ignores a cancelled signal (nothing to wait on)", async () => {
     const server = fakeServer();
-    const invoker = createActionInvoker({ createRequestId: () => "request-1" });
+    const invoker = createActionInvoker({ batching: false, createRequestId: () => "request-1" });
 
     const cancel = createCancelToken();
     cancel.cancel();
@@ -485,6 +500,7 @@ describe("client contract handshake", () => {
     advertise("abc");
     const mismatches = new Array<VersionMismatchInfo>();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       expectedContractHash: "abc",
       onVersionMismatch: (info) => {
@@ -503,6 +519,7 @@ describe("client contract handshake", () => {
     advertise("server-hash");
     const mismatches = new Array<VersionMismatchInfo>();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       expectedContractHash: "client-hash",
       onVersionMismatch: (info) => {
@@ -523,6 +540,7 @@ describe("client contract handshake", () => {
     const server = fakeServer();
     advertise("server-hash");
     const invoker = createActionInvoker({
+      batching: false,
       expectedContractHash: "client-hash",
       rejectOnMismatch: true,
     });
@@ -545,6 +563,7 @@ describe("client contract handshake", () => {
     advertise(undefined);
     const mismatches = new Array<VersionMismatchInfo>();
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => "request-1",
       expectedContractHash: "client-hash",
       onVersionMismatch: (info) => {
@@ -563,7 +582,7 @@ describe("client contract handshake", () => {
   it("isActionVersionMismatchError detects the rejection from either runtime", async () => {
     fakeServer();
     advertise("b");
-    const invoker = createActionInvoker({ expectedContractHash: "a", rejectOnMismatch: true });
+    const invoker = createActionInvoker({ batching: false, expectedContractHash: "a", rejectOnMismatch: true });
     const rejection = await rejectionOf(invoker("shop.buy", {}));
 
     expect(isActionVersionMismatchError(rejection)).toBe(true);
@@ -1036,8 +1055,8 @@ describe("bindRemoteEventActions", () => {
       }),
     });
 
-    // A usable requestId no longer earns a reply: a malformed envelope is
-    // dropped, so a flood of them has nothing to measure.
+    // A usable requestId no longer earns a reply: a malformed call is dropped,
+    // so a flood of them has nothing to measure.
     await wire.send("request-1", 123, {});
     // Ids past their length limits are malformed too.
     await wire.send("r".rep(65), "shop.purchaseItem", {});
@@ -1060,9 +1079,9 @@ describe("bindRemoteEventActions", () => {
     });
 
     await wire.send(undefined, "shop.purchaseItem", {});
-    // An envelope with nothing in it.
+    // A fire with no frame in it.
     wire.remote.FireServer();
-    await waitUntil(() => wire.responses().size() > 0);
+    await waitUntil(() => wire.responses().size() > 0, 5);
 
     expect(runs).toBe(0);
     expect(wire.responses()).toEqual([]);
@@ -1128,6 +1147,7 @@ describe("RemoteEvent round trip", () => {
     const server = fakeServer();
     let counter = 0;
     const invoker = createActionInvoker({
+      batching: false,
       createRequestId: () => {
         counter += 1;
         return `request-${counter}`;

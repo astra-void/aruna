@@ -317,8 +317,8 @@ still running waits for it; one that arrives later gets the remembered result. T
 server keeps a player's keys for 20 seconds (twice the default request timeout), at most
 64 per player, and drops them when the player leaves. A call refused before it ran
 (rate limited, invalid input) is not remembered, so its retry can still run. The key is
-the 4th argument of the action RemoteEvent; anything other than a string of at most 64
-characters is ignored. To de-duplicate across calls yourself (a double-clicked buy
+the call's `k` field on the wire ([wire protocol](../../../docs/wire-protocol.md));
+anything other than a string of at most 64 characters is ignored. To de-duplicate across calls yourself (a double-clicked buy
 button), pass your own: `invokeAction(id, input, { idempotencyKey })`, or
 `app.dispatch(id, ctx, input, { idempotencyKey })` in-process.
 

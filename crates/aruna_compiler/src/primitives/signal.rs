@@ -278,14 +278,14 @@ pub(crate) fn check_unreliable_payload_size(
 
     // The table encoding has no frame header, and its true size is larger than
     // the binary layout, so the binary size without the header is a floor.
-    // Either way the envelope around the payload counts toward the limit.
+    // Either way the wire frame around the payload counts toward the limit.
     let payload = if binary {
         encoded
     } else {
         encoded - BINARY_FRAME_HEADER_BYTES
     };
     let compared = signal_message_bytes(signal_id, payload);
-    let envelope = compared - payload;
+    let frame = compared - payload;
     if compared > UNRELIABLE_PAYLOAD_LIMIT_BYTES {
         diagnostics.push(create_diagnostic(
             "aruna::511",
@@ -296,11 +296,11 @@ pub(crate) fn check_unreliable_payload_size(
             Some(span),
             Some(if binary {
                 format!(
-                    "Largest binary frame ({payload} bytes, 4-byte header included) plus the {{ signalId, payload }} envelope ({envelope} bytes) (export name: {export_name})."
+                    "Largest binary frame ({payload} bytes, 4-byte header included) plus its wire frame ({frame} bytes) (export name: {export_name})."
                 )
             } else {
                 format!(
-                    "Largest payload by the binary layout ({payload} bytes) plus the {{ signalId, payload }} envelope ({envelope} bytes); the table encoding is larger still (export name: {export_name})."
+                    "Largest payload by the binary layout ({payload} bytes) plus its wire frame ({frame} bytes); the table encoding is larger still (export name: {export_name})."
                 )
             }),
             Some("Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable.".to_string()),
@@ -320,7 +320,7 @@ pub(crate) fn check_unreliable_payload_size(
             Some(file.to_string()),
             Some(span),
             Some(format!(
-                "Largest payload by the binary layout ({payload} bytes) plus the {{ signalId, payload }} envelope ({envelope} bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: {export_name})."
+                "Largest payload by the binary layout ({payload} bytes) plus its wire frame ({frame} bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: {export_name})."
             )),
             Some("Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing.".to_string()),
         ));

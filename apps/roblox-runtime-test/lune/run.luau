@@ -26,6 +26,8 @@ local ctx = {
 	conformancePath = conformancePath,
 }
 
+fakes.startHeartbeat()
+
 require("./specs/schema")(ctx)
 require("./specs/serialization")(ctx)
 require("./specs/rate-limit")(ctx)
@@ -38,7 +40,9 @@ require("./specs/store")(ctx)
 require("./specs/testing")(ctx)
 require("./specs/conformance")(ctx)
 
+fakes.stopHeartbeat()
 local failed = framework.finish()
-if failed > 0 then
-	process.exit(1)
-end
+-- Exit explicitly, as the `aruna test` runner does: a timer a spec left armed
+-- (an invoker's request timeout, a Heartbeat-driven Promise.delay) must not hold
+-- the process open once the results are in.
+process.exit(if failed > 0 then 1 else 0)

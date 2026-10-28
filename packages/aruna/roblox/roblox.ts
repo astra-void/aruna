@@ -20,6 +20,15 @@ import {
 	type SignalServerLike,
 	type SignalSubscriber,
 } from "./signal-runtime";
+import {
+	createWireOutbox,
+	defaultWireProtocolErrorHandler,
+	readWireFrame,
+	type WireBatchOptions,
+	type WireCall,
+	type WireProtocolErrorHandler,
+	type WireResponse,
+} from "./wire";
 
 // Roblox-flavored definition helpers. `defineSignal` is unchanged from
 // `aruna/server`; `defineAction` defaults `TPlayer` to `Player` so `ctx.player`
@@ -44,6 +53,9 @@ export { createRemoteSignalPublisher, createRemoteSignalSubscriber };
 // The DataStoreService adapter. Roblox-only by nature, so it lives on this entry
 // rather than `aruna/server`, alongside the RemoteEvent transport.
 export * from "./datastore";
+// The wire protocol the transports speak (docs/wire-protocol.md): the frame
+// codec and the per-frame outbox, for a remote you wire yourself.
+export * from "./wire";
 
 export function defineAction<
 	TInput extends Schema | undefined = undefined,
@@ -129,12 +141,15 @@ function defaultRequestId(): string {
 // Pass requestTimeoutMs: 0 to explicitly opt out (wait forever).
 export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
-export interface CreateActionInvokerOptions extends ContractHandshakeOptions {
+export interface CreateActionInvokerOptions extends ContractHandshakeOptions, WireBatchOptions {
 	readonly createRequestId?: () => string;
 	// Milliseconds to wait for a server response before rejecting with a timeout
 	// error. Defaults to DEFAULT_ACTION_REQUEST_TIMEOUT_MS (10s); pass 0 to
 	// disable the timeout entirely.
 	readonly requestTimeoutMs?: number;
+	// Called for a response frame this client drops (docs/wire-protocol.md).
+	// Defaults to a warning in Studio.
+	readonly onProtocolError?: WireProtocolErrorHandler;
 }
 
 interface PendingActionRequest {
@@ -178,18 +193,48 @@ export function createActionInvoker(
 			? options.requestTimeoutMs
 			: DEFAULT_ACTION_REQUEST_TIMEOUT_MS;
 	const pending = new Map<string, PendingActionRequest>();
+	const onProtocolError =
+		options !== undefined && options.onProtocolError !== undefined
+			? options.onProtocolError
+			: defaultWireProtocolErrorHandler;
+	// Calls leave once per frame (or one per frame with `batching: false`).
+	const outbox = createWireOutbox<RemoteEvent>(
+		(target, frame) => {
+			target.FireServer(frame);
+		},
+		undefined,
+		options,
+	);
+	const sendCall = (call: WireCall): void => {
+		outbox.push(remote, call);
+	};
 
-	remote.OnClientEvent.Connect((requestId: string, payload: ActionResponsePayload) => {
-		const entry = pending.get(requestId);
-		if (entry !== undefined) {
-			pending.delete(requestId);
-			if (entry.timeoutThread !== undefined) {
-				task.cancel(entry.timeoutThread);
+	remote.OnClientEvent.Connect((frame: unknown) => {
+		const read = readWireFrame(frame);
+		if (!read.ok) {
+			onProtocolError(remote.Name, read.reason);
+			return;
+		}
+		for (const item of read.items) {
+			if (!typeIs(item, "table")) {
+				continue;
 			}
-			if (entry.unsubscribeCancel !== undefined) {
-				entry.unsubscribeCancel();
+			const response = item as Partial<WireResponse>;
+			const requestId = response.i;
+			if (!typeIs(requestId, "string") || !typeIs(response.r, "table")) {
+				continue;
 			}
-			entry.resolve(payload);
+			const entry = pending.get(requestId);
+			if (entry !== undefined) {
+				pending.delete(requestId);
+				if (entry.timeoutThread !== undefined) {
+					task.cancel(entry.timeoutThread);
+				}
+				if (entry.unsubscribeCancel !== undefined) {
+					entry.unsubscribeCancel();
+				}
+				entry.resolve(response.r as ActionResponsePayload);
+			}
 		}
 	});
 
@@ -208,8 +253,7 @@ export function createActionInvoker(
 		// entry is registered (the server's ignored ack, if any, is dropped) and
 		// no timeout is armed. Matches the server binder skipping its response.
 		if (options !== undefined && options.fireAndForget === true) {
-			const requestId = createRequestId();
-			remote.FireServer(requestId, actionId, input);
+			sendCall({ i: createRequestId(), a: actionId, d: input });
 			return Promise.resolve(undefined);
 		}
 
@@ -236,16 +280,18 @@ export function createActionInvoker(
 				},
 			};
 			pending.set(requestId, entry);
-			// The idempotency key rides as the 4th argument, only when there is one.
+			// The idempotency key rides along only when there is one.
 			const idempotencyKey = options !== undefined ? options.idempotencyKey : undefined;
-			if (idempotencyKey !== undefined) {
-				remote.FireServer(requestId, actionId, input, idempotencyKey);
-			} else {
-				remote.FireServer(requestId, actionId, input);
-			}
+			sendCall({
+				i: requestId,
+				a: actionId,
+				d: input,
+				...(idempotencyKey !== undefined ? { k: idempotencyKey } : {}),
+			});
 
-			// The response may have arrived synchronously above; only arm the
-			// timeout and cancellation listener while still pending.
+			// With `batching: false` the response may have arrived synchronously
+			// above; only arm the timeout and cancellation listener while still
+			// pending.
 			if (pending.get(requestId) !== entry) {
 				return;
 			}
@@ -286,8 +332,9 @@ export function createActionInvoker(
 	};
 }
 
-// Options for the default Aruna RemoteEvent server transport.
-export interface RobloxRemoteEventOptions {
+// Options for the default Aruna RemoteEvent server transport. `batching`
+// (default true) sends a player's responses once per frame.
+export interface RobloxRemoteEventOptions extends WireBatchOptions {
 	// The server's contract hash, advertised on the action remote so clients can
 	// detect a deploy skew. Pass the generated `contractHash`; omit to advertise
 	// nothing (clients then treat this server as unknown, never mismatched).
@@ -301,12 +348,13 @@ export function robloxRemoteEvent<TPlayer = Player>(
 	options?: RobloxRemoteEventOptions,
 ): ServerTransport<TPlayer> {
 	return (registry) =>
-		bindActions(registry, options !== undefined ? options.contractHash : undefined);
+		bindActions(registry, options !== undefined ? options.contractHash : undefined, options);
 }
 
 export function bindActions<TPlayer>(
 	registry: ActionRegistry<TPlayer>,
 	contractHash?: string,
+	options?: WireBatchOptions,
 ): ServerAppBinding {
 	const remote = ensureServerActionRemote();
 	// Advertise the contract hash so a client with a mismatched compiled-in hash
@@ -314,38 +362,57 @@ export function bindActions<TPlayer>(
 	if (contractHash !== undefined) {
 		remote.SetAttribute(CONTRACT_HASH_ATTRIBUTE_NAME, contractHash);
 	}
-	const connection = remote.OnServerEvent.Connect((player: Player, ...args: Array<unknown>) => {
-		const requestId = args[0];
-		const actionId = args[1];
-
-		// Before anything else is read: drop a malformed envelope (ids must be
-		// bounded strings) and charge the player's request budget, dropping the
-		// envelope when it is spent. Neither gets a response.
-		if (!registry.admitEnvelope(player as unknown as TPlayer, requestId, actionId)) {
+	const outbox = createWireOutbox<Player>(
+		(player, frame) => {
+			remote.FireClient(player, frame);
+		},
+		undefined,
+		options,
+	);
+	const connection = remote.OnServerEvent.Connect((player: Player, frame: unknown) => {
+		const sender = player as unknown as TPlayer;
+		// The frame as a whole first: its shape, its protocol version, and its
+		// length, before any call in it is read. A frame that fails is dropped
+		// whole, charged one request, and reported.
+		const read = readWireFrame(frame);
+		if (!read.ok) {
+			registry.refuseFrame(sender, read.reason);
 			return;
 		}
-		if (!typeIs(requestId, "string") || !typeIs(actionId, "string")) {
-			return;
-		}
-		const input = args[2];
-		// Untrusted: dispatch ignores anything that is not a string of at most 64
-		// characters.
-		const idempotencyKey = args[3];
 
-		// Fire-and-forget actions are one-way: dispatch still runs (for its side
-		// effects and rate limiting), but no response is sent back, since the
-		// client is not waiting for one.
-		const fireAndForget = registry.isFireAndForget(actionId);
-		void registry.dispatch(player as unknown as TPlayer, actionId, input, idempotencyKey).then((result) => {
-			if (!fireAndForget) {
-				remote.FireClient(player, requestId, result);
+		for (const item of read.items) {
+			const call = typeIs(item, "table") ? (item as Partial<WireCall>) : undefined;
+			const requestId = call !== undefined ? call.i : undefined;
+			const actionId = call !== undefined ? call.a : undefined;
+
+			// Each call is charged on its own: drop a malformed one (ids must be
+			// bounded strings), and charge the player's request budget, dropping
+			// the call when it is spent. Neither gets a response.
+			if (!registry.admitEnvelope(sender, requestId, actionId)) {
+				continue;
 			}
-		});
+			if (call === undefined || !typeIs(requestId, "string") || !typeIs(actionId, "string")) {
+				continue;
+			}
+
+			// Fire-and-forget actions are one-way: dispatch still runs (for its
+			// side effects and rate limiting), but no response is sent back, since
+			// the client is not waiting for one. The idempotency key is untrusted:
+			// dispatch ignores anything that is not a string of at most 64
+			// characters.
+			const fireAndForget = registry.isFireAndForget(actionId);
+			void registry.dispatch(sender, actionId, call.d, call.k).then((result) => {
+				if (!fireAndForget) {
+					outbox.push(player, { i: requestId, r: result } satisfies WireResponse);
+				}
+			});
+		}
 	});
 
 	return {
 		disconnect: () => {
 			connection.Disconnect();
+			outbox.dispose();
 		},
 	};
 }

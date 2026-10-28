@@ -16,32 +16,32 @@ import { afterEach, describe, expect, it } from "aruna/testing";
 import {
   createRemoteSignalPublisher,
   createRemoteSignalSubscriber,
-  type RemoteSignalMessage,
   type SignalClientLike,
   type SignalServerLike,
 } from "aruna/internal/signal-runtime";
-import { wireRemote } from "./support";
+import { waitUntil, wireRemote } from "./support";
 
 type FakeSignalRemote = SignalServerLike<unknown> & SignalClientLike;
 
 function createFakeSignalRemote(): FakeSignalRemote {
-  const listeners = new Set<(message: RemoteSignalMessage) => void>();
-  const emit = (message: RemoteSignalMessage): void => {
-    const snapshot = new Array<(message: RemoteSignalMessage) => void>();
+  // Wire frames pass straight through to the subscriber.
+  const listeners = new Set<(frame: unknown) => void>();
+  const emit = (frame: unknown): void => {
+    const snapshot = new Array<(frame: unknown) => void>();
     for (const listener of listeners) {
       snapshot.push(listener);
     }
     for (const listener of snapshot) {
-      listener(message);
+      listener(frame);
     }
   };
 
   return {
-    FireClient: (_player, message) => {
-      emit(message);
+    FireClient: (_player, frame) => {
+      emit(frame);
     },
-    FireAllClients: (message) => {
-      emit(message);
+    FireAllClients: (frame) => {
+      emit(frame);
     },
     OnClientEvent: {
       Connect: (callback) => {
@@ -89,7 +89,7 @@ describe("createServerApp signal publisher ownership", () => {
     const serverApp = createServerApp({
       actions: {},
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
     });
     track(() => serverApp.dispose());
 
@@ -120,7 +120,7 @@ describe("createClientApp signal subscriber ownership", () => {
     const serverApp = createServerApp({
       actions: {},
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
     });
     track(() => serverApp.dispose());
 
@@ -150,7 +150,7 @@ describe("createClientApp signal subscriber ownership", () => {
     const serverApp = createServerApp({
       actions: {},
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
     });
     track(() => serverApp.dispose());
 
@@ -230,7 +230,7 @@ describe("action ctx.publisher injection", () => {
     const serverApp = createServerApp<Player, typeof signals>({
       actions: { "score.bump": bumpAction() },
       signals,
-      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry),
+      createPublisher: (registry) => createRemoteSignalPublisher(remote, registry, undefined, { batching: false }),
     });
     track(() => serverApp.dispose());
 
@@ -249,7 +249,7 @@ describe("action ctx.publisher injection", () => {
     subscriber.on("scoreChanged", (payload) => received.push(payload));
 
     // The real action RemoteEvent the transport binds, driven with a raw
-    // envelope from the client end.
+    // frame from the client end.
     const serverApp = createServerApp<Player, typeof signals>({
       actions: { "score.bump": bumpAction() },
       signals,
@@ -273,7 +273,7 @@ describe("action ctx.publisher injection", () => {
 describe("turnkey signal helpers are part of the public surface", () => {
   disposeAfterEach();
 
-  it("exposes createSignalPublisher/createSignalSubscriber and the remote ensurers", () => {
+  it("exposes createSignalPublisher/createSignalSubscriber and the remote ensurers", async () => {
     expect(typeIs(createSignalPublisher, "function")).toBe(true);
     expect(typeIs(createSignalSubscriber, "function")).toBe(true);
 
@@ -292,6 +292,9 @@ describe("turnkey signal helpers are part of the public surface", () => {
     const received = new Array<{ score: number }>();
     subscriber.on("scoreChanged", (payload) => received.push(payload));
     publisher.toAll("scoreChanged", { score: 13 });
+    // Batched: it goes out with the frame's other signals, at Heartbeat.
+    expect(received).toEqual([]);
+    await waitUntil(() => received.size() > 0);
     expect(received).toEqual([{ score: 13 }]);
 
     // Built again, the publisher reuses the remote rather than adding one.
