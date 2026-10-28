@@ -227,9 +227,13 @@ export declare const STORE_MAX_KEY_LENGTH = 50;
 
 export declare const STORE_MAX_META_ID_BYTES = 128;
 
+export declare const STORE_MAX_PRESERVED_META_BYTES = 4096;
+
 export declare const STORE_MAX_RECEIPTS = 100;
 
 export declare const STORE_MAX_VALUE_BYTES = 4194304;
+
+export declare const STORE_MUST_UNDERSTAND_PREFIX = "!";
 
 export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
     readonly actions: ActionMap<TPlayer>;
@@ -338,12 +342,13 @@ export interface StoreEnvelopeLock {
 }
 
 export interface StoreEnvelopeMeta {
-    readonly r?: Array<string>;
+    readonly "!r"?: Array<string>;
     readonly h?: {
         readonly k: string;
         readonly x: number;
     };
     readonly e?: number;
+    readonly [key: string]: unknown;
 }
 
 export interface StoreError {
@@ -397,6 +402,9 @@ export interface StoreMeta {
     readonly receipts: ReadonlyArray<string>;
     readonly handoff?: StoreHandoff;
     readonly erasedAtMs?: number;
+    readonly preserved?: {
+        readonly [key: string]: unknown;
+    };
 }
 
 export type StoreMigrate<TSchema extends Schema> = (stored: unknown, fromVersion: number) => Infer<TSchema> | undefined;
@@ -418,6 +426,9 @@ export type StoreRecord = {
 } | {
     readonly kind: "format-ahead";
     readonly format: number;
+} | {
+    readonly kind: "meta-ahead";
+    readonly key: string;
 } | {
     readonly kind: "malformed";
     readonly reason: string;

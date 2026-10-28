@@ -13,6 +13,7 @@ import {
   readStoreRecord,
   recordStoreReceipt,
   runStoreRequest,
+  STORE_MAX_PRESERVED_META_BYTES,
   STORE_MAX_RECEIPTS,
   storeRetryDelayMs,
   validateStoreKey,
@@ -556,8 +557,9 @@ describe("persisted format v1", () => {
     const malformed: Array<unknown> = [
       { "$aruna": 1, v: "1", t: 0, d: {} },
       { "$aruna": 1, v: 1, d: {} },
-      { "$aruna": 1, v: 1, t: 0, d: {}, m: { r: "receipt" } },
+      { "$aruna": 1, v: 1, t: 0, d: {}, m: { "!r": "receipt" } },
       { "$aruna": 1, v: 1, t: 0, d: {}, l: { o: 5, h: 0 } },
+      { "$aruna": 1, v: 1, t: 0, d: {}, m: [1, 2] },
     ];
     for (const value of malformed) {
       const decoded = decodeStoreValue(definition, value);
@@ -567,7 +569,14 @@ describe("persisted format v1", () => {
   });
 
   it("keeps the metadata slot untouched through a user migrate and the save after it", async () => {
-    const meta = { r: ["receipt-1", "receipt-2"], h: { k: "handoff-token", x: 99_000 }, e: 42 };
+    // Every key this runtime reads, plus one a newer Aruna added: may-ignore
+    // (no `!`), so it is carried through as it was.
+    const meta = {
+      "!r": ["receipt-1", "receipt-2"],
+      h: { k: "handoff-token", x: 99_000 },
+      e: 42,
+      future: { region: "eu", n: [1, 2] },
+    };
     const backend = createMemoryStoreBackend(
       entries({ ada: { "$aruna": 1, v: 1, t: 0, d: { coins: 7 }, m: meta } }),
     );
@@ -592,6 +601,7 @@ describe("persisted format v1", () => {
       receipts: ["receipt-1", "receipt-2"],
       handoff: { token: "handoff-token", expiresAtMs: 99_000 },
       erasedAtMs: 42,
+      preserved: { future: { region: "eu", n: [1, 2] } },
     });
 
     await store.update("ada", (current) => ({ ...current, coins: current.coins + 1 }));
@@ -631,7 +641,7 @@ describe("persisted format v1", () => {
           v: 1,
           t: 0,
           d: { coins: 1, name: "ada" },
-          m: { r: receiptIds(STORE_MAX_RECEIPTS + 3) },
+          m: { "!r": receiptIds(STORE_MAX_RECEIPTS + 3) },
         },
       }),
     );
@@ -642,8 +652,8 @@ describe("persisted format v1", () => {
     expect(loaded.ok && loaded.value.meta.receipts[0]).toBe("receipt-4");
 
     await store.save("ada", { coins: 2, name: "ada" });
-    const stored = backend.snapshot().get("ada") as { m: { r: Array<string> } };
-    expect(stored.m.r).toEqual(receiptIds(STORE_MAX_RECEIPTS, 4));
+    const stored = backend.snapshot().get("ada") as { m: { "!r": Array<string> } };
+    expect(stored.m["!r"]).toEqual(receiptIds(STORE_MAX_RECEIPTS, 4));
   });
 
   it("refuses a record in a newer envelope format without migrating or writing it", async () => {
@@ -680,5 +690,101 @@ describe("persisted format v1", () => {
     expect(loaded.ok === false && loaded.error.name).toBe("StoreVersionAheadError");
     expect(loaded.ok === false && loaded.error.message).toContain("version 5");
     expect(backend.snapshot().get("ada")).toEqual(newer);
+  });
+  it("carries an unknown may-ignore metadata key through load, update, save, and a receipt", async () => {
+    const backend = createMemoryStoreBackend(
+      entries({
+        ada: { "$aruna": 1, v: 1, t: 0, d: { coins: 1, name: "ada" }, m: { "next.flag": true } },
+      }),
+    );
+    const store = createStore(profileStore(), { backend, nowMs: () => 10 });
+
+    const loaded = await store.loadSnapshot("ada");
+    expect(loaded.ok && loaded.value.meta.preserved).toEqual({ "next.flag": true });
+    await store.update("ada", (current) => ({ ...current, coins: current.coins + 1 }));
+    await store.save("ada", { coins: 5, name: "ada" });
+    expect(backend.snapshot().get("ada")).toEqual({
+      "$aruna": 1,
+      v: 1,
+      t: 10,
+      d: { coins: 5, name: "ada" },
+      m: { "next.flag": true },
+    });
+
+    // The framework changing its own metadata leaves the unknown key alone.
+    const reloaded = await store.loadSnapshot("ada");
+    const recorded = reloaded.ok ? recordStoreReceipt(reloaded.value.meta, "receipt-1") : undefined;
+    expect(recorded !== undefined && recorded.ok).toBe(true);
+    const encoded =
+      recorded !== undefined && recorded.ok
+        ? encodeStoreValue(profileStore(), { coins: 5, name: "ada" }, 11, undefined, recorded.value)
+        : undefined;
+    expect(encoded !== undefined && encoded.ok && (encoded.value as { m: unknown }).m).toEqual({
+      "next.flag": true,
+      "!r": ["receipt-1"],
+    });
+  });
+
+  it("refuses a must-understand metadata key it does not know, and never writes the record back", async () => {
+    const ahead = {
+      "$aruna": 1,
+      v: 1,
+      t: 0,
+      d: { coins: 1, name: "ada" },
+      m: { "!r": ["receipt-1"], "!grants": { pending: 2 } },
+    };
+    expect(readStoreRecord(ahead)).toEqual({ kind: "meta-ahead", key: "!grants" });
+    const backend = createMemoryStoreBackend(entries({ ada: ahead }));
+    let migrateCalls = 0;
+    const store = createStore(
+      profileStore({
+        version: 2,
+        migrate: (stored) => {
+          migrateCalls += 1;
+          return stored as Profile;
+        },
+      }),
+      { backend },
+    );
+
+    const loaded = await store.load("ada");
+    const saved = await store.save("ada", { coins: 2, name: "ada" });
+    const updated = await store.update("ada", (current) => current);
+    for (const result of [loaded, saved, updated]) {
+      expect(result.ok === false && result.error.name).toBe("StoreVersionAheadError");
+    }
+    expect(loaded.ok === false && loaded.error.message).toContain('"!grants"');
+    expect(migrateCalls).toBe(0);
+    expect(backend.snapshot().get("ada")).toEqual(ahead);
+  });
+
+  it("refuses preserved metadata over the bound rather than truncating it", async () => {
+    // `{"k":"…"}` is 8 bytes plus the string: at the bound it is carried, one
+    // byte over it is refused.
+    const atBound = { "$aruna": 1, v: 1, t: 0, d: { coins: 1, name: "ada" }, m: { k: "x".rep(STORE_MAX_PRESERVED_META_BYTES - 8) } };
+    const overBound = { "$aruna": 1, v: 1, t: 0, d: { coins: 1, name: "ada" }, m: { k: "x".rep(STORE_MAX_PRESERVED_META_BYTES - 7) } };
+    expect(readStoreRecord(atBound).kind).toBe("envelope");
+    expect(readStoreRecord(overBound).kind).toBe("malformed");
+
+    const backend = createMemoryStoreBackend(entries({ ada: overBound }));
+    const store = createStore(profileStore(), { backend });
+    const loaded = await store.load("ada");
+    const saved = await store.save("ada", { coins: 2, name: "ada" });
+    expect(loaded.ok === false && loaded.error.name).toBe("StoreValidationError");
+    expect(loaded.ok === false && loaded.error.message).toContain(`${STORE_MAX_PRESERVED_META_BYTES}-byte bound`);
+    expect(saved.ok === false && saved.error.name).toBe("StoreValidationError");
+    expect(backend.snapshot().get("ada")).toEqual(overBound);
+  });
+
+  it("refuses a v1 envelope with an unknown top-level field", async () => {
+    const extra = { "$aruna": 1, v: 1, t: 0, d: { coins: 1, name: "ada" }, x: "not v1" };
+    expect(readStoreRecord(extra)).toEqual({ kind: "malformed", reason: "unknown top-level field x" });
+    const backend = createMemoryStoreBackend(entries({ ada: extra }));
+    const store = createStore(profileStore(), { backend });
+    const loaded = await store.load("ada");
+    const saved = await store.save("ada", { coins: 2, name: "ada" });
+    expect(loaded.ok === false && loaded.error.name).toBe("StoreValidationError");
+    expect(saved.ok === false && saved.error.name).toBe("StoreValidationError");
+    expect(backend.snapshot().get("ada")).toEqual(extra);
   });
 });

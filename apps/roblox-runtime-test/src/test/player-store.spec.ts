@@ -403,6 +403,43 @@ describe("documents", () => {
     expect(storedCoins(backend)).toBe(0);
   });
 
+  it("never writes back a record a newer Aruna marked must-understand, even holding the lock", async () => {
+    const backend = createMemoryStoreBackend();
+    const store = createPlayerStore(definition(), {
+      backend,
+      owner: "server-a",
+      nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
+    });
+    const loaded = await store.load(player);
+    if (!loaded.ok) {
+      throw "expected the load to succeed";
+    }
+
+    // A newer server rewrites the record under the same lock (as a handoff
+    // would), with metadata this server must understand to write it safely.
+    const current = backend.snapshot().get("player_42") as { [key: string]: unknown };
+    const rewritten = { ...current, m: { "!grants": ["g-1"] } };
+    await backend.set("player_42", rewritten);
+
+    loaded.value.update((profile: Profile) => ({ ...profile, coins: 9 }));
+    const saved = await loaded.value.save();
+    expect(saved.ok === false && saved.error.name).toBe("StoreVersionAheadError");
+    expect(backend.snapshot().get("player_42")).toEqual(rewritten);
+
+    // And a fresh load refuses it outright, writing no lock.
+    await store.release(player);
+    const other = createPlayerStore(definition(), {
+      backend,
+      owner: "server-b",
+      nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
+    });
+    const reloaded = await other.load(player);
+    expect(reloaded.ok === false && reloaded.error.name).toBe("StoreVersionAheadError");
+    expect(backend.snapshot().get("player_42")).toEqual(rewritten);
+  });
+
   it("skips the write when nothing changed", async () => {
     let updates = 0;
     const inner = createMemoryStoreBackend();
@@ -507,7 +544,8 @@ describe("heartbeat", () => {
   });
 
   it("carries the framework metadata through the lock, heartbeat, and release", async () => {
-    const meta = { r: ["receipt-1"], h: { k: "token", x: 50 } };
+    // With a key a newer Aruna added, which this one carries without reading.
+    const meta = { "!r": ["receipt-1"], h: { k: "token", x: 50 }, later: "kept" };
     const backend = createMemoryStoreBackend(
       entries({ player_42: { "$aruna": 1, v: 1, t: 0, d: { coins: 3, name: "ada" }, m: meta } }),
     );

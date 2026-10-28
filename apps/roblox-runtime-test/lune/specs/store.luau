@@ -473,7 +473,13 @@ return function(ctx)
 				v = 1,
 				t = 0,
 				d = { coins = 7 },
-				m = { r = { "receipt-1", "receipt-2" }, h = { k = "token", x = 99 }, e = 3 },
+				m = {
+					["!r"] = { "receipt-1", "receipt-2" },
+					h = { k = "token", x = 99 },
+					e = 3,
+					-- A key a newer Aruna added, without the must-understand marker.
+					later = { n = 1 },
+				},
 			})
 			local migrateInput = {}
 			local store = storeModule.createStore(
@@ -497,10 +503,11 @@ return function(ctx)
 			local entry = storedEntry("meta")
 			t.eq(entry.v, 2, "migrated version written")
 			t.eq(entry.d.coins, 8, "updated data written")
-			t.eq(#entry.m.r, 2, "receipts kept")
-			t.eq(entry.m.r[2], "receipt-2", "receipts kept in order")
+			t.eq(#entry.m["!r"], 2, "receipts kept")
+			t.eq(entry.m["!r"][2], "receipt-2", "receipts kept in order")
 			t.eq(entry.m.h.k, "token", "handoff token kept")
 			t.eq(entry.m.e, 3, "erasure marker kept")
+			t.eq(entry.m.later.n, 1, "unknown may-ignore key carried verbatim")
 		end)
 
 		t.it("evicts the oldest receipt ids beyond the bound", function()
@@ -525,6 +532,48 @@ return function(ctx)
 			local _, _, saved = t.await(store.save("format-ahead", { coins = 2, name = "a" }))
 			t.eq(saved.error.name, "StoreVersionAheadError", "save refused")
 			t.eq(storedEntry("format-ahead")["$aruna"], 2, "record untouched")
+		end)
+
+		t.it("refuses an unknown must-understand metadata key and never writes it back", function()
+			seed("meta-ahead", {
+				["$aruna"] = 1,
+				v = 1,
+				t = 0,
+				d = { coins = 1, name = "a" },
+				m = { ["!grants"] = { "g-1" } },
+			})
+			t.eq(storeModule.STORE_MUST_UNDERSTAND_PREFIX, "!")
+			local store = storeModule.createStore(definition(), { createBackend = backendFor })
+
+			local _, _, loaded = t.await(store.load("meta-ahead"))
+			t.eq(loaded.error.name, "StoreVersionAheadError", "load refused")
+			t.contains(loaded.error.message, "!grants")
+			local _, _, saved = t.await(store.save("meta-ahead", { coins = 2, name = "a" }))
+			t.eq(saved.error.name, "StoreVersionAheadError", "save refused")
+			local entry = storedEntry("meta-ahead")
+			t.eq(entry.d.coins, 1, "record untouched")
+			t.eq(entry.m["!grants"][1], "g-1", "metadata untouched")
+		end)
+
+		t.it("refuses preserved metadata over the bound and an unknown top-level field", function()
+			local bound = storeModule.STORE_MAX_PRESERVED_META_BYTES
+			t.eq(bound, 4096)
+			local function withMeta(length)
+				return { ["$aruna"] = 1, v = 1, t = 0, d = { coins = 1, name = "a" }, m = { k = string.rep("x", length) } }
+			end
+			-- `{"k":"…"}` is 8 bytes plus the string.
+			t.eq(storeModule.readStoreRecord(withMeta(bound - 8)).kind, "envelope", "at the bound")
+			t.eq(storeModule.readStoreRecord(withMeta(bound - 7)).kind, "malformed", "one byte over")
+			local extra = { ["$aruna"] = 1, v = 1, t = 0, d = { coins = 1, name = "a" }, x = 1 }
+			t.eq(storeModule.readStoreRecord(extra).kind, "malformed", "top level is closed")
+
+			seed("meta-over", withMeta(bound - 7))
+			local store = storeModule.createStore(definition(), { createBackend = backendFor })
+			local _, _, loaded = t.await(store.load("meta-over"))
+			t.eq(loaded.error.name, "StoreValidationError", "over the bound is malformed")
+			local _, _, saved = t.await(store.save("meta-over", { coins = 2, name = "a" }))
+			t.eq(saved.error.name, "StoreValidationError", "and never rewritten")
+			t.eq(#storedEntry("meta-over").m.k, bound - 7, "not truncated")
 		end)
 	end)
 

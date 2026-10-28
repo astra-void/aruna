@@ -404,9 +404,16 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 					(current) => {
 						const at = nowMs();
 						const decoded = decodeStoreValue(codec, current);
-						// A record we can no longer decode is still ours to overwrite: we
-						// hold the lock and our in-memory value is the authority. Only lock
-						// ownership can stop this write.
+						// A record a newer Aruna wrote (a newer envelope format, a
+						// must-understand metadata key, a newer store version) is never
+						// written back: this server cannot carry what it does not read.
+						if (!decoded.ok && decoded.error.name === "StoreVersionAheadError") {
+							failure = decoded;
+							return undefined;
+						}
+						// Any other record we can no longer decode is still ours to
+						// overwrite: we hold the lock and our in-memory value is the
+						// authority. Only lock ownership can stop this write.
 						const currentLock = decoded.ok ? decoded.value.lock : undefined;
 						if (currentLock !== undefined && currentLock.owner !== owner) {
 							// Someone took the lock — our TTL lapsed while we were throttled.

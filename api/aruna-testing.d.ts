@@ -408,6 +408,9 @@ interface StoreMeta {
     readonly receipts: ReadonlyArray<string>;
     readonly handoff?: StoreHandoff;
     readonly erasedAtMs?: number;
+    readonly preserved?: {
+        readonly [key: string]: unknown;
+    };
 }
 
 type StoreResult<TValue> = StoreSuccess<TValue> | StoreFailure;

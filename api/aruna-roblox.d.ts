@@ -439,6 +439,9 @@ interface StoreMeta {
     readonly receipts: ReadonlyArray<string>;
     readonly handoff?: StoreHandoff;
     readonly erasedAtMs?: number;
+    readonly preserved?: {
+        readonly [key: string]: unknown;
+    };
 }
 
 type StoreMigrate<TSchema extends Schema> = (stored: unknown, fromVersion: number) => Infer<TSchema> | undefined;

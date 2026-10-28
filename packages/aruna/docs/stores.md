@@ -349,14 +349,12 @@ The snapshot path is `contract.snapshot` in `aruna.config.ts` (default
 Every record a store writes is wrapped in this envelope:
 
 ```json
-{ "$aruna": 1, "v": 2, "d": { "coins": 40 }, "t": 1767225600000, "m": { "r": ["…"] }, "l": { "o": "…", "h": 1767225600000 } }
+{ "$aruna": 1, "v": 2, "d": { "coins": 40 }, "t": 1767225600000, "m": { "!r": ["…"] }, "l": { "o": "…", "h": 1767225600000 } }
 ```
 
 **This format is permanent.** Records outlive every build that wrote them, so once a game
-has saved one, v1 is read for as long as Aruna exists. It evolves only through the
-envelope format version (`$aruna`): a new format gets a new number, and a reader keeps
-reading every format that was ever written. Fields not in the table below are not part
-of v1: a v1 writer never writes them, and a v1 reader drops them on its next write.
+has saved one, v1 is read for as long as Aruna exists. The top level is **closed** and
+`m` is **open**, which is how the format grows without breaking a rollout (below).
 
 | Field | Type and bounds | Meaning |
 | --- | --- | --- |
@@ -364,15 +362,58 @@ of v1: a v1 writer never writes them, and a v1 reader drops them on its next wri
 | `v` | number ≥ 0 | The **store's schema version** (`version` in `defineStore`, default 1) the data was written at. Drives `migrate`. |
 | `d` | any DataStore-storable value | The data: validated against the store's schema on every read and write. |
 | `t` | number | When the record was last written, in ms since the Unix epoch. |
-| `m` | table, optional; omitted when empty | **Framework metadata.** Never validated against the store's schema, never passed to `migrate`, and carried through every write unchanged unless the framework changes it. Each field below is optional. |
-| `m.r` | array of at most **100** strings, each 1–128 UTF-8 bytes | Processed purchase receipt ids, oldest first. Recording the 101st evicts the oldest. For the planned `ProcessReceipt` support: a grant and its receipt id land in the same write. |
-| `m.h` | `{ k: string of 1–128 bytes, x: number }` | A session handoff token (`k`) and its expiry in ms (`x`). For the planned teleport handoff: the destination server presents it to take the lock without waiting out the TTL. |
-| `m.e` | number | Erasure marker: when the record's data was erased on a right-to-erasure request, in ms. |
+| `m` | table with string keys, optional; omitted when empty | **Framework metadata.** Never validated against the store's schema, never passed to `migrate`, and carried through every write unchanged unless the framework changes it. Each key below is optional; keys not below follow the [evolution rule](#how-the-format-evolves). |
 | `l` | `{ o: string, h: number }`, optional | The **session lock** of a player store: the owner (`${JobId}:${PlaceId}`, a `studio-…` id in Studio) and its last heartbeat in ms. Absent when no server holds the record. |
 
-Worst case the envelope adds about 13.5 KB to the data: 100 receipt ids of 128 bytes
-(~13.2 KB), a handoff token (~160 bytes), the lock (~100 bytes), and the fixed fields.
-The 4 MB size check counts the whole envelope.
+The `m` keys v1 defines. A key starting with `!` is **must-understand**; the others are
+**may-ignore** (see the rule below for what each means to a reader that does not know it):
+
+| Key | Type and bounds | Meaning | Kind, and why |
+| --- | --- | --- | --- |
+| `!r` | array of at most **100** strings, each 1–128 UTF-8 bytes | Processed purchase receipt ids, oldest first. Recording the 101st evicts the oldest. For the planned `ProcessReceipt` support: a grant and its receipt id land in the same write. | **Must-understand.** A server that ignored it would not see that a receipt was already granted and would grant a retried purchase again; writing the list back unread does not prevent that. Refusing the record costs a failed load on an outdated server; ignoring it costs real currency. |
+| `h` | `{ k: string of 1–128 bytes, x: number }` | A session handoff token (`k`) and its expiry in ms (`x`). For the planned teleport handoff: the destination server presents it to take the lock without waiting out the TTL. | **May-ignore.** A server that ignores it waits out the lock TTL, as any takeover does: slower, never unsafe. The token expires on its own (`x`), which the handoff must keep shorter than the lock TTL, so a token carried unread is dead before an ignoring server can take the lock. |
+| `e` | number | Erasure marker: when the record's data was erased on a right-to-erasure request, in ms. | **May-ignore.** It records what happened, for tooling and audits; no server decision reads it, so ignoring it changes nothing a server does, and it is carried through. |
+
+Worst case the envelope adds about 17.5 KB to the data: 100 receipt ids of 128 bytes
+(~13.2 KB), up to 4 KB of metadata from newer releases, a handoff token (~160 bytes), the
+lock (~100 bytes), and the fixed fields. The 4 MB size check counts the whole envelope.
+
+### How the format evolves
+
+The format changed once before the first release: the top level used to be read
+leniently (an unknown top-level field was dropped on the next write) and so did `m`.
+Both rules below replace that.
+
+- **The top level is closed.** A v1 envelope has exactly `$aruna`, `v`, `d`, `t`, and
+  optionally `m` and `l`. Any other top-level key makes it a **malformed envelope**:
+  `StoreValidationError`, never adopted, never written back. A change to the top-level
+  shape is the only reason to bump `$aruna`, and a server refuses a newer `$aruna` with
+  `StoreVersionAheadError`.
+- **`m` is open.** A new field goes in `m`, and the format version stays `1`. A reader
+  meets a key it does not know in one of two ways:
+  - **May-ignore** (no `!`): preserved **verbatim** on every write — through `save`,
+    `update`, a user `migrate`, the session lock and its heartbeat — and otherwise
+    ignored. All of them together are bounded at **4,096 bytes**, JSON-encoded
+    (`STORE_MAX_PRESERVED_META_BYTES`); a record over the bound is a malformed envelope
+    (`StoreValidationError`) when read, never silently truncated, since truncating is
+    erasing.
+  - **Must-understand** (starts with `!`, `STORE_MUST_UNDERSTAND_PREFIX`): the reader
+    refuses the record with `StoreVersionAheadError`, exactly as for a newer `$aruna`, and
+    never writes it back — not even a player store already holding the session lock.
+- **Which to use.** A new field is may-ignore by default. It is must-understand only when
+  a server that ignored it would do harm (grant twice, resurrect what should stay gone,
+  break an invariant another server relies on). Must-understand is cheap to read but
+  expensive to roll out: until every server knows the key, an older one refuses the
+  records that carry it.
+- **Why 4 KB.** The keys v1 defines are small — a handoff token is ~160 bytes — so 4 KB
+  leaves room for dozens of ids, timestamps, or tokens from later releases, while capping
+  what an older server carries blindly (and measures on every read) at 0.1% of the 4 MB
+  record. A later release must keep its may-ignore keys inside the bound, or older servers
+  would refuse those records during a rollout; a field that cannot fit is a reason to
+  reconsider the field, not to raise the bound under servers that are already running.
+
+A rollout therefore never needs every server upgraded first, except for must-understand
+keys, and never loses a field an older server did not know.
 
 ### Reading a stored value
 
@@ -380,7 +421,8 @@ The 4 MB size check counts the whole envelope.
 | --- | --- | --- |
 | nothing | absent | the store's default; `existed: false` |
 | a table whose `$aruna` is `1` and whose fields fit the table above | an **envelope v1** | `v` above the store's version → `StoreVersionAheadError`; below → `migrate(d, v)`; equal → validated |
-| a table whose `$aruna` is `1` but a field does not fit (`v` not a number, `t` missing, `m.r` not an array, …) | a malformed envelope | `StoreValidationError`; never treated as raw data |
+| a table whose `$aruna` is `1` but a field does not fit (`v` not a number, `t` missing, `m["!r"]` not an array, an unknown top-level field, over 4 KB of unknown `m` keys, …) | a malformed envelope | `StoreValidationError`; never treated as raw data, never written back |
+| a table whose `$aruna` is `1` and whose `m` holds a `!` key this server does not know | an envelope from a newer Aruna | `StoreVersionAheadError`; never migrated, never written back |
 | a table whose `$aruna` is an integer above `1` | an envelope from a newer Aruna | `StoreVersionAheadError`; never migrated, never written back |
 | anything else, **including** a table that looks like an envelope but fails the marker check (`{ v: 1, t: 2 }`, `$aruna: "1"`, `$aruna: 0`) | a **raw legacy value**: data from before this store owned the key | adopted at version 0: `migrate(value, 0)`, the whole value as the data, no metadata, no lock; the next write wraps it in a v1 envelope |
 

@@ -207,15 +207,24 @@ export function validateStoreKey(key: string): StoreResult<string> {
 // ---------------------------------------------------------------------------
 //
 // Every record Aruna writes is wrapped in this envelope. It is permanent: once a
-// game has saved records, it changes only through STORE_ENVELOPE_FORMAT, and a
-// reader handles every format it ever wrote. Short field names because the
-// wrapper is pure overhead against the 4 MB per-key budget.
+// game has saved records, a reader handles every format it ever wrote. Short
+// field names because the wrapper is pure overhead against the 4 MB per-key
+// budget.
 //
 //   { "$aruna": 1, v, d, t, m?, l? }
 //
 // The marker is an explicit field rather than a shape test: any table whose
 // marker is not a positive integer is a raw value the store is adopting, however
 // much it looks like an envelope.
+//
+// How it evolves: the top level is closed — a v1 envelope with any other field
+// is malformed — and changes only by bumping STORE_ENVELOPE_FORMAT. Additive
+// fields go in `m`, which is open: a key this reader does not know is carried
+// through every write verbatim (up to STORE_MAX_PRESERVED_META_BYTES) and
+// otherwise ignored, unless it starts with STORE_MUST_UNDERSTAND_PREFIX, in
+// which case the reader refuses the record (StoreVersionAheadError) and never
+// writes it back. A field is must-understand only when ignoring it would cause
+// harm.
 
 // The marker field. Its value is the envelope format version.
 export const STORE_ENVELOPE_MARKER = "$aruna";
@@ -226,6 +235,20 @@ export const STORE_ENVELOPE_FORMAT = 1;
 export const STORE_MAX_RECEIPTS = 100;
 // Upper bound on a receipt id and on a handoff token, in UTF-8 bytes.
 export const STORE_MAX_META_ID_BYTES = 128;
+// A metadata key that starts with this must be understood: a reader that does
+// not know it refuses the record instead of ignoring the key.
+export const STORE_MUST_UNDERSTAND_PREFIX = "!";
+// Upper bound on the metadata a reader carries without understanding it — every
+// `m` key it does not know, JSON-encoded together. Over it, the record is
+// refused (StoreValidationError), never truncated.
+export const STORE_MAX_PRESERVED_META_BYTES = 4096;
+
+// The envelope's fields; any other top-level key makes a v1 envelope malformed.
+const STORE_ENVELOPE_FIELDS = new Set<string>([STORE_ENVELOPE_MARKER, "v", "d", "t", "m", "l"]);
+// The `m` keys this reader understands.
+const META_RECEIPTS = "!r";
+const META_HANDOFF = "h";
+const META_ERASED = "e";
 
 // The session lock a player store writes alongside the data. It lives inside
 // the record so claiming it and reading the data are one atomic UpdateAsync
@@ -254,6 +277,9 @@ export interface StoreMeta {
 	readonly handoff?: StoreHandoff;
 	// When the record's data was erased on a right-to-erasure request.
 	readonly erasedAtMs?: number;
+	// The `m` keys this runtime does not understand, as read: written back
+	// verbatim on every write, never interpreted. Absent when there are none.
+	readonly preserved?: { readonly [key: string]: unknown };
 }
 
 // The persisted forms. `StoreLockState`/`StoreMeta` are what the runtime works
@@ -264,9 +290,11 @@ export interface StoreEnvelopeLock {
 }
 
 export interface StoreEnvelopeMeta {
-	readonly r?: Array<string>;
+	readonly "!r"?: Array<string>;
 	readonly h?: { readonly k: string; readonly x: number };
 	readonly e?: number;
+	// Keys a newer Aruna wrote, carried through as they were.
+	readonly [key: string]: unknown;
 }
 
 export interface StoreEnvelope {
@@ -313,22 +341,61 @@ export function hasStoreReceipt(meta: StoreMeta, receiptId: string): boolean {
 	return meta.receipts.includes(receiptId);
 }
 
-function readEnvelopeMeta(raw: unknown): StoreMeta | string {
+// Why `m` could not be read: it does not fit (malformed), or it carries a key
+// this reader must understand and does not (ahead).
+interface MetaRefusal {
+	readonly refusal: "malformed" | "ahead";
+	readonly reason: string;
+}
+
+function readEnvelopeMeta(raw: unknown): StoreMeta | MetaRefusal {
 	if (raw === undefined) {
 		return emptyStoreMeta();
 	}
 	if (!typeIs(raw, "table")) {
-		return "m must be a table";
+		return { refusal: "malformed", reason: "m must be a table" };
 	}
-	const candidate = raw as { readonly r?: unknown; readonly h?: unknown; readonly e?: unknown };
-	const receipts: Array<string> = [];
-	if (candidate.r !== undefined) {
-		if (!typeIs(candidate.r, "table")) {
-			return "m.r must be an array";
+	const fields = raw as { readonly [key: string]: unknown };
+	// Every key first: an unknown must-understand key refuses the record however
+	// the rest of it reads, and what is not understood is set aside verbatim.
+	let preserved: { [key: string]: unknown } | undefined;
+	for (const [key, value] of pairs(fields)) {
+		if (!typeIs(key, "string")) {
+			return { refusal: "malformed", reason: "m must have only string keys" };
 		}
-		for (const id of candidate.r as Array<unknown>) {
+		if (key === META_RECEIPTS || key === META_HANDOFF || key === META_ERASED) {
+			continue;
+		}
+		if (key.sub(1, STORE_MUST_UNDERSTAND_PREFIX.size()) === STORE_MUST_UNDERSTAND_PREFIX) {
+			return { refusal: "ahead", reason: key };
+		}
+		if (preserved === undefined) {
+			preserved = {};
+		}
+		preserved[key] = value;
+	}
+	if (preserved !== undefined) {
+		const bytes = measureStoreValueBytes(preserved);
+		if (bytes > STORE_MAX_PRESERVED_META_BYTES) {
+			return {
+				refusal: "malformed",
+				reason: `m holds ${bytes === math.huge ? "unencodable" : `${bytes} bytes of`} metadata this server does not read, over the ${STORE_MAX_PRESERVED_META_BYTES}-byte bound`,
+			};
+		}
+	}
+
+	const receiptsField = fields[META_RECEIPTS];
+	const receipts: Array<string> = [];
+	if (receiptsField !== undefined) {
+		if (!typeIs(receiptsField, "table")) {
+			return { refusal: "malformed", reason: "m.!r must be an array" };
+		}
+		for (const id of receiptsField as Array<unknown>) {
 			if (!isMetaId(id)) {
-				return `m.r holds an id that is not a string of 1..${STORE_MAX_META_ID_BYTES} bytes`;
+				return {
+					refusal: "malformed",
+					reason: `m.!r holds an id that is not a string of 1..${STORE_MAX_META_ID_BYTES} bytes`,
+				};
 			}
 			receipts.push(id);
 		}
@@ -337,21 +404,24 @@ function readEnvelopeMeta(raw: unknown): StoreMeta | string {
 			receipts.shift();
 		}
 	}
+	const handoffField = fields[META_HANDOFF];
 	let handoff: StoreHandoff | undefined;
-	if (candidate.h !== undefined) {
-		const token = typeIs(candidate.h, "table") ? (candidate.h as { k?: unknown; x?: unknown }) : undefined;
+	if (handoffField !== undefined) {
+		const token = typeIs(handoffField, "table") ? (handoffField as { k?: unknown; x?: unknown }) : undefined;
 		if (token === undefined || !isMetaId(token.k) || !isFiniteValue(token.x)) {
-			return "m.h must be { k: token, x: expiry ms }";
+			return { refusal: "malformed", reason: "m.h must be { k: token, x: expiry ms }" };
 		}
 		handoff = { token: token.k, expiresAtMs: token.x };
 	}
-	if (candidate.e !== undefined && !isFiniteValue(candidate.e)) {
-		return "m.e must be a number";
+	const erasedField = fields[META_ERASED];
+	if (erasedField !== undefined && !isFiniteValue(erasedField)) {
+		return { refusal: "malformed", reason: "m.e must be a number" };
 	}
 	return {
 		receipts,
 		...(handoff !== undefined ? { handoff } : {}),
-		...(candidate.e !== undefined ? { erasedAtMs: candidate.e as number } : {}),
+		...(erasedField !== undefined ? { erasedAtMs: erasedField as number } : {}),
+		...(preserved !== undefined ? { preserved } : {}),
 	};
 }
 
@@ -363,17 +433,30 @@ function writeEnvelopeMeta(meta: StoreMeta | undefined): StoreEnvelopeMeta | und
 	while (receipts.size() > STORE_MAX_RECEIPTS) {
 		receipts.shift();
 	}
-	// Empty metadata is omitted, so a record without any reads back the same.
-	if (receipts.size() === 0 && meta.handoff === undefined && meta.erasedAtMs === undefined) {
-		return undefined;
+	const m: { [key: string]: unknown } = {};
+	let empty = true;
+	// What this runtime does not understand goes back exactly as it was read. A
+	// key it does understand is always written from its own field, below.
+	if (meta.preserved !== undefined) {
+		for (const [key, value] of pairs(meta.preserved)) {
+			m[key] = value;
+			empty = false;
+		}
 	}
-	return {
-		...(receipts.size() > 0 ? { r: receipts } : {}),
-		...(meta.handoff !== undefined
-			? { h: { k: meta.handoff.token, x: meta.handoff.expiresAtMs } }
-			: {}),
-		...(meta.erasedAtMs !== undefined ? { e: meta.erasedAtMs } : {}),
-	};
+	if (receipts.size() > 0) {
+		m[META_RECEIPTS] = receipts;
+		empty = false;
+	}
+	if (meta.handoff !== undefined) {
+		m[META_HANDOFF] = { k: meta.handoff.token, x: meta.handoff.expiresAtMs };
+		empty = false;
+	}
+	if (meta.erasedAtMs !== undefined) {
+		m[META_ERASED] = meta.erasedAtMs;
+		empty = false;
+	}
+	// Empty metadata is omitted, so a record without any reads back the same.
+	return empty ? undefined : (m as StoreEnvelopeMeta);
 }
 
 function readEnvelopeLock(raw: unknown): StoreLockState | undefined | string {
@@ -422,6 +505,9 @@ export type StoreRecord =
 	  }
 	// Marked with a format this runtime does not read.
 	| { readonly kind: "format-ahead"; readonly format: number }
+	// A v1 envelope whose metadata holds a must-understand key this runtime does
+	// not know: written by a newer Aruna.
+	| { readonly kind: "meta-ahead"; readonly key: string }
 	// Marked as a v1 envelope, with fields that do not fit it.
 	| { readonly kind: "malformed"; readonly reason: string };
 
@@ -448,6 +534,13 @@ export function readStoreRecord(raw: unknown): StoreRecord {
 	if (format > STORE_ENVELOPE_FORMAT) {
 		return { kind: "format-ahead", format };
 	}
+	// The top level is closed: a field v1 does not define means the record is not
+	// what it claims to be (an additive field belongs in `m`).
+	for (const [key] of pairs(raw as { readonly [key: string]: unknown })) {
+		if (!typeIs(key, "string") || !STORE_ENVELOPE_FIELDS.has(key)) {
+			return { kind: "malformed", reason: `unknown top-level field ${tostring(key)}` };
+		}
+	}
 	if (!isFiniteValue(candidate.v) || candidate.v < 0) {
 		return { kind: "malformed", reason: "v must be a non-negative number" };
 	}
@@ -455,9 +548,13 @@ export function readStoreRecord(raw: unknown): StoreRecord {
 		return { kind: "malformed", reason: "t must be a number" };
 	}
 	const meta = readEnvelopeMeta(candidate.m);
-	if (typeIs(meta, "string")) {
-		return { kind: "malformed", reason: meta };
+	if ((meta as Partial<MetaRefusal>).refusal !== undefined) {
+		const refused = meta as MetaRefusal;
+		return refused.refusal === "ahead"
+			? { kind: "meta-ahead", key: refused.reason }
+			: { kind: "malformed", reason: refused.reason };
 	}
+	const understood = meta as StoreMeta;
 	const lock = readEnvelopeLock(candidate.l);
 	if (typeIs(lock, "string")) {
 		return { kind: "malformed", reason: lock };
@@ -467,7 +564,7 @@ export function readStoreRecord(raw: unknown): StoreRecord {
 		version: candidate.v,
 		data: candidate.d,
 		updatedAtMs: candidate.t,
-		meta,
+		meta: understood,
 		lock,
 	};
 }
@@ -862,6 +959,16 @@ export function decodeStoreValue(
 		return storeFail(
 			"StoreVersionAheadError",
 			`Store ${definition.id} read a record in envelope format ${record.format}; this server reads format ${STORE_ENVELOPE_FORMAT}. This server is running an older version of Aruna.`,
+		);
+	}
+
+	// Metadata a newer Aruna marked must-understand. Ignoring it could do harm
+	// (a processed receipt granted twice, say), and writing the record back
+	// would carry it unread, so the record is refused like a newer format.
+	if (record.kind === "meta-ahead") {
+		return storeFail(
+			"StoreVersionAheadError",
+			`Store ${definition.id} read a record whose metadata holds "${record.key}", which this server must understand and does not. This server is running an older version of Aruna.`,
 		);
 	}
 

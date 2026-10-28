@@ -272,6 +272,18 @@ the game build like any other module.
   `readStoreRecord`, `recordStoreReceipt`, `hasStoreReceipt` are new;
   `isStoreLockState` is gone.
 
+- **Breaking: the v1 envelope evolves without a format bump.** The top level is
+  closed: an unknown top-level field makes a v1 envelope malformed
+  (`StoreValidationError`); it used to be dropped on the next write. `m` is
+  open: a key this runtime does not know is written back verbatim (exposed as
+  `meta.preserved`), up to 4 KB JSON-encoded (`STORE_MAX_PRESERVED_META_BYTES`;
+  over it is `StoreValidationError`, never truncation), unless it starts with
+  `!` (`STORE_MUST_UNDERSTAND_PREFIX`), which refuses the record with
+  `StoreVersionAheadError` and never writes it back, including from a player
+  store that holds the lock. Receipt ids are must-understand and move from
+  `m.r` to `m["!r"]`; `m.h` and `m.e` stay may-ignore. docs/stores.md, "How the
+  format evolves".
+
 - **Pre-release policy.** Until the first public release, breaking changes need
   no deprecation, shim, or migration notes, and the API report is a review aid
   rather than a gate (docs/stability.md). Diagnostic codes are still never

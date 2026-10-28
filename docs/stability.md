@@ -25,7 +25,10 @@ Until then Aruna has no users to keep working, so compatibility has no value:
 
 The persisted store format is the one thing even this freedom does not reach once a game
 has saved records with it: [Persisted format v1](../packages/aruna/docs/stores.md#persisted-format-v1)
-is permanent, and changes only through its envelope format version.
+is permanent. Its top-level shape changes only through its envelope format version;
+everything else grows as new keys in the metadata slot `m`, which older servers carry
+through unread or, for a must-understand `!` key, refuse ([how the format
+evolves](../packages/aruna/docs/stores.md#how-the-format-evolves)).
 
 The [wire protocol](wire-protocol.md) is versioned the same way (a protocol version in
 every frame), but it needs no such care before release: no two builds of a game ever talk
