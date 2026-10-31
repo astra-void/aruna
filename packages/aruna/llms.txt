@@ -21,8 +21,9 @@ virtual modules:
 - `$aruna/actions/client` — generated per-action client call functions
 - `$aruna/signals` — generated signal registry (`signals`)
 
-The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
-`aruna build` / `aruna doctor --fix`. They are NOT the npm subpath exports
+The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases that `aruna build`
+(and `init`, `dev`, `test`, `doctor --fix`) write into the project's `tsconfig.json`,
+relative to the file, with no `baseUrl`. They are NOT the npm subpath exports
 (`@arunajs/aruna/server`); in a real project you import the short `aruna/*` form.
 
 ## Docs
@@ -60,9 +61,12 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 - To publish a signal from inside an action, use `ctx.publisher` (injected when
   `createServerApp` owns a publisher). Bind `createActionDefiner<Signals, Player>()`
   in a shared module for a non-optional, registry-checked `ctx.publisher`.
-- If `aruna check` reports `aruna::111`/`aruna::112` (alias desync), run
-  `aruna doctor --fix --emit-runtime` (realigns tsconfig aliases). Generated output
-  under `generatedDir` is fully owned.
+- Do not hand-wire `tsconfig.json` for Aruna: like Next.js, the build keeps it correct
+  (it forces the roblox-ts compile contract and the aliases, adds defaults only where a
+  key is unset, and edits in place). Do not add a `baseUrl` for Aruna's sake, and do not
+  `extends` a generated `tsconfig.aruna.json` (that fragment is gone). If `aruna check`
+  reports `aruna::111` (alias desync), run `aruna build` or `aruna doctor --fix`.
+  Generated output under `generatedDir` is fully owned.
 - Schemas are plain immutable objects with zero runtime cost; compose by spreading
   `.shape`, never mutate.
 - Bound every string, array, and record an action accepts (`.maxLength`/`.maxChars`,

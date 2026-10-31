@@ -3,31 +3,24 @@ import path from "node:path";
 import { loadProjectConfig } from "@arunajs/compiler";
 import type { Diagnostic } from "@arunajs/core";
 import {
-  ARUNA_ACTION_PATHS,
-  ARUNA_TSCONFIG_FRAGMENT_FILE,
-  addFragmentToExtends,
-  arunaTsconfigExtendsRef,
-  arunaTsconfigFragmentContents,
-  extendsIncludesFragment,
-  inspectArunaActionPaths,
-  isArunaOwnedAlias,
-  resolveArunaActionPaths,
-  resolveArunaRuntimePaths,
-  resolveArunaSignalPaths,
-  updateArunaActionPaths,
-  updateArunaRuntimePaths,
-} from "./tsconfig-paths.js";
-import {
   formatRojoProjectProblem,
   inspectRojoProject,
   type RojoProjectReport,
 } from "./rojo-project.js";
+import {
+  applyTsconfigSetup,
+  formatTsconfigSetup,
+  planTsconfigSetup,
+  tsconfigSetupSummary,
+  type TsconfigAliasStatus,
+  type TsconfigChange,
+  type TsconfigSetupSummary,
+} from "./tsconfig-setup.js";
 
 export type DoctorOptions = {
   projectRoot: string;
   configPath?: string | undefined;
   fix?: boolean | undefined;
-  emitRuntime?: boolean | undefined;
 };
 
 // roblox-ts pins the exact TypeScript version it can drive (it taps compiler
@@ -52,46 +45,26 @@ export type DoctorReport = {
   manifestOutputResolved: string;
   configDiagnostics: Diagnostic[];
   tsconfigDiagnostics: Diagnostic[];
-  // "extends": the tsconfig references the generated fragment and inherits all
-  // aruna aliases from it. "inline": aliases are managed inside the tsconfig
-  // itself (a project with its own compilerOptions.paths).
-  aliasMode: "extends" | "inline";
-  fragment: {
-    // Project-relative posix path of <generatedDir>/tsconfig.aruna.json.
-    path: string;
-    referenced: boolean;
-    status: "missing" | "correct" | "stale";
+  // What tsconfig.json still lacks: the changes `aruna build` makes on its own
+  // before it compiles. Only mandatory changes fail the doctor; suggested
+  // values are listed for the project to take or leave.
+  tsconfig: {
+    status: "ok" | "needs-update" | "missing" | "unreadable";
+    mandatory: readonly TsconfigChange[];
+    suggested: readonly TsconfigChange[];
+    error?: string | undefined;
   };
-  // True when the tsconfig extends the fragment but also declares its own
-  // compilerOptions.paths — TS replaces inherited paths wholesale, so the
-  // fragment's aliases are shadowed and must be kept aligned inline (aruna::112).
-  pathsShadowFragment: boolean;
-  expectedPaths: {
-    client: string[];
-    server: string[];
-  };
-  actualPaths: {
-    client?: string[] | undefined;
-    server?: string[] | undefined;
-  };
-  status: {
-    client: "missing" | "correct" | "incorrect";
-    server: "missing" | "correct" | "incorrect";
-    baseUrlPresent: boolean;
-    baseUrlRequired: boolean;
-    baseUrlRecommended: boolean;
-  };
+  // Every Aruna alias, as tsconfig.json maps it now.
+  aliases: readonly TsconfigAliasStatus[];
   toolchain: ToolchainReport;
   // The Rojo project file measured against the partitioned `out/` contract.
   // Nothing else in the pipeline looks at it, so an unmounted `out/` is
   // otherwise invisible: every command exits 0 and the place comes out empty.
   rojoProject: RojoProjectReport;
   fixable: boolean;
-  fixApplied: boolean;
-  fixChanges: string[];
+  // What `--fix` wrote, when it ran.
+  fix?: TsconfigSetupSummary | undefined;
 };
-
-type TsconfigJsonObject = Record<string, unknown>;
 
 type PackageJsonShape = {
   version?: unknown;
@@ -158,67 +131,9 @@ export function inspectToolchain(projectRoot: string): ToolchainReport {
   };
 }
 
-function readTsconfig(tsconfigPath: string): { value?: TsconfigJsonObject; error?: string } {
-  if (!fs.existsSync(tsconfigPath)) {
-    return { error: "missing" };
-  }
-
-  try {
-    const raw = fs.readFileSync(tsconfigPath, "utf8");
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return { error: "top-level JSON value must be an object" };
-    }
-
-    return { value: parsed as TsconfigJsonObject };
-  } catch {
-    return { error: "invalid JSON" };
-  }
-}
-
-function createTsconfigDiagnostic(tsconfigPath: string, error: string): Diagnostic {
-  const file = path.basename(tsconfigPath);
-  if (error === "missing") {
-    return {
-      code: "aruna::102",
-      name: "missing-tsconfig",
-      severity: "warning",
-      message: `Missing TypeScript config at ${path.basename(tsconfigPath)}.`,
-      file,
-      details: "Aruna looked for the TypeScript config at the resolved path but could not find it.",
-      suggestion: "Create tsconfig.json or point aruna.config.ts to an existing tsconfig file.",
-    };
-  }
-
-  return {
-    code: "aruna::103",
-    name: "invalid-tsconfig",
-    severity: "error",
-    message: `Malformed TypeScript config at ${path.basename(tsconfigPath)}.`,
-    file,
-    details: error,
-    suggestion: "Fix the tsconfig JSON syntax or use a supported top-level object shape.",
-  };
-}
-
 function displayPath(projectRoot: string, absolutePath: string): string {
   const relativePath = path.relative(projectRoot, absolutePath);
   return relativePath.length > 0 ? relativePath.split(path.sep).join("/") : ".";
-}
-
-function formatPathList(values: readonly string[]): string {
-  return values.join(", ");
-}
-
-function renderStatusLabel(status: "missing" | "correct" | "incorrect"): string {
-  switch (status) {
-    case "correct":
-      return "ok";
-    case "incorrect":
-      return "incorrect";
-    case "missing":
-      return "missing";
-  }
 }
 
 function renderDiagnosticSummary(diagnostic: Diagnostic): string {
@@ -229,14 +144,15 @@ function renderDiagnosticSummary(diagnostic: Diagnostic): string {
   return parts.join(" ");
 }
 
+function needsFix(report: DoctorReport): boolean {
+  return (
+    report.tsconfig.status === "missing" ||
+    (report.tsconfig.status === "needs-update" && report.tsconfig.mandatory.length > 0)
+  );
+}
+
 export function formatDoctorReport(report: DoctorReport): string {
   const lines: string[] = ["aruna doctor", ""];
-  const extendsClean = report.aliasMode === "extends" && !report.pathsShadowFragment;
-  const needsFix = extendsClean
-    ? report.fragment.status !== "correct"
-    : report.status.client !== "correct" ||
-      report.status.server !== "correct" ||
-      !report.status.baseUrlPresent;
   lines.push(`project: ${displayPath(process.cwd(), report.projectRoot)}`);
   if (report.configPath) {
     lines.push(`config: ${displayPath(report.projectRoot, report.configPath)}`);
@@ -257,38 +173,37 @@ export function formatDoctorReport(report: DoctorReport): string {
   }
 
   lines.push("");
-  lines.push("tsconfig aliases");
-  lines.push(
-    `  mode: ${report.aliasMode}${report.aliasMode === "extends" ? ` (${report.fragment.path})` : ""}`,
-  );
-  if (report.aliasMode === "extends") {
-    lines.push(
-      `  fragment: ${report.fragment.status === "correct" ? "ok" : report.fragment.status}${
-        report.fragment.status === "stale" ? " — run `aruna build` to regenerate" : ""
-      }`,
+  lines.push("tsconfig.json");
+  if (report.tsconfig.status === "ok") {
+    lines.push("  ok: has everything roblox-ts and Aruna need");
+  } else if (report.tsconfig.status === "unreadable") {
+    lines.push(`  unreadable: ${report.tsconfig.error ?? "it could not be read"}`);
+  } else {
+    const [headline, ...changes] = formatTsconfigSetup(
+      {
+        status: report.tsconfig.status === "missing" ? "create" : "update",
+        mandatory: report.tsconfig.mandatory,
+        suggested: report.tsconfig.suggested,
+      },
+      "pending",
     );
-  }
-  if (report.pathsShadowFragment) {
-    lines.push(
-      "  warning: compilerOptions.paths shadows the generated fragment (aruna::112) — " +
-        "the aruna aliases below must stay aligned inline",
-    );
-  }
-  if (!extendsClean) {
-    lines.push(
-      `  baseUrl: ${report.status.baseUrlPresent ? "present" : "missing"}${report.status.baseUrlRequired ? " (required)" : ""}`,
-    );
-    lines.push(
-      `  ${ARUNA_ACTION_PATHS.client} -> ${formatPathList(report.expectedPaths.client)}  ${renderStatusLabel(report.status.client)}`,
-    );
-    if (report.status.client === "incorrect" && report.actualPaths.client) {
-      lines.push(`    current: ${formatPathList(report.actualPaths.client)}`);
+    if (headline !== undefined) {
+      lines.push(`  ${headline}`);
     }
-    lines.push(
-      `  ${ARUNA_ACTION_PATHS.server} -> ${formatPathList(report.expectedPaths.server)}  ${renderStatusLabel(report.status.server)}`,
-    );
-    if (report.status.server === "incorrect" && report.actualPaths.server) {
-      lines.push(`    current: ${formatPathList(report.actualPaths.server)}`);
+    for (const line of changes) {
+      lines.push(line === "" ? "" : `  ${line}`);
+    }
+  }
+
+  if (report.aliases.length > 0) {
+    lines.push("");
+    lines.push("tsconfig aliases");
+    for (const alias of report.aliases) {
+      lines.push(`  ${alias.alias} -> ${alias.expected}  ${alias.status}`);
+      if (alias.status === "stale" && alias.actual !== undefined) {
+        const where = alias.declaredIn !== undefined ? ` (in ${alias.declaredIn})` : "";
+        lines.push(`    current: ${alias.actual}${where}`);
+      }
     }
   }
 
@@ -323,32 +238,31 @@ export function formatDoctorReport(report: DoctorReport): string {
     }
   }
 
-  if (report.fixApplied) {
+  if (report.fix !== undefined) {
     lines.push("");
-    if (report.fixChanges.length > 0) {
-      lines.push("fixed tsconfig.json");
-      for (const change of report.fixChanges) {
-        lines.push(`  - ${change}`);
-      }
+    const written = formatTsconfigSetup(report.fix, "applied");
+    if (written.length > 0) {
+      lines.push(...written);
     } else {
-      lines.push("tsconfig.json already matched the Aruna aliases");
+      lines.push("tsconfig.json already had everything roblox-ts and Aruna need");
     }
   } else if (
     report.configDiagnostics.length > 0 ||
     report.tsconfigDiagnostics.length > 0 ||
-    needsFix
+    needsFix(report)
   ) {
     lines.push("");
     if (report.fixable) {
       lines.push(
-        `run \`aruna doctor --fix --project ${displayPath(process.cwd(), report.projectRoot)}\` to update tsconfig.json`,
+        `run \`aruna doctor --fix --project ${displayPath(process.cwd(), report.projectRoot)}\` ` +
+          "(or any `aruna build`) to update tsconfig.json",
       );
     } else {
       lines.push("unable to fix automatically until the project config and tsconfig are valid");
     }
   } else if (rojoProblem.length > 0) {
-    // The aliases are healthy but the place would still build empty; never
-    // report "done" over that.
+    // tsconfig is healthy but the place would still build empty; never report
+    // "done" over that.
     lines.push("");
     lines.push("the Rojo project above must be fixed before the build reaches the place");
   } else {
@@ -359,260 +273,67 @@ export function formatDoctorReport(report: DoctorReport): string {
   return lines.join("\n");
 }
 
-function inspectFragment(
-  projectRoot: string,
-  generatedDir: string,
-): { path: string; status: "missing" | "correct" | "stale" } {
-  const fragmentRel = path
-    .join(generatedDir, ARUNA_TSCONFIG_FRAGMENT_FILE)
-    .split(path.sep)
-    .join("/");
-  const fragmentAbs = path.resolve(projectRoot, generatedDir, ARUNA_TSCONFIG_FRAGMENT_FILE);
-  if (!fs.existsSync(fragmentAbs)) {
-    return { path: fragmentRel, status: "missing" };
-  }
-  const expected = arunaTsconfigFragmentContents(projectRoot, generatedDir);
-  const actual = fs.readFileSync(fragmentAbs, "utf8");
-  return { path: fragmentRel, status: actual === expected ? "correct" : "stale" };
-}
-
 export function inspectDoctorProject(options: DoctorOptions): DoctorReport {
   const loaded = loadProjectConfig(options.projectRoot, options.configPath);
   const generatedDir = loaded.config.generatedDir;
   const generatedDirResolved = path.resolve(options.projectRoot, generatedDir);
   const manifestOutput = loaded.config.manifestOutput;
   const manifestOutputResolved = path.resolve(options.projectRoot, manifestOutput);
-  const tsconfigPath = loaded.tsconfigPath;
-  const expectedPaths = resolveArunaActionPaths(tsconfigPath, generatedDir);
-  const tsconfigResult = readTsconfig(tsconfigPath);
   const tsconfigDiagnostics = loaded.diagnostics.filter(
     (diagnostic) => diagnostic.code === "aruna::102" || diagnostic.code === "aruna::103",
   );
   const configDiagnostics = loaded.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "aruna::102" && diagnostic.code !== "aruna::103",
   );
-  const effectiveTsconfigDiagnostics =
-    tsconfigDiagnostics.length > 0 || !tsconfigResult.error
-      ? tsconfigDiagnostics
-      : [createTsconfigDiagnostic(tsconfigPath, tsconfigResult.error)];
-  const fragment = inspectFragment(options.projectRoot, generatedDir);
-  const toolchain = inspectToolchain(options.projectRoot);
-  const rojoProject = inspectRojoProject(options.projectRoot, undefined, generatedDir);
-
-  if (!tsconfigResult.value) {
-    return {
-      projectRoot: options.projectRoot,
-      configPath: loaded.configPath,
-      tsconfigPath,
-      generatedDir,
-      generatedDirResolved,
-      manifestOutput,
-      manifestOutputResolved,
-      configDiagnostics,
-      tsconfigDiagnostics: effectiveTsconfigDiagnostics,
-      aliasMode: "inline",
-      fragment: { ...fragment, referenced: false },
-      pathsShadowFragment: false,
-      expectedPaths,
-      actualPaths: {},
-      status: {
-        client: "missing",
-        server: "missing",
-        baseUrlPresent: false,
-        baseUrlRequired: true,
-        baseUrlRecommended: false,
-      },
-      toolchain,
-      rojoProject,
-      fixable: false,
-      fixApplied: false,
-      fixChanges: [],
-    };
-  }
-
-  const inspection = inspectArunaActionPaths(tsconfigResult.value, expectedPaths);
-  const extendsRef = arunaTsconfigExtendsRef(tsconfigPath, generatedDir);
-  const referenced = extendsIncludesFragment(tsconfigResult.value, extendsRef);
-  const pathsShadowFragment = referenced && inspection.paths !== undefined;
-  const aliasMode = referenced ? "extends" : "inline";
-  const extendsClean = referenced && !pathsShadowFragment;
+  const setup = planTsconfigSetup({ projectRoot: options.projectRoot, generatedDir });
+  const summary = tsconfigSetupSummary(setup);
 
   return {
     projectRoot: options.projectRoot,
     configPath: loaded.configPath,
-    tsconfigPath,
+    tsconfigPath: loaded.tsconfigPath,
     generatedDir,
     generatedDirResolved,
     manifestOutput,
     manifestOutputResolved,
     configDiagnostics,
-    tsconfigDiagnostics: effectiveTsconfigDiagnostics,
-    aliasMode,
-    fragment: { ...fragment, referenced },
-    pathsShadowFragment,
-    expectedPaths,
-    actualPaths: inspection.current,
-    status: {
-      // In clean extends mode the fragment supplies every alias (and its own
-      // baseUrl); the inline alias inspection only governs otherwise.
-      client: extendsClean && fragment.status === "correct" ? "correct" : inspection.status.client,
-      server: extendsClean && fragment.status === "correct" ? "correct" : inspection.status.server,
-      baseUrlPresent: inspection.hasBaseUrl,
-      baseUrlRequired: !extendsClean,
-      baseUrlRecommended: false,
+    tsconfigDiagnostics,
+    tsconfig: {
+      status:
+        summary.status === "create"
+          ? "missing"
+          : summary.status === "update"
+            ? "needs-update"
+            : summary.status,
+      mandatory: summary.mandatory,
+      suggested: summary.suggested,
+      ...(summary.error !== undefined ? { error: summary.error } : {}),
     },
-    toolchain,
-    rojoProject,
-    fixable: configDiagnostics.length === 0 && effectiveTsconfigDiagnostics.length === 0,
-    fixApplied: false,
-    fixChanges: [],
+    aliases: setup.status === "unreadable" ? [] : setup.aliases,
+    toolchain: inspectToolchain(options.projectRoot),
+    rojoProject: inspectRojoProject(options.projectRoot, undefined, generatedDir),
+    // A broken aruna.config.ts hides the generatedDir the aliases point into,
+    // and an unreadable tsconfig is the project's to repair.
+    fixable:
+      setup.status !== "unreadable" &&
+      !configDiagnostics.some((diagnostic) => diagnostic.code === "aruna::100"),
   };
-}
-
-// Realigns the aruna aliases inside compilerOptions.paths (inline alias
-// management). Used when the project keeps its own path aliases, which shadow
-// the generated fragment under `extends` — the aruna aliases must then live
-// inline alongside them.
-function applyInlineAliasFix(
-  tsconfig: TsconfigJsonObject,
-  report: DoctorReport,
-  options: DoctorOptions,
-): { changed: boolean; contents: string; fixChanges: string[] } {
-  const actionUpdate = updateArunaActionPaths(tsconfig, report.expectedPaths, {
-    requireBaseUrl: true,
-  });
-  let finalContents = actionUpdate.contents;
-  let changed = actionUpdate.changed;
-
-  // The $aruna/signals virtual-module alias is installed alongside the action
-  // aliases (always, like actions — independent of runtime vendoring).
-  const signalChanges: string[] = [];
-  const signalPaths = resolveArunaSignalPaths(report.tsconfigPath, report.generatedDir);
-  const signalUpdate = updateArunaRuntimePaths(tsconfig, signalPaths);
-  finalContents = signalUpdate.contents;
-  if (signalUpdate.changed) {
-    changed = true;
-    for (const [alias, targets] of Object.entries(signalPaths)) {
-      signalChanges.push(`${alias} -> ${formatPathList(targets)}`);
-    }
-  }
-
-  const runtimeChanges: string[] = [];
-  if (options.emitRuntime) {
-    const runtimePaths = resolveArunaRuntimePaths(report.tsconfigPath, report.generatedDir);
-    const runtimeUpdate = updateArunaRuntimePaths(tsconfig, runtimePaths, {
-      pruneStaleRuntimeAliases: true,
-    });
-    finalContents = runtimeUpdate.contents;
-    if (runtimeUpdate.changed) {
-      changed = true;
-      for (const [alias, targets] of Object.entries(runtimePaths)) {
-        runtimeChanges.push(`${alias} -> ${formatPathList(targets)}`);
-      }
-    }
-  }
-
-  const fixChanges: string[] = [];
-  if (changed) {
-    if (!report.status.baseUrlPresent) {
-      fixChanges.push('added compilerOptions.baseUrl = "."');
-    }
-    if (report.status.client !== "correct") {
-      fixChanges.push(
-        `${ARUNA_ACTION_PATHS.client} -> ${formatPathList(report.expectedPaths.client)}`,
-      );
-    }
-    if (report.status.server !== "correct") {
-      fixChanges.push(
-        `${ARUNA_ACTION_PATHS.server} -> ${formatPathList(report.expectedPaths.server)}`,
-      );
-    }
-    fixChanges.push(...signalChanges);
-    fixChanges.push(...runtimeChanges);
-  }
-
-  return { changed, contents: finalContents, fixChanges };
 }
 
 export function fixDoctorProject(options: DoctorOptions): DoctorReport {
   const report = inspectDoctorProject(options);
-  if (
-    !report.fixable ||
-    report.configDiagnostics.length > 0 ||
-    report.tsconfigDiagnostics.length > 0
-  ) {
+  if (!report.fixable) {
     return report;
   }
 
-  const tsconfigResult = readTsconfig(report.tsconfigPath);
-  if (!tsconfigResult.value) {
-    return report;
-  }
-  const tsconfig = tsconfigResult.value;
-  const fixChanges: string[] = [];
-
-  // The fragment is generated output: always converge it first.
-  if (report.fragment.status !== "correct") {
-    const fragmentAbs = path.resolve(
-      report.projectRoot,
-      report.generatedDir,
-      ARUNA_TSCONFIG_FRAGMENT_FILE,
-    );
-    fs.mkdirSync(path.dirname(fragmentAbs), { recursive: true });
-    fs.writeFileSync(
-      fragmentAbs,
-      arunaTsconfigFragmentContents(report.projectRoot, report.generatedDir),
-      "utf8",
-    );
-    fixChanges.push(`wrote ${report.fragment.path}`);
-  }
-
-  const compilerOptions = tsconfig["compilerOptions"];
-  const paths =
-    typeof compilerOptions === "object" &&
-    compilerOptions !== null &&
-    !Array.isArray(compilerOptions) &&
-    typeof (compilerOptions as TsconfigJsonObject)["paths"] === "object" &&
-    (compilerOptions as TsconfigJsonObject)["paths"] !== null &&
-    !Array.isArray((compilerOptions as TsconfigJsonObject)["paths"])
-      ? ((compilerOptions as TsconfigJsonObject)["paths"] as TsconfigJsonObject)
-      : undefined;
-  const userAliases = paths ? Object.keys(paths).filter((key) => !isArunaOwnedAlias(key)) : [];
-
-  if (userAliases.length > 0) {
-    // The project owns other path aliases; they shadow the fragment, so the
-    // aruna aliases must stay aligned inline next to them.
-    const inlineFix = applyInlineAliasFix(tsconfig, report, options);
-    if (inlineFix.changed) {
-      fs.writeFileSync(report.tsconfigPath, inlineFix.contents, "utf8");
-      fixChanges.push(...inlineFix.fixChanges);
-    }
-  } else {
-    // Migrate to extends-managed aliases: drop the aruna-owned inline aliases
-    // (the whole paths block only held aruna aliases, if it existed at all)
-    // and reference the fragment once.
-    let tsconfigChanged = false;
-    if (paths !== undefined) {
-      delete (compilerOptions as TsconfigJsonObject)["paths"];
-      tsconfigChanged = true;
-      fixChanges.push(`removed inline Aruna aliases (now provided by ${report.fragment.path})`);
-    }
-    const extendsRef = arunaTsconfigExtendsRef(report.tsconfigPath, report.generatedDir);
-    if (addFragmentToExtends(tsconfig, extendsRef)) {
-      tsconfigChanged = true;
-      fixChanges.push(`extends ${extendsRef}`);
-    }
-    if (tsconfigChanged) {
-      fs.writeFileSync(report.tsconfigPath, `${JSON.stringify(tsconfig, null, 2)}\n`, "utf8");
-    }
-  }
+  const setup = planTsconfigSetup({
+    projectRoot: options.projectRoot,
+    generatedDir: report.generatedDir,
+  });
+  applyTsconfigSetup(setup);
 
   // Re-inspect so the reported state reflects what is now on disk.
-  return {
-    ...inspectDoctorProject(options),
-    fixApplied: true,
-    fixChanges,
-  };
+  return { ...inspectDoctorProject(options), fix: tsconfigSetupSummary(setup) };
 }
 
 export function runDoctor(options: DoctorOptions): DoctorReport {
@@ -634,5 +355,5 @@ export function doctorExitCode(report: DoctorReport): number {
     return 1;
   }
 
-  return report.status.client === "correct" && report.status.server === "correct" ? 0 : 1;
+  return report.tsconfig.status === "unreadable" || needsFix(report) ? 1 : 0;
 }

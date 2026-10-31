@@ -14,17 +14,17 @@ Roblox-facing code is consumed through a **vendored runtime**, not through direc
 - The roblox-ts-native runtime lives at `packages/aruna/roblox/` and is the only runtime; the `aruna/*` subpaths are type-only and resolve to its declarations (`dist/native/`). It is intentionally thin: schema (`string`/`number`/`boolean`/`object`/`array`/`optional`/`literal`/`enum`/`union`), `defineAction`, client `invokeAction`, server dispatch, a default `RemoteEvent` action transport, and `plain-data-v1` serialization plus fixed-window rate-limit enforcement in dispatch.
 - The native runtime ships in the published package via `files`.
 - `aruna build` vendors that runtime into the consumer as project source under `<generatedDir>/runtime/` (e.g. `src/.aruna/runtime/`).
-- `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig `paths` aliases that pair with `build`.
+- `aruna build` (like `aruna doctor --fix`) writes the `aruna/*` → vendored-runtime `paths` aliases into the consumer's `tsconfig.json`, relative to it and with no `baseUrl`.
 - `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer project — including the vendored runtime — to Luau.
 
 Consumers import `defineConfig` from the root package for config only, and use the runtime-safe public subpaths (`aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema`) for Roblox-facing code; those subpaths resolve to the vendored runtime through the aliases.
 
-`aruna init` scaffolds a turnkey project for this model (`aruna.config.ts`, a roblox-ts `tsconfig.json` with the action + runtime aliases and `@rbxts` typeRoots, and a full-`out` `default.project.json`). A scaffolded project plus an action compiles to Luau via `aruna build` then `rbxtsc` with no hand-editing.
+`aruna init` scaffolds a turnkey project for this model (`aruna.config.ts`, a roblox-ts `tsconfig.json` with the action + runtime aliases and `@rbxts` typeRoots — or the same settings added to an existing one — and a full-`out` `default.project.json`). A scaffolded project plus an action compiles to Luau via `aruna build` then `rbxtsc` with no hand-editing.
 
 ## What is now validated
 
 - The packed smoke installs local tarballs for `aruna`, `@arunajs/core`, and `@arunajs/compiler` without contacting the npm registry.
-- `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` run against the package-style layout.
+- `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` run against the package-style layout.
 - `aruna build` generates the `src/.aruna` action files and vendors the native runtime.
 - The consumer passes TypeScript (`tsc --noEmit`).
 - The consumer compiles to Luau with `rbxtsc`, including the vendored runtime — the earlier "modules directly under node_modules" rejection no longer occurs.

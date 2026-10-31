@@ -7,13 +7,13 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 
 | Command | What it does |
 | --- | --- |
-| `aruna init` | Scaffold `aruna.config.ts`, `tsconfig.json`, and `default.project.json`. |
+| `aruna init` | Scaffold `aruna.config.ts` and `default.project.json`, and create or reconfigure `tsconfig.json` (see [tsconfig.json](#tsconfigjson)). |
 | `aruna check` | Type-check the project and validate module boundaries. Does **not** generate. |
 | `aruna build` | Generate action stubs + manifest, vendor the Roblox runtime, then compile to Luau with rbxtsc. |
 | `aruna dev` | One-terminal dev loop: `build --watch` plus a `rojo serve` child. |
 | `aruna test` | Compile the project *with* its specs and run them under Lune (`--filter <pattern>`). See [Testing](./testing.md). |
 | `aruna add domain <name>` | Scaffold `<root>/domains/<name>/{schema,model,actions,actions.test}.ts` (`--with ui,runtime` for extras). |
-| `aruna doctor [--fix]` | Inspect (and with `--fix`, write) the `aruna/*` and `$aruna/*` tsconfig path aliases. |
+| `aruna doctor [--fix]` | Report what `tsconfig.json` still needs, the `aruna/*` and `$aruna/*` aliases, and the Rojo project (with `--fix`, reconfigure `tsconfig.json`). |
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |
 | `aruna inspect stores` | List discovered stores, their version, scope, and persisted shape. |
@@ -31,10 +31,53 @@ writes nothing. `aruna build` is what regenerates `$aruna/actions/*`, `$aruna/si
 the manifest, and the vendored runtime. **After changing any action or signal you must
 run `aruna build`** — otherwise the generated client stubs reference the old contract.
 
-`check` also flags **layout desync**: `aruna::111` for a tsconfig alias pointing at a path
-that does not match the current emit layout (or a missing or stale generated tsconfig
-fragment), and `aruna::112` for inline `compilerOptions.paths` that shadow the fragment.
-Fix them with `aruna doctor --fix --emit-runtime` (realigns aliases).
+`check` also flags **layout desync** as `aruna::111`: a tsconfig alias that maps to a path
+the current emit layout does not generate, or a tsconfig that still extends the generated
+`tsconfig.aruna.json` fragment older releases wrote. `check` itself never edits
+`tsconfig.json`; the next `aruna build` (or `aruna doctor --fix`) fixes both.
+
+## tsconfig.json
+
+You do not wire `tsconfig.json` up by hand. Like `next dev` and `next build`, Aruna keeps it
+correct itself: `aruna init`, `aruna build`, `aruna dev`, and `aruna test` read it before they
+compile, make the changes roblox-ts and Aruna need, and say what they changed:
+
+```
+reconfigured tsconfig.json for roblox-ts and Aruna
+
+  mandatory changes:
+    - module was set to "CommonJS" (required by roblox-ts)
+    - paths was updated to add $aruna/signals, aruna/testing (Aruna's generated modules and vendored runtime resolve through them)
+
+  suggested values (yours to change):
+    - skipLibCheck was set to true
+```
+
+- **Mandatory changes** are forced, because nothing else works: the compile contract
+  roblox-ts enforces (`target`, `module`, `moduleResolution`, `moduleDetection`, `noLib`,
+  `strict`, `allowSyntheticDefaultImports`, `node_modules/@rbxts` in `typeRoots`), the
+  Aruna aliases in `paths`, and the dot-folder generated dir in `include` (TypeScript's
+  wildcards skip `src/.aruna`, where the generated entry scripts live).
+- **Suggested values** (`skipLibCheck`, `rootDir`, `outDir`, `jsx`, `types`, `include`,
+  `exclude`, ...) are added only when the key is unset, and are yours to change: a value
+  you set is never touched again.
+
+Only those keys are edited, in place: comments, formatting, key order, and everything else
+in the file stay as you wrote them. Settings a base config supplies through `extends`
+count as set. The aliases are written relative to `tsconfig.json`, with no `baseUrl`:
+
+```jsonc
+"paths": {
+  "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
+  "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
+  // ...your own aliases sit next to them, untouched
+  "@/*": ["./src/*"]
+}
+```
+
+A project that sets its own `baseUrl` keeps it, and the aliases are written relative to it.
+A `tsconfig.json` that cannot be parsed is left alone (the build reports it as
+`aruna::103`).
 
 ## The store compatibility gate
 
@@ -182,10 +225,10 @@ When a concern outgrows one file, rename it into a folder of the same name
 
 ## `aruna doctor`
 
-If `aruna/server`, `aruna/schema`, `$aruna/actions/client`, etc. fail to resolve, the
-tsconfig path aliases are missing or stale. `aruna doctor` reports their status;
-`aruna doctor --fix` writes the correct ones. Add `--emit-runtime` to also alias the
-`aruna/*` subpaths to the vendored runtime (pair with `build`'s default vendoring).
+`aruna doctor` reports, without writing anything, what [`tsconfig.json`](#tsconfigjson)
+still needs, where each `aruna/*` and `$aruna/*` alias points, the Rojo project, and the
+roblox-ts/TypeScript pairing. It exits 1 while a mandatory change is pending.
+`aruna doctor --fix` makes the same `tsconfig.json` changes `aruna build` would.
 
 ## `aruna migrate`
 

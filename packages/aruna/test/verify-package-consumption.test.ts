@@ -141,7 +141,8 @@ describe("verify-package-consumption args", () => {
       exclude?: string[];
     };
 
-    expect(tsconfig.compilerOptions?.baseUrl).toBe(".");
+    // The doctor writes "./"-relative aliases, which need no baseUrl.
+    expect(tsconfig.compilerOptions?.baseUrl).toBeUndefined();
     expect(tsconfig.compilerOptions?.rootDir).toBe("src");
     expect(tsconfig.compilerOptions?.paths).toEqual({});
     // The dot-prefixed generated dir is named explicitly — wildcard globs skip it.
@@ -225,10 +226,9 @@ describe("verify-package-consumption args", () => {
     const root = await makeTempRoot("aruna-package-consumption-alias-");
     await writeJsonFile(path.join(root, "tsconfig.json"), {
       compilerOptions: {
-        baseUrl: ".",
         paths: {
-          "$aruna/actions/client": ["src/.aruna/shared/actions.client.generated.ts"],
-          "$aruna/actions/server": ["src/.aruna/server/actions.server.generated.ts"],
+          "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
+          "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
         },
       },
     });
@@ -240,9 +240,8 @@ describe("verify-package-consumption args", () => {
     const root = await makeTempRoot("aruna-package-consumption-alias-");
     await writeJsonFile(path.join(root, "tsconfig.json"), {
       compilerOptions: {
-        baseUrl: ".",
         paths: {
-          "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
+          "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
         },
       },
     });
@@ -256,9 +255,8 @@ describe("verify-package-consumption args", () => {
     const root = await makeTempRoot("aruna-package-consumption-alias-");
     await writeJsonFile(path.join(root, "tsconfig.json"), {
       compilerOptions: {
-        baseUrl: ".",
         paths: {
-          "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
+          "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
         },
       },
     });

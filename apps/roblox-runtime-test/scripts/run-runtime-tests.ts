@@ -146,15 +146,17 @@ symlinkSync(
 // rbxtsc refuses a project without one.
 writeJson(join(workDir, "package.json"), { name: "aruna-runtime-test-project", private: true });
 
+// "./"-relative, as TypeScript requires of path targets without a baseUrl.
 const paths: Record<string, string[]> = {};
 for (const subpath of RUNTIME_SUBPATHS) {
-  paths[`aruna/${subpath}`] = [toPosix(relative(workDir, join(stagedRuntime, `${subpath}.ts`)))];
+  paths[`aruna/${subpath}`] = [
+    `./${toPosix(relative(workDir, join(stagedRuntime, `${subpath}.ts`)))}`,
+  ];
 }
-paths["aruna/internal/*"] = [toPosix(`${relative(workDir, stagedRuntime)}/*`)];
+paths["aruna/internal/*"] = [`./${toPosix(relative(workDir, stagedRuntime))}/*`];
 writeJson(join(workDir, "tsconfig.json"), {
   extends: toPosix(join(repoRoot, "tsconfig.base.json")),
   compilerOptions: {
-    baseUrl: ".",
     module: "CommonJS",
     moduleDetection: "force",
     moduleResolution: "Node",

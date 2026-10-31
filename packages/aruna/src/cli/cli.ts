@@ -43,11 +43,13 @@ import {
   type PartitionWatch,
 } from "./rojo-layout.js";
 import { findLuneRunnerDir, probeLune, runLuneSpecs } from "./test-run.js";
+import { GENERATED_RUNTIME_DIR } from "./tsconfig-paths.js";
 import {
-  ARUNA_TSCONFIG_FRAGMENT_FILE,
-  arunaTsconfigFragmentContents,
-  GENERATED_RUNTIME_DIR,
-} from "./tsconfig-paths.js";
+  formatTsconfigSetup,
+  setUpTsconfig,
+  tsconfigSetupSummary,
+  type TsconfigSetup,
+} from "./tsconfig-setup.js";
 import {
   NODE_MODULES_PROJECT_FILE,
   arunaNodeModulesProjectContents,
@@ -68,7 +70,7 @@ import {
   runAddDomain,
   validateDomainName,
 } from "./add.js";
-import { formatError, formatMuted, formatSuccess, formatWarning } from "./theme.js";
+import { formatError, formatInfo, formatMuted, formatSuccess, formatWarning } from "./theme.js";
 
 type CliOptions = {
   project?: string;
@@ -83,7 +85,6 @@ type CliOptions = {
 
 type DoctorCliOptions = CliOptions & {
   fix?: boolean;
-  emitRuntime?: boolean;
 };
 
 function isCI(env: NodeJS.ProcessEnv): boolean {
@@ -415,10 +416,48 @@ async function emitRobloxRuntime(
   return runtimeFiles.map((name) => `${GENERATED_RUNTIME_DIR}/${name}`);
 }
 
+// The tsconfig upkeep, run before a compile reads tsconfig.json, the way
+// `next build` and `next dev` do: `build`, `dev`, and `test` bring the file in
+// line with what roblox-ts and Aruna need and say what they changed. Skipped
+// while aruna.config.ts fails to load, since the generatedDir the aliases
+// point into is unknown then.
+function setUpProjectTsconfig(options: CliOptions): TsconfigSetup | undefined {
+  const input = compilerInput(options);
+  const loaded = loadProjectConfig(input.root, input.configPath);
+  if (loaded.diagnostics.some((diagnostic) => diagnostic.code === "aruna::100")) {
+    return undefined;
+  }
+  return setUpTsconfig({ projectRoot: input.root, generatedDir: loaded.config.generatedDir });
+}
+
+function tsconfigWritten(
+  setup: TsconfigSetup | undefined,
+): setup is Exclude<TsconfigSetup, { status: "unreadable" }> {
+  return setup?.status === "create" || setup?.status === "update";
+}
+
+function renderTsconfigSetup(setup: TsconfigSetup | undefined, options: CliOptions): void {
+  if (!tsconfigWritten(setup) || options.quiet) {
+    return;
+  }
+  const [headline, ...details] = formatTsconfigSetup(setup, "applied");
+  if (headline === undefined) {
+    return;
+  }
+  writeText(formatInfo(headline, resolveColorMode(options)));
+  for (const line of details) {
+    writeText(line);
+  }
+  writeText("");
+}
+
 export type BuildRunResult = {
   readonly output: CompilerOutput;
   // Stale artifacts (generatedDir-relative) pruned during this build.
   readonly pruned: string[];
+  // What the tsconfig upkeep did before a one-shot compile. A watch session
+  // runs the upkeep itself, before it starts its compiler.
+  readonly tsconfig?: TsconfigSetup | undefined;
 };
 
 // `session`, when given, is the watch loop's incremental compiler; a one-shot
@@ -428,6 +467,7 @@ async function runBuild(
   session?: CompilerSessionHandle,
 ): Promise<BuildRunResult> {
   const input = compilerInput(options);
+  const tsconfig = session === undefined ? setUpProjectTsconfig(options) : undefined;
   const compiled = session !== undefined ? await session.run() : await buildProject(input);
   // A store change that would leave saved records unreadable stops the build
   // before anything is vendored or compiled to Luau.
@@ -439,7 +479,7 @@ async function runBuild(
       )
     : compiled;
   if (!output.ok) {
-    return { output, pruned: [] };
+    return { output, pruned: [], tsconfig };
   }
 
   const generatedDir = generatedDirFromOutput(output);
@@ -461,20 +501,11 @@ async function runBuild(
     }
   }
 
-  // The generated tsconfig fragment: alias wiring is codegen-owned, so a
-  // layout change can never desync a project whose tsconfig `extends` it.
-  await fs.mkdir(generatedDirAbs, { recursive: true });
-  await fs.writeFile(
-    path.join(generatedDirAbs, ARUNA_TSCONFIG_FRAGMENT_FILE),
-    arunaTsconfigFragmentContents(input.root, generatedDir),
-    "utf8",
-  );
-  generatedRel.push(ARUNA_TSCONFIG_FRAGMENT_FILE);
-
   // The generated Rojo node_modules project: the scope list is derived from
   // what is installed, so adding a Roblox-facing dependency never means editing
   // default.project.json. Emitted unconditionally — a project that mounts its
   // node_modules by hand simply never points at this file.
+  await fs.mkdir(generatedDirAbs, { recursive: true });
   await fs.writeFile(
     path.join(generatedDirAbs, NODE_MODULES_PROJECT_FILE),
     arunaNodeModulesProjectContents(input.root, generatedDir),
@@ -487,7 +518,7 @@ async function runBuild(
     current: { generated: generatedRel, runtime: runtimeRel },
   });
 
-  return { output, pruned };
+  return { output, pruned, tsconfig };
 }
 
 // Renders the rbxtsc Luau-compile step that runs after a successful build.
@@ -537,7 +568,8 @@ async function runTestSession(options: TestCliOptions): Promise<boolean> {
   const input = compilerInput(options);
   const projectRoot = input.root;
 
-  const { output } = await runBuild(options);
+  const { output, tsconfig } = await runBuild(options);
+  renderTsconfigSetup(tsconfig, options);
   renderCompilerOutput(output, options, Date.now() - startedAt, "build");
   if (!output.ok) {
     return false;
@@ -641,7 +673,7 @@ async function executeBuildPass(
   session?: CompilerSessionHandle,
 ): Promise<{ ok: boolean; generatedDir: string; manifest?: Manifest | undefined }> {
   const startedAt = Date.now();
-  const { output, pruned } = await runBuild(options, session);
+  const { output, pruned, tsconfig } = await runBuild(options, session);
   const projectRoot = compilerInput(options).root;
   let rbxtsc: RbxtscResult | undefined;
   if (output.ok && options.emitLuau !== false && mode === "compile") {
@@ -664,8 +696,14 @@ async function executeBuildPass(
   }
 
   if (options.json) {
-    writeJson({ ...output, ...(pruned.length > 0 ? { pruned } : {}), ...(rbxtsc ? { rbxtsc } : {}) });
+    writeJson({
+      ...output,
+      ...(tsconfigWritten(tsconfig) ? { tsconfig: tsconfigSetupSummary(tsconfig) } : {}),
+      ...(pruned.length > 0 ? { pruned } : {}),
+      ...(rbxtsc ? { rbxtsc } : {}),
+    });
   } else {
+    renderTsconfigSetup(tsconfig, options);
     renderCompilerOutput(output, options, Date.now() - startedAt, "build");
     if (pruned.length > 0 && !options.quiet) {
       const colors = resolveColorMode(options);
@@ -791,9 +829,33 @@ async function runWatchSession(
   // change makes watch mode no faster than repeated one-shot builds.
   const resident = startResidentLuauWatch(options, colors);
 
+  // The tsconfig upkeep runs before each compiler session reads tsconfig.json.
+  // What it last wrote is remembered so that write, when the watcher reports
+  // it, is not taken for an edit to rebuild on.
+  const tsconfigPath = path.join(projectRoot, "tsconfig.json");
+  let tsconfigWrite: string | undefined;
+  const upkeepTsconfig = (): void => {
+    const setup = setUpProjectTsconfig(options);
+    if (tsconfigWritten(setup)) {
+      tsconfigWrite = setup.contents;
+    }
+    renderTsconfigSetup(setup, options);
+  };
+  const isOwnTsconfigWrite = (file: string): boolean => {
+    if (tsconfigWrite === undefined || file !== tsconfigPath) {
+      return false;
+    }
+    try {
+      return fsSync.readFileSync(file, "utf8") === tsconfigWrite;
+    } catch {
+      return false;
+    }
+  };
+
   // One incremental compiler for the whole session: each pass tells it what
   // changed instead of re-reading and re-parsing the project. A config change
   // (aruna.config.ts, tsconfig.json) is part of its input, so it starts over.
+  upkeepTsconfig();
   let session = createCompilerSession(compilerInput(options), "build");
   const pendingChanges = new Set<string>();
 
@@ -831,6 +893,7 @@ async function runWatchSession(
     pendingChanges.clear();
     if (changed.some((file) => isCompilerInputChange(path.relative(projectRoot, file)))) {
       session.dispose();
+      upkeepTsconfig();
       session = createCompilerSession(compilerInput(options), "build");
     } else {
       session.update(changed);
@@ -845,8 +908,9 @@ async function runWatchSession(
     if (fileName === null || fileName === undefined) {
       return;
     }
-    if (shouldRebuildOnChange(fileName, { generatedDir })) {
-      pendingChanges.add(path.join(projectRoot, fileName));
+    const file = path.join(projectRoot, fileName);
+    if (shouldRebuildOnChange(fileName, { generatedDir }) && !isOwnTsconfigWrite(file)) {
+      pendingChanges.add(file);
       scheduler.notify();
     }
   });
@@ -1050,7 +1114,6 @@ async function runDoctorCli(options: DoctorCliOptions): Promise<void> {
       projectRoot: compilerOptions.root,
       configPath: compilerOptions.configPath,
       fix: options.fix,
-      emitRuntime: options.emitRuntime,
     });
 
     if (options.json) {
@@ -1365,7 +1428,9 @@ export async function main(): Promise<number> {
 
   program
     .command("init")
-    .description("scaffold aruna.config.ts, tsconfig.json, and default.project.json")
+    .description(
+      "scaffold aruna.config.ts and default.project.json, and create or reconfigure tsconfig.json",
+    )
     .option(
       "--force",
       "overwrite the scaffolded files instead of keeping existing ones (replaces a Rojo project file that does not mount out/)",
@@ -1385,12 +1450,8 @@ export async function main(): Promise<number> {
 
   const doctor = program
     .command("doctor")
-    .description("inspect and optionally fix generated action aliases in tsconfig.json")
-    .option("--fix", "write the required tsconfig path aliases")
-    .option(
-      "--emit-runtime",
-      "also alias the Roblox aruna/* subpaths to the vendored runtime (pairs with the runtime build vendors)",
-    );
+    .description("inspect the project setup: tsconfig.json, its Aruna aliases, the Rojo project")
+    .option("--fix", "reconfigure tsconfig.json the way `aruna build` does on its own");
 
   doctor.action(async () => {
     const options = doctor.optsWithGlobals<DoctorCliOptions>();

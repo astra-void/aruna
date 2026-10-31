@@ -63,6 +63,9 @@ impl ArunaDiagnostic {
 // Retired codes (never reuse):
 // - aruna::110 stale-generated-artifact (emitted by the CLI; flagged leftovers of
 //   the flat codegen layout, removed with that layout's migration path).
+// - aruna::112 tsconfig-paths-shadow-generated (emitted by the CLI; flagged inline
+//   `paths` shadowing the generated tsconfig fragment, removed with the fragment:
+//   Aruna writes its aliases into tsconfig.json itself now).
 pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)> {
     match code {
         "aruna::100" => Some(("invalid-config", DiagnosticSeverity::Error)),

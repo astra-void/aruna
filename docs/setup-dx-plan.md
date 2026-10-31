@@ -114,6 +114,18 @@ vendored `aruna/*` runtime aliases. The user tsconfig references it once:
   Paths in it are anchored on the fragment's own directory, which is how TypeScript
   resolves an extended config — the staged build rebases inherited `typeRoots` back
   onto the project root accordingly.
+- **Superseded: the upkeep writes tsconfig.json itself, the way Next.js does.** The
+  fragment lived in the gitignored generated dir, so a fresh clone opened in an editor
+  with a dangling `extends` (no `noLib`, no @rbxts types) until the first build; it
+  set `baseUrl`, which TypeScript 6 deprecates and which leaked root-relative
+  auto-imports (`src/shared/...`) the staged build cannot resolve; and a project with
+  its own `paths` (Next's `@/*`) shadowed it wholesale (aruna::112). Now `init`,
+  `build`, `dev`, `test`, and `doctor --fix` edit `tsconfig.json` in place
+  (`packages/aruna/src/cli/tsconfig-setup.ts`): the roblox-ts contract and the aliases
+  are mandatory and forced, defaults are suggested and added only when unset,
+  inherited settings count, and the edit keeps comments and formatting. Aliases are
+  `./`-relative with no `baseUrl`. The fragment is pruned through the build ledger, a
+  leftover `extends` of it is dropped, and aruna::112 is retired.
 
 ### Rojo
 

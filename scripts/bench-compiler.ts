@@ -146,7 +146,7 @@ describe("${name}", () => {
 // Writes a project of about `files` source files; returns the domain count.
 function generateProject(root: string, files: number): number {
   const domains = Math.max(1, Math.round((files - ROOT_FILES) / FILES_PER_DOMAIN));
-  writeFile(root, "tsconfig.json", `{ "compilerOptions": { "baseUrl": "." } }\n`);
+  writeFile(root, "tsconfig.json", "{}\n");
   writeFile(
     root,
     "src/shared/format.ts",

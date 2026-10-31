@@ -288,6 +288,31 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: Aruna keeps `tsconfig.json` correct itself, the way Next.js
+  does, and writes no `baseUrl`.** `aruna init`, `build`, `dev`, and `test`
+  read `tsconfig.json` before they compile, make the changes roblox-ts and Aruna
+  need, and print what they changed. The compile contract roblox-ts enforces
+  (`target`, `module`, `moduleResolution`, `moduleDetection`, `noLib`, `strict`,
+  `allowSyntheticDefaultImports`, `node_modules/@rbxts` in `typeRoots`), the
+  Aruna aliases in `paths`, and the dot-folder generated dir in `include` are
+  mandatory and forced; sensible defaults (`skipLibCheck`, `rootDir`, `outDir`,
+  `jsx`, `types`, `include`, `exclude`, ...) are suggested and added only when
+  unset. Settings a base config supplies through `extends` count as set. Only
+  those keys are edited, in place, so comments and formatting survive. The
+  aliases are written relative to `tsconfig.json` (`./src/.aruna/...`); a
+  project that sets its own `baseUrl` keeps it and gets aliases relative to it.
+  The generated `tsconfig.aruna.json` fragment is gone: a build prunes it and
+  drops a leftover `extends` of it. `aruna init` reconfigures an existing
+  `tsconfig.json` instead of keeping or (`--force`) overwriting it.
+  `aruna doctor` reports what `tsconfig.json` still needs, `--fix` makes the
+  same changes, and its `--emit-runtime` flag is gone (the runtime aliases are
+  always written); its `--json` report has `tsconfig`, `aliases`, and `fix` in
+  place of `aliasMode`, `fragment`, `pathsShadowFragment`, `expectedPaths`,
+  `actualPaths`, `status`, `fixApplied`, and `fixChanges`. `aruna build --json`
+  carries a `tsconfig` summary when it changed the file. `aruna::111` now also
+  reports a `tsconfig.json` that still extends the fragment; `aruna::112` is
+  retired. The staged rbxtsc compile has no `baseUrl` either.
+
 - **Breaking: contract snapshot version 2.** `aruna.contract.json` now records
   schema constraints (see Added). A version 1 snapshot is still read, as a
   baseline whose constraints are unknown: `contract diff` and the store gate

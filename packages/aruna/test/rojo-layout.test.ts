@@ -12,7 +12,6 @@ import {
   stagePathFor,
   stagedCompilerOptions,
   stagedIncludeGlobs,
-  stripJsonComments,
 } from "../src/cli/rojo-layout.js";
 
 describe("layoutTargetFor", () => {
@@ -122,11 +121,26 @@ describe("partitionedRojoProject", () => {
 });
 
 describe("staged tsconfig inheritance", () => {
-  it("strips comments but keeps them inside strings", () => {
-    expect(stripJsonComments('{ // note\n "a": "http://x", /* b */ "c": 1 }')).toContain(
-      '"a": "http://x"',
-    );
-    expect(stripJsonComments('{ // note\n "c": 1 }')).not.toContain("note");
+  it("reads a JSONC tsconfig: comments, trailing commas, and // inside strings", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-tsconfig-"));
+    try {
+      fs.writeFileSync(
+        path.join(root, "tsconfig.json"),
+        `{
+          // note
+          "compilerOptions": {
+            "jsxFactory": "http://x", /* b */
+            "strict": true,
+          },
+        }`,
+      );
+
+      const options = readInheritedCompilerOptions(path.join(root, "tsconfig.json"));
+      expect(options["jsxFactory"]).toBe("http://x");
+      expect(options["strict"]).toBe(true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("reads compilerOptions through the extends chain, nearest wins", () => {
@@ -172,13 +186,14 @@ describe("staged tsconfig inheritance", () => {
         incremental: true,
         tsBuildInfoFile: "out/tsconfig.tsbuildinfo",
       },
-      { rootDir: "src", outDir: "out", baseUrl: ".", paths: { "$aruna/signals": ["x.ts"] } },
+      { rootDir: "src", outDir: "out", paths: { "$aruna/signals": ["./x.ts"] } },
     );
 
     expect(merged["jsx"]).toBe("react");
     expect(merged["plugins"]).toEqual([{ transform: "t" }]);
-    expect(merged["baseUrl"]).toBe(".");
-    expect(merged["paths"]).toEqual({ "$aruna/signals": ["x.ts"] });
+    // The consumer's baseUrl points into their tree; the staged one has none.
+    expect(merged["baseUrl"]).toBeUndefined();
+    expect(merged["paths"]).toEqual({ "$aruna/signals": ["./x.ts"] });
     // Writing a tsbuildinfo would land in the consumer's out/ from a temp build.
     expect(merged["incremental"]).toBeUndefined();
     expect(merged["tsBuildInfoFile"]).toBeUndefined();
@@ -207,17 +222,17 @@ describe("readInheritedCompilerOptions typeRoots", () => {
   it("rebases an extended config's relative typeRoots onto the root config", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-inherit-"));
     try {
-      fs.mkdirSync(path.join(root, "src/.aruna"), { recursive: true });
-      // What the generated fragment writes: paths anchored on its own directory.
+      fs.mkdirSync(path.join(root, "config/shared"), { recursive: true });
+      // A base config in a subdirectory: its paths are anchored on its own directory.
       fs.writeFileSync(
-        path.join(root, "src/.aruna/tsconfig.aruna.json"),
+        path.join(root, "config/shared/tsconfig.base.json"),
         JSON.stringify({
           compilerOptions: { typeRoots: ["../../node_modules", "../../node_modules/@rbxts"] },
         }),
       );
       fs.writeFileSync(
         path.join(root, "tsconfig.json"),
-        JSON.stringify({ extends: "./src/.aruna/tsconfig.aruna.json", compilerOptions: {} }),
+        JSON.stringify({ extends: "./config/shared/tsconfig.base.json", compilerOptions: {} }),
       );
 
       const options = readInheritedCompilerOptions(path.join(root, "tsconfig.json"));

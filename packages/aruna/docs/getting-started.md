@@ -13,7 +13,7 @@ A consumer project that uses Aruna looks roughly like this:
 ```
 my-game/
   aruna.config.ts            # defineConfig({...})
-  tsconfig.json              # gets `aruna/*` + `$aruna/*` path aliases written for you
+  tsconfig.json              # kept correct for you, Next.js-style (aliases, roblox-ts contract)
   default.project.json       # Rojo layout (service-separated)
   src/
     server.ts                # createServerApp + bind
@@ -48,13 +48,18 @@ import its root modules, or only its `index.ts` once it has one. See
 ## The build loop
 
 ```bash
-aruna init     # one-time: scaffold aruna.config.ts, tsconfig.json, default.project.json
+aruna init     # one-time: scaffold aruna.config.ts and default.project.json, set up tsconfig.json
 aruna build    # generate stubs + manifest, vendor the runtime, compile to Luau (rbxtsc)
 ```
 
 Run `aruna build` again every time you add or change an action or signal. `aruna check`
 type-checks and validates boundaries but does **not** regenerate stubs — your client
 calls will reference stale contracts if you only `check`. See [cli.md](./cli.md).
+
+You never wire `tsconfig.json` up by hand: like `next dev`, every `aruna build` (and
+`dev`, `test`, `init`) checks it first, forces what roblox-ts and Aruna need, adds
+defaults only where you left a key unset, and tells you what it changed — comments and
+formatting kept. See [tsconfig.json](./cli.md#tsconfigjson).
 
 ## A minimal round-trip
 

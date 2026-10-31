@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Manifest, ModuleKind, ModuleRecord } from "@arunajs/core";
+import { parse, type ParseError } from "jsonc-parser";
 import { spawnCommand, spawnSyncCommand } from "./spawn.js";
 
 // Partitions the project into client/server/shared before compiling to Luau, so
@@ -254,65 +255,11 @@ export type PartitionOptions = {
   readonly tsconfigPath?: string | undefined;
 };
 
-// Strips // and /* */ comments outside of string literals. tsconfig.json is
-// JSONC and real projects do comment it.
-export function stripJsonComments(contents: string): string {
-  let out = "";
-  let inString = false;
-  let inLine = false;
-  let inBlock = false;
-  for (let i = 0; i < contents.length; i += 1) {
-    const char = contents[i] ?? "";
-    const next = contents[i + 1] ?? "";
-    if (inLine) {
-      if (char === "\n") {
-        inLine = false;
-        out += char;
-      }
-      continue;
-    }
-    if (inBlock) {
-      if (char === "*" && next === "/") {
-        inBlock = false;
-        i += 1;
-      }
-      continue;
-    }
-    if (inString) {
-      out += char;
-      if (char === "\\") {
-        out += next;
-        i += 1;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-    if (char === '"') {
-      inString = true;
-      out += char;
-      continue;
-    }
-    if (char === "/" && next === "/") {
-      inLine = true;
-      i += 1;
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      inBlock = true;
-      i += 1;
-      continue;
-    }
-    out += char;
-  }
-  return out;
-}
-
 // Relative `typeRoots` in an extended config are resolved by TypeScript against
-// *that* config's directory, so a fragment under `src/.aruna/` writes them as
-// `../../node_modules`. The staged compile writes one flat tsconfig at the
-// staged root, where those would climb out of the temp tree — rebase them onto
-// the root config's directory, which is what the staged node_modules mirror
+// *that* config's directory, so a base config under `config/` writes them as
+// `../node_modules`. The staged compile writes one flat tsconfig at the staged
+// root, where those would climb out of the temp tree — rebase them onto the
+// root config's directory, which is what the staged node_modules mirror
 // reproduces. Absolute entries are left alone.
 function rebaseTypeRoots(
   options: Record<string, unknown>,
@@ -351,12 +298,18 @@ export function readInheritedCompilerOptions(
   }
   seen.add(resolved);
 
+  // tsconfig.json is JSONC: real projects comment it, and trailing commas are
+  // fine by TypeScript.
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(stripJsonComments(fs.readFileSync(resolved, "utf8"))) as Record<
-      string,
-      unknown
-    >;
+    const errors: ParseError[] = [];
+    const value: unknown = parse(fs.readFileSync(resolved, "utf8"), errors, {
+      allowTrailingComma: true,
+    });
+    if (errors.length > 0 || typeof value !== "object" || value === null || Array.isArray(value)) {
+      return {};
+    }
+    parsed = value as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -601,22 +554,27 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
 
     pruneStagedFiles(stageSrc, staged);
 
-    // Resolve the generated/runtime aliases to their partitioned locations.
-    const aliasPath = (target: LayoutTarget, rel: string): string[] => [`src/${target}/${generatedDirRel}/${rel}`];
+    // Resolve the generated/runtime aliases to their partitioned locations. The
+    // staged tsconfig has no baseUrl, so every target is relative ("./"), as
+    // TypeScript requires without one.
+    const aliasPath = (target: LayoutTarget, rel: string): string[] => [
+      `./src/${target}/${generatedDirRel}/${rel}`,
+    ];
     const runtimeAlias: Record<string, string[]> = {};
     const runtimeDir = path.join(stageSrc, "shared", generatedDirRel, "runtime");
     if (fs.existsSync(runtimeDir)) {
       for (const entry of fs.readdirSync(runtimeDir)) {
         if (entry.endsWith(".ts")) {
           const name = entry.replace(/\.ts$/, "");
-          runtimeAlias[`aruna/${name}`] = [`src/shared/${generatedDirRel}/runtime/${name}.ts`];
+          runtimeAlias[`aruna/${name}`] = [`./src/shared/${generatedDirRel}/runtime/${name}.ts`];
         }
       }
     }
 
-    // Derive path aliases for baseUrl-relative imports (e.g. "shared/*", "client/*").
-    // Source files at src/{dir}/... are staged at src/{target}/{dir}/..., so a
-    // bare "{dir}/*" import needs an alias to bridge the extra target prefix.
+    // Derive path aliases for baseUrl-relative imports (e.g. "shared/*", "client/*")
+    // in a project whose own baseUrl is src/. Source files at src/{dir}/... are
+    // staged at src/{target}/{dir}/..., so a bare "{dir}/*" import needs an alias
+    // to bridge the extra target prefix.
     //
     // Only "canonical" kinds (client/server/shared) define these aliases —
     // serverAction and serverStore modules are directive-classified and can sit
@@ -639,7 +597,7 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
       const prefix = sourceRel.slice(0, slash);
       const pattern = `${prefix}/*`;
       if (!(pattern in baseUrlAliases)) {
-        baseUrlAliases[pattern] = [`src/${target}/${prefix}/*`];
+        baseUrlAliases[pattern] = [`./src/${target}/${prefix}/*`];
       }
     }
 
@@ -694,7 +652,6 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
         moduleResolution: "Node",
         moduleDetection: "force",
         noLib: true,
-        baseUrl: ".",
         rootDir: "src",
         outDir: "out",
         declaration: false,

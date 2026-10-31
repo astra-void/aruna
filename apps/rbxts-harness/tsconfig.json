@@ -1,10 +1,6 @@
 {
-  "extends": [
-    "../../tsconfig.base.json",
-    "./src/.aruna/tsconfig.aruna.json"
-  ],
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "module": "commonjs",
     "moduleDetection": "force",
     "moduleResolution": "node",
@@ -22,7 +18,19 @@
     "types": [
       "@rbxts/types",
       "@rbxts/compiler-types"
-    ]
+    ],
+    "target": "ESNext",
+    "downlevelIteration": true,
+    "paths": {
+      "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
+      "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
+      "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
+      "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
+      "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],
+      "aruna/schema": ["./src/.aruna/shared/runtime/schema.ts"],
+      "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"]
+    }
   },
   "include": [
     "src/**/*.ts",

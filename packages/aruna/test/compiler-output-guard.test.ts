@@ -4,10 +4,11 @@
 // the CLI in-process: each `inspect` subcommand, `check`, `build`, and — where
 // the fixture commits a contract snapshot — `contract diff`, all with --json.
 // The exact stdout of each command, its exit code, and every file `build`
-// writes under the generated dir are concatenated into one golden file per
-// fixture (test/__golden__/compiler-output/<fixture>.golden) and compared as
-// bytes, not as parsed JSON: key order, number formatting, and whitespace all
-// count. Refactoring the compiler must leave every golden untouched.
+// writes or rewrites (under the generated dir, and tsconfig.json) are
+// concatenated into one golden file per fixture
+// (test/__golden__/compiler-output/<fixture>.golden) and compared as bytes, not
+// as parsed JSON: key order, number formatting, and whitespace all count.
+// Refactoring the compiler must leave every golden untouched.
 //
 // Regenerate deliberately, after a reviewed output change, with
 // ARUNA_UPDATE_GOLDEN=1 pnpm --filter aruna exec vitest run test/compiler-output-guard.test.ts
@@ -157,17 +158,23 @@ async function captureFixture(fixture: string): Promise<string> {
     );
   }
 
-  const before = new Set(await listFiles(root));
+  // Contents before the build, so a file it rewrote (tsconfig.json, which the
+  // build brings in line before compiling) is captured as well as one it created.
+  const before = new Map<string, string>();
+  for (const file of await listFiles(root)) {
+    before.set(file, await fs.readFile(file, "utf8"));
+  }
   record(
     "build",
     await runCli(["build", "--json", "--no-emit-luau", "--no-emit-runtime", "--project", root]),
   );
   for (const file of await listFiles(root)) {
-    if (before.has(file)) {
+    const contents = await fs.readFile(file, "utf8");
+    if (before.get(file) === contents) {
       continue;
     }
     const relative = path.relative(root, file).split(path.sep).join("/");
-    sections.push(`=== file ${relative}\n${normalize(await fs.readFile(file, "utf8"))}`);
+    sections.push(`=== file ${relative}\n${normalize(contents)}`);
   }
 
   return `${sections.join("\n")}\n`;

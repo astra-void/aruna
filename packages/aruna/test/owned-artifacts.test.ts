@@ -124,6 +124,30 @@ describe("owned-artifacts: reconcile / prune", () => {
     expect(manifest?.runtime).toEqual(["shared/runtime/client.ts"]);
   });
 
+  it("prunes the tsconfig fragment older builds generated", async () => {
+    const root = makeTempRoot();
+    const generatedDir = path.join(root, "src/.aruna");
+    write(root, {
+      "src/.aruna/tsconfig.aruna.json": "{}\n",
+      "src/.aruna/shared/actions.client.generated.ts": "// client\n",
+    });
+    // The ledger an older build left: it owned the fragment.
+    await reconcileOwnedArtifacts({
+      generatedDirAbs: generatedDir,
+      current: {
+        generated: ["tsconfig.aruna.json", "shared/actions.client.generated.ts"],
+        runtime: [],
+      },
+    });
+
+    const { pruned } = await reconcileOwnedArtifacts({
+      generatedDirAbs: generatedDir,
+      current: { generated: ["shared/actions.client.generated.ts"], runtime: [] },
+    });
+
+    expect(pruned).toEqual(["tsconfig.aruna.json"]);
+    expect(exists(path.join(generatedDir, "tsconfig.aruna.json"))).toBe(false);
+  });
 });
 
 describe("owned-artifacts: layout desync diagnostics", () => {
@@ -153,6 +177,36 @@ describe("owned-artifacts: layout desync diagnostics", () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it("is silent for the relative aliases the upkeep writes, with no baseUrl", async () => {
+    const root = makeTempRoot();
+    write(root, {
+      "aruna.config.ts": minimalConfig(),
+      "tsconfig.json": `{\n  "compilerOptions": {\n    "paths": {\n      "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],\n      "aruna/client": ["./src/.aruna/shared/runtime/client.ts"]\n    }\n  }\n}\n`,
+    });
+
+    const diagnostics = await collectLayoutDesyncDiagnostics({ projectRoot: root });
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("resolves an inherited alias against the config that declares it", async () => {
+    const root = makeTempRoot();
+    write(root, {
+      "aruna.config.ts": minimalConfig(),
+      // Without a baseUrl, TypeScript resolves these against config/, so they
+      // reach the generated files.
+      "config/tsconfig.base.json": `{\n  "compilerOptions": {\n    "paths": {\n      "$aruna/actions/client": ["../src/.aruna/shared/actions.client.generated.ts"],\n      "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"]\n    }\n  }\n}\n`,
+      "tsconfig.json": `{ "extends": "./config/tsconfig.base.json" }\n`,
+    });
+
+    const diagnostics = await collectLayoutDesyncDiagnostics({ projectRoot: root });
+    // Only $aruna/signals misses: from config/ it points at config/src/.aruna.
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.details).toBe(
+      "$aruna/signals -> ./src/.aruna/shared/signals.generated.ts (in config/tsconfig.base.json; " +
+        "expected ./src/.aruna/shared/signals.generated.ts in tsconfig.json)",
+    );
+  });
+
   it("does not flag a merely missing alias as a desync", async () => {
     const root = makeTempRoot();
     write(root, {
@@ -162,5 +216,19 @@ describe("owned-artifacts: layout desync diagnostics", () => {
 
     const diagnostics = await collectLayoutDesyncDiagnostics({ projectRoot: root });
     expect(diagnostics.filter((diagnostic) => diagnostic.code === "aruna::111")).toEqual([]);
+  });
+
+  it("reports a tsconfig that still extends the retired generated fragment", async () => {
+    const root = makeTempRoot();
+    write(root, {
+      "aruna.config.ts": minimalConfig(),
+      "tsconfig.json": `{\n  "extends": "./src/.aruna/tsconfig.aruna.json",\n  "compilerOptions": {}\n}\n`,
+    });
+
+    const diagnostics = await collectLayoutDesyncDiagnostics({ projectRoot: root });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.code).toBe("aruna::111");
+    expect(diagnostics[0]?.message).toContain("src/.aruna/tsconfig.aruna.json");
+    expect(diagnostics[0]?.suggestion).toContain("aruna build");
   });
 });

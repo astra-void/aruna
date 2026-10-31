@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatInitReport, runInit } from "../src/cli/init.ts";
-import { stripJsonComments } from "./support/jsonc.ts";
 
 // What `rojo init` leaves behind: Luau sources mounted off src/, nothing
 // pointing at the compiled out/ tree.
@@ -21,64 +20,59 @@ const ROJO_INIT_PROJECT = `${JSON.stringify(
 )}\n`;
 
 describe("aruna init", () => {
-  it("scaffolds an extends-managed tsconfig plus the generated alias fragment", async () => {
+  it("scaffolds a complete tsconfig.json with the Aruna aliases and no baseUrl", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-init-"));
     try {
       const result = runInit({ projectRoot: root });
-      expect(result.created.sort()).toEqual([
+      expect(result.created).toEqual([
         "aruna.config.ts",
-        "default.project.json",
-        "src/.aruna/node_modules.project.json",
-        "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
+        "src/.aruna/node_modules.project.json",
+        "default.project.json",
       ]);
+      expect(result.tsconfig.status).toBe("create");
 
-      // The scaffolded tsconfig carries no aruna aliases and no roblox-ts
-      // boilerplate — it extends the generated fragment, so neither the codegen
-      // layout nor the compile contract can drift out from under it.
+      // Everything lives in tsconfig.json itself: it works in an editor on a
+      // fresh clone, before anything has been generated.
       const tsconfig = JSON.parse(await fs.readFile(path.join(root, "tsconfig.json"), "utf8")) as {
-        extends: string;
-        include?: string[];
-        compilerOptions: { paths?: Record<string, string[]>; target?: string };
-      };
-      expect(tsconfig.extends).toBe("./src/.aruna/tsconfig.aruna.json");
-      expect(tsconfig.compilerOptions.paths).toBeUndefined();
-      expect(tsconfig.compilerOptions.target).toBeUndefined();
-
-      const fragment = JSON.parse(
-        stripJsonComments(
-          await fs.readFile(path.join(root, "src/.aruna/tsconfig.aruna.json"), "utf8"),
-        ),
-      ) as {
+        extends?: string;
+        include: string[];
+        exclude: string[];
         compilerOptions: {
-          baseUrl: string;
+          baseUrl?: string;
           paths: Record<string, string[]>;
+          target: string;
+          noLib: boolean;
           rootDir: string;
           outDir: string;
           types: string[];
+          typeRoots: string[];
         };
-        include: string[];
-        exclude: string[];
       };
-      expect(fragment.compilerOptions.baseUrl).toBe("../..");
-      // The compile contract roblox-ts requires, anchored on the fragment's own
-      // directory the way TypeScript resolves an extended config's paths.
-      expect(fragment.compilerOptions.rootDir).toBe("../../src");
-      expect(fragment.compilerOptions.outDir).toBe("../../out");
-      expect(fragment.compilerOptions.types).toEqual(["@rbxts/types", "@rbxts/compiler-types"]);
-      expect(fragment.include).toContain("../../src/**/*.ts");
+      expect(tsconfig.extends).toBeUndefined();
+      expect(tsconfig.compilerOptions.baseUrl).toBeUndefined();
+      // The compile contract roblox-ts requires.
+      expect(tsconfig.compilerOptions.target).toBe("ESNext");
+      expect(tsconfig.compilerOptions.noLib).toBe(true);
+      expect(tsconfig.compilerOptions.rootDir).toBe("src");
+      expect(tsconfig.compilerOptions.outDir).toBe("out");
+      expect(tsconfig.compilerOptions.typeRoots).toEqual([
+        "./node_modules",
+        "./node_modules/@rbxts",
+      ]);
+      expect(tsconfig.compilerOptions.types).toEqual(["@rbxts/types", "@rbxts/compiler-types"]);
       // The dot-prefixed generated dir is named explicitly — TypeScript's
       // wildcard globs skip it, which would leave the generated entry scripts
-      // untypechecked by `aruna check` and the IDE. The fragment lives inside
-      // that dir, so its own relative glob covers it.
-      expect(fragment.include).toContain("**/*.ts");
-      const paths = fragment.compilerOptions.paths;
-      expect(paths["aruna/server"]).toEqual(["src/.aruna/shared/runtime/server.ts"]);
-      expect(paths["aruna/schema"]).toEqual(["src/.aruna/shared/runtime/schema.ts"]);
+      // untypechecked by `aruna check` and the IDE.
+      expect(tsconfig.include).toEqual(["src/**/*.ts", "src/**/*.tsx", "src/.aruna/**/*.ts"]);
+      expect(tsconfig.exclude).toEqual(["aruna.config.ts", "out", "node_modules"]);
+      const paths = tsconfig.compilerOptions.paths;
+      expect(paths["aruna/server"]).toEqual(["./src/.aruna/shared/runtime/server.ts"]);
+      expect(paths["aruna/schema"]).toEqual(["./src/.aruna/shared/runtime/schema.ts"]);
       expect(paths["$aruna/actions/server"]).toEqual([
-        "src/.aruna/server/actions.server.generated.ts",
+        "./src/.aruna/server/actions.server.generated.ts",
       ]);
-      expect(paths["$aruna/signals"]).toEqual(["src/.aruna/shared/signals.generated.ts"]);
+      expect(paths["$aruna/signals"]).toEqual(["./src/.aruna/shared/signals.generated.ts"]);
 
       const project = JSON.parse(
         await fs.readFile(path.join(root, "default.project.json"), "utf8"),
@@ -117,12 +111,41 @@ describe("aruna init", () => {
         "aruna.config.ts",
         "default.project.json",
         "src/.aruna/node_modules.project.json",
-        "src/.aruna/tsconfig.aruna.json",
         "tsconfig.json",
       ]);
+      expect(second.tsconfig.status).toBe("ok");
       // Its own scaffolded project file is aligned, so no warning fires.
       expect(second.rojoProject.status).toBe("aligned");
       expect(formatInitReport(second)).not.toContain("warning");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reconfigures an existing tsconfig.json instead of skipping or overwriting it", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-init-"));
+    try {
+      const own = `{\n  // ours\n  "compilerOptions": {\n    "jsx": "react",\n    "jsxFactory": "Vide.jsx"\n  }\n}\n`;
+      await fs.writeFile(path.join(root, "tsconfig.json"), own, "utf8");
+
+      // --force replaces templates, never the project's tsconfig.
+      const result = runInit({ projectRoot: root, force: true });
+      expect(result.created).not.toContain("tsconfig.json");
+      expect(result.overwritten).not.toContain("tsconfig.json");
+      expect(result.skipped).not.toContain("tsconfig.json");
+      expect(result.tsconfig.status).toBe("update");
+
+      const contents = await fs.readFile(path.join(root, "tsconfig.json"), "utf8");
+      expect(contents).toContain("// ours");
+      expect(contents).toContain('"jsx": "react"');
+      expect(contents).toContain('"jsxFactory": "Vide.jsx"');
+      expect(contents).toContain(
+        '"$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"]',
+      );
+
+      const report = formatInitReport(result);
+      expect(report).toContain("reconfigured (your settings kept)");
+      expect(report).toContain('module was set to "CommonJS" (required by roblox-ts)');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -161,6 +184,7 @@ describe("aruna init", () => {
 
       expect(result.overwritten).toEqual(["default.project.json"]);
       expect(result.skipped).toEqual([]);
+      expect(result.created).toContain("tsconfig.json");
       expect(result.rojoProject.status).toBe("aligned");
       expect(formatInitReport(result)).toContain("overwritten (--force)");
     } finally {

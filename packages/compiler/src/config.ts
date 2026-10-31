@@ -1002,11 +1002,13 @@ function loadTsConfig(
   }
 
   const parsed = ts.parseJsonConfigFileContent(result.config, ts.sys, path.dirname(tsconfigPath));
-  // A missing generated Aruna fragment (`extends: ./<generatedDir>/tsconfig.aruna.json`)
-  // is a self-healing state, not a broken tsconfig: `aruna build` / `aruna doctor
-  // --fix` write the fragment. Failing here would deadlock a fresh clone whose
-  // generated dir is not committed. Name kept in sync with
-  // ARUNA_TSCONFIG_FRAGMENT_FILE in packages/aruna/src/cli/tsconfig-paths.ts.
+  // A missing generated fragment (`extends: ./<generatedDir>/tsconfig.aruna.json`,
+  // which older builds wrote) is a self-healing state, not a broken tsconfig:
+  // `aruna build` / `aruna doctor --fix` drop the reference and write the
+  // settings into tsconfig.json itself. Failing here would leave `aruna check`
+  // stuck on a fresh clone whose generated dir is not committed. Name kept in
+  // sync with RETIRED_TSCONFIG_FRAGMENT_FILE in
+  // packages/aruna/src/cli/tsconfig-paths.ts.
   // TS 5083 "Cannot read file" / 6053 "File not found" for the extends target.
   //
   // TS 18003 ("No inputs were found") is likewise not a malformed tsconfig: a

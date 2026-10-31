@@ -1,10 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  ARUNA_TSCONFIG_FRAGMENT_FILE,
-  arunaTsconfigExtendsRef,
-  arunaTsconfigFragmentContents,
-} from "./tsconfig-paths.js";
 import { partitionedRojoProject } from "./rojo-layout.js";
 import {
   NODE_MODULES_PROJECT_FILE,
@@ -17,12 +12,18 @@ import {
   inspectRojoProject,
   type RojoProjectReport,
 } from "./rojo-project.js";
+import {
+  formatTsconfigSetup,
+  setUpTsconfig,
+  tsconfigSetupSummary,
+} from "./tsconfig-setup.js";
 
 export type InitOptions = {
   projectRoot: string;
   // Overwrite the scaffolded files instead of keeping what is already there.
   // The escape hatch for adopting Aruna inside an existing Rojo project, whose
   // project file mounts Luau sources rather than the compiled `out/` tree.
+  // tsconfig.json is never overwritten: it gets the upkeep either way.
   force?: boolean | undefined;
 };
 
@@ -31,14 +32,18 @@ export type InitResult = {
   created: string[];
   overwritten: string[];
   skipped: string[];
+  // tsconfig.json is not a template: like `aruna build`, init creates it or
+  // adds what it lacks and keeps everything else. It shows up in `created`
+  // when it was created and in `skipped` when it needed nothing.
+  tsconfig: ReturnType<typeof tsconfigSetupSummary>;
   // State of the Rojo project file after init. An `incomplete` report on a file
   // init kept is the silent-failure case worth shouting about: everything
   // downstream exits 0 and the built place holds none of the compiled code.
   rojoProject: RojoProjectReport;
 };
 
-// Default generated dir; matches the compiler config default so the scaffolded
-// tsconfig aliases line up with what `aruna build --emit-runtime` writes.
+// Default generated dir; matches the compiler config default so the tsconfig
+// aliases line up with what `aruna build --emit-runtime` writes.
 const GENERATED_DIR = "src/.aruna";
 
 function arunaConfigTemplate(): string {
@@ -48,23 +53,6 @@ export default defineConfig({
   root: "src",
 });
 `;
-}
-
-function tsconfigTemplate(projectRoot: string): string {
-  const tsconfigPath = path.join(projectRoot, "tsconfig.json");
-
-  // Everything a roblox-ts + Aruna project needs and nobody chooses — the
-  // compile contract, the src -> out layout, the @rbxts type roots, and the
-  // aruna path aliases — comes from the generated fragment, so this file holds
-  // only what the project actually decides. Any key here overrides the
-  // fragment (TypeScript `extends` semantics), so `jsx` and friends stay the
-  // project's call.
-  const tsconfig = {
-    extends: arunaTsconfigExtendsRef(tsconfigPath, GENERATED_DIR),
-    compilerOptions: {},
-  };
-
-  return `${JSON.stringify(tsconfig, null, 2)}\n`;
 }
 
 function defaultProjectTemplate(): string {
@@ -83,47 +71,45 @@ function defaultProjectTemplate(): string {
 }
 
 export function runInit(options: InitOptions): InitResult {
-  const fragmentName = path.posix.join(GENERATED_DIR, ARUNA_TSCONFIG_FRAGMENT_FILE);
-  const files: Array<{ name: string; contents: string }> = [
-    { name: "aruna.config.ts", contents: arunaConfigTemplate() },
-    { name: "tsconfig.json", contents: tsconfigTemplate(options.projectRoot) },
-    // The scaffolded tsconfig `extends` the fragment, so an initial copy must
-    // exist before the first `aruna build` regenerates it.
-    {
-      name: fragmentName,
-      contents: arunaTsconfigFragmentContents(options.projectRoot, GENERATED_DIR),
-    },
-    // Same reasoning as the tsconfig fragment: the scaffolded Rojo project
-    // mounts it, so an initial copy must exist before the first `aruna build`
-    // regenerates it from node_modules/.
-    {
-      name: path.posix.join(GENERATED_DIR, NODE_MODULES_PROJECT_FILE),
-      contents: arunaNodeModulesProjectContents(options.projectRoot, GENERATED_DIR),
-    },
-    { name: ROJO_PROJECT_FILE, contents: defaultProjectTemplate() },
-  ];
-
   const created: string[] = [];
   const overwritten: string[] = [];
   const skipped: string[] = [];
 
-  for (const file of files) {
-    const filePath = path.join(options.projectRoot, file.name);
+  const scaffold = (name: string, contents: string): void => {
+    const filePath = path.join(options.projectRoot, name);
     const exists = fs.existsSync(filePath);
     if (exists && !options.force) {
-      skipped.push(file.name);
-      continue;
+      skipped.push(name);
+      return;
     }
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, file.contents, "utf8");
-    (exists ? overwritten : created).push(file.name);
+    fs.writeFileSync(filePath, contents, "utf8");
+    (exists ? overwritten : created).push(name);
+  };
+
+  scaffold("aruna.config.ts", arunaConfigTemplate());
+
+  const tsconfig = setUpTsconfig({ projectRoot: options.projectRoot, generatedDir: GENERATED_DIR });
+  if (tsconfig.status === "create") {
+    created.push("tsconfig.json");
+  } else if (tsconfig.status !== "update") {
+    skipped.push("tsconfig.json");
   }
+
+  // The scaffolded Rojo project mounts it, so an initial copy must exist
+  // before the first `aruna build` regenerates it from node_modules/.
+  scaffold(
+    path.posix.join(GENERATED_DIR, NODE_MODULES_PROJECT_FILE),
+    arunaNodeModulesProjectContents(options.projectRoot, GENERATED_DIR),
+  );
+  scaffold(ROJO_PROJECT_FILE, defaultProjectTemplate());
 
   return {
     projectRoot: options.projectRoot,
     created,
     overwritten,
     skipped,
+    tsconfig: tsconfigSetupSummary(tsconfig),
     rojoProject: inspectRojoProject(options.projectRoot, undefined, GENERATED_DIR),
   };
 }
@@ -148,14 +134,39 @@ export function formatInitReport(result: InitResult): string {
     }
   }
 
-  if (result.skipped.length > 0) {
+  const [, ...tsconfigChanges] = formatTsconfigSetup(result.tsconfig, "applied");
+  if (result.tsconfig.status === "update") {
     if (result.created.length > 0 || result.overwritten.length > 0) {
+      lines.push("");
+    }
+    lines.push("reconfigured (your settings kept)");
+    lines.push("  ~ tsconfig.json");
+    for (const line of tsconfigChanges) {
+      lines.push(line === "" ? "" : `  ${line}`);
+    }
+  }
+
+  if (result.skipped.length > 0) {
+    if (
+      result.created.length > 0 ||
+      result.overwritten.length > 0 ||
+      result.tsconfig.status === "update"
+    ) {
       lines.push("");
     }
     lines.push("kept existing");
     for (const name of result.skipped) {
       lines.push(`  = ${name}`);
     }
+  }
+
+  if (result.tsconfig.status === "unreadable") {
+    lines.push("");
+    lines.push("warning");
+    lines.push(
+      `  tsconfig.json was left as it is: ${result.tsconfig.error ?? "it could not be read"}.`,
+    );
+    lines.push("  Fix it, then run `aruna init` or `aruna build` again to configure it.");
   }
 
   // Keeping an existing Rojo project file is the safe default, but it is only

@@ -21,7 +21,6 @@ export type DiagnosticCode =
   | "aruna::102"
   | "aruna::103"
   | "aruna::111"
-  | "aruna::112"
   | "aruna::106"
   | "aruna::105"
   | "aruna::109"

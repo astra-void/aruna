@@ -137,7 +137,7 @@ export function buildConsumerPackageJson(
     private: true,
     type: "module",
     scripts: {
-      doctor: "aruna doctor --fix --emit-runtime --project .",
+      doctor: "aruna doctor --fix --project .",
       check: "aruna check --project .",
       build: "aruna build --project .",
       inspect: "aruna inspect actions --project .",
@@ -225,10 +225,10 @@ const GENERATED_CLIENT_ACTIONS_REL = "src/.aruna/shared/actions.client.generated
 const GENERATED_SERVER_ACTIONS_REL = "src/.aruna/server/actions.server.generated.ts";
 const GENERATED_RUNTIME_CLIENT_REL = "src/.aruna/shared/runtime/client.ts";
 
-// `aruna doctor --fix` no longer writes the aliases inline: it moves them into
-// the generated fragment (src/.aruna/tsconfig.aruna.json) that the project
-// tsconfig `extends`. Follow the extends chain so this gate accepts either shape
-// and does not silently pass on a config that resolves nothing.
+// `aruna doctor --fix` writes the aliases into tsconfig.json itself; a base
+// config can still supply them through `extends`. Follow the extends chain so
+// this gate accepts either and does not silently pass on a config that
+// resolves nothing.
 function stripJsonComments(contents: string): string {
   return contents.replace(/^\s*\/\/.*$/gm, "");
 }
@@ -261,8 +261,8 @@ function formatGeneratedActionAliasFailure(logPath: string): string {
   return [
     "aruna doctor --fix did not install generated action aliases reachable from tsconfig.json.",
     "Expected:",
-    `  $aruna/actions/client -> ${GENERATED_CLIENT_ACTIONS_REL}`,
-    `  $aruna/actions/server -> ${GENERATED_SERVER_ACTIONS_REL}`,
+    `  $aruna/actions/client -> ./${GENERATED_CLIENT_ACTIONS_REL}`,
+    `  $aruna/actions/server -> ./${GENERATED_SERVER_ACTIONS_REL}`,
     `See ${logPath}`,
   ].join("\n");
 }
@@ -289,7 +289,6 @@ export function buildConsumerTsconfigJson(tsconfigBasePath: string): string {
     "{",
     `  "extends": "${tsconfigBasePath}",`,
     '  "compilerOptions": {',
-    '    "baseUrl": ".",',
     '    "module": "CommonJS",',
     '    "moduleDetection": "force",',
     '    "moduleResolution": "Node",',
@@ -423,25 +422,21 @@ export async function assertGeneratedActionAliases(projectRoot: string): Promise
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
 
-  // baseUrl anchors the alias targets; it may come from the fragment.
-  if (!optionsChain.some((entry) => typeof entry.baseUrl === "string" && entry.baseUrl.length > 0)) {
-    throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
-  }
-
   const paths = optionsChain.find((entry) => isRecord(entry.paths))?.paths;
   if (!isRecord(paths)) {
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
 
+  // Relative to tsconfig.json, with no baseUrl — the form the doctor writes.
   const clientAlias = paths["$aruna/actions/client"];
   const serverAlias = paths["$aruna/actions/server"];
   if (
     !isStringArray(clientAlias) ||
     clientAlias.length !== 1 ||
-    clientAlias[0] !== GENERATED_CLIENT_ACTIONS_REL ||
+    clientAlias[0] !== `./${GENERATED_CLIENT_ACTIONS_REL}` ||
     !isStringArray(serverAlias) ||
     serverAlias.length !== 1 ||
-    serverAlias[0] !== GENERATED_SERVER_ACTIONS_REL
+    serverAlias[0] !== `./${GENERATED_SERVER_ACTIONS_REL}`
   ) {
     throw new Error(formatGeneratedActionAliasFailure(doctorLogPath));
   }
@@ -519,10 +514,10 @@ export async function assertAliasDesyncRegression(projectRoot: string): Promise<
   ) as JsonRecord;
   compilerOptions.paths = {
     ...(isRecord(compilerOptions.paths) ? compilerOptions.paths : {}),
-    "$aruna/actions/client": ["src/.aruna/actions.client.generated.ts"],
-    "$aruna/actions/server": ["src/.aruna/actions.server.generated.ts"],
-    "$aruna/signals": ["src/.aruna/signals.generated.ts"],
-    "aruna/client": ["src/.aruna/runtime/client.ts"],
+    "$aruna/actions/client": ["./src/.aruna/actions.client.generated.ts"],
+    "$aruna/actions/server": ["./src/.aruna/actions.server.generated.ts"],
+    "$aruna/signals": ["./src/.aruna/signals.generated.ts"],
+    "aruna/client": ["./src/.aruna/runtime/client.ts"],
   };
   tsconfig.compilerOptions = compilerOptions;
   await writeJson(tsconfigPath, tsconfig);
@@ -536,13 +531,11 @@ export async function assertAliasDesyncRegression(projectRoot: string): Promise<
     "13-check-stale.log",
   );
   const checkLog = await fs.readFile(path.join(logsRoot, "13-check-stale.log"), "utf8");
-  // Match diagnostic codes, not prose: 111 (inline aliases point elsewhere) or
-  // 112 (inline aliases shadow the generated fragment), depending on whether the
-  // tsconfig extends the fragment.
-  if (!checkLog.includes("aruna::111") && !checkLog.includes("aruna::112")) {
+  // Match the diagnostic code, not prose.
+  if (!checkLog.includes("aruna::111")) {
     throw new Error(
       [
-        "`aruna check` did not flag the alias desync (expected aruna::111 or aruna::112).",
+        "`aruna check` did not flag the alias desync (expected aruna::111).",
         `See ${path.join(logsRoot, "13-check-stale.log")}`,
       ].join("\n"),
     );
@@ -552,23 +545,22 @@ export async function assertAliasDesyncRegression(projectRoot: string): Promise<
   await runCommand(
     "aruna doctor --fix (realign)",
     "pnpm",
-    ["exec", "aruna", "doctor", "--fix", "--emit-runtime", "--project", "."],
+    ["exec", "aruna", "doctor", "--fix", "--project", "."],
     projectRoot,
     "15-doctor-realign.log",
   );
   await assertGeneratedActionAliases(projectRoot);
-  // The realigned aliases may live in the generated fragment the tsconfig
-  // extends, so resolve them through the chain rather than inline only.
+  // Resolve them through the chain rather than inline only, as the gate above does.
   const realignedPaths =
     (await readTsconfigChain(tsconfigPath))
       .map((entry) => entry.compilerOptions)
       .filter((entry): entry is JsonRecord => isRecord(entry))
       .find((entry) => isRecord(entry.paths))?.paths ?? {};
   const runtimeClient = isRecord(realignedPaths) ? realignedPaths["aruna/client"] : undefined;
-  if (!isStringArray(runtimeClient) || runtimeClient[0] !== GENERATED_RUNTIME_CLIENT_REL) {
+  if (!isStringArray(runtimeClient) || runtimeClient[0] !== `./${GENERATED_RUNTIME_CLIENT_REL}`) {
     throw new Error(
       [
-        `aruna doctor --fix did not realign aruna/client to ${GENERATED_RUNTIME_CLIENT_REL}.`,
+        `aruna doctor --fix did not realign aruna/client to ./${GENERATED_RUNTIME_CLIENT_REL}.`,
         `See ${path.join(logsRoot, "15-doctor-realign.log")}`,
       ].join("\n"),
     );
@@ -1144,7 +1136,7 @@ async function runChecks(): Promise<void> {
   await runCommand(
     "aruna doctor --fix",
     "pnpm",
-    ["exec", "aruna", "doctor", "--fix", "--emit-runtime", "--project", "."],
+    ["exec", "aruna", "doctor", "--fix", "--project", "."],
     tempRoot,
     "06-doctor-fix.log",
   );

@@ -312,9 +312,8 @@ warning aruna::304 cross-domain-private-import
 4. Commands:
 
    ```bash
-   aruna doctor --fix
+   aruna build    # sets up tsconfig.json, then generates the stubs and compiles to Luau
    aruna check
-   aruna build
    aruna inspect actions
    aruna inspect contract --json
    aruna contract diff --project apps/rbxts-harness --baseline contract.snapshot.json
@@ -329,7 +328,7 @@ warning aruna::304 cross-domain-private-import
 - source discovery, entry classification, module classification, import graph construction, action discovery, boundary validation, diagnostics, and manifest generation in Rust
 - OXC-based TS/TSX import parsing in the Rust core (replaces the earlier SWC parser path)
 - deterministic compiler output
-- `aruna check` (also flags layout desync: tsconfig aliases pointing at a path the current layout does not emit, `aruna::111` / `aruna::112`)
+- `aruna check` (also flags layout desync: tsconfig aliases pointing at a path the current layout does not emit, or a tsconfig still extending the retired generated fragment, `aruna::111`)
 - `aruna inspect`
 - running `aruna` with no subcommand aliases to `aruna check`
 - `aruna build` prunes artifacts a previous build emitted and this one does not (tracked in `.aruna-build.json`, confined to `generatedDir`)
@@ -680,18 +679,18 @@ Serialization boundary, fixed-window rate limits, the pre-dispatch request budge
 
 `apps/package-consumption-harness` simulates a project outside the monorepo source layout consuming Aruna as a package.
 It imports `defineConfig` from the root package for config only, and uses the runtime-safe public subpaths `aruna/server`, `aruna/client`, `aruna/roblox`, and `aruna/schema` for Roblox-facing code.
-It validates `aruna doctor --fix --emit-runtime`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
+It validates `aruna doctor --fix`, `aruna check`, `aruna build`, `aruna inspect actions`, `aruna inspect contract --json`, and `aruna contract diff` against that package-style layout.
 It is not `create-aruna-app` output.
 
 Package consumption uses a vendored-runtime model rather than direct `node_modules` imports of Roblox-facing code:
 
 - The roblox-ts-native runtime lives at `packages/aruna/roblox/` and ships in the package via `files`; its declarations (`dist/native/`) are what the `aruna/*` subpaths resolve to.
 - `aruna build` vendors that native runtime into the consumer as project source under `src/.aruna/shared/runtime/`.
-- `aruna doctor --fix --emit-runtime` installs the `aruna/*` → vendored-runtime tsconfig path aliases that pair with `build`.
+- `aruna build` (like `aruna doctor --fix`) writes the `aruna/*` → vendored-runtime tsconfig path aliases into `tsconfig.json`.
 - `default.project.json` maps the full `out` tree, so `rbxtsc` compiles the whole consumer — including the vendored runtime — to Luau without the "modules directly under node_modules" rejection.
 
 `pnpm verify:package-consumption` builds local tarballs and installs the packed Aruna dependency graph without contacting the npm registry for `aruna`, `@arunajs/core`, or `@arunajs/compiler`.
-The packed package-style tarball smoke runs `doctor --fix --emit-runtime` and `build`, generates `src/.aruna` action files and the vendored runtime, passes TypeScript, and compiles to Luau with `rbxtsc`. This is package-layout and rbxtsc compile validation, not production Studio validation.
+The packed package-style tarball smoke runs `doctor --fix` and `build`, generates `src/.aruna` action files and the vendored runtime, passes TypeScript, and compiles to Luau with `rbxtsc`. This is package-layout and rbxtsc compile validation, not production Studio validation.
 
 See [docs/package-consumption.md](docs/package-consumption.md) for the final package-consumption model and remaining follow-ups.
 
@@ -709,29 +708,41 @@ import { actions } from "$aruna/actions/server";
 Do not import the physical `../.aruna/*.generated` files directly in app code.
 Aruna owns the physical files under `src/.aruna/`.
 `aruna check` resolves these virtual modules without writing files.
-`aruna build` writes the physical generated files used by TypeScript and roblox-ts tooling.
-For TypeScript and roblox-ts tooling, run `aruna doctor --fix` once to install the required tsconfig path aliases.
+`aruna build` writes the physical generated files used by TypeScript and roblox-ts tooling,
+and the tsconfig path aliases that point at them (see below).
 
 ### Generated project wiring
 
-Anything that must stay in step with codegen or with what is installed is
-generated into `<generatedDir>/` and referenced once, rather than copied into a
-file you then have to maintain.
+Anything that must stay in step with codegen or with what is installed is kept in step
+by Aruna, rather than copied into a file you then have to maintain.
 
-`<generatedDir>/tsconfig.aruna.json` carries the roblox-ts compile contract
-(`target`/`module`/`noLib`, the `@rbxts` type roots, `src` → `out`, the include
-globs that reach the dot-prefixed generated dir) plus every `$aruna/*` and
-`aruna/*` path alias. A project tsconfig is therefore only what the project
-actually decides:
+`tsconfig.json` is maintained the way Next.js maintains it: `aruna init`, `aruna build`,
+`aruna dev`, and `aruna test` read it before compiling, force what roblox-ts and Aruna
+cannot work without (the `target`/`module`/`noLib` contract, the `@rbxts` type root,
+every `$aruna/*` and `aruna/*` path alias, the include that reaches the dot-prefixed
+generated dir), add sensible defaults only where a key is unset, and print what they
+changed. The edit is in place — comments, formatting, and every other key survive — and
+the aliases are written relative to the file, with no `baseUrl`:
 
 ```jsonc
 {
-  "extends": "./src/.aruna/tsconfig.aruna.json",
   "compilerOptions": {
-    // e.g. a JSX runtime and rbxtsc transformers — anything here wins over the fragment
-  }
+    // your choices stay yours: a JSX runtime, rbxtsc transformers, your own aliases
+    "jsx": "react",
+    "jsxFactory": "Vide.jsx",
+    // ...the roblox-ts contract...
+    "paths": {
+      "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
+      "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/.aruna/**/*.ts"]
 }
 ```
+
+Because the file is complete on its own, a fresh clone typechecks in the editor before
+anything has been generated. See [tsconfig.json](packages/aruna/docs/cli.md#tsconfigjson).
 
 `<generatedDir>/node_modules.project.json` is a nested Rojo project holding the
 npm scopes that ship Luau, rebuilt from `node_modules/` on every `aruna build`.

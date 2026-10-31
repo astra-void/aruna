@@ -1,13 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "rootDir": ".",
     "paths": {
-      "$aruna/actions/client": ["src/.aruna/shared/actions.client.generated.ts"],
-      "$aruna/actions/server": ["src/.aruna/server/actions.server.generated.ts"]
+      "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
+      "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"]
     },
     "jsx": "preserve",
     "noEmit": true,
