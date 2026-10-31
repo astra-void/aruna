@@ -73,6 +73,10 @@ the game build like any other module.
   `RequestAbuseReason`, `RequestAbuseInfo`, `RequestAbuseHandler`, and
   `RequestBudgetOptions` are exported from `aruna/server`.
 
+- **An RFC for binary items on the wire** (docs/rfcs/binary-wire.md): numeric
+  ids, buffer payloads inside the existing frame grammar, the contract
+  handshake it needs, and what has to be measured before it is built.
+
 - **`aruna migrate`: codemods for breaking changes.** `aruna migrate --list`
   shows them; `aruna migrate <name> --dry-run` prints a unified diff without
   writing; `aruna migrate <name>` applies it. Codemods edit only what they

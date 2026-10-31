@@ -10,6 +10,8 @@ subscriber); the compiler's size checks are in `crates/aruna_compiler/src/payloa
 Before the first public release this can change freely
 ([stability.md](stability.md#before-the-first-public-release-now)); after it, a change
 that an older peer cannot read is a new protocol version, never an edit to this one.
+A draft for binary items (numeric ids, buffer payloads) is in
+[rfcs/binary-wire.md](rfcs/binary-wire.md).
 
 ## Remotes
 
