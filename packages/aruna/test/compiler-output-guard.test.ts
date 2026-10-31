@@ -97,8 +97,9 @@ afterAll(async () => {
 });
 
 // Every spelling of the temp project path a command can print — absolute,
-// symlink-resolved (macOS /var → /private/var), and relative to the cwd — becomes
-// `<root>`, so the golden does not depend on where the run happened.
+// symlink-resolved (macOS /var → /private/var), and relative to the cwd, each
+// also as --json escapes it — becomes `<root>`, so the golden does not depend on
+// where the run happened.
 function normalizer(root: string, realRoot: string): (text: string) => string {
   const spellings = [
     realRoot,
@@ -108,11 +109,19 @@ function normalizer(root: string, realRoot: string): (text: string) => string {
   ]
     .filter((spelling) => spelling.length > 0)
     .flatMap((spelling) => [spelling, spelling.split(path.sep).join("/")])
+    // --json doubles a Windows path's backslashes.
+    .flatMap((spelling) => [spelling, JSON.stringify(spelling).slice(1, -1)])
     .sort((left, right) => right.length - left.length);
   return (text) => {
     let normalized = text;
     for (const spelling of spellings) {
       normalized = normalized.split(spelling).join("<root>");
+    }
+    if (path.sep === "\\") {
+      // Below the root a Windows path keeps its own separators, which --json
+      // escapes (the compiler prints `<root>\\src/.aruna/manifest.json`). Write
+      // them as "/", as every other platform prints them.
+      normalized = normalized.replace(/<root>[^\s"]*/g, (match) => match.split("\\\\").join("/"));
     }
     return normalized;
   };
