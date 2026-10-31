@@ -531,8 +531,9 @@ export function bindRemoteActions<TPlayer>(
 			const actionId = call !== undefined ? call.a : undefined;
 
 			// Each call is charged on its own: drop a malformed one (ids must be
-			// bounded strings), and charge the player's request budget, dropping
-			// the call when it is spent. Neither gets a response.
+			// bounded strings), charge the player's request budget, dropping the
+			// call when it is spent, and drop a call to an action the server does
+			// not define. None of them gets a response.
 			if (!registry.admitEnvelope(sender, requestId, actionId)) {
 				continue;
 			}

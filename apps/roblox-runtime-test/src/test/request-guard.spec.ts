@@ -12,12 +12,14 @@ import {
   defineAction as defineServerAction,
   type ActionRegistry,
 } from "aruna/server";
+import { schema, type Schema } from "aruna/schema";
 import { afterEach, createTestPlayer, describe, expect, it } from "aruna/testing";
 import { createIdempotencyCache } from "aruna/internal/idempotency";
 import {
   DEPARTED_PLAYER_TTL_MS,
   createDepartedPlayers,
   createRequestGuard,
+  type RequestAbuseInfo,
   type RequestAbuseReason,
   type RequestBudgetOptions,
 } from "aruna/internal/request-guard";
@@ -96,8 +98,11 @@ function disposeAfterEach(): void {
 function setup(options: {
   readonly run?: () => unknown;
   readonly requestBudget?: RequestBudgetOptions;
+  readonly input?: Schema;
+  readonly rateLimit?: { readonly key: "player"; readonly windowMs: number; readonly max: number };
 }) {
   const abuse = new Array<RequestAbuseReason>();
+  const reports = new Array<RequestAbuseInfo>();
   const players = createFakePlayers();
   let clockMs = 0;
   let runs = 0;
@@ -106,6 +111,8 @@ function setup(options: {
     actions: {
       "shop.buy": defineAction({
         id: "shop.buy",
+        ...(options.input !== undefined ? { input: options.input } : {}),
+        ...(options.rateLimit !== undefined ? { rateLimit: options.rateLimit } : {}),
         run() {
           runs += 1;
           const produced = options.run !== undefined ? options.run() : undefined;
@@ -118,6 +125,7 @@ function setup(options: {
     ...(options.requestBudget !== undefined ? { requestBudget: options.requestBudget } : {}),
     onAbuse: (_player, info) => {
       abuse.push(info.reason);
+      reports.push(info);
     },
     transport: (bound) => {
       registry = bound;
@@ -134,6 +142,7 @@ function setup(options: {
   return {
     app,
     abuse,
+    reports,
     players,
     dispose,
     runs: () => runs,
@@ -147,6 +156,10 @@ function setup(options: {
     send(input: unknown = undefined): Promise<void> {
       sent += 1;
       return wire.send(`r${sent}`, "shop.buy", input);
+    },
+    sendTo(actionId: string, input: unknown = undefined): Promise<void> {
+      sent += 1;
+      return wire.send(`r${sent}`, actionId, input);
     },
     // One envelope from another player, through the calls the transport makes.
     sendAs(player: Player, input: unknown = undefined): Promise<void> {
@@ -233,6 +246,115 @@ describe("request budget", () => {
     // The slots are free again.
     await harness.send();
     expect(harness.runs()).toBe(3);
+    harness.dispose();
+  });
+
+  it("drops a call to an unknown action unanswered, charged, and reported", async () => {
+    const harness = setup({ requestBudget: { burst: 2, perSecond: 1 } });
+
+    await harness.sendTo("shop.missing", {});
+    expect(harness.responses()).toHaveLength(0);
+    expect(harness.reports).toEqual([{ reason: "unknown-action", actionId: "shop.missing", count: 1 }]);
+
+    // It spent a token: one call left in the burst.
+    await harness.send();
+    await harness.send();
+    expect(harness.runs()).toBe(1);
+    expect(harness.abuse).toEqual(["unknown-action", "budget-exhausted"]);
+
+    // In-process dispatch is not a client's envelope: it still gets the error.
+    const refused = await harness.app
+      .dispatch("shop.missing", { player: Players.LocalPlayer }, {})
+      .then(
+        () => undefined,
+        (reason) => reason as { name?: string },
+      );
+    expect(refused?.name).toBe("ActionNotFoundError");
+    harness.dispose();
+  });
+
+  it("reports invalid input and rate-limited calls, counted per reason", async () => {
+    const harness = setup({
+      input: schema.object({ amount: schema.number() }),
+      rateLimit: { key: "player", windowMs: 1000, max: 1 },
+    });
+
+    await harness.send({ amount: "lots" });
+    await harness.send({ callback: () => undefined });
+    await harness.send({ amount: 1 });
+    await harness.send({ amount: 2 });
+    // Each one is still answered.
+    expect(harness.results().map((result) => result.errorName)).toEqual([
+      "ActionValidationError",
+      "ActionSerializationError",
+      undefined,
+      "ActionRateLimitError",
+    ]);
+    expect(harness.reports).toEqual([
+      { reason: "invalid-input", actionId: "shop.buy", count: 1 },
+      { reason: "invalid-input", actionId: "shop.buy", count: 2 },
+      { reason: "rate-limited", actionId: "shop.buy", count: 1 },
+    ]);
+
+    // Counts start over for a player who left and came back.
+    harness.players.leave(Players.LocalPlayer);
+    harness.players.join(Players.LocalPlayer);
+    await harness.send({ amount: "lots" });
+    expect(harness.reports[harness.reports.size() - 1]).toEqual({
+      reason: "invalid-input",
+      actionId: "shop.buy",
+      count: 1,
+    });
+    harness.dispose();
+  });
+
+  it("gives back the token of a call its action's rate limit admitted", async () => {
+    // Two tokens that barely refill, in front of an action allowed 100 a second.
+    const harness = setup({
+      input: schema.object({ amount: schema.number() }),
+      rateLimit: { key: "player", windowMs: 1000, max: 100 },
+      requestBudget: { burst: 2, perSecond: 0.001 },
+    });
+
+    for (let call = 0; call < 10; call += 1) {
+      await harness.send({ amount: call });
+    }
+    expect(harness.runs()).toBe(10);
+
+    // Calls that lead nowhere still spend the budget.
+    await harness.send({ amount: "lots" });
+    await harness.send({ amount: "lots" });
+    await harness.send({ amount: 1 });
+    expect(harness.runs()).toBe(10);
+    expect(harness.abuse).toEqual(["invalid-input", "invalid-input", "budget-exhausted"]);
+    harness.dispose();
+  });
+
+  it("charges every call to an action with no rate limit", async () => {
+    const harness = setup({ requestBudget: { burst: 2, perSecond: 0.001 } });
+
+    await harness.send();
+    await harness.send();
+    await harness.send();
+    expect(harness.runs()).toBe(2);
+    expect(harness.abuse).toEqual(["budget-exhausted"]);
+    harness.dispose();
+  });
+
+  it("never reports in-process dispatch", async () => {
+    const harness = setup({
+      input: schema.object({ amount: schema.number() }),
+      rateLimit: { key: "player", windowMs: 1000, max: 1 },
+    });
+    const player = createTestPlayer();
+
+    for (const input of [{ amount: "lots" }, { amount: 1 }, { amount: 2 }]) {
+      await harness.app.dispatch("shop.buy", { player }, input).then(
+        () => undefined,
+        () => undefined,
+      );
+    }
+    expect(harness.reports).toEqual([]);
     harness.dispose();
   });
 

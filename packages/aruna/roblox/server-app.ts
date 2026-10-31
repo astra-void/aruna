@@ -154,8 +154,10 @@ export interface CreateServerAppOptions<
 	// (`maxInFlight`). An envelope over budget is dropped without a response; a
 	// call over the cap is refused with ActionRateLimitError. Defaults 60 / 30 / 32.
 	readonly requestBudget?: RequestBudgetOptions;
-	// Told when a player's envelope is dropped (malformed, over budget) or a call
-	// is refused for too many in flight — for logging, or a kick.
+	// Told, with a running count per player and reason, when a player's envelope
+	// is dropped (malformed, over budget, an unknown action) or a call of theirs
+	// is refused (too many in flight, invalid input, rate limited). For logging,
+	// or a kick. Never told about in-process dispatch.
 	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 	// Replaces the Players service as the source of joins and leaves. Left unset
 	// in a game — the app connects to `Players` itself; set by the test harness,

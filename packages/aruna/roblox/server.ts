@@ -181,6 +181,13 @@ export * from "./server-app";
 // The error an action throws when the client should see its name and message.
 export { actionError } from "./action-error";
 export type { PublicActionError } from "./action-error";
+// The request budget and the `onAbuse` report, for a handler typed on its own.
+export type {
+	RequestAbuseHandler,
+	RequestAbuseInfo,
+	RequestAbuseReason,
+	RequestBudgetOptions,
+} from "./request-guard";
 // Domain runtimes: the boot sequence the compiler resolves from `after` edges.
 export * from "./define-runtime";
 export * from "./domain-runtime";

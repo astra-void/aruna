@@ -20,11 +20,18 @@ return function(ctx)
 
 	t.describe("RemoteEvent transport", function()
 		local fired = { count = 0 }
+		local actionError = ctx.load("action-error").actionError
 		local registry = createActionRegistry({
 			ping = {
 				id = "ping",
 				run = function(_self, _context, input)
 					return { reply = input.msg }
+				end,
+			},
+			refuse = {
+				id = "refuse",
+				run = function(_self, _context, _input)
+					error(actionError("OutOfStock", "sold out"))
 				end,
 			},
 			-- One-way action: the server runs it but sends no response.
@@ -51,12 +58,22 @@ return function(ctx)
 		end)
 
 		t.it("rejects when the server reports a failure", function()
-			local settled, ok, value = t.await(invoke("missing", {}))
+			local settled, ok, value = t.await(invoke("refuse", {}))
 			t.isTrue(settled, "round trip settled")
 			t.isFalse(ok, "invoker rejected")
 			-- Rejections are structured: message + optional name/retryAfterMs.
-			t.contains(value.message, "Aruna action not found")
-			t.eq(value.name, "ActionNotFoundError")
+			t.eq(value.message, "sold out")
+			t.eq(value.name, "OutOfStock")
+		end)
+
+		t.it("sends no response to a call to an unknown action", function()
+			-- Only a forged id reaches this, so the server does not confirm which
+			-- ids exist: the caller waits out its timeout.
+			local timedInvoke = transport.createActionInvoker({ requestTimeoutMs = 20 })
+			local settled, ok, value = t.await(timedInvoke("missing", {}), 0.5)
+			t.isTrue(settled, "timeout settled")
+			t.isFalse(ok, "invoker rejected")
+			t.eq(value.name, "ActionTimeoutError")
 		end)
 
 		t.it("fire-and-forget resolves immediately with no value", function()

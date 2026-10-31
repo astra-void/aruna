@@ -6,6 +6,13 @@
 // costing a wire-safety walk, defaults, and a schema validation. The guard
 // charges every envelope against a token bucket before any of that runs, and
 // caps how many of a player's dispatches can be running at once.
+//
+// A call its action's own rate limit admits gets its token back: that limit
+// already prices it, and charging it twice would let the budget throttle an
+// action below the rate it declares (a fire-and-forget input at 60 a second).
+// What the budget is left pricing is the work that leads nowhere — malformed
+// envelopes, unknown actions, invalid input, refused calls — and calls to an
+// action with no rate limit at all.
 
 import { refilledTokens } from "./rate-limit";
 
@@ -98,22 +105,45 @@ export type RequestAbuseReason =
 	| "unknown-protocol-version"
 	// A frame with more than WIRE_MAX_FRAME_ITEMS calls. Dropped whole, before
 	// any call in it is read.
-	| "oversize-batch";
+	| "oversize-batch"
+	// A call to an action this server does not define. Dropped with no
+	// response: a client always runs its server's build, so only a forged id
+	// gets here, and a response would tell it which ids exist.
+	| "unknown-action"
+	// A call whose input failed wire safety or its schema. Answered as usual
+	// (ActionSerializationError / ActionValidationError).
+	| "invalid-input"
+	// A call its action's rate limit refused. Answered as usual
+	// (ActionRateLimitError). A well-behaved client can get here too, by
+	// calling faster than the limit; whether that is abuse is the game's call.
+	| "rate-limited";
 
-export type RequestAbuseHandler<TPlayer = unknown> = (
-	player: TPlayer,
-	info: { readonly reason: RequestAbuseReason; readonly actionId?: string },
-) => void;
+export interface RequestAbuseInfo {
+	readonly reason: RequestAbuseReason;
+	readonly actionId?: string;
+	// How many times this player has been reported for this reason since they
+	// joined, this report included: what a game decides a kick on.
+	readonly count: number;
+}
+
+export type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: RequestAbuseInfo) => void;
 
 export interface RequestGuard<TPlayer = unknown> {
 	// Charges one envelope. False when the player's budget is empty: drop it.
 	readonly admit: (player: TPlayer) => boolean;
+	// Gives back the token of a call its action's own rate limit admitted.
+	readonly refund: (player: TPlayer) => void;
 	// Claims an in-flight slot. False when the player is at the cap.
 	readonly begin: (player: TPlayer) => boolean;
 	readonly finish: (player: TPlayer) => void;
 	readonly maxInFlight: number;
-	readonly report: RequestAbuseHandler<TPlayer>;
-	// Drops a player's budget and in-flight count. Called on leave.
+	// Counts the report for the player and passes it to `onAbuse`.
+	readonly report: (
+		player: TPlayer,
+		info: { readonly reason: RequestAbuseReason; readonly actionId?: string },
+	) => void;
+	// Drops a player's budget, in-flight count, and report counts. Called on
+	// leave.
 	readonly forget: (player: TPlayer) => void;
 	// True for a player who left (see DepartedPlayers): their envelopes are
 	// dropped, and no state is created for them.
@@ -124,6 +154,7 @@ interface PlayerBudget {
 	tokens: number;
 	refilledAtMs: number;
 	inFlight: number;
+	reports: Map<RequestAbuseReason, number>;
 }
 
 function positiveOr(value: number | undefined, fallback: number): number {
@@ -156,7 +187,7 @@ export function createRequestGuard<TPlayer>(options?: {
 	const stateFor = (player: TPlayer): PlayerBudget => {
 		let state = players.get(player);
 		if (state === undefined) {
-			state = { tokens: burst, refilledAtMs: readNow(), inFlight: 0 };
+			state = { tokens: burst, refilledAtMs: readNow(), inFlight: 0, reports: new Map() };
 			players.set(player, state);
 		}
 		return state;
@@ -176,6 +207,12 @@ export function createRequestGuard<TPlayer>(options?: {
 			}
 			state.tokens -= 1;
 			return true;
+		},
+		refund: (player) => {
+			const state = players.get(player);
+			if (state !== undefined) {
+				state.tokens = math.min(burst, state.tokens + 1);
+			}
 		},
 		begin: (player) => {
 			// Nothing to cap for a player who is gone, and no state to create.
@@ -198,8 +235,19 @@ export function createRequestGuard<TPlayer>(options?: {
 		},
 		maxInFlight,
 		report: (player, info) => {
+			// A player who left gets no state back for a late report.
+			if (hasDeparted(player)) {
+				return;
+			}
+			const reports = stateFor(player).reports;
+			const count = (reports.get(info.reason) ?? 0) + 1;
+			reports.set(info.reason, count);
 			if (onAbuse !== undefined) {
-				onAbuse(player, info);
+				onAbuse(player, {
+					reason: info.reason,
+					...(info.actionId !== undefined ? { actionId: info.actionId } : {}),
+					count,
+				});
 			}
 		},
 		forget: (player) => {

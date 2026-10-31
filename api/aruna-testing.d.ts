@@ -280,12 +280,15 @@ interface RemoteSignalConnection {
     readonly disconnect: () => void;
 }
 
-type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: {
+type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: RequestAbuseInfo) => void;
+
+interface RequestAbuseInfo {
     readonly reason: RequestAbuseReason;
     readonly actionId?: string;
-}) => void;
+    readonly count: number;
+}
 
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch";
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited";
 
 interface RequestBudgetOptions {
     readonly burst?: number;

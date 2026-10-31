@@ -65,8 +65,10 @@ export interface ActionRegistry<TPlayer = unknown> {
 		idempotencyKey?: unknown,
 	) => Promise<ActionDispatchResult>;
 	// The transport's gate for one envelope, before it reads the input: the
-	// request and action ids must be bounded strings, and the player's request
-	// budget must have a token. False means drop the envelope with no response.
+	// request and action ids must be bounded strings, the player's request
+	// budget must have a token, and the action must exist. False means drop the
+	// envelope with no response. (`dispatch` still answers an unknown id with
+	// ActionNotFoundError, for a caller that does not go through this gate.)
 	readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
 	// The transport's report of a frame it dropped whole, before reading any call
 	// in it (docs/wire-protocol.md): charged one request and reported through
@@ -153,8 +155,10 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	readonly nowMs?: () => number;
 	// The per-player envelope budget and in-flight cap in front of dispatch.
 	readonly requestBudget?: RequestBudgetOptions;
-	// Told when a player's envelope is dropped (malformed, over budget) or a
-	// dispatch is refused for too many in flight. For logging, or a kick.
+	// Told, with a running count per player and reason, when a player's envelope
+	// is dropped (malformed, over budget, an unknown action) or a call of theirs
+	// is refused (too many in flight, invalid input, rate limited). For logging,
+	// or a kick. Never told about in-process dispatch.
 	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
 }
 
@@ -240,17 +244,25 @@ export function createActionRegistry<TPlayer>(
 	// keeps a hostile payload cheap: wire safety (bounded in depth and size)
 	// before defaults, defaults before validation, validation before the
 	// per-action rate limit (invalid input does not consume quota).
+	//
+	// `fromClient` is set for a client's envelope, which the transport charged
+	// to the request budget: its refusals are reported through `onAbuse`, and
+	// its token is given back once its action's rate limit admits it.
 	const dispatchDefined = (
 		definition: AnyActionDefinition<TPlayer>,
 		player: TPlayer,
 		actionId: string,
 		input: unknown,
 		progress: { ran: boolean } | undefined,
+		fromClient: boolean,
 	): Promise<ActionDispatchResult> => {
 		return new Promise<ActionDispatchResult>((resolve) => {
 			// Reject non-wire-safe input before anything else reads it. The input
 			// schema decides where an Instance may appear.
 			if (!isWireSafe(input, undefined, definition.input)) {
+				if (fromClient) {
+					guard.report(player, { reason: "invalid-input", actionId });
+				}
 				resolve({
 					ok: false,
 					error: "non-serializable action input",
@@ -270,6 +282,9 @@ export function createActionRegistry<TPlayer>(
 				// The boolean validate stays the cheap gate; the metadata walk runs
 				// only on failure to attach the first failing path + reason.
 				const failure = validationFailure(actionId, "input", inputSchema, input);
+				if (fromClient) {
+					guard.report(player, { reason: "invalid-input", actionId });
+				}
 				resolve({ ok: false, error: failure.message, errorName: failure.name });
 				return;
 			}
@@ -289,6 +304,9 @@ export function createActionRegistry<TPlayer>(
 					nowMs !== undefined ? nowMs() / 1000 : undefined,
 				);
 				if (!limitResult.ok) {
+					if (fromClient) {
+						guard.report(player, { reason: "rate-limited", actionId });
+					}
 					resolve({
 						ok: false,
 						error: `Aruna action ${actionId} is rate limited. Retry after ${limitResult.retryAfterMs}ms.`,
@@ -297,6 +315,11 @@ export function createActionRegistry<TPlayer>(
 						resetAtMs: limitResult.resetAtMs,
 					});
 					return;
+				}
+				// The action's own limit priced this call; the budget does not
+				// charge it a second time.
+				if (fromClient) {
+					guard.refund(player);
 				}
 			}
 
@@ -425,7 +448,7 @@ export function createActionRegistry<TPlayer>(
 				resetAtMs: now + IN_FLIGHT_RETRY_AFTER_MS,
 			});
 		}
-		const settled = dispatchDefined(definition, player, actionId, input, progress);
+		const settled = dispatchDefined(definition, player, actionId, input, progress, true);
 		settled.finally(() => {
 			guard.finish(player);
 		});
@@ -443,7 +466,7 @@ export function createActionRegistry<TPlayer>(
 		if (definition === undefined) {
 			return notFound(actionId);
 		}
-		return dispatchDefined(definition, player, actionId, input, progress);
+		return dispatchDefined(definition, player, actionId, input, progress, false);
 	};
 
 	type DispatchOnce = typeof dispatchCapped;
@@ -464,8 +487,19 @@ export function createActionRegistry<TPlayer>(
 
 	return {
 		isFireAndForget: (actionId) => actionsById.get(actionId)?.fireAndForget === true,
-		admitEnvelope: (player, requestId, actionId) =>
-			admitEnvelope(guard, player, requestId, actionId),
+		admitEnvelope: (player, requestId, actionId) => {
+			if (!admitEnvelope(guard, player, requestId, actionId)) {
+				return false;
+			}
+			// Charged like any envelope, and dropped without the
+			// ActionNotFoundError a response would carry: that would only tell a
+			// prober which ids exist.
+			if (!actionsById.has(actionId as string)) {
+				guard.report(player, { reason: "unknown-action", actionId: actionId as string });
+				return false;
+			}
+			return true;
+		},
 		refuseFrame: (player, reason) => refuseFrame(guard, player, reason),
 		dispatch: (player, actionId, input, idempotencyKey) =>
 			withIdempotency(dispatchCapped, player, actionId, input, idempotencyKey),

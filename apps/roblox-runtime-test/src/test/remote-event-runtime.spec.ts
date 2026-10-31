@@ -856,21 +856,14 @@ describe("bindRemoteEventActions", () => {
     expect(wire.responses()).toEqual([]);
   });
 
-  it("sends an error response for an unknown action id", async () => {
+  it("drops a call to an unknown action id with no response", async () => {
     const { wire } = bindWire({});
 
+    // Only a forged id reaches the server, and an ActionNotFoundError would tell
+    // it which ids exist. The in-process path still answers one (dispatch).
     await wire.send("request-1", "shop.purchaseItem", { itemId: "sword" });
 
-    expect(wire.responses()).toEqual([
-      {
-        requestId: "request-1",
-        result: {
-          ok: false,
-          error: "Aruna action not found: shop.purchaseItem",
-          errorName: "ActionNotFoundError",
-        },
-      },
-    ]);
+    expect(wire.responses()).toEqual([]);
   });
 
   it("turns input validation failures into error responses", async () => {
@@ -1089,7 +1082,14 @@ describe("bindRemoteEventActions", () => {
   });
 
   it("dispose disconnects from the server request signal", async () => {
-    const { binding, wire } = bindWire({});
+    const { binding, wire } = bindWire({
+      "shop.purchaseItem": defineAction({
+        id: "shop.purchaseItem",
+        run() {
+          return { ok: true };
+        },
+      }),
+    });
 
     // Bound: an envelope earns a response.
     await wire.send("request-1", "shop.purchaseItem", {});

@@ -188,6 +188,8 @@ describe("wire frames", () => {
       let counter = 0;
       const invoke = createActionInvoker({
         batching,
+        // The unknown action is never answered; it times out on both sides.
+        requestTimeoutMs: 200,
         createRequestId: () => {
           counter += 1;
           return `${batching ? "b" : "u"}-${counter}`;
@@ -215,7 +217,7 @@ describe("wire frames", () => {
     expect(unbatched.outcomes).toEqual([
       { ok: true, value: { bought: "sword", order: 1 } },
       { ok: false, value: "ActionValidationError" },
-      { ok: false, value: "ActionNotFoundError" },
+      { ok: false, value: "ActionTimeoutError" },
       { ok: true, value: undefined },
       { ok: true, value: { bought: "shield", order: 3 } },
       { ok: true, value: { bought: "shield", order: 3 } },
@@ -327,14 +329,14 @@ describe("wire frames", () => {
       },
     });
     // A response in a future protocol arrives before the server's real one.
-    const pending = settle(invoke("shop.missing", {}));
+    const pending = settle(invoke("shop.buy", { item: "sword" }));
     wire.remote.FireClient(game.GetService("Players").LocalPlayer, [
       2,
       { t: 2, i: "r-unknown", r: { ok: true, output: "from the future" } },
     ]);
     expect(reported).toEqual(["ArunaRemoteEvent unknown-protocol-version"]);
     // The future frame resolved nothing; the real (v1) answer still does.
-    expect(await pending).toEqual({ ok: false, value: "ActionNotFoundError" });
+    expect(await pending).toEqual({ ok: true, value: { bought: "sword", order: 1 } });
 
     const signals = { "fx.note": defineSignal({ id: "fx.note", payload: schema.string() }) };
     let deliver: ((frame: unknown) => void) | undefined;

@@ -46,6 +46,14 @@ the game build like any other module.
   stays the default; the manifest and the contract record the strategy only for
   a token bucket, and `contract diff` reports a strategy change as info.
 
+- **`onAbuse` reports more, with a count.** A call to an unknown action
+  (`unknown-action`), invalid input (`invalid-input`), and a call an action's
+  rate limit refused (`rate-limited`) are reported too, and every report
+  carries `count`: how many times that player has been reported for that
+  reason since joining. In-process dispatch is never reported.
+  `RequestAbuseReason`, `RequestAbuseInfo`, `RequestAbuseHandler`, and
+  `RequestBudgetOptions` are exported from `aruna/server`.
+
 - **`aruna migrate`: codemods for breaking changes.** `aruna migrate --list`
   shows them; `aruna migrate <name> --dry-run` prints a unified diff without
   writing; `aruna migrate <name>` applies it. Codemods edit only what they
@@ -274,6 +282,17 @@ the game build like any other module.
   literal `maxLength`/`maxItems` used to be a hash-change warning. A loosened
   bound is compatible and no longer reported; only a changed predicate or a
   computed bound is still `store-constraint-changed`.
+
+- **Breaking: a call to an unknown action is not answered.** The transport
+  drops it (charged to the request budget, reported as `unknown-action`)
+  instead of answering `ActionNotFoundError`, which told a sender which ids
+  exist; a caller's request times out. In-process dispatch still rejects with
+  `ActionNotFoundError`.
+
+- **The request budget gives back the token of a call its action's rate limit
+  admitted**, so it no longer throttles an action below the rate it declares;
+  it prices malformed envelopes, unknown actions, invalid input, refused calls,
+  and calls to an action with no rate limit.
 
 - **`aruna inspect contract` summarizes a contract that has warnings.** It used
   to print only the counts whenever there was any diagnostic.

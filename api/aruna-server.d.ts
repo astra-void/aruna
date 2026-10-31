@@ -222,6 +222,22 @@ export type PublishingActionDefinition<TInput extends Schema | undefined, TOutpu
     run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
 
+export type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: RequestAbuseInfo) => void;
+
+export interface RequestAbuseInfo {
+    readonly reason: RequestAbuseReason;
+    readonly actionId?: string;
+    readonly count: number;
+}
+
+export type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited";
+
+export interface RequestBudgetOptions {
+    readonly burst?: number;
+    readonly perSecond?: number;
+    readonly maxInFlight?: number;
+}
+
 export declare const STORE_ENVELOPE_FORMAT = 1;
 
 export declare const STORE_ENVELOPE_MARKER = "$aruna";
@@ -580,19 +596,6 @@ type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
 interface Refinement {
     readonly check: (value: unknown) => boolean;
     readonly message: string;
-}
-
-type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: {
-    readonly reason: RequestAbuseReason;
-    readonly actionId?: string;
-}) => void;
-
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch";
-
-interface RequestBudgetOptions {
-    readonly burst?: number;
-    readonly perSecond?: number;
-    readonly maxInFlight?: number;
 }
 
 interface Schema<T = unknown> {

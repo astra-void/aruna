@@ -202,10 +202,13 @@ per frame, not once per reader.
 Then each item, in order. On the server, every item is charged **one request** from the
 player's budget before anything else in it is read (`requestBudget`: a burst and a refill
 rate), exactly as a call in its own frame would be: an item whose `t` is not `1`, or a
-call with a bad `i` or `a`, is charged and reported as `malformed-envelope`, and a call
-past the budget is dropped and reported as `budget-exhausted`. Neither gets a response, and the rest of the frame is still read. The
-in-flight cap, the action's own `rateLimit`, validation, middleware, and idempotency then
-apply per call as they always do.
+call with a bad `i` or `a`, is charged and reported as `malformed-envelope`; a call past
+the budget is dropped and reported as `budget-exhausted`; a call whose `a` names no action
+is charged, dropped, and reported as `unknown-action`. None of them gets a response, and
+the rest of the frame is still read. The in-flight cap, the action's own `rateLimit`,
+validation, middleware, and idempotency then apply per call as they always do; a call the
+action's `rateLimit` admits is given its request back
+([actions.md](../packages/aruna/docs/actions.md#the-request-budget-in-front-of-dispatch)).
 
 ## Size accounting
 

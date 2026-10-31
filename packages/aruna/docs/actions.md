@@ -206,31 +206,65 @@ puts per-player limits in front of every action, before the payload is read:
 
 | Limit | Default | Over it |
 | --- | --- | --- |
-| Envelope budget: a token bucket charged for **every** envelope, valid or not | 60 burst, 30 per second | dropped, no response |
+| Envelope budget: a token bucket charged for **every** envelope before it is read | 60 burst, 30 per second | dropped, no response |
 | Request id a string of at most 64 characters, action id at most 128 | — | dropped, no response |
+| The action exists | — | dropped, no response |
 | Dispatches running at once | 32 | `ActionRateLimitError` (`retryAfterMs: 100`) |
 | Values in the input, however shallow (the wire-safety walk) | 2048 | `ActionSerializationError` |
+
+**A call its action's own rate limit admits gets its token back.** That limit already
+prices the call, and charging it twice would let the budget throttle an action below the
+rate it declares: a fire-and-forget input declared at `max: 60` a second would otherwise
+run into the budget's 30. What the budget is left pricing is the work that leads nowhere
+— malformed envelopes, unknown actions, invalid input, calls refused by a rate limit or
+the in-flight cap — and every call to an action with no rate limit at all (neither its
+own nor `defaultRateLimit`).
+
+**A call to an unknown action is not answered.** A client always runs its own server's
+build, so only a forged id gets there, and an `ActionNotFoundError` would tell the sender
+which ids exist; a caller sees its request time out instead. In-process dispatch
+(`app.dispatch`, the test harness) still rejects with `ActionNotFoundError`.
 
 Each dispatch then runs in the order that keeps a hostile payload cheap: wire safety,
 then `.default(...)` filling, then validation, then the per-action rate limit. An action's
 own output and a signal payload are server-authored, so they are not held to the
 2048-value limit.
 
+`onAbuse` hears about each of these, with the action id where there is one and a running
+count per player and reason since they joined, so the decision to kick is the game's:
+
 ```ts
 createServerApp({
   actions,
   transport: robloxRemoteEvent(),
   requestBudget: { burst: 60, perSecond: 30, maxInFlight: 32 },
-  onAbuse: (player, { reason }) => {
-    // "budget-exhausted" | "malformed-envelope" | "too-many-in-flight"
-    warn(`${player.Name}: ${reason}`);
+  onAbuse: (player, { reason, actionId, count }) => {
+    warn(`${player.Name}: ${reason} ${actionId ?? ""} (#${count})`);
+    // A real client never sends these; a rate limit, on the other hand, can be
+    // hit by someone mashing a button.
+    if ((reason === "malformed-envelope" || reason === "unknown-action") && count >= 5) {
+      player.Kick("Unexpected network traffic");
+    }
   },
 });
 ```
 
-A player's budget and in-flight count are dropped when they leave, and for 30 seconds after
-(or until they join again) an envelope that still arrives from them is dropped rather than
-starting that state over.
+| `reason` | What happened | Answered? |
+| --- | --- | --- |
+| `malformed-envelope` | an item that is not a call, or a call with bad ids; also a frame that is not one | no |
+| `unknown-protocol-version`, `oversize-batch` | a frame dropped whole ([wire protocol](../../../docs/wire-protocol.md#receiving)) | no |
+| `budget-exhausted` | the envelope budget was empty | no |
+| `unknown-action` | the action id names no action | no |
+| `too-many-in-flight` | the player was at the in-flight cap | `ActionRateLimitError` |
+| `invalid-input` | the input failed wire safety or its schema | `ActionSerializationError` / `ActionValidationError` |
+| `rate-limited` | the action's rate limit refused it | `ActionRateLimitError` |
+
+`RequestAbuseReason`, `RequestAbuseInfo`, `RequestAbuseHandler`, and `RequestBudgetOptions`
+are exported from `aruna/server` for a handler typed on its own.
+
+A player's budget, in-flight count, and report counts are dropped when they leave, and for
+30 seconds after (or until they join again) an envelope that still arrives from them is
+dropped rather than starting that state over.
 
 Both limits are for a client's envelopes, so only the transport applies them. `app.dispatch`
 in-process (and the test harness's `invoke` and `client`) is trusted server code: it is
