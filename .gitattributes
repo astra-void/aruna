@@ -2,6 +2,9 @@
 * text=auto
 
 # Compared byte for byte against generated output, which is always LF: keep them
-# LF on every platform's checkout.
+# LF on every platform's checkout. Fixtures are also the compiler's inputs, and
+# the spans it reports are byte offsets into them, so a CRLF checkout on Windows
+# shifts every expected span.
 /api/*.d.ts text eol=lf
 /packages/aruna/test/__golden__/** text eol=lf
+/fixtures/** text eol=lf
