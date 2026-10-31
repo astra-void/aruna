@@ -7,6 +7,18 @@ import { fileURLToPath } from "node:url";
 import { main, resolveColorMode } from "./cli/cli.js";
 import { formatError } from "./cli/theme.js";
 
+// Runs the CLI on process.argv, as the `aruna` command does (bin/aruna.js calls
+// this), and reports a crash on stderr with exit code 3.
+export function runCli(): void {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    process.stderr.write(
+      `${formatError(message, resolveColorMode({}, process.env, Boolean(process.stderr.isTTY)))}\n`,
+    );
+    process.exitCode = 3;
+  });
+}
+
 function resolveRealPath(absolutePath: string): string {
   try {
     return fs.realpathSync.native(absolutePath);
@@ -20,11 +32,5 @@ const isDirectExecution =
   resolveRealPath(process.argv[1]) === resolveRealPath(fileURLToPath(import.meta.url));
 
 if (isDirectExecution) {
-  main().catch((error: unknown) => {
-    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
-    process.stderr.write(
-      `${formatError(message, resolveColorMode({}, process.env, Boolean(process.stderr.isTTY)))}\n`,
-    );
-    process.exitCode = 3;
-  });
+  runCli();
 }

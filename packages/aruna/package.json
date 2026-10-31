@@ -7,10 +7,11 @@
     "url": "git+https://github.com/astra-void/aruna.git"
   },
   "bin": {
-    "aruna": "./dist/cli.js"
+    "aruna": "./bin/aruna.js"
   },
   "files": [
     "dist",
+    "bin",
     "roblox",
     "lune",
     "docs",
