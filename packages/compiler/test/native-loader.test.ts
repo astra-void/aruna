@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   nativeArtifactName,
@@ -7,6 +8,7 @@ import {
   nativePackageName,
   nativeTargetInfo,
   resolveNativeTarget,
+  type NativeTarget,
 } from "../src/native-platform.ts";
 
 type DlopenModule = {
@@ -22,6 +24,17 @@ const mockRequire = vi.fn(() => {
 vi.mock("node:module", () => ({
   createRequire: () => mockRequire,
 }));
+
+// The tails of the paths the loader tries, built with path.join as the loader
+// builds them, so they match on Windows too. Failure messages print the same
+// paths with "/" on every platform, so the message assertions spell them out.
+function stagedArtifactTail(target: NativeTarget): string {
+  return path.join(".npm", `compiler-${target}`, nativeArtifactName(target));
+}
+
+function installedArtifactTail(target: NativeTarget): string {
+  return path.join("node_modules", nativePackageName(target), nativeArtifactName(target));
+}
 
 // The shape the loader checks for; the functions are never called.
 function fakeNativeCompiler() {
@@ -86,7 +99,7 @@ describe("loadNativeCompiler", () => {
 
   it("loads the staged native artifact before package resolution", () => {
     const target = resolveNativeTarget();
-    const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const stagedPackagePath = stagedArtifactTail(target);
     const loadedCompiler = fakeNativeCompiler();
 
     vi.spyOn(fs, "existsSync").mockImplementation((candidate: string) =>
@@ -106,7 +119,7 @@ describe("loadNativeCompiler", () => {
   it("falls back to the installed package when the staged artifact is missing", () => {
     const target = resolveNativeTarget();
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const stagedPackagePath = `.npm/compiler-${target}/${nativeArtifactName(target)}`;
+    const stagedPackagePath = stagedArtifactTail(target);
     const loadedCompiler = fakeNativeCompiler();
 
     mockRequire.mockImplementationOnce((specifier: string) => {
@@ -126,8 +139,8 @@ describe("loadNativeCompiler", () => {
     const target = resolveNativeTarget();
     const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const installedPackagePath = `node_modules/${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const debugFallback = `target/debug/${buildOutputName}`;
+    const installedPackagePath = installedArtifactTail(target);
+    const debugFallback = path.join("target", "debug", buildOutputName);
     const loadedCompiler = fakeNativeCompiler();
 
     mockRequire
@@ -157,7 +170,7 @@ describe("loadNativeCompiler", () => {
     const target = resolveNativeTarget();
     const buildOutputName = nativeBuildOutputName(target);
     const expectedPackage = `${nativePackageName(target)}/${nativeArtifactName(target)}`;
-    const debugFallback = `target/debug/${buildOutputName}`;
+    const debugFallback = path.join("target", "debug", buildOutputName);
     const loadedCompiler = fakeNativeCompiler();
 
     mockRequire

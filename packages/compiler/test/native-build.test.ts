@@ -317,16 +317,18 @@ describe("native build tool selection", () => {
 
   it("includes generic release output paths for host-native cargo builds", () => {
     const candidates = resolveNativeArtifactCandidates("/tmp/aruna", "darwin-arm64", "release");
-    expect(candidates).toContain("/tmp/aruna/target/release/libaruna_napi.dylib");
-    expect(candidates).toContain("/tmp/aruna/target/release/aruna_napi.node");
+    expect(candidates).toContain(
+      path.join("/tmp/aruna", "target", "release", "libaruna_napi.dylib"),
+    );
+    expect(candidates).toContain(path.join("/tmp/aruna", "target", "release", "aruna_napi.node"));
   });
 
   it("includes platform-specific raw library names for other native targets", () => {
     expect(resolveNativeArtifactCandidates("/tmp/aruna", "linux-x64-gnu", "debug")).toContain(
-      "/tmp/aruna/target/debug/libaruna_napi.so",
+      path.join("/tmp/aruna", "target", "debug", "libaruna_napi.so"),
     );
     expect(resolveNativeArtifactCandidates("/tmp/aruna", "win32-x64-msvc", "debug")).toContain(
-      "/tmp/aruna/target/debug/aruna_napi.dll",
+      path.join("/tmp/aruna", "target", "debug", "aruna_napi.dll"),
     );
   });
 

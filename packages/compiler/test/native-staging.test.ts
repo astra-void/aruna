@@ -21,14 +21,18 @@ describe("native staging helpers", () => {
   });
 
   it("generates target-qualified staging paths", () => {
+    // Built with path.join, as the helpers build them, so the separators match on
+    // Windows too.
     const workspaceRoot = "/tmp/aruna";
     expect(stagedNativePackageDirectory(workspaceRoot, "darwin-arm64")).toBe(
-      "/tmp/aruna/.npm/compiler-darwin-arm64",
+      path.join(workspaceRoot, ".npm", "compiler-darwin-arm64"),
     );
     expect(stagedNativePackageArtifactPath(workspaceRoot, "darwin-arm64")).toBe(
-      "/tmp/aruna/.npm/compiler-darwin-arm64/compiler.darwin-arm64.node",
+      path.join(workspaceRoot, ".npm", "compiler-darwin-arm64", "compiler.darwin-arm64.node"),
     );
-    expect(stagedCompilerPackageDirectory(workspaceRoot)).toBe("/tmp/aruna/.npm/compiler");
+    expect(stagedCompilerPackageDirectory(workspaceRoot)).toBe(
+      path.join(workspaceRoot, ".npm", "compiler"),
+    );
   });
 
   it("stages a native package with a target-qualified artifact filename", async () => {
