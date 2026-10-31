@@ -30,14 +30,23 @@ function resolveProjectRoot(input: CompilerInput): string {
 }
 
 function normalizeTsconfigOptions(options: CompilerOptions): NativeTsconfigOptions {
+  const baseUrl = typeof options.baseUrl === "string" ? options.baseUrl : undefined;
+  // Without a baseUrl, TypeScript resolves `paths` targets against the
+  // directory of the config that declares them — an extended config's, not
+  // necessarily the project root the native resolver would assume — so they
+  // are anchored there first. `pathsBasePath` is where TypeScript records it.
+  const pathsBase = (options as { pathsBasePath?: unknown }).pathsBasePath;
+  const anchor = (target: string): string =>
+    baseUrl === undefined && typeof pathsBase === "string"
+      ? path.resolve(pathsBase, target)
+      : target;
   const paths = options.paths
-    ? Object.fromEntries(Object.entries(options.paths).map(([key, value]) => [key, [...value]]))
+    ? Object.fromEntries(
+        Object.entries(options.paths).map(([key, value]) => [key, value.map(anchor)]),
+      )
     : undefined;
 
-  return {
-    baseUrl: typeof options.baseUrl === "string" ? options.baseUrl : undefined,
-    paths,
-  };
+  return { baseUrl, paths };
 }
 
 function buildNativeInput(
