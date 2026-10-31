@@ -8,6 +8,9 @@ import {
 
 export type StageCompilerPackageOptions = {
   workspaceRoot: string;
+  // Where `.npm/compiler` is staged; defaults to workspaceRoot. The sources are
+  // always read from workspaceRoot.
+  stagingRoot?: string;
   version: string;
   nativeTargets: readonly NativeTarget[];
   allowMissingDist?: boolean;
@@ -60,7 +63,9 @@ export async function stageCompilerPackage(
 export async function stageCompilerPackage(
   options: StageCompilerPackageOptions,
 ): Promise<StagedCompilerPackage | null> {
-  const packageDirectory = stagedCompilerPackageDirectory(options.workspaceRoot);
+  const packageDirectory = stagedCompilerPackageDirectory(
+    options.stagingRoot ?? options.workspaceRoot,
+  );
   const packageJsonPath = path.join(packageDirectory, "package.json");
   const sourcePackageDirectory = path.join(options.workspaceRoot, "packages", "compiler");
   const sourcePackageJsonPath = path.join(sourcePackageDirectory, "package.json");

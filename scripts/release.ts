@@ -51,6 +51,13 @@ export type ReleaseDeps = {
   stageNativePackage?: typeof stageNativePackage;
   stageCompilerPackage?: typeof stageCompilerPackage;
   toolAvailability?: ToolAvailability;
+  // Where `.npm/` and `.npm-pack/` go; defaults to this repository. Sources,
+  // native builds, the TypeScript build, and pnpm whoami/view/publish stay in
+  // the repository; pnpm pack runs in each staged package, so under this root.
+  // A test passes its own directory: while tests run, other processes load the
+  // native compiler from the repository's `.npm/`, and on Windows a loaded DLL
+  // cannot be deleted.
+  stagingRoot?: string;
 };
 
 export type PreparedRelease = {
@@ -74,10 +81,29 @@ const compilerPackageJsonPath = path.join(compilerPackageRoot, "package.json");
 const corePackageRoot = path.join(workspaceRoot, "packages", "core");
 const arunaPackageRoot = path.join(workspaceRoot, "packages", "aruna");
 const createArunaPackageRoot = path.join(workspaceRoot, "packages", "create-aruna-app");
-const stagedCoreDirectory = path.join(workspaceRoot, ".npm", "core");
-const stagedArunaDirectory = path.join(workspaceRoot, ".npm", "aruna");
-const stagedCreateArunaDirectory = path.join(workspaceRoot, ".npm", "create-aruna-app");
 const releaseProfile: NativeBuildProfile = "release";
+
+export type StagingLayout = {
+  root: string;
+  npmDirectory: string;
+  packDirectory: string;
+  coreDirectory: string;
+  arunaDirectory: string;
+  createArunaDirectory: string;
+};
+
+export function stagingLayout(deps: ReleaseDeps): StagingLayout {
+  const root = deps.stagingRoot ?? workspaceRoot;
+  const npmDirectory = path.join(root, ".npm");
+  return {
+    root,
+    npmDirectory,
+    packDirectory: path.join(root, ".npm-pack"),
+    coreDirectory: path.join(npmDirectory, "core"),
+    arunaDirectory: path.join(npmDirectory, "aruna"),
+    createArunaDirectory: path.join(npmDirectory, "create-aruna-app"),
+  };
+}
 
 export function parseTargetList(value: string | undefined): NativeTarget[] {
   if (!value) {
@@ -376,11 +402,12 @@ async function validateCompilerPackage(
 }
 
 async function validateStagedRelease(
+  staging: StagingLayout,
   stagedNativePackages: Array<{ packageDirectory: string; target: NativeTarget }>,
   compilerPackageDirectory: string,
   expectedTargets: NativeTarget[],
 ): Promise<void> {
-  const rootEntries = (await fs.readdir(path.join(workspaceRoot, ".npm"))).filter(
+  const rootEntries = (await fs.readdir(staging.npmDirectory)).filter(
     (entry) => !entry.startsWith("."),
   );
   const expectedRootEntries = [
@@ -404,9 +431,9 @@ async function validateStagedRelease(
     await validateNativePackage(entry.packageDirectory, entry.target);
   }
   await validateCompilerPackage(compilerPackageDirectory, expectedTargets);
-  await ensureNoWorkspaceProtocols(path.join(stagedCoreDirectory, "package.json"));
-  await ensureNoWorkspaceProtocols(path.join(stagedArunaDirectory, "package.json"));
-  await ensureNoWorkspaceProtocols(path.join(stagedCreateArunaDirectory, "package.json"));
+  await ensureNoWorkspaceProtocols(path.join(staging.coreDirectory, "package.json"));
+  await ensureNoWorkspaceProtocols(path.join(staging.arunaDirectory, "package.json"));
+  await ensureNoWorkspaceProtocols(path.join(staging.createArunaDirectory, "package.json"));
 }
 
 type StagedNativePackage = { packageDirectory: string; target: NativeTarget };
@@ -447,6 +474,7 @@ async function buildAndStageNativeTargets(
   const buildNativeArtifactFn = deps.buildNativeArtifact ?? buildNativeArtifact;
   const stageNativePackageFn = deps.stageNativePackage ?? stageNativePackage;
   const toolAvailability = deps.toolAvailability ?? detectToolAvailability(spawn);
+  const staging = stagingLayout(deps);
   const hostTarget = resolveNativeTarget();
   const version = await readCompilerVersion();
   const zigPolicy = options.zig ?? "auto";
@@ -477,8 +505,9 @@ async function buildAndStageNativeTargets(
       profile: releaseProfile,
       buildTool: selection,
     });
+    // stageNativePackage's root is only where the package goes.
     const staged = await stageNativePackageFn({
-      workspaceRoot,
+      workspaceRoot: staging.root,
       version,
       target,
       sourceArtifactPath: buildResult.sourceArtifactPath,
@@ -495,27 +524,29 @@ async function stagePublishablePackages(
   deps: ReleaseDeps,
 ): Promise<{ compilerPackageDirectory: string }> {
   const stageCompilerPackageFn = deps.stageCompilerPackage ?? stageCompilerPackage;
+  const staging = stagingLayout(deps);
   const version = await readCompilerVersion();
 
   const compilerPackage = await stageCompilerPackageFn({
     workspaceRoot,
+    stagingRoot: staging.root,
     version,
     nativeTargets,
   });
 
   await stageWorkspacePackage({
     sourcePackageDirectory: corePackageRoot,
-    stagedPackageDirectory: stagedCoreDirectory,
+    stagedPackageDirectory: staging.coreDirectory,
     version,
   });
   await stageWorkspacePackage({
     sourcePackageDirectory: arunaPackageRoot,
-    stagedPackageDirectory: stagedArunaDirectory,
+    stagedPackageDirectory: staging.arunaDirectory,
     version,
   });
   await stageWorkspacePackage({
     sourcePackageDirectory: createArunaPackageRoot,
-    stagedPackageDirectory: stagedCreateArunaDirectory,
+    stagedPackageDirectory: staging.createArunaDirectory,
     version,
   });
 
@@ -523,6 +554,7 @@ async function stagePublishablePackages(
 }
 
 function toPreparedRelease(args: {
+  staging: StagingLayout;
   version: string;
   mode: ReleaseMode;
   hostTarget: NativeTarget;
@@ -540,9 +572,9 @@ function toPreparedRelease(args: {
     skippedTargets: args.skippedTargets,
     nativePackageDirectories: args.stagedNativePackages.map((entry) => entry.packageDirectory),
     compilerPackageDirectory: args.compilerPackageDirectory,
-    corePackageDirectory: stagedCoreDirectory,
-    arunaPackageDirectory: stagedArunaDirectory,
-    createArunaPackageDirectory: stagedCreateArunaDirectory,
+    corePackageDirectory: args.staging.coreDirectory,
+    arunaPackageDirectory: args.staging.arunaDirectory,
+    createArunaPackageDirectory: args.staging.createArunaDirectory,
   };
 }
 
@@ -553,11 +585,11 @@ async function stageReleasePackages(
   deps: ReleaseDeps,
 ): Promise<PreparedRelease> {
   const spawn = deps.spawnSync ?? spawnSync;
+  const staging = stagingLayout(deps);
   const hostTarget = resolveNativeTarget();
   const version = await readCompilerVersion();
-  const npmDirectory = path.join(workspaceRoot, ".npm");
 
-  await cleanDirectory(npmDirectory);
+  await cleanDirectory(staging.npmDirectory);
   buildPublishableTypeScriptPackages(spawn);
 
   const { stagedNativePackages, nativeTargets, skippedTargets } =
@@ -565,9 +597,15 @@ async function stageReleasePackages(
 
   const { compilerPackageDirectory } = await stagePublishablePackages(nativeTargets, deps);
 
-  await validateStagedRelease(stagedNativePackages, compilerPackageDirectory, nativeTargets);
+  await validateStagedRelease(
+    staging,
+    stagedNativePackages,
+    compilerPackageDirectory,
+    nativeTargets,
+  );
 
   return toPreparedRelease({
+    staging,
     version,
     mode,
     hostTarget,
@@ -578,11 +616,11 @@ async function stageReleasePackages(
   });
 }
 
-async function discoverStagedNativeTargets(): Promise<NativeTarget[]> {
+async function discoverStagedNativeTargets(staging: StagingLayout): Promise<NativeTarget[]> {
   const discovered: NativeTarget[] = [];
   for (const target of SUPPORTED_NATIVE_TARGETS) {
     try {
-      await fs.access(stagedNativePackageDirectory(workspaceRoot, target));
+      await fs.access(stagedNativePackageDirectory(staging.root, target));
       discovered.push(target);
     } catch {
       // Target was not built/downloaded for this release; skip it.
@@ -605,12 +643,13 @@ async function discoverStagedNativeTargets(): Promise<NativeTarget[]> {
 // staged around the pre-built native packages.
 async function assembleReleasePackages(deps: ReleaseDeps): Promise<PreparedRelease> {
   const spawn = deps.spawnSync ?? spawnSync;
+  const staging = stagingLayout(deps);
   const hostTarget = resolveNativeTarget();
   const version = await readCompilerVersion();
 
-  const nativeTargets = await discoverStagedNativeTargets();
+  const nativeTargets = await discoverStagedNativeTargets(staging);
   const stagedNativePackages: StagedNativePackage[] = nativeTargets.map((target) => ({
-    packageDirectory: stagedNativePackageDirectory(workspaceRoot, target),
+    packageDirectory: stagedNativePackageDirectory(staging.root, target),
     target,
   }));
 
@@ -618,9 +657,15 @@ async function assembleReleasePackages(deps: ReleaseDeps): Promise<PreparedRelea
 
   const { compilerPackageDirectory } = await stagePublishablePackages(nativeTargets, deps);
 
-  await validateStagedRelease(stagedNativePackages, compilerPackageDirectory, nativeTargets);
+  await validateStagedRelease(
+    staging,
+    stagedNativePackages,
+    compilerPackageDirectory,
+    nativeTargets,
+  );
 
   return toPreparedRelease({
+    staging,
     version,
     mode: "full",
     hostTarget,
@@ -659,7 +704,7 @@ async function packPackage(
 
 async function packRelease(prepared: PreparedRelease, deps: ReleaseDeps): Promise<string[]> {
   const spawn = deps.spawnSync ?? spawnSync;
-  const packDestination = path.join(workspaceRoot, ".npm-pack");
+  const packDestination = stagingLayout(deps).packDirectory;
   await cleanDirectory(packDestination);
 
   const tarballs: string[] = [];
@@ -809,9 +854,8 @@ export async function buildNativeRelease(
   const targetList = parseTargetList(options.targets);
   const targets = resolveTargetsForMode(options.mode, hostTarget, targetList);
   const version = await readCompilerVersion();
-  const npmDirectory = path.join(workspaceRoot, ".npm");
 
-  await cleanDirectory(npmDirectory);
+  await cleanDirectory(stagingLayout(deps).npmDirectory);
 
   const { stagedNativePackages, nativeTargets, skippedTargets } =
     await buildAndStageNativeTargets(options, targets, deps);

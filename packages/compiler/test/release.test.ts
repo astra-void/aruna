@@ -12,6 +12,7 @@ import {
   publishPreparedRelease,
   packPreparedRelease,
   resolveTargetsForMode,
+  stagingLayout,
 } from "../../../scripts/release.ts";
 import {
   nativePackageName,
@@ -31,10 +32,10 @@ const compilerVersion = (
   ) as { version: string }
 ).version;
 
-async function cleanReleaseArtifacts(): Promise<void> {
-  await fsp.rm(path.join(workspaceRoot, ".npm"), { recursive: true, force: true });
-  await fsp.rm(path.join(workspaceRoot, ".npm-pack"), { recursive: true, force: true });
-}
+// Each test stages into its own directory (`stagingRoot` in every deps object),
+// never the repository's `.npm/`: other test processes load the native compiler
+// from there, and on Windows a loaded DLL cannot be deleted.
+let stagingRoot = "";
 
 async function createNativeArtifact(target: string): Promise<string> {
   const artifactRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "aruna-release-artifact-"));
@@ -43,19 +44,19 @@ async function createNativeArtifact(target: string): Promise<string> {
   return artifactPath;
 }
 
-async function stageCompilerPackageStub({
-  workspaceRoot,
-  version,
-  nativeTargets,
-  allowMissingDist,
-}: {
+async function stageCompilerPackageStub(options: {
   workspaceRoot: string;
+  stagingRoot?: string;
   version: string;
   nativeTargets: readonly NativeTarget[];
   allowMissingDist?: boolean;
 }): Promise<{ packageDirectory: string; packageJsonPath: string }> {
-  void allowMissingDist;
-  const packageDirectory = path.join(workspaceRoot, ".npm", "compiler");
+  const { version, nativeTargets } = options;
+  const packageDirectory = path.join(
+    options.stagingRoot ?? options.workspaceRoot,
+    ".npm",
+    "compiler",
+  );
   const distDirectory = path.join(packageDirectory, "dist");
   const packageJsonPath = path.join(packageDirectory, "package.json");
   await fsp.mkdir(distDirectory, { recursive: true });
@@ -98,12 +99,26 @@ describe("release orchestrator", () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
-    await cleanReleaseArtifacts();
+    stagingRoot = await fsp.mkdtemp(path.join(os.tmpdir(), "aruna-release-staging-"));
   });
 
   afterEach(async () => {
-    await cleanReleaseArtifacts();
+    await fsp.rm(stagingRoot, { recursive: true, force: true });
     vi.restoreAllMocks();
+  });
+
+  it("stages under the repository when no stagingRoot is given", () => {
+    // The layout publish.yaml relies on: each build-native job uploads
+    // .npm/compiler-<target>, and the publish job downloads into .npm/.
+    const staging = stagingLayout({});
+    expect(staging.root).toBe(workspaceRoot);
+    expect(staging.npmDirectory).toBe(path.join(workspaceRoot, ".npm"));
+    expect(staging.packDirectory).toBe(path.join(workspaceRoot, ".npm-pack"));
+    expect(staging.coreDirectory).toBe(path.join(workspaceRoot, ".npm", "core"));
+    expect(staging.arunaDirectory).toBe(path.join(workspaceRoot, ".npm", "aruna"));
+    expect(staging.createArunaDirectory).toBe(
+      path.join(workspaceRoot, ".npm", "create-aruna-app"),
+    );
   });
 
   it("selects the current host target in local mode", () => {
@@ -166,6 +181,7 @@ describe("release orchestrator", () => {
         spawnSync,
         buildNativeArtifact,
         stageCompilerPackage: stageCompilerPackageStub,
+        stagingRoot,
       },
     );
 
@@ -181,7 +197,7 @@ describe("release orchestrator", () => {
     );
 
     const compilerPackageJson = JSON.parse(
-      await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
+      await fsp.readFile(path.join(stagingRoot, ".npm", "compiler", "package.json"), "utf8"),
     ) as {
       optionalDependencies: Record<string, string>;
     };
@@ -191,8 +207,8 @@ describe("release orchestrator", () => {
 
     const stagedPackageJsons = await Promise.all(
       [
-        path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`, "package.json"),
-        path.join(workspaceRoot, ".npm", "compiler", "package.json"),
+        path.join(stagingRoot, ".npm", `compiler-${hostTarget}`, "package.json"),
+        path.join(stagingRoot, ".npm", "compiler", "package.json"),
       ].map(async (packageJsonPath) => fsp.readFile(packageJsonPath, "utf8")),
     );
     for (const packageJsonText of stagedPackageJsons) {
@@ -221,6 +237,7 @@ describe("release orchestrator", () => {
         buildNativeArtifact,
         stageNativePackage,
         stageCompilerPackage: stageCompilerPackageStub,
+        stagingRoot,
         toolAvailability: {
           cargo: true,
           cargoZigbuild: false,
@@ -238,16 +255,16 @@ describe("release orchestrator", () => {
     expect(stageNativePackage).not.toHaveBeenCalled();
 
     const compilerPackageJson = JSON.parse(
-      await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
+      await fsp.readFile(path.join(stagingRoot, ".npm", "compiler", "package.json"), "utf8"),
     ) as {
       optionalDependencies: Record<string, string>;
     };
     expect(compilerPackageJson.optionalDependencies).toEqual({});
 
     await expect(
-      fsp.access(path.join(workspaceRoot, ".npm", "compiler-linux-x64-gnu")),
+      fsp.access(path.join(stagingRoot, ".npm", "compiler-linux-x64-gnu")),
     ).rejects.toThrow();
-    const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter(
+    const rootEntries = (await fsp.readdir(path.join(stagingRoot, ".npm"))).filter(
       (entry) => !entry.startsWith("."),
     );
     expect([...rootEntries].sort()).toEqual(["aruna", "compiler", "core", "create-aruna-app"]);
@@ -275,6 +292,7 @@ describe("release orchestrator", () => {
         spawnSync,
         buildNativeArtifact,
         stageCompilerPackage: stageCompilerPackageStub,
+        stagingRoot,
       },
     );
 
@@ -288,7 +306,7 @@ describe("release orchestrator", () => {
 
     for (const target of targets) {
       const artifactPath = path.join(
-        workspaceRoot,
+        stagingRoot,
         ".npm",
         `compiler-${target}`,
         `compiler.${target}.node`,
@@ -296,7 +314,7 @@ describe("release orchestrator", () => {
       expect(await fsp.readFile(artifactPath, "utf8")).toBe(`artifact:${target}`);
     }
     const compilerPackageJson = JSON.parse(
-      await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
+      await fsp.readFile(path.join(stagingRoot, ".npm", "compiler", "package.json"), "utf8"),
     ) as {
       optionalDependencies: Record<string, string>;
     };
@@ -330,13 +348,14 @@ describe("release orchestrator", () => {
           spawnSync: vi.fn(() => ({ status: 0, error: undefined })),
           buildNativeArtifact,
           stageCompilerPackage: stageCompilerPackageStub,
+          stagingRoot,
         },
       ),
     ).rejects.toThrow();
   });
 
   it("packs native packages before the compiler package", async () => {
-    const packDestination = path.join(workspaceRoot, ".npm-pack");
+    const packDestination = path.join(stagingRoot, ".npm-pack");
     const buildNativeArtifact = vi.fn(
       async (options: { target: NativeTarget; [key: string]: unknown }) => {
         const sourceArtifactPath = await createNativeArtifact(options.target);
@@ -367,6 +386,7 @@ describe("release orchestrator", () => {
         spawnSync,
         buildNativeArtifact,
         stageCompilerPackage: stageCompilerPackageStub,
+        stagingRoot,
       },
     );
 
@@ -374,14 +394,14 @@ describe("release orchestrator", () => {
     const packCwds = packCalls.map((entry) => entry.cwd);
     // Dependency order: native binaries first, then core → compiler → aruna →
     // create-aruna-app.
-    expect(packCwds[0]).toBe(path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`));
-    expect(packCwds.indexOf(path.join(workspaceRoot, ".npm", "core"))).toBeLessThan(
-      packCwds.indexOf(path.join(workspaceRoot, ".npm", "compiler")),
+    expect(packCwds[0]).toBe(path.join(stagingRoot, ".npm", `compiler-${hostTarget}`));
+    expect(packCwds.indexOf(path.join(stagingRoot, ".npm", "core"))).toBeLessThan(
+      packCwds.indexOf(path.join(stagingRoot, ".npm", "compiler")),
     );
-    expect(packCwds.indexOf(path.join(workspaceRoot, ".npm", "aruna"))).toBeLessThan(
-      packCwds.indexOf(path.join(workspaceRoot, ".npm", "create-aruna-app")),
+    expect(packCwds.indexOf(path.join(stagingRoot, ".npm", "aruna"))).toBeLessThan(
+      packCwds.indexOf(path.join(stagingRoot, ".npm", "create-aruna-app")),
     );
-    expect(packCwds[packCwds.length - 1]).toBe(path.join(workspaceRoot, ".npm", "create-aruna-app"));
+    expect(packCwds[packCwds.length - 1]).toBe(path.join(stagingRoot, ".npm", "create-aruna-app"));
     expect(await fsp.readdir(packDestination)).toContain("compiler.tgz");
   });
 
@@ -402,7 +422,7 @@ describe("release orchestrator", () => {
 
     const result = await buildNativeRelease(
       { mode: "cross", targets: hostTarget },
-      { spawnSync, buildNativeArtifact },
+      { spawnSync, buildNativeArtifact, stagingRoot },
     );
 
     expect(result.nativeTargets).toEqual([hostTarget]);
@@ -410,7 +430,7 @@ describe("release orchestrator", () => {
 
     // The native package is staged...
     const artifactPath = path.join(
-      workspaceRoot,
+      stagingRoot,
       ".npm",
       `compiler-${hostTarget}`,
       `compiler.${hostTarget}.node`,
@@ -419,7 +439,7 @@ describe("release orchestrator", () => {
 
     // ...but the TS graph (compiler/core/aruna) is not — that is the publish
     // job's responsibility during --assemble.
-    const rootEntries = (await fsp.readdir(path.join(workspaceRoot, ".npm"))).filter(
+    const rootEntries = (await fsp.readdir(path.join(stagingRoot, ".npm"))).filter(
       (entry) => !entry.startsWith("."),
     );
     expect(rootEntries).toEqual([`compiler-${hostTarget}`]);
@@ -443,7 +463,11 @@ describe("release orchestrator", () => {
     // it in `.npm/` for the assemble step to pick up (as artifact download would).
     await buildNativeRelease(
       { mode: "cross", targets: hostTarget },
-      { spawnSync: vi.fn(() => ({ status: 0, error: undefined })), buildNativeArtifact },
+      {
+        spawnSync: vi.fn(() => ({ status: 0, error: undefined })),
+        buildNativeArtifact,
+        stagingRoot,
+      },
     );
 
     const spawnCalls: Array<{ command: string; args: string[]; cwd: string }> = [];
@@ -461,12 +485,13 @@ describe("release orchestrator", () => {
           throw new Error("native build must not run during assemble");
         }),
         stageCompilerPackage: stageCompilerPackageStub,
+        stagingRoot,
       },
     );
 
     // The discovered native target flows into the compiler optionalDependencies.
     const compilerPackageJson = JSON.parse(
-      await fsp.readFile(path.join(workspaceRoot, ".npm", "compiler", "package.json"), "utf8"),
+      await fsp.readFile(path.join(stagingRoot, ".npm", "compiler", "package.json"), "utf8"),
     ) as { optionalDependencies: Record<string, string> };
     expect(compilerPackageJson.optionalDependencies).toEqual({
       [nativePackageName(hostTarget)]: compilerVersion,
@@ -477,10 +502,10 @@ describe("release orchestrator", () => {
     // Native package publishes first (dependency order), create-aruna-app last —
     // it scaffolds installs of @arunajs/aruna, so the CLI must exist first.
     expect(publishCalls[0].args).toContain(
-      path.join(workspaceRoot, ".npm", `compiler-${hostTarget}`),
+      path.join(stagingRoot, ".npm", `compiler-${hostTarget}`),
     );
     expect(publishCalls[publishCalls.length - 1].args).toContain(
-      path.join(workspaceRoot, ".npm", "create-aruna-app"),
+      path.join(stagingRoot, ".npm", "create-aruna-app"),
     );
   });
 
@@ -491,6 +516,7 @@ describe("release orchestrator", () => {
         {
           spawnSync: vi.fn(() => ({ status: 0, error: undefined })),
           stageCompilerPackage: stageCompilerPackageStub,
+          stagingRoot,
         },
       ),
     ).rejects.toThrow(/No staged native packages/);
@@ -521,6 +547,7 @@ describe("release orchestrator", () => {
         spawnSync,
         buildNativeArtifact,
         stageCompilerPackage: stageCompilerPackageStub,
+        stagingRoot,
       },
     );
 
@@ -528,9 +555,11 @@ describe("release orchestrator", () => {
     const publishCalls = spawnCalls.filter((entry) => entry.args.includes("publish"));
     expect(publishCalls.length).toBeGreaterThan(0);
     for (const entry of publishCalls) {
-      expect(entry.args.join(" ")).toContain(".npm/");
-      expect(entry.args.join(" ")).not.toContain("packages/");
-      expect(entry.args.join(" ")).toContain("--access public");
+      // With "/" separators, so the path checks hold on Windows too.
+      const args = entry.args.join(" ").split(path.sep).join("/");
+      expect(args).toContain(".npm/");
+      expect(args).not.toContain("packages/");
+      expect(args).toContain("--access public");
       expect(entry.args).toContain("--dry-run");
       expect(entry.args).toContain("--tag");
       expect(entry.args).toContain("next");
