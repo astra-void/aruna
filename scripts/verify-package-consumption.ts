@@ -1007,28 +1007,31 @@ async function runChecks(): Promise<void> {
   await fs.mkdir(stagedRoot, { recursive: true });
   await fs.mkdir(pnpmStoreRoot, { recursive: true });
 
-  await runCommand("build:native", "pnpm", ["build:native"], workspaceRoot, "01-build-native.log");
   await runCommand(
     "@arunajs/core build",
     "pnpm",
     ["--filter", "@arunajs/core", "build"],
     workspaceRoot,
-    "02-core-build.log",
+    "01-core-build.log",
   );
   await runCommand(
     "@arunajs/compiler build",
     "pnpm",
     ["--filter", "@arunajs/compiler", "build"],
     workspaceRoot,
-    "03-compiler-build.log",
+    "02-compiler-build.log",
   );
   await runCommand(
     "aruna build",
     "pnpm",
     ["--filter", "aruna", "build"],
     workspaceRoot,
-    "04-aruna-build.log",
+    "03-aruna-build.log",
   );
+  // After the TypeScript builds: build:native stages the compiler wrapper
+  // (.npm/compiler, packed below) from packages/compiler/dist, and skips it when
+  // dist does not exist yet, which on a fresh checkout it does not.
+  await runCommand("build:native", "pnpm", ["build:native"], workspaceRoot, "04-build-native.log");
 
   const corePackageDirectory = path.join(workspaceRoot, "packages", "core");
   const arunaPackageDirectory = path.join(workspaceRoot, "packages", "aruna");
