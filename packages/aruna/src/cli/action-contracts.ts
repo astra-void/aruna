@@ -82,8 +82,13 @@ export type StoreContractRecord = {
   readonly warnings: readonly string[];
 };
 
+// The contract snapshot format. Version 2 records each schema's constraints
+// (see schema-constraints.ts); a version 1 file is still read, as a baseline
+// whose constraints are unknown.
+export const CONTRACT_SNAPSHOT_VERSION = 2;
+
 export type ActionContractSnapshot = {
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly project: ActionContractProjectMetadata;
   readonly actions: readonly ActionContractRecord[];
   // Omitted when the project declares no signals, keeping action-only snapshots
@@ -255,7 +260,7 @@ export function summarizeStores(output: CompilerOutput): StoreContractRecord[] {
 
 export function buildActionContractSnapshot(output: CompilerOutput): ActionContractSnapshot {
   const snapshot: Record<string, unknown> = {
-    version: 1,
+    version: CONTRACT_SNAPSHOT_VERSION,
     project: {
       root: normalizePath(path.relative(process.cwd(), output.projectRoot)) || ".",
       generatedDir: normalizePath(output.config.generatedDir),

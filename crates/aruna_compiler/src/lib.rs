@@ -6,6 +6,7 @@ pub mod diagnostics;
 pub mod domains;
 pub mod files;
 pub mod graph;
+mod input_bounds;
 pub mod manifest;
 pub mod module_kind;
 pub mod parser;

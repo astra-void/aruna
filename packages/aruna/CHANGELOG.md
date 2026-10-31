@@ -17,6 +17,27 @@ the game build like any other module.
 
 ### Added
 
+- **Schema constraints in the contract.** The compiler records every bound
+  whose argument it can read (a number literal, or a module-level `const` bound
+  to one) as a value on the schema — `minLength`/`maxLength`,
+  `minChars`/`maxChars`, `min`/`max`, `int`, `minItems`/`maxItems`,
+  `maxEntries` — counts `.refine()` calls, names a bound computed at runtime in
+  `dynamicConstraints`, and hashes only what it cannot read. `aruna contract
+  diff` judges each change by the direction the value travels: a tighter input
+  bound is breaking and a looser one non-breaking; for an output or a signal
+  payload, the other way round; a changed predicate is a
+  warning. `aruna inspect` shows the bounds after the type
+  (`string (maxLength 64)`).
+
+- **`aruna::514 unbounded-action-input`.** An action whose input leaves a
+  string, array, or record without an upper bound is a warning, listing each
+  such path; a bound computed at runtime counts. `strict.unboundedInput` sets
+  its severity (`"off"` | `"warning"` | `"error"`). `aruna add domain`
+  scaffolds a bounded input.
+
+- **`schema.record(...).maxEntries(n)`**, with `.refine()` and `.default()` on
+  records like on arrays.
+
 - **`aruna migrate`: codemods for breaking changes.** `aruna migrate --list`
   shows them; `aruna migrate <name> --dry-run` prints a unified diff without
   writing; `aruna migrate <name>` applies it. Codemods edit only what they
@@ -227,6 +248,27 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **Breaking: contract snapshot version 2.** `aruna.contract.json` now records
+  schema constraints (see Added). A version 1 snapshot is still read, as a
+  baseline whose constraints are unknown: `contract diff` and the store gate
+  compare no constraints against it and say so in an info entry
+  (`constraints-not-compared`); `aruna contract update` writes version 2.
+  `SchemaMetadata.maxLength` is now the declared byte bound only (a
+  `.maxChars(n)` is `maxChars`, no longer folded in as 4n), and
+  `constraintsHash` covers only `.refine()` predicates and bounds computed at
+  runtime.
+
+- **Breaking: the store gate judges every recorded bound.** At the same
+  version, a bound that tightens — `.min()` raised, `.int()` or a `.refine()`
+  added, `.maxEntries` lowered, as well as `maxLength`/`maxItems` — is
+  `store-bound-tightened` (breaking, so `aruna::578`), where everything but a
+  literal `maxLength`/`maxItems` used to be a hash-change warning. A loosened
+  bound is compatible and no longer reported; only a changed predicate or a
+  computed bound is still `store-constraint-changed`.
+
+- **`aruna inspect contract` summarizes a contract that has warnings.** It used
+  to print only the counts whenever there was any diagnostic.
 
 - **Breaking: wire protocol v1.** Every remote fire carries one frame,
   `[1, ...items]`, and every item names its kind in `t`: calls

@@ -1,7 +1,7 @@
 import { schema } from "aruna/schema";
 
 export const purchaseItemInput = schema.object({
-  itemId: schema.string(),
+  itemId: schema.string().maxLength(64),
 });
 
 export const purchaseItemOutput = schema.object({

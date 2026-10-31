@@ -51,6 +51,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -59,7 +68,7 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -98,6 +107,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -106,7 +124,7 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -122,6 +140,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -130,13 +157,13 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
 === inspect contract (exit 0)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -209,6 +236,15 @@
     }
   ],
   "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
     {
       "code": "aruna::568",
       "details": "Recognized server hooks: configure, middleware, onError.",
@@ -297,6 +333,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -305,7 +350,7 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -346,6 +391,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -354,7 +408,7 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -422,6 +476,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -434,6 +489,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "manifest": {
@@ -467,6 +531,15 @@
       }
     ],
     "diagnostics": [
+      {
+        "code": "aruna::514",
+        "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.purchaseItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      },
       {
         "code": "aruna::568",
         "details": "Recognized server hooks: configure, middleware, onError.",
@@ -599,7 +672,7 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 
@@ -667,6 +740,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -679,6 +753,15 @@
       "name": "unknown-hook-export",
       "severity": "warning",
       "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "generatedFiles": [
@@ -703,7 +786,7 @@
       "path": "src/.aruna/client/main.client.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/client/main.client.ts\",\n      \"path\": \"src/.aruna/client/main.client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"generated client entry (entries: generated)\"\n    },\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/server/main.server.ts\",\n      \"path\": \"src/.aruna/server/main.server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"generated server entry (entries: generated)\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/signals.generated.ts\",\n      \"path\": \"src/.aruna/shared/signals.generated.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/signals module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"client hook module (entries: generated)\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"server hook module (entries: generated)\"\n    },\n    {\n      \"id\": \"src/shared/combat/signals.ts\",\n      \"path\": \"src/shared/combat/signals.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/combat/signals.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/combat/signals.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"signals\": [\n    {\n      \"id\": \"combat.damaged\",\n      \"file\": \"src/shared/combat/signals.ts\",\n      \"exportName\": \"damaged\",\n      \"hasPayloadSchema\": true,\n      \"maxEncodedBytes\": 12,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"amount\": {\n            \"kind\": \"number\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::568\",\n      \"name\": \"unknown-hook-export\",\n      \"severity\": \"warning\",\n      \"message\": \"src/server.ts exports bootFlag, which is not a recognized server hook.\",\n      \"file\": \"src/server.ts\",\n      \"details\": \"Recognized server hooks: configure, middleware, onError.\",\n      \"suggestion\": \"The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module.\"\n    }\n  ]\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/client/main.client.ts\",\n      \"path\": \"src/.aruna/client/main.client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"generated client entry (entries: generated)\"\n    },\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/server/main.server.ts\",\n      \"path\": \"src/.aruna/server/main.server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"generated server entry (entries: generated)\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/signals.generated.ts\",\n      \"path\": \"src/.aruna/shared/signals.generated.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/signals module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"client hook module (entries: generated)\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"server hook module (entries: generated)\"\n    },\n    {\n      \"id\": \"src/shared/combat/signals.ts\",\n      \"path\": \"src/shared/combat/signals.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/combat/signals.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/shared/combat/signals.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"signals\": [\n    {\n      \"id\": \"combat.damaged\",\n      \"file\": \"src/shared/combat/signals.ts\",\n      \"exportName\": \"damaged\",\n      \"hasPayloadSchema\": true,\n      \"maxEncodedBytes\": 12,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"payloadSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"amount\": {\n            \"kind\": \"number\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action shop.purchaseItem accepts input with no size limit.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"details\": \"export name: purchaseItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    },\n    {\n      \"code\": \"aruna::568\",\n      \"name\": \"unknown-hook-export\",\n      \"severity\": \"warning\",\n      \"message\": \"src/server.ts exports bootFlag, which is not a recognized server hook.\",\n      \"file\": \"src/server.ts\",\n      \"details\": \"Recognized server hooks: configure, middleware, onError.\",\n      \"suggestion\": \"The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -738,6 +821,15 @@
       }
     ],
     "diagnostics": [
+      {
+        "code": "aruna::514",
+        "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.purchaseItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      },
       {
         "code": "aruna::568",
         "details": "Recognized server hooks: configure, middleware, onError.",
@@ -870,7 +962,7 @@
     "infos": 0,
     "modules": 9,
     "resolvedImports": 0,
-    "warnings": 1
+    "warnings": 2
   }
 }
 

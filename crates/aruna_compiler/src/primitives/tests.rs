@@ -120,11 +120,16 @@ export const settings = defineStore({
 }
 
 fn store_fields(source_schema: &str) -> BTreeMap<String, ArunaSchemaMetadata> {
+    store_fields_after("", source_schema)
+}
+
+// `prelude` is module-level code the schema can refer to (a `const` bound).
+fn store_fields_after(prelude: &str, source_schema: &str) -> BTreeMap<String, ArunaSchemaMetadata> {
     let result = collect_stores(&format!(
         r#"
 import {{ defineStore }} from "aruna/server";
 import {{ schema }} from "aruna/schema";
-
+{prelude}
 export const profile = defineStore({{
   id: "player.profile",
   schema: {source_schema},
@@ -143,48 +148,108 @@ export const profile = defineStore({{
 }
 
 #[test]
-fn hashes_constraints_the_metadata_does_not_record() {
+fn records_each_literal_constraint_on_the_schema_it_bounds() {
     let fields = store_fields(
         r#"schema.object({
 name: schema.string().minLength(2).maxLength(16),
 plain: schema.string(),
-capped: schema.string().maxLength(16),
-level: schema.number().min(0).refine((value) => value % 2 === 0, "even"),
-tags: schema.array(schema.string()).maxItems(8),
+code: schema.string().length(6),
+level: schema.number().min(0).max(99.5).int(),
+debt: schema.number().min(-10),
+tags: schema.array(schema.string()).minItems(1).maxItems(8),
+slots: schema.array(schema.string()).length(4),
+inventory: schema.record(schema.number()).maxEntries(32),
   })"#,
     );
 
-    // A literal maxLength / maxItems is recorded as a bound, not hashed.
-    assert_eq!(fields["name"].max_length, Some(16));
-    assert!(fields["name"].constraints_hash.is_some());
-    assert_eq!(fields["capped"].max_length, Some(16));
-    assert_eq!(fields["capped"].constraints_hash, None);
-    assert_eq!(fields["tags"].max_items, Some(8));
-    assert_eq!(fields["tags"].constraints_hash, None);
-    assert_eq!(fields["plain"].constraints_hash, None);
+    assert_eq!((fields["name"].min_length, fields["name"].max_length), (Some(2), Some(16)));
+    assert_eq!(
+        fields["plain"],
+        ArunaSchemaMetadata { kind: "string".to_string(), ..Default::default() }
+    );
+    // `.length(n)` is both ends.
+    assert_eq!((fields["code"].min_length, fields["code"].max_length), (Some(6), Some(6)));
+    assert_eq!(fields["level"].min, Some(0.into()));
+    assert_eq!(fields["level"].max.as_ref().and_then(|max| max.as_f64()), Some(99.5));
+    assert!(fields["level"].int);
+    assert_eq!(fields["debt"].min, Some((-10).into()));
+    assert_eq!((fields["tags"].min_items, fields["tags"].max_items), (Some(1), Some(8)));
+    assert_eq!((fields["slots"].min_items, fields["slots"].max_items), (Some(4), Some(4)));
+    assert_eq!(fields["inventory"].max_entries, Some(32));
+    // Every bound was readable, so nothing is left to hash.
+    for field in fields.values() {
+        assert_eq!(field.constraints_hash, None);
+        assert!(field.dynamic_constraints.is_empty());
+    }
+}
+
+#[test]
+fn keeps_the_tighter_of_two_bounds() {
+    let fields = store_fields(
+        r#"schema.object({
+name: schema.string().maxLength(40).maxLength(20).minLength(1).minLength(3),
+score: schema.number().min(0).min(-5).max(10).max(100),
+  })"#,
+    );
+
+    assert_eq!((fields["name"].min_length, fields["name"].max_length), (Some(3), Some(20)));
+    assert_eq!((fields["score"].min.clone(), fields["score"].max.clone()), (Some(0.into()), Some(10.into())));
+}
+
+#[test]
+fn counts_refinements_and_hashes_their_predicates() {
+    let fields = store_fields(
+        r#"schema.object({
+level: schema.number().min(0).refine((value) => value % 2 === 0, "even"),
+  })"#,
+    );
+    assert_eq!(fields["level"].refinements, 1);
     let level = fields["level"].constraints_hash.as_deref().expect("expected a hash");
     assert_eq!(level.len(), 16);
 
-    // Reformatting the chain is not a change.
+    // Reformatting the chain is not a change, and neither is moving a bound
+    // within it: bounds are recorded as values, not hashed.
     let reformatted = store_fields(
         r#"schema.object({ level: schema.number()
-  .min( 0 )
   .refine(
     (value) => value % 2 === 0,
     "even",
-  ) })"#,
+  )
+  .min( 0 ) })"#,
     );
     assert_eq!(reformatted["level"].constraints_hash.as_deref(), Some(level));
 
-    // A different bound, or the same calls in another order, is.
+    // Another predicate is.
     let changed = store_fields(
-        r#"schema.object({ level: schema.number().min(1).refine((value) => value % 2 === 0, "even") })"#,
+        r#"schema.object({ level: schema.number().min(0).refine((value) => value % 3 === 0, "even") })"#,
     );
     assert_ne!(changed["level"].constraints_hash.as_deref(), Some(level));
-    let reordered = store_fields(
-        r#"schema.object({ level: schema.number().refine((value) => value % 2 === 0, "even").min(0) })"#,
+}
+
+#[test]
+fn names_a_bound_it_cannot_read_and_reads_a_const_one() {
+    let fields = store_fields_after(
+        "const NAME_LIMIT = 20;\nconst FLOOR = -NAME_LIMIT;\nfunction limit(): number { return 5; }\n",
+        r#"schema.object({
+fromConst: schema.string().maxLength(NAME_LIMIT),
+negated: schema.number().min(FLOOR),
+computed: schema.string().maxLength(limit()),
+mixed: schema.string().maxLength(40).maxLength(limit()),
+  })"#,
     );
-    assert_ne!(reordered["level"].constraints_hash.as_deref(), Some(level));
+
+    assert_eq!(fields["fromConst"].max_length, Some(20));
+    assert!(fields["fromConst"].dynamic_constraints.is_empty());
+    assert_eq!(fields["negated"].min, Some((-20).into()));
+
+    // Bounded, by an amount the compiler cannot read.
+    assert_eq!(fields["computed"].max_length, None);
+    assert_eq!(fields["computed"].dynamic_constraints, vec!["maxLength".to_string()]);
+    assert!(fields["computed"].constraints_hash.is_some());
+
+    // The literal bound is kept; the computed one is still named.
+    assert_eq!(fields["mixed"].max_length, Some(40));
+    assert_eq!(fields["mixed"].dynamic_constraints, vec!["maxLength".to_string()]);
 }
 
 #[test]
@@ -196,11 +261,11 @@ both: schema.string().maxChars(50).maxLength(120),
   })"#,
     );
 
-    assert_eq!(fields["chat"].max_length, Some(200));
-    // maxChars is hashed: bytes do not describe a character limit.
-    assert!(fields["chat"].constraints_hash.is_some());
-    assert_eq!(fields["both"].max_length, Some(120));
-    assert_eq!(fields["both"].constraints_hash, fields["chat"].constraints_hash);
+    // Characters and bytes are recorded apart; the payload bound combines them.
+    assert_eq!((fields["chat"].max_chars, fields["chat"].max_length), (Some(50), None));
+    assert_eq!(crate::payload_size::max_string_bytes(&fields["chat"]), Some(200));
+    assert_eq!((fields["both"].max_chars, fields["both"].max_length), (Some(50), Some(120)));
+    assert_eq!(crate::payload_size::max_string_bytes(&fields["both"]), Some(120));
 }
 
 #[test]

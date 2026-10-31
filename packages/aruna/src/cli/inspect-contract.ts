@@ -22,7 +22,7 @@ export function formatActionContractInspection(
   const snapshot = buildActionContractSnapshot(output);
   const lines: string[] = [commandTitle("inspect contract", colors), ""];
 
-  if (!output.ok || output.diagnostics.length > 0) {
+  if (!output.ok) {
     lines.push(
       `  ${output.summary.errors} ${output.summary.errors === 1 ? "error" : "errors"} found`,
     );
@@ -35,6 +35,11 @@ export function formatActionContractInspection(
     return lines.join("\n").trimEnd();
   }
 
+  // Warnings do not stop the contract from being summarized: they are listed
+  // after it.
+  if (output.summary.warnings > 0) {
+    lines.push(`  ${pluralize(output.summary.warnings, "warning", "warnings")} found`, "");
+  }
   lines.push(`  ${pluralize(snapshot.actions.length, "action contract", "action contracts")}`);
   lines.push(`  serialization policy: plain-data-v1`);
   lines.push(`  rate-limited actions: ${countRateLimitedActions(output)}`);

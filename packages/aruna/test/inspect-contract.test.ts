@@ -59,14 +59,15 @@ describe("inspect contract", () => {
 
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toMatchObject({
-      version: 1,
+      version: 2,
       project: {
         root: relativeFixturePath("action-rate-limit"),
         generatedDir: "src/.aruna",
         manifest: "src/.aruna/manifest.json",
       },
       generatedAt: null,
-      diagnostics: [],
+      // The fixture's input string has no bound.
+      diagnostics: [expect.objectContaining({ code: "aruna::514" })],
     });
     expect(parsed.actions).toHaveLength(1);
     expect(parsed.actions[0]).toMatchObject({

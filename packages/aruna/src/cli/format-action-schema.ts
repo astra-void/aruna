@@ -1,4 +1,5 @@
 import type { SchemaLiteralMetadata, SchemaMetadata } from "@arunajs/core";
+import { constraintSummary } from "./schema-constraints.js";
 
 export type ActionSchemaSummary = {
   readonly summary: string;
@@ -38,11 +39,19 @@ function renderLiteralMetadata(literal: SchemaLiteralMetadata): string {
 }
 
 function wrapTypeForArray(summary: string): string {
-  if (summary.includes(" | ") || summary.startsWith("object ")) {
+  if (summary.includes(" | ") || summary.startsWith("object ") || summary.endsWith(")")) {
     return `(${summary})`;
   }
 
   return summary;
+}
+
+// A node's declared constraints after its type: `string (maxLength 20)`.
+function withConstraints(summary: ActionSchemaSummary, schema: SchemaMetadata): ActionSchemaSummary {
+  const constraints = constraintSummary(schema);
+  return constraints === ""
+    ? summary
+    : { summary: `${summary.summary} (${constraints})`, warnings: summary.warnings };
 }
 
 function sortWarnings(warnings: readonly string[]): string[] {
@@ -67,11 +76,11 @@ function summarizeSchema(schema: SchemaMetadata | undefined): ActionSchemaSummar
 
   switch (schema.kind) {
     case "string":
-      return { summary: "string", warnings: [] };
+      return withConstraints({ summary: "string", warnings: [] }, schema);
     case "number":
       // Surface the numeric width hint so `inspect actions` and `contract diff`
       // distinguish a u8 from a u16. Plain schema.number() carries no format.
-      return { summary: schema.numericFormat ?? "number", warnings: [] };
+      return withConstraints({ summary: schema.numericFormat ?? "number", warnings: [] }, schema);
     case "boolean":
       return { summary: "boolean", warnings: [] };
     case "literal":
@@ -90,10 +99,13 @@ function summarizeSchema(schema: SchemaMetadata | undefined): ActionSchemaSummar
       }
 
       const item = summarizeSchema(schema.items);
-      return {
-        summary: `${wrapTypeForArray(item.summary)}[]`,
-        warnings: item.warnings,
-      };
+      return withConstraints(
+        {
+          summary: `${wrapTypeForArray(item.summary)}[]`,
+          warnings: item.warnings,
+        },
+        schema,
+      );
     }
     case "object": {
       if (!schema.properties) {
@@ -157,10 +169,13 @@ function summarizeSchema(schema: SchemaMetadata | undefined): ActionSchemaSummar
       }
 
       const value = summarizeSchema(schema.items);
-      return {
-        summary: `Record<string, ${value.summary}>`,
-        warnings: value.warnings,
-      };
+      return withConstraints(
+        {
+          summary: `Record<string, ${value.summary}>`,
+          warnings: value.warnings,
+        },
+        schema,
+      );
     }
     case "tuple": {
       // Element schemas ride the `members` metadata slot, in positional order.

@@ -32,6 +32,7 @@ export type DiagnosticCode =
   | "aruna::511"
   | "aruna::512"
   | "aruna::513"
+  | "aruna::514"
   | "aruna::550"
   | "aruna::551"
   | "aruna::552"
@@ -178,13 +179,26 @@ export type SchemaMetadata = {
   values?: SchemaLiteralMetadata[] | undefined;
   inner?: SchemaMetadata | undefined;
   members?: SchemaMetadata[] | undefined;
-  // A string's `.maxLength` / `.length` (UTF-8 bytes; `.maxChars(n)` counts
-  // 4n) and an array's `.maxItems` / `.length`: the constraints that bound the
-  // encoded size.
+  // The bounds a constraint chain declares with a static argument (a number
+  // literal, or a module-level const bound to one). A string's
+  // `minLength`/`maxLength` are UTF-8 bytes and `minChars`/`maxChars` code
+  // points; `.length(n)` sets both ends of a string's bytes or an array's items.
+  minLength?: number | undefined;
   maxLength?: number | undefined;
+  minChars?: number | undefined;
+  maxChars?: number | undefined;
+  min?: number | undefined;
+  max?: number | undefined;
+  int?: boolean | undefined;
+  minItems?: number | undefined;
   maxItems?: number | undefined;
-  // A hash of the rest of the constraint chain's source (`.min(0)`,
-  // `.refine(...)`, ...). Opaque: equal means the chain did not change.
+  maxEntries?: number | undefined;
+  // How many `.refine(...)` calls the chain makes.
+  refinements?: number | undefined;
+  // Bounds present with a non-static argument: bounded, but not comparable.
+  dynamicConstraints?: string[] | undefined;
+  // A hash of every `.refine(...)` and every non-static bound, in order.
+  // Opaque: equal means that part of the chain did not change.
   constraintsHash?: string | undefined;
 };
 
@@ -264,6 +278,9 @@ export type StrictConfig = {
   // build unable to read records the previous build wrote (aruna::578). An
   // error by default: the cost of getting it wrong is a player's save file.
   readonly storeCompatibility?: "off" | "warning" | "error" | undefined;
+  // An action input with a string, array, or record that has no upper bound
+  // (aruna::514).
+  readonly unboundedInput?: "off" | "warning" | "error" | undefined;
 };
 
 // The committed contract snapshot `aruna check` and `aruna build` compare the
@@ -346,6 +363,7 @@ export type NormalizedConfig = {
     readonly unresolvedImports: "off" | "warning" | "error";
     readonly domainBoundary: "off" | "warning" | "error";
     readonly storeCompatibility: "off" | "warning" | "error";
+    readonly unboundedInput: "off" | "warning" | "error";
   };
   readonly diagnostics: {
     readonly ignore: readonly string[];
@@ -436,6 +454,7 @@ export const DEFAULT_CONFIG: NormalizedConfig = {
     unresolvedImports: "warning",
     domainBoundary: "warning",
     storeCompatibility: "error",
+    unboundedInput: "warning",
   },
   diagnostics: {
     ignore: [],

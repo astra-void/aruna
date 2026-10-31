@@ -142,6 +142,15 @@
   ],
   "diagnostics": [
     {
+      "code": "aruna::514",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "file": "src/domains/shop/actions.ts",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
       "code": "aruna::568",
       "name": "unknown-hook-export",
       "severity": "warning",

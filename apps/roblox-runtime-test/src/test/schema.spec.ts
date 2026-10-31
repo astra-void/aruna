@@ -249,6 +249,32 @@ describe("schema constraints and refinements", () => {
     });
   });
 
+  it("enforces a record's maxEntries after its values", () => {
+    const scores = schema.record(schema.number()).maxEntries(2);
+    expect(validated(scores, { a: 1, b: 2 })).toEqual({ ok: true });
+    expect(validated(scores, {})).toEqual({ ok: true });
+    expect(validated(scores, { a: 1, b: 2, c: 3 })).toEqual({
+      ok: false,
+      issue: "expected at most 2 entries",
+    });
+    // A bad value is reported before the count, as for an array's items.
+    expect(validated(scores, { a: 1, b: 2, c: "x" })).toEqual({
+      ok: false,
+      issue: "c: expected finite number",
+    });
+    const withDefault = schema
+      .record(schema.string())
+      .refine((value) => (value as { [key: string]: unknown })["default"] !== undefined, "expected a default entry");
+    expect(validated(withDefault, { other: "x" })).toEqual({
+      ok: false,
+      issue: "expected a default entry",
+    });
+    // `.default()` makes the record optional for the client, filled for the handler.
+    expect(applyDefaults(schema.object({ tags: schema.record(schema.boolean()).default({}) }), {})).toEqual({
+      tags: {},
+    });
+  });
+
   it("runs a custom .refine predicate after the structural check", () => {
     const even = schema
       .number()

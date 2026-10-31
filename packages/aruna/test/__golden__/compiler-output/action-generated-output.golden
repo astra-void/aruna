@@ -103,48 +103,105 @@
       "warnings": []
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 4,
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 
 === inspect signals (exit 0)
 {
   "signals": [],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 4,
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 
 === inspect stores (exit 0)
 {
   "stores": [],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 4,
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 
 === inspect contract (exit 0)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -253,7 +310,26 @@
       "warnings": []
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "generatedAt": null
 }
 
@@ -303,14 +379,33 @@
       "reasonDetail": "matched recommended entry file"
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 4,
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 
@@ -342,14 +437,33 @@
       "specifier": "aruna/server"
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 4,
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 
@@ -417,10 +531,30 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "manifest": {
     "actions": [
       {
@@ -499,7 +633,26 @@
         }
       }
     ],
-    "diagnostics": [],
+    "diagnostics": [
+      {
+        "code": "aruna::514",
+        "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/inventory/actions.ts",
+        "message": "Server action inventory.restockItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      },
+      {
+        "code": "aruna::514",
+        "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.purchaseItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      }
+    ],
     "imports": [
       {
         "from": "src/domains/inventory/actions.ts",
@@ -582,7 +735,7 @@
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 
@@ -650,10 +803,30 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "generatedFiles": [
     {
       "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type RestockItemInput = { itemId: string; note?: string | undefined; quantity: number; tags: string[]; };\n\nexport type RestockItemOutput = { ok: boolean; warnings: string[]; };\n\nexport const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {\n  return invokeAction(\"inventory.restockItem\", input) as Promise<RestockItemOutput>;\n};\n\nexport type PurchaseItemInput = { itemId: string; };\n\nexport type PurchaseItemOutput = { ok: boolean; };\n\nexport const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {\n  return invokeAction(\"shop.purchaseItem\", input) as Promise<PurchaseItemOutput>;\n};\n\nexport const contractHash = \"b96ebe65e96edabe\";\n",
@@ -664,7 +837,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/inventory/actions.ts\",\n      \"path\": \"src/domains/inventory/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"inventory.restockItem\",\n      \"file\": \"src/domains/inventory/actions.ts\",\n      \"exportName\": \"restockItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          },\n          \"note\": {\n            \"kind\": \"optional\",\n            \"inner\": {\n              \"kind\": \"string\"\n            }\n          },\n          \"quantity\": {\n            \"kind\": \"number\"\n          },\n          \"tags\": {\n            \"kind\": \"array\",\n            \"items\": {\n              \"kind\": \"string\"\n            }\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          },\n          \"warnings\": {\n            \"kind\": \"array\",\n            \"items\": {\n              \"kind\": \"string\"\n            }\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": []\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/inventory/actions.ts\",\n      \"path\": \"src/domains/inventory/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/inventory/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"inventory.restockItem\",\n      \"file\": \"src/domains/inventory/actions.ts\",\n      \"exportName\": \"restockItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          },\n          \"note\": {\n            \"kind\": \"optional\",\n            \"inner\": {\n              \"kind\": \"string\"\n            }\n          },\n          \"quantity\": {\n            \"kind\": \"number\"\n          },\n          \"tags\": {\n            \"kind\": \"array\",\n            \"items\": {\n              \"kind\": \"string\"\n            }\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          },\n          \"warnings\": {\n            \"kind\": \"array\",\n            \"items\": {\n              \"kind\": \"string\"\n            }\n          }\n        }\n      }\n    },\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action inventory.restockItem accepts input with no size limit.\",\n      \"file\": \"src/domains/inventory/actions.ts\",\n      \"details\": \"export name: restockItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\\ninput.note: a string with no .maxLength(n) or .maxChars(n)\\ninput.tags: an array with no .maxItems(n)\\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    },\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action shop.purchaseItem accepts input with no size limit.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"details\": \"export name: purchaseItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -746,7 +919,26 @@
         }
       }
     ],
-    "diagnostics": [],
+    "diagnostics": [
+      {
+        "code": "aruna::514",
+        "details": "export name: restockItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\ninput.note: a string with no .maxLength(n) or .maxChars(n)\ninput.tags: an array with no .maxItems(n)\ninput.tags[]: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/inventory/actions.ts",
+        "message": "Server action inventory.restockItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      },
+      {
+        "code": "aruna::514",
+        "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.purchaseItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      }
+    ],
     "imports": [
       {
         "from": "src/domains/inventory/actions.ts",
@@ -829,7 +1021,7 @@
     "infos": 0,
     "modules": 6,
     "resolvedImports": 0,
-    "warnings": 0
+    "warnings": 2
   }
 }
 

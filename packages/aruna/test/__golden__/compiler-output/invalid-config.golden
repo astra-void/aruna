@@ -69,7 +69,7 @@
 
 === inspect contract (exit 1)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -199,6 +199,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -306,6 +307,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },

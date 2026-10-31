@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "../../../../../../private/tmp/claude-501/-Users-returnf4lse-Desktop-Workspace-typescript-aruna/742ff090-7dd9-4a65-ab15-685f2a4b3318/scratchpad/tmp2_1_bozf",
     "generatedDir": "src/.aruna",
@@ -15,7 +15,7 @@
       "scope": null,
       "hasMigrate": false,
       "schema": {
-        "summary": "object { name: string, tags: string[], title: string }",
+        "summary": "object { name: string (maxLength 32), tags: string[], title: string (maxLength 32) }",
         "schema": {
           "kind": "object",
           "properties": {

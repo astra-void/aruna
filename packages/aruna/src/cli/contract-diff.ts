@@ -16,6 +16,13 @@ import {
 import { contractSnapshotPath, readCommittedSnapshot } from "./contract-gate.js";
 import { contractPrimitives } from "./primitives.js";
 import { formatActionSchemaSummary } from "./format-action-schema.js";
+import {
+  compareConstraints,
+  constraintsEqual,
+  NUMERIC_CONSTRAINT_FIELDS,
+  withoutConstraints,
+  type ConstraintChange,
+} from "./schema-constraints.js";
 import { formatBrandTitle, formatError, formatMuted } from "./theme.js";
 import type { CliColorMode } from "./format.js";
 
@@ -69,6 +76,15 @@ export type ContractDiffKind =
   | "store-field-type-changed"
   | "store-bound-tightened"
   | "store-constraint-changed"
+  // A bound on an action's input or output, or a signal's payload, moved:
+  // tighter (`maxLength` lowered, `.int()` added), looser, or changed in a way
+  // the compiler cannot judge (a `.refine()` predicate). The severity depends on
+  // the direction the value travels.
+  | "constraint-tightened"
+  | "constraint-loosened"
+  | "constraint-changed"
+  // One side is a version 1 snapshot, which predates recorded constraints.
+  | "constraints-not-compared"
   | "metadata-changed";
 
 export type ContractDiffEntry = {
@@ -291,13 +307,28 @@ function parseSchemaMetadata(value: unknown, location: string): ParsedSchema {
     parsed.numericFormat = value["numericFormat"];
   }
 
-  for (const bound of ["maxLength", "maxItems"] as const) {
+  for (const bound of NUMERIC_CONSTRAINT_FIELDS) {
     if (bound in value && value[bound] !== undefined) {
-      if (typeof value[bound] !== "number") {
-        throw new Error(`${location}.${bound} must be a number.`);
+      if (typeof value[bound] !== "number" || !Number.isFinite(value[bound])) {
+        throw new Error(`${location}.${bound} must be a finite number.`);
       }
       parsed[bound] = value[bound];
     }
+  }
+
+  if ("int" in value && value["int"] !== undefined) {
+    if (typeof value["int"] !== "boolean") {
+      throw new Error(`${location}.int must be a boolean.`);
+    }
+    parsed.int = value["int"];
+  }
+
+  if ("dynamicConstraints" in value && value["dynamicConstraints"] !== undefined) {
+    const dynamic = value["dynamicConstraints"];
+    if (!Array.isArray(dynamic) || dynamic.some((entry) => typeof entry !== "string")) {
+      throw new Error(`${location}.dynamicConstraints must be an array of strings.`);
+    }
+    parsed.dynamicConstraints = [...(dynamic as string[])];
   }
 
   if ("constraintsHash" in value && value["constraintsHash"] !== undefined) {
@@ -626,8 +657,9 @@ function parseActionContractSnapshotJsonAtPath(
   if (!isRecordLike(value)) {
     throw new Error(`${location} must be an object.`);
   }
-  if (value["version"] !== 1) {
-    throw new Error(`${location}.version must be 1.`);
+  const version = value["version"];
+  if (version !== 1 && version !== 2) {
+    throw new Error(`${location}.version must be 1 or 2.`);
   }
   if (!isRecordLike(value["project"])) {
     throw new Error(`${location}.project must be an object.`);
@@ -686,7 +718,7 @@ function parseActionContractSnapshotJsonAtPath(
   }
 
   return {
-    version: 1,
+    version,
     project: {
       root: normalizePath(value["project"]["root"]),
       generatedDir: normalizePath(value["project"]["generatedDir"]),
@@ -757,7 +789,7 @@ function schemaNodesEqual(
     return false;
   }
 
-  if (left.kind !== right.kind) {
+  if (left.kind !== right.kind || !constraintsEqual(left, right)) {
     return false;
   }
 
@@ -1222,6 +1254,8 @@ function diffSchema(
     return;
   }
 
+  diffConstraints(role, actionId, before, after, entries, pathPrefix);
+
   switch (before.kind) {
     case "string":
     case "number":
@@ -1336,6 +1370,52 @@ function diffSchema(
         },
         entries,
       );
+  }
+}
+
+// The severity of a bound that moved, by the direction the value travels. An
+// input goes client → server: a tighter bound refuses what a client built
+// against the old contract may still send, while a looser one only accepts
+// more. An output or a signal payload goes the other way, so it is the looser
+// bound that hands such a client a value outside what it was promised. A change
+// the compiler cannot judge (a `.refine()` predicate) is a warning either way.
+function constraintSeverity(
+  role: "input" | "output" | "payload",
+  change: ConstraintChange,
+): ContractDiffSeverity {
+  if (change.direction === "changed") {
+    return "warning";
+  }
+  const refusesMore = change.direction === "tightened";
+  return refusesMore === (role === "input") ? "breaking" : "non-breaking";
+}
+
+function diffConstraints(
+  role: "input" | "output" | "payload",
+  actionId: string,
+  before: ParsedSchema,
+  after: ParsedSchema,
+  entries: ContractDiffEntry[],
+  path: string,
+): void {
+  for (const change of compareConstraints(before, after)) {
+    makeEntry(
+      {
+        severity: constraintSeverity(role, change),
+        kind:
+          change.direction === "tightened"
+            ? "constraint-tightened"
+            : change.direction === "loosened"
+              ? "constraint-loosened"
+              : "constraint-changed",
+        actionId,
+        path,
+        message: `${actionId} ${path} ${change.description}.`,
+        ...(change.before !== undefined ? { before: change.before } : {}),
+        ...(change.after !== undefined ? { after: change.after } : {}),
+      },
+      entries,
+    );
   }
 }
 
@@ -1683,36 +1763,48 @@ function storeChange(
   );
 }
 
-// A literal upper bound (`maxLength`, `maxItems`) the reader adds or lowers
-// refuses saved values the writer allowed, so it is breaking at the same
-// version. Raising or dropping one is compatible.
-function diffStoreBound(
+// A bound the reader adds or tightens (`maxLength` lowered, `.min(0)` or
+// `.int()` or a `.refine()` added) refuses saved values the writer allowed, so
+// it is breaking at the same version. Raising or dropping one is compatible.
+// What the compiler cannot judge (a predicate, a bound computed at runtime) is
+// a warning: saved records were never checked against it.
+function diffStoreConstraints(
   storeId: string,
-  bound: "maxLength" | "maxItems",
-  unit: string,
-  written: number | undefined,
-  read: number | undefined,
-  path: string,
+  writer: ParsedSchema,
+  reader: ParsedSchema,
   entries: ContractDiffEntry[],
+  path: string,
 ): void {
-  if (read === undefined || (written !== undefined && read >= written)) {
-    return;
+  for (const change of compareConstraints(writer, reader)) {
+    if (change.direction === "loosened") {
+      continue;
+    }
+    if (change.direction === "changed") {
+      storeChange(
+        storeId,
+        "warning",
+        "store-constraint-changed",
+        path,
+        `${storeId} ${path} constraint changed; saved records not verified. Check that every record saved under the old constraints still passes the new ones, or bump the version with a migrate.`,
+        writer,
+        reader,
+        entries,
+      );
+      continue;
+    }
+    makeEntry(
+      {
+        severity: "breaking",
+        kind: "store-bound-tightened",
+        actionId: storeId,
+        path,
+        message: `${storeId} ${path} ${change.description}; saved records may not satisfy it and will fail to load.`,
+        before: change.before ?? null,
+        after: change.after ?? null,
+      },
+      entries,
+    );
   }
-  makeEntry(
-    {
-      severity: "breaking",
-      kind: "store-bound-tightened",
-      actionId: storeId,
-      path,
-      message:
-        written === undefined
-          ? `${storeId} ${path} gained ${bound} ${read}; saved records may be longer and will fail to load.`
-          : `${storeId} ${path} ${bound} lowered from ${written} to ${read}; saved records up to ${written} ${unit} will fail to load.`,
-      before: written ?? null,
-      after: read,
-    },
-    entries,
-  );
 }
 
 // `writer` is the schema records were saved under, `reader` the one that will
@@ -1757,24 +1849,10 @@ function diffStoreSchema(
     return;
   }
 
-  // The rest of the chain (`.min(0)`, `.refine(...)`, a non-literal bound) is
-  // only a hash: a change can be seen, but not judged against saved records.
-  if (writer.constraintsHash !== reader.constraintsHash) {
-    storeChange(
-      storeId,
-      "warning",
-      "store-constraint-changed",
-      path,
-      `${storeId} ${path} constraint changed; saved records not verified. Check that every record saved under the old constraints still passes the new ones, or bump the version with a migrate.`,
-      writer,
-      reader,
-      entries,
-    );
-  }
+  diffStoreConstraints(storeId, writer, reader, entries, path);
 
   switch (reader.kind) {
     case "string":
-      diffStoreBound(storeId, "maxLength", "bytes long", writer.maxLength, reader.maxLength, path, entries);
       return;
     case "number":
       if (!numericFormatAccepts(writer.numericFormat, reader.numericFormat)) {
@@ -1817,7 +1895,6 @@ function diffStoreSchema(
       return;
     }
     case "array":
-      diffStoreBound(storeId, "maxItems", "items long", writer.maxItems, reader.maxItems, path, entries);
       diffStoreSchema(storeId, writer.items ?? null, reader.items ?? null, entries, `${path}[]`);
       return;
     case "record":
@@ -2046,15 +2123,56 @@ export function diffStores(
   }
 }
 
+// A snapshot with every schema's constraints dropped.
+function withoutSnapshotConstraints(snapshot: ActionContractSnapshot): ActionContractSnapshot {
+  const strip = <T extends { readonly schema: SchemaMetadata | null }>(part: T): T => ({
+    ...part,
+    schema: part.schema === null ? null : withoutConstraints(part.schema),
+  });
+  return {
+    ...snapshot,
+    actions: snapshot.actions.map((action) => ({
+      ...action,
+      input: strip(action.input),
+      output: strip(action.output),
+    })),
+    ...(snapshot.signals !== undefined
+      ? { signals: snapshot.signals.map((signal) => ({ ...signal, payload: strip(signal.payload) })) }
+      : {}),
+    ...(snapshot.stores !== undefined
+      ? { stores: snapshot.stores.map((store) => ({ ...store, schema: strip(store.schema) })) }
+      : {}),
+  };
+}
+
 export function diffActionContractSnapshots(
   before: ActionContractSnapshot,
   after: ActionContractSnapshot,
 ): ContractDiffResult {
   const entries: ContractDiffEntry[] = [];
 
-  diffProjectMetadata(before, after, entries);
+  // A version 1 snapshot predates recorded constraints: its schemas hold at
+  // most a byte or item bound and a hash of the rest. Read against a version 2
+  // one, every other bound would look newly added, so both sides are compared
+  // without constraints instead.
+  const comparable = before.version !== 1 && after.version !== 1;
+  const left = comparable ? before : withoutSnapshotConstraints(before);
+  const right = comparable ? after : withoutSnapshotConstraints(after);
+  if (!comparable) {
+    makeEntry(
+      {
+        severity: "info",
+        kind: "constraints-not-compared",
+        message:
+          "A version 1 contract snapshot predates recorded schema constraints, so constraint changes were not compared. `aruna contract update` writes version 2.",
+      },
+      entries,
+    );
+  }
+
+  diffProjectMetadata(left, right, entries);
   for (const primitive of contractPrimitives()) {
-    primitive.diff(before, after, entries);
+    primitive.diff(left, right, entries);
   }
 
   entries.sort(

@@ -2,9 +2,9 @@ import { schema, type Infer } from "aruna/schema";
 import { actionResultSchema } from "../../shared/result";
 
 export const restockItemInputSchema = schema.object({
-  itemIds: schema.array(schema.string()),
+  itemIds: schema.array(schema.string().maxLength(64)).maxItems(50),
   warehouse: schema.literal("central"),
-  auditTag: schema.optional(schema.string()),
+  auditTag: schema.optional(schema.string().maxLength(64)),
 });
 
 export const restockItemOutputSchema = schema.object({

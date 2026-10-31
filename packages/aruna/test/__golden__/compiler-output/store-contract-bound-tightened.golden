@@ -36,7 +36,7 @@
       "exportName": "profile",
       "version": 1,
       "hasMigrate": false,
-      "schema": "object { name: string, tags: string[], title: string }"
+      "schema": "object { name: string (maxLength 16), tags: string[] (maxItems 10), title: string (maxLength 64) }"
     }
   ],
   "diagnostics": [],
@@ -52,7 +52,7 @@
 
 === inspect contract (exit 0)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -68,7 +68,7 @@
       "scope": null,
       "hasMigrate": false,
       "schema": {
-        "summary": "object { name: string, tags: string[], title: string }",
+        "summary": "object { name: string (maxLength 16), tags: string[] (maxItems 10), title: string (maxLength 64) }",
         "schema": {
           "kind": "object",
           "properties": {
@@ -224,6 +224,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -232,7 +233,7 @@
       "code": "aruna::578",
       "name": "store-incompatible-change",
       "severity": "error",
-      "message": "player.profile schema.name maxLength lowered from 32 to 16; saved records up to 32 bytes long will fail to load.",
+      "message": "player.profile schema.name maxLength lowered from 32 to 16; saved records may not satisfy it and will fail to load.",
       "file": "src/domains/economy/store.ts",
       "details": "compared against aruna.contract.json\nbefore: 32\nafter: 16",
       "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
@@ -241,7 +242,7 @@
       "code": "aruna::578",
       "name": "store-incompatible-change",
       "severity": "error",
-      "message": "player.profile schema.tags gained maxItems 10; saved records may be longer and will fail to load.",
+      "message": "player.profile schema.tags gained maxItems 10; saved records may not satisfy it and will fail to load.",
       "file": "src/domains/economy/store.ts",
       "details": "compared against aruna.contract.json\nbefore: null\nafter: 10",
       "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
@@ -347,7 +348,7 @@
       "kind": "store-bound-tightened",
       "actionId": "player.profile",
       "path": "schema.name",
-      "message": "player.profile schema.name maxLength lowered from 32 to 16; saved records up to 32 bytes long will fail to load.",
+      "message": "player.profile schema.name maxLength lowered from 32 to 16; saved records may not satisfy it and will fail to load.",
       "before": 32,
       "after": 16
     },
@@ -356,7 +357,7 @@
       "kind": "store-bound-tightened",
       "actionId": "player.profile",
       "path": "schema.tags",
-      "message": "player.profile schema.tags gained maxItems 10; saved records may be longer and will fail to load.",
+      "message": "player.profile schema.tags gained maxItems 10; saved records may not satisfy it and will fail to load.",
       "before": null,
       "after": 10
     }
@@ -427,6 +428,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -435,7 +437,7 @@
       "code": "aruna::578",
       "name": "store-incompatible-change",
       "severity": "error",
-      "message": "player.profile schema.name maxLength lowered from 32 to 16; saved records up to 32 bytes long will fail to load.",
+      "message": "player.profile schema.name maxLength lowered from 32 to 16; saved records may not satisfy it and will fail to load.",
       "file": "src/domains/economy/store.ts",
       "details": "compared against aruna.contract.json\nbefore: 32\nafter: 16",
       "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."
@@ -444,7 +446,7 @@
       "code": "aruna::578",
       "name": "store-incompatible-change",
       "severity": "error",
-      "message": "player.profile schema.tags gained maxItems 10; saved records may be longer and will fail to load.",
+      "message": "player.profile schema.tags gained maxItems 10; saved records may not satisfy it and will fail to load.",
       "file": "src/domains/economy/store.ts",
       "details": "compared against aruna.contract.json\nbefore: null\nafter: 10",
       "suggestion": "Keep saved records readable: give the new field a .default(...), or bump the store's version and add a migrate() that converts the old records."

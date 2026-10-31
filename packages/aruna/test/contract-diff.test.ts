@@ -101,7 +101,7 @@ function snapshot(
   },
 ): ActionContractSnapshot {
   return {
-    version: 1,
+    version: 2,
     project,
     actions,
     diagnostics: [],
@@ -288,6 +288,196 @@ describe("contract diff for stores", () => {
 
     expect(parsed.stores).toEqual(original.stores);
     expect(diffActionContractSnapshots(parsed, original).entries).toEqual([]);
+  });
+});
+
+describe("contract diff for constraints", () => {
+  function withInput(itemId: Record<string, unknown>): ActionContractRecord {
+    return action({
+      input: { summary: "object", schema: objectSchema({ itemId: { kind: "string", ...itemId } }) },
+    });
+  }
+
+  function withOutput(total: Record<string, unknown>): ActionContractRecord {
+    return action({
+      output: { summary: "object", schema: objectSchema({ total: { kind: "number", ...total } }) },
+    });
+  }
+
+  function diffActions(before: ActionContractRecord, after: ActionContractRecord) {
+    return diffActionContractSnapshots(snapshot([before]), snapshot([after]));
+  }
+
+  it("breaks on a tightened input bound and allows a loosened one", () => {
+    const tightened = diffActions(withInput({ maxLength: 50 }), withInput({ maxLength: 20 }));
+    expect(tightened.entries).toEqual([
+      {
+        severity: "breaking",
+        kind: "constraint-tightened",
+        actionId: "shop.purchaseItem",
+        path: "input.itemId",
+        message: "shop.purchaseItem input.itemId maxLength lowered from 50 to 20.",
+        before: 50,
+        after: 20,
+      },
+    ]);
+
+    const loosened = diffActions(withInput({ maxLength: 20 }), withInput({ maxLength: 50 }));
+    expect(loosened.entries).toEqual([
+      expect.objectContaining({ severity: "non-breaking", kind: "constraint-loosened" }),
+    ]);
+  });
+
+  it("reads an added bound as tighter and a removed one as looser", () => {
+    const gained = diffActions(withInput({}), withInput({ minLength: 3, maxChars: 20, refinements: 1 }));
+    expect(gained.entries.map((entry) => [entry.severity, entry.kind, entry.message])).toEqual([
+      ["breaking", "constraint-tightened", "shop.purchaseItem input.itemId .refine() calls went from 0 to 1."],
+      ["breaking", "constraint-tightened", "shop.purchaseItem input.itemId gained maxChars 20."],
+      ["breaking", "constraint-tightened", "shop.purchaseItem input.itemId gained minLength 3."],
+    ]);
+
+    const dropped = diffActions(withInput({ minLength: 3, maxChars: 20 }), withInput({}));
+    expect(dropped.summary).toEqual({ breaking: 0, warning: 0, nonBreaking: 2, info: 0 });
+  });
+
+  it("turns the rule around for an output and a signal payload", () => {
+    // Loosening what the server sends can hand an old client a value it was
+    // promised it would not get; tightening only promises it less.
+    const raised = diffActions(withOutput({ max: 100 }), withOutput({ max: 200 }));
+    expect(raised.entries).toEqual([
+      expect.objectContaining({
+        severity: "breaking",
+        kind: "constraint-loosened",
+        path: "output.total",
+        message: "shop.purchaseItem output.total max raised from 100 to 200.",
+      }),
+    ]);
+    const integral = diffActions(withOutput({}), withOutput({ int: true, min: 0 }));
+    expect(integral.summary).toEqual({ breaking: 0, warning: 0, nonBreaking: 2, info: 0 });
+
+    const payload = (amount: Record<string, unknown>) => ({
+      ...snapshot([]),
+      signals: [
+        signal({
+          payload: { summary: "object", schema: objectSchema({ amount: { kind: "number", ...amount } }) },
+        }),
+      ],
+    });
+    const widened = diffActionContractSnapshots(payload({ max: 10 }), payload({}));
+    expect(widened.entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "constraint-loosened", path: "payload.amount" }),
+    ]);
+  });
+
+  it("warns on a change it can see but not judge", () => {
+    const predicate = diffActions(
+      withInput({ refinements: 1, constraintsHash: "aaaa" }),
+      withInput({ refinements: 1, constraintsHash: "bbbb" }),
+    );
+    expect(predicate.entries).toEqual([
+      expect.objectContaining({
+        severity: "warning",
+        kind: "constraint-changed",
+        path: "input.itemId",
+        before: "aaaa",
+        after: "bbbb",
+      }),
+    ]);
+
+    // A bound the compiler could not read is not compared by value.
+    const computed = diffActions(
+      withInput({ maxLength: 40, dynamicConstraints: ["maxLength"], constraintsHash: "aaaa" }),
+      withInput({ maxLength: 10, dynamicConstraints: ["maxLength"], constraintsHash: "bbbb" }),
+    );
+    expect(computed.entries.map((entry) => entry.kind)).toEqual(["constraint-changed"]);
+  });
+
+  it("compares bounds inside arrays and records", () => {
+    const tags = (items: Record<string, unknown>, list: Record<string, unknown> = {}) =>
+      action({
+        input: {
+          summary: "object",
+          schema: objectSchema({
+            tags: { kind: "array", items: { kind: "string", ...items }, ...list },
+            scores: { kind: "record", items: { kind: "number" }, maxEntries: 8 },
+          }),
+        },
+      });
+    const result = diffActions(tags({ maxLength: 16 }, { maxItems: 8 }), tags({ maxLength: 8 }, { maxItems: 4 }));
+    expect(result.entries.map((entry) => entry.path)).toEqual(["input.tags", "input.tags.items"]);
+    expect(result.summary.breaking).toBe(2);
+  });
+
+  it("keeps constraints when a snapshot round-trips through JSON", () => {
+    const original = snapshot([
+      withInput({
+        minLength: 1,
+        maxLength: 20,
+        maxChars: 10,
+        refinements: 2,
+        dynamicConstraints: ["minChars"],
+        constraintsHash: "0123456789abcdef",
+      }),
+      action({
+        id: "shop.counted",
+        input: {
+          summary: "object",
+          schema: objectSchema({ amount: { kind: "number", min: -5, max: 2.5, int: true } }),
+        },
+      }),
+    ]);
+    const parsed = parseActionContractSnapshotJson(JSON.parse(JSON.stringify(original)));
+
+    expect(parsed.actions).toEqual(original.actions);
+    expect(diffActionContractSnapshots(parsed, original).entries).toEqual([]);
+  });
+
+  it("compares no constraints against a version 1 snapshot, which did not record them", () => {
+    // Version 1 hashed `.min(0)` and kept only byte and item bounds.
+    const legacy = {
+      ...snapshot([withInput({ constraintsHash: "aaaa" })]),
+      version: 1 as const,
+    };
+    const result = diffActionContractSnapshots(legacy, snapshot([withInput({ minLength: 3 })]));
+    expect(result.entries).toEqual([
+      expect.objectContaining({ severity: "info", kind: "constraints-not-compared" }),
+    ]);
+    // Everything else is still compared.
+    const removed = diffActionContractSnapshots(legacy, snapshot([]));
+    expect(removed.summary).toEqual({ breaking: 1, warning: 0, nonBreaking: 0, info: 1 });
+  });
+});
+
+describe("contract diff for store constraints", () => {
+  const level = (constraints: Record<string, unknown>) =>
+    store({ schema: storeSchema({ level: { kind: "number", ...constraints } }) });
+
+  it("breaks when a bound tightens at the same version, and says nothing when it loosens", () => {
+    const tightened = diffStores(level({}), level({ min: 0, int: true }));
+    expect(tightened.entries.map((entry) => [entry.severity, entry.kind, entry.message])).toEqual([
+      [
+        "breaking",
+        "store-bound-tightened",
+        "player.profile schema.level gained .int(); saved records may not satisfy it and will fail to load.",
+      ],
+      [
+        "breaking",
+        "store-bound-tightened",
+        "player.profile schema.level gained min 0; saved records may not satisfy it and will fail to load.",
+      ],
+    ]);
+    expect(diffStores(level({ min: 0, int: true }), level({})).entries).toEqual([]);
+  });
+
+  it("breaks on a new .refine(), and warns when only a predicate changed", () => {
+    expect(diffStores(level({}), level({ refinements: 1, constraintsHash: "aaaa" })).summary.breaking).toBe(1);
+    const changed = diffStores(
+      level({ refinements: 1, constraintsHash: "aaaa" }),
+      level({ refinements: 1, constraintsHash: "bbbb" }),
+    );
+    expect(changed.entries).toEqual([
+      expect.objectContaining({ severity: "warning", kind: "store-constraint-changed", path: "schema.level" }),
+    ]);
   });
 });
 
@@ -589,8 +779,8 @@ describe("contract diff", () => {
   });
 
   it("rejects unsupported snapshot versions", () => {
-    expect(() => parseActionContractSnapshotJson({ version: 2 })).toThrow(
-      "snapshot.version must be 1.",
+    expect(() => parseActionContractSnapshotJson({ version: 3 })).toThrow(
+      "snapshot.version must be 1 or 2.",
     );
   });
 

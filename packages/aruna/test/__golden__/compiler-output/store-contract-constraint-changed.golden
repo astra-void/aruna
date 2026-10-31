@@ -36,7 +36,7 @@
       "exportName": "profile",
       "version": 1,
       "hasMigrate": false,
-      "schema": "object { level: number, nickname: string }"
+      "schema": "object { level: number (min 0, refine), nickname: string (minLength 2, maxLength computed) }"
     }
   ],
   "diagnostics": [],
@@ -52,7 +52,7 @@
 
 === inspect contract (exit 0)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -68,18 +68,23 @@
       "scope": null,
       "hasMigrate": false,
       "schema": {
-        "summary": "object { level: number, nickname: string }",
+        "summary": "object { level: number (min 0, refine), nickname: string (minLength 2, maxLength computed) }",
         "schema": {
           "kind": "object",
           "properties": {
             "level": {
-              "constraintsHash": "653eede104d35803",
-              "kind": "number"
+              "constraintsHash": "783c24327886b922",
+              "kind": "number",
+              "min": 0,
+              "refinements": 1
             },
             "nickname": {
-              "constraintsHash": "adf33a6a2904437d",
+              "constraintsHash": "61e8cf8d09ae395a",
+              "dynamicConstraints": [
+                "maxLength"
+              ],
               "kind": "string",
-              "maxLength": 20
+              "minLength": 2
             }
           }
         }
@@ -218,6 +223,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -273,13 +279,18 @@
           "kind": "object",
           "properties": {
             "level": {
-              "constraintsHash": "653eede104d35803",
-              "kind": "number"
+              "constraintsHash": "783c24327886b922",
+              "kind": "number",
+              "min": 0,
+              "refinements": 1
             },
             "nickname": {
-              "constraintsHash": "adf33a6a2904437d",
+              "constraintsHash": "61e8cf8d09ae395a",
+              "dynamicConstraints": [
+                "maxLength"
+              ],
               "kind": "string",
-              "maxLength": 20
+              "minLength": 2
             }
           }
         },
@@ -317,8 +328,8 @@
       "actionId": "player.profile",
       "path": "schema.level",
       "message": "player.profile schema.level constraint changed; saved records not verified. Check that every record saved under the old constraints still passes the new ones, or bump the version with a migrate.",
-      "before": "number",
-      "after": "number"
+      "before": "number (min 0, refine)",
+      "after": "number (min 0, refine)"
     },
     {
       "severity": "warning",
@@ -326,8 +337,8 @@
       "actionId": "player.profile",
       "path": "schema.nickname",
       "message": "player.profile schema.nickname constraint changed; saved records not verified. Check that every record saved under the old constraints still passes the new ones, or bump the version with a migrate.",
-      "before": "string",
-      "after": "string"
+      "before": "string (minLength 3, maxLength computed)",
+      "after": "string (minLength 2, maxLength computed)"
     }
   ]
 }
@@ -396,6 +407,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -410,7 +422,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/domains/economy/store.ts\",\n      \"path\": \"src/domains/economy/store.ts\",\n      \"kind\": \"serverStore\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineStore(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"./domains/economy/store\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"stores\": [\n    {\n      \"id\": \"player.profile\",\n      \"file\": \"src/domains/economy/store.ts\",\n      \"exportName\": \"profile\",\n      \"kind\": \"playerStore\",\n      \"version\": 1,\n      \"schema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"level\": {\n            \"kind\": \"number\",\n            \"constraintsHash\": \"653eede104d35803\"\n          },\n          \"nickname\": {\n            \"kind\": \"string\",\n            \"maxLength\": 20,\n            \"constraintsHash\": \"adf33a6a2904437d\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": []\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/domains/economy/store.ts\",\n      \"path\": \"src/domains/economy/store.ts\",\n      \"kind\": \"serverStore\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineStore(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/domains/economy/store.ts\",\n      \"specifier\": \"./domains/economy/store\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"stores\": [\n    {\n      \"id\": \"player.profile\",\n      \"file\": \"src/domains/economy/store.ts\",\n      \"exportName\": \"profile\",\n      \"kind\": \"playerStore\",\n      \"version\": 1,\n      \"schema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"level\": {\n            \"kind\": \"number\",\n            \"min\": 0,\n            \"refinements\": 1,\n            \"constraintsHash\": \"783c24327886b922\"\n          },\n          \"nickname\": {\n            \"kind\": \"string\",\n            \"minLength\": 2,\n            \"dynamicConstraints\": [\n              \"maxLength\"\n            ],\n            \"constraintsHash\": \"61e8cf8d09ae395a\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": []\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -465,13 +477,18 @@
           "kind": "object",
           "properties": {
             "level": {
-              "constraintsHash": "653eede104d35803",
-              "kind": "number"
+              "constraintsHash": "783c24327886b922",
+              "kind": "number",
+              "min": 0,
+              "refinements": 1
             },
             "nickname": {
-              "constraintsHash": "adf33a6a2904437d",
+              "constraintsHash": "61e8cf8d09ae395a",
+              "dynamicConstraints": [
+                "maxLength"
+              ],
               "kind": "string",
-              "maxLength": 20
+              "minLength": 2
             }
           }
         },

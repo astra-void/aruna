@@ -225,6 +225,7 @@ export default defineConfig({
     unresolvedImports: "warning",             // aruna::105
     domainBoundary: "warning",                // aruna::304: imports past a domain's public surface
     storeCompatibility: "error",              // aruna::578: a store change saved records can't survive
+    unboundedInput: "warning",                // aruna::514: an action input with no size bound
   },
   diagnostics: {
     ignore: [],                               // codes or names to drop, e.g. "raw-remote-usage"

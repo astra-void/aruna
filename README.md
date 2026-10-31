@@ -187,6 +187,9 @@ export default defineConfig({
     are never checked.
   - `strict.domainBoundary` (default `"warning"`): the severity of `aruna::304
     cross-domain-private-import`. See [Domain boundaries](#domain-boundaries).
+  - `strict.unboundedInput` (default `"warning"`): the severity of `aruna::514
+    unbounded-action-input`, an action input with a string, array, or record that has no
+    upper bound. See [Bounding input](packages/aruna/docs/actions.md#bounding-input).
   - `strict.sharedSafety` (default `true`): **not enforced yet.** No shared-module
     safety check exists. Shared modules are checked only by the import boundary rules
     (`aruna::302`, `aruna::303`), which always run. Setting it to `false` reports

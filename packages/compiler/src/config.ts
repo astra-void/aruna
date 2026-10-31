@@ -73,6 +73,7 @@ type MutableStrictConfig = {
   unresolvedImports?: StrictConfig["unresolvedImports"];
   domainBoundary?: StrictConfig["domainBoundary"];
   storeCompatibility?: StrictConfig["storeCompatibility"];
+  unboundedInput?: StrictConfig["unboundedInput"];
 };
 
 type MutableContractConfig = {
@@ -613,6 +614,7 @@ function normalizeConfigObject(value: unknown): {
           "unresolvedImports",
           "domainBoundary",
           "storeCompatibility",
+          "unboundedInput",
         ],
         diagnostics,
         "strict",
@@ -658,6 +660,14 @@ function normalizeConfigObject(value: unknown): {
           );
         } else {
           strict.storeCompatibility = strictValue["storeCompatibility"];
+        }
+      }
+
+      if (strictValue["unboundedInput"] !== undefined) {
+        if (!isStrictSeverity(strictValue["unboundedInput"])) {
+          diagnostics.push('strict.unboundedInput must be one of "off", "warning", or "error"');
+        } else {
+          strict.unboundedInput = strictValue["unboundedInput"];
         }
       }
 
@@ -819,6 +829,7 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
       unresolvedImports: config.strict?.unresolvedImports ?? "warning",
       domainBoundary: config.strict?.domainBoundary ?? "warning",
       storeCompatibility: config.strict?.storeCompatibility ?? "error",
+      unboundedInput: config.strict?.unboundedInput ?? "warning",
     },
     diagnostics: {
       ignore: [...(config.diagnostics?.ignore ?? [])],

@@ -9,8 +9,10 @@ use crate::diagnostics::{
 use crate::domains::{DomainIndex, PublicSurface, DOMAIN_PRIVATE_SEGMENTS};
 use crate::cache::GraphCache;
 use crate::graph::{build_project_graph_cached, ArunaImportEdge, GraphImportRecord};
+use crate::input_bounds::create_unbounded_input_diagnostic;
 use crate::manifest::{create_manifest, ArunaManifest, ArunaModuleRecord};
 use crate::module_kind::ModuleKind;
+use crate::primitives::ArunaActionRecord;
 use crate::resolver::{
     is_bare_specifier, resolve_virtual_generated_action_module,
     resolve_virtual_generated_signal_module, TsconfigResolverOptions,
@@ -388,6 +390,7 @@ fn build_diagnostics(
     graph_diagnostics: &[ArunaDiagnostic],
     imports: &[GraphImportRecord],
     modules: &[ArunaModuleRecord],
+    actions: &[ArunaActionRecord],
     config: &ArunaConfig,
     config_diagnostics: &[ArunaDiagnostic],
     ignore: &[String],
@@ -434,6 +437,11 @@ fn build_diagnostics(
         modules,
         &touched_unknown_kinds,
     ));
+    diagnostics.extend(
+        actions
+            .iter()
+            .filter_map(|action| create_unbounded_input_diagnostic(action, &config.strict.unbounded_input)),
+    );
     strip_ignored_diagnostics(&diagnostics, ignore)
 }
 
@@ -499,6 +507,7 @@ pub(crate) fn run_project_with_files(
         &graph.diagnostics,
         &graph.imports,
         &graph.modules,
+        &graph.actions,
         &input.config,
         &input.config_diagnostics,
         ignore,

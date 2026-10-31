@@ -93,7 +93,7 @@ export type Diagnostic = {
     docsUrl?: string | undefined;
 };
 
-export type DiagnosticCode = "aruna::100" | "aruna::102" | "aruna::103" | "aruna::111" | "aruna::112" | "aruna::106" | "aruna::105" | "aruna::109" | "aruna::200" | "aruna::203" | "aruna::507" | "aruna::510" | "aruna::511" | "aruna::512" | "aruna::513" | "aruna::550" | "aruna::551" | "aruna::552" | "aruna::553" | "aruna::554" | "aruna::559" | "aruna::560" | "aruna::563" | "aruna::564" | "aruna::565" | "aruna::566" | "aruna::568" | "aruna::569" | "aruna::578" | "aruna::579" | "aruna::555" | "aruna::556" | "aruna::557" | "aruna::558" | "aruna::300" | "aruna::301" | "aruna::302" | "aruna::303" | "aruna::304" | "aruna::305" | "aruna::700" | "aruna::701" | "aruna::900";
+export type DiagnosticCode = "aruna::100" | "aruna::102" | "aruna::103" | "aruna::111" | "aruna::112" | "aruna::106" | "aruna::105" | "aruna::109" | "aruna::200" | "aruna::203" | "aruna::507" | "aruna::510" | "aruna::511" | "aruna::512" | "aruna::513" | "aruna::514" | "aruna::550" | "aruna::551" | "aruna::552" | "aruna::553" | "aruna::554" | "aruna::559" | "aruna::560" | "aruna::563" | "aruna::564" | "aruna::565" | "aruna::566" | "aruna::568" | "aruna::569" | "aruna::578" | "aruna::579" | "aruna::555" | "aruna::556" | "aruna::557" | "aruna::558" | "aruna::300" | "aruna::301" | "aruna::302" | "aruna::303" | "aruna::304" | "aruna::305" | "aruna::700" | "aruna::701" | "aruna::900";
 
 export type DiagnosticSeverity = "error" | "warning" | "info";
 
@@ -157,8 +157,18 @@ export type SchemaMetadata = {
     values?: SchemaLiteralMetadata[] | undefined;
     inner?: SchemaMetadata | undefined;
     members?: SchemaMetadata[] | undefined;
+    minLength?: number | undefined;
     maxLength?: number | undefined;
+    minChars?: number | undefined;
+    maxChars?: number | undefined;
+    min?: number | undefined;
+    max?: number | undefined;
+    int?: boolean | undefined;
+    minItems?: number | undefined;
     maxItems?: number | undefined;
+    maxEntries?: number | undefined;
+    refinements?: number | undefined;
+    dynamicConstraints?: string[] | undefined;
     constraintsHash?: string | undefined;
 };
 
@@ -168,6 +178,7 @@ export type StrictConfig = {
     readonly unresolvedImports?: "off" | "warning" | "error" | undefined;
     readonly domainBoundary?: "off" | "warning" | "error" | undefined;
     readonly storeCompatibility?: "off" | "warning" | "error" | undefined;
+    readonly unboundedInput?: "off" | "warning" | "error" | undefined;
 };
 
 export declare function buildProject(input: CompilerInput): Promise<CompilerOutput>;
@@ -237,6 +248,7 @@ type NormalizedConfig = {
         readonly unresolvedImports: "off" | "warning" | "error";
         readonly domainBoundary: "off" | "warning" | "error";
         readonly storeCompatibility: "off" | "warning" | "error";
+        readonly unboundedInput: "off" | "warning" | "error";
     };
     readonly diagnostics: {
         readonly ignore: readonly string[];

@@ -65,8 +65,10 @@ export function pascalCase(name: string): string {
 function schemaTemplate(pascal: string): string {
   return `import { schema, type Infer } from "aruna/schema";
 
+// Client input is bounded, so the server refuses an oversized payload while
+// validating it (aruna::514 flags an unbounded one).
 export const ping${pascal}InputSchema = schema.object({
-  message: schema.string(),
+  message: schema.string().maxChars(200),
 });
 
 export const ping${pascal}OutputSchema = schema.object({

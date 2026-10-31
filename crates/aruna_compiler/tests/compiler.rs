@@ -236,6 +236,60 @@ fn reports_raw_remote_usage_at_the_configured_severity() {
     assert!(check_project(off).diagnostics.is_empty());
 }
 
+fn unbounded_input_project(root: &Path) {
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const rename = defineAction({
+  id: "profile.rename",
+  input: schema.object({ name: schema.string(), tags: schema.array(schema.string().maxLength(8)) }),
+  run() {},
+});
+
+export const bounded = defineAction({
+  id: "profile.bounded",
+  input: schema.object({ name: schema.string().maxChars(20), level: schema.number() }),
+  run() {},
+});
+"#,
+    );
+}
+
+#[test]
+fn reports_unbounded_action_input_at_the_configured_severity() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    unbounded_input_project(root);
+
+    // One diagnostic for the action that has unbounded values, naming each.
+    let output = check_project(compiler_input(root));
+    assert!(output.ok);
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::514".to_string()]);
+    let diagnostic = &output.diagnostics[0];
+    assert_eq!(diagnostic.name, "unbounded-action-input");
+    assert_eq!(diagnostic.severity, DiagnosticSeverity::Warning);
+    assert_eq!(diagnostic.file.as_deref(), Some("src/server/actions.ts"));
+    assert!(diagnostic.message.contains("profile.rename"));
+    let details = diagnostic.details.as_deref().unwrap_or_default();
+    assert!(details.contains("input.name: a string with no .maxLength(n) or .maxChars(n)"));
+    assert!(details.contains("input.tags: an array with no .maxItems(n)"));
+    assert!(!details.contains("input.tags[]"));
+
+    let mut as_error = compiler_input(root);
+    as_error.config.strict.unbounded_input = StrictSeverity::Error;
+    let output = check_project(as_error);
+    assert!(!output.ok);
+    assert_eq!(output.diagnostics[0].severity, DiagnosticSeverity::Error);
+
+    let mut off = compiler_input(root);
+    off.config.strict.unbounded_input = StrictSeverity::Off;
+    assert!(check_project(off).diagnostics.is_empty());
+}
+
 #[test]
 fn drops_diagnostics_listed_in_diagnostics_ignore_by_code_or_name() {
     let temp = TempDir::new().unwrap();

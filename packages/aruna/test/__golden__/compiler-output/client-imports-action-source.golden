@@ -48,6 +48,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -56,7 +65,7 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -76,6 +85,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -84,7 +102,7 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -104,6 +122,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -112,13 +139,13 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
 === inspect contract (exit 1)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -160,6 +187,15 @@
     }
   ],
   "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
     {
       "code": "aruna::556",
       "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/shop/actions.ts\nimported kind: server action",
@@ -222,6 +258,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -230,7 +275,7 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -270,6 +315,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "summary": {
@@ -278,7 +332,7 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -346,6 +400,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -362,6 +417,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "manifest": {
@@ -399,6 +463,15 @@
           "start": 29
         },
         "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+      },
+      {
+        "code": "aruna::514",
+        "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.purchaseItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
       }
     ],
     "imports": [
@@ -464,7 +537,7 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -532,6 +605,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -548,6 +622,15 @@
         "start": 29
       },
       "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
     }
   ],
   "generatedFiles": [
@@ -560,7 +643,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/client.tsx\",\n      \"to\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"./domains/shop/actions\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::556\",\n      \"name\": \"action-imported-from-invalid-environment\",\n      \"severity\": \"error\",\n      \"message\": \"src/client.tsx is classified as client entry. It imports src/domains/shop/actions.ts, which is classified as server action.\",\n      \"file\": \"src/client.tsx\",\n      \"span\": {\n        \"start\": 29,\n        \"end\": 53\n      },\n      \"details\": \"importer: src/client.tsx\\nimporter kind: client entry\\nimported: src/domains/shop/actions.ts\\nimported kind: server action\",\n      \"suggestion\": \"Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.\"\n    }\n  ]\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/client.tsx\",\n      \"to\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"./domains/shop/actions\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::556\",\n      \"name\": \"action-imported-from-invalid-environment\",\n      \"severity\": \"error\",\n      \"message\": \"src/client.tsx is classified as client entry. It imports src/domains/shop/actions.ts, which is classified as server action.\",\n      \"file\": \"src/client.tsx\",\n      \"span\": {\n        \"start\": 29,\n        \"end\": 53\n      },\n      \"details\": \"importer: src/client.tsx\\nimporter kind: client entry\\nimported: src/domains/shop/actions.ts\\nimported kind: server action\",\n      \"suggestion\": \"Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.\"\n    },\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action shop.purchaseItem accepts input with no size limit.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"details\": \"export name: purchaseItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -599,6 +682,15 @@
           "start": 29
         },
         "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+      },
+      {
+        "code": "aruna::514",
+        "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/actions.ts",
+        "message": "Server action shop.purchaseItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
       }
     ],
     "imports": [
@@ -664,7 +756,7 @@
     "infos": 0,
     "modules": 4,
     "resolvedImports": 1,
-    "warnings": 0
+    "warnings": 1
   }
 }
 

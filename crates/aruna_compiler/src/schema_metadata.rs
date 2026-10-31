@@ -44,22 +44,56 @@ pub struct ArunaSchemaMetadata {
     pub inner: Option<Box<ArunaSchemaMetadata>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub members: Option<Vec<ArunaSchemaMetadata>>,
-    // `.maxLength(n)` / `.length(n)` on a string, in UTF-8 bytes, or four bytes
-    // per character of `.maxChars(n)`. The only part of a string schema that
-    // bounds its encoded size, so it is kept even though other constraints are
-    // runtime-only.
+    // The bounds a constraint chain declares, kept when the argument is static: a
+    // number literal, or a module-level `const` bound to one. `contract diff` and
+    // the store gate judge a tightened or loosened schema by them, and the upper
+    // ones bound a payload's encoded size. A string's `minLength`/`maxLength` are
+    // UTF-8 bytes and `minChars`/`maxChars` code points; `.length(n)` sets both
+    // ends of a string's bytes or an array's items. A chain that repeats a bound
+    // keeps the tighter one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_length: Option<u32>,
-    // `.maxItems(n)` / `.length(n)` on an array, for the same reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_chars: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_chars: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<serde_json::Number>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<serde_json::Number>,
+    // `.int()` on a number.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub int: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_items: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_items: Option<u32>,
-    // A hash of the constraint chain's source (`.min(0).refine(...)`), for the
-    // constraints the metadata does not otherwise record: the store gate cannot
-    // check a saved record against them, but it can tell they changed. A literal
-    // `.maxLength(n)` / `.maxItems(n)` is recorded above instead and left out.
-    // Omitted when there is no such chain.
+    // `.maxEntries(n)` on a record.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_entries: Option<u32>,
+    // How many `.refine(...)` calls the chain makes. A predicate cannot be read,
+    // but one more is a stricter schema and one fewer a looser one.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub refinements: u32,
+    // Bounds whose argument is not static (`.maxLength(limit())`): the value is
+    // bounded, but by an amount the compiler cannot compare. Sorted, no repeats.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dynamic_constraints: Vec<String>,
+    // A hash of what the chain says that the fields above cannot: every
+    // `.refine(...)` and every bound with a non-static argument, in order. A
+    // change to it can be seen, though not judged. Omitted when there is none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constraints_hash: Option<String>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 // FNV-1a, 64-bit: stable across platforms and builds, which a snapshot
@@ -776,7 +810,7 @@ pub(crate) fn parse_schema_object<'a>(
 
 // Chainable constraint/refine method names. These attach runtime validation to
 // a schema without changing its rendered TypeScript type or wire format, so the
-// parser transparently unwraps them to the underlying schema.
+// parser unwraps them to the underlying schema and records them on it.
 pub(crate) fn is_chain_constraint_method(name: &str) -> bool {
     matches!(
         name,
@@ -789,21 +823,144 @@ pub(crate) fn is_chain_constraint_method(name: &str) -> bool {
             | "maxItems"
             | "minChars"
             | "maxChars"
+            | "maxEntries"
             | "refine"
     )
 }
 
-// The first argument of a length constraint, when it is a non-negative integer
-// literal. Anything else leaves the schema unbounded.
-pub(crate) fn literal_length_bound(call: &CallExpression<'_>) -> Option<u32> {
-    let Some(Argument::NumericLiteral(literal)) = call.arguments.first() else {
+// A constraint's argument as a number, when the compiler can know it: a number
+// literal (negated or not), or a module-level `const` bound to one.
+fn static_number_argument(call: &CallExpression<'_>, scope: &SchemaScope<'_>) -> Option<f64> {
+    if call.arguments.len() != 1 {
         return None;
-    };
-    let value = literal.value;
-    if value >= 0.0 && value.fract() == 0.0 && value <= f64::from(u32::MAX) {
-        Some(value as u32)
+    }
+    static_number(call.arguments.first()?.as_expression()?, scope, 0)
+}
+
+fn static_number(expression: &Expression<'_>, scope: &SchemaScope<'_>, depth: u8) -> Option<f64> {
+    match unwrap_schema_expression(expression) {
+        Expression::NumericLiteral(literal) => Some(literal.value),
+        Expression::UnaryExpression(unary)
+            if unary.operator == oxc_ast::ast::UnaryOperator::UnaryNegation =>
+        {
+            static_number(&unary.argument, scope, depth).map(|value| -value)
+        }
+        // `const MAX = 20` — followed a few hops, so a cycle cannot loop.
+        Expression::Identifier(identifier) if depth < 4 => {
+            static_number(scope.env.get(identifier.name.as_str())?, scope, depth + 1)
+        }
+        _ => None,
+    }
+}
+
+// A length or count bound: a non-negative integer. Anything else is not one the
+// compiler can compare (the runtime still checks it).
+fn length_bound(value: f64) -> Option<u32> {
+    (value >= 0.0 && value.fract() == 0.0 && value <= f64::from(u32::MAX)).then(|| value as u32)
+}
+
+// A number bound as JSON: an integer when it is one, so `.min(0)` records `0`
+// rather than `0.0`.
+fn number_bound(value: f64) -> Option<serde_json::Number> {
+    if value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0 {
+        Some(serde_json::Number::from(value as i64))
     } else {
-        None
+        serde_json::Number::from_f64(value)
+    }
+}
+
+fn raise_length(slot: &mut Option<u32>, value: u32) {
+    *slot = Some(slot.map_or(value, |current| current.max(value)));
+}
+
+fn lower_length(slot: &mut Option<u32>, value: u32) {
+    *slot = Some(slot.map_or(value, |current| current.min(value)));
+}
+
+fn raise_number(slot: &mut Option<serde_json::Number>, value: serde_json::Number) {
+    let keep_current = slot
+        .as_ref()
+        .is_some_and(|current| current.as_f64() >= value.as_f64());
+    if !keep_current {
+        *slot = Some(value);
+    }
+}
+
+fn lower_number(slot: &mut Option<serde_json::Number>, value: serde_json::Number) {
+    let keep_current = slot
+        .as_ref()
+        .is_some_and(|current| current.as_f64() <= value.as_f64());
+    if !keep_current {
+        *slot = Some(value);
+    }
+}
+
+// Records one constraint call on the schema it applies to. A bound with a
+// static argument is kept as its value; `.int()` as a flag; a `.refine(...)` is
+// counted. What cannot be read — a predicate, a bound computed at runtime — goes
+// into `constraints_hash`, and a bound computed at runtime is also named in
+// `dynamic_constraints`, so it still counts as a bound.
+fn record_constraint(
+    schema: &mut ArunaSchemaMetadata,
+    name: &str,
+    call: &CallExpression<'_>,
+    scope: &SchemaScope<'_>,
+) {
+    let hash_call = |schema: &mut ArunaSchemaMetadata| {
+        schema.constraints_hash = Some(extend_constraints_hash(
+            schema.constraints_hash.as_deref(),
+            &canonical_constraint_call(name, call, scope.source),
+        ));
+    };
+    let kind = schema.kind.clone();
+    if name == "refine" {
+        schema.refinements += 1;
+        hash_call(schema);
+        return;
+    }
+    if (kind.as_str(), name) == ("number", "int") {
+        schema.int = true;
+        return;
+    }
+
+    let value = static_number_argument(call, scope);
+    let length = value.and_then(length_bound);
+    let recorded = match (kind.as_str(), name) {
+        ("string", "minLength") => length.map(|bound| raise_length(&mut schema.min_length, bound)),
+        ("string", "maxLength") => length.map(|bound| lower_length(&mut schema.max_length, bound)),
+        ("string", "length") => length.map(|bound| {
+            raise_length(&mut schema.min_length, bound);
+            lower_length(&mut schema.max_length, bound);
+        }),
+        ("string", "minChars") => length.map(|bound| raise_length(&mut schema.min_chars, bound)),
+        ("string", "maxChars") => length.map(|bound| lower_length(&mut schema.max_chars, bound)),
+        ("array", "minItems") => length.map(|bound| raise_length(&mut schema.min_items, bound)),
+        ("array", "maxItems") => length.map(|bound| lower_length(&mut schema.max_items, bound)),
+        ("array", "length") => length.map(|bound| {
+            raise_length(&mut schema.min_items, bound);
+            lower_length(&mut schema.max_items, bound);
+        }),
+        ("record", "maxEntries") => {
+            length.map(|bound| lower_length(&mut schema.max_entries, bound))
+        }
+        ("number", "min") => value
+            .and_then(number_bound)
+            .map(|bound| raise_number(&mut schema.min, bound)),
+        ("number", "max") => value
+            .and_then(number_bound)
+            .map(|bound| lower_number(&mut schema.max, bound)),
+        // A method this kind does not have at runtime: nothing to judge it by.
+        _ => {
+            hash_call(schema);
+            return;
+        }
+    };
+    if recorded.is_none() {
+        if !schema.dynamic_constraints.iter().any(|existing| existing == name) {
+            schema.dynamic_constraints.push(name.to_string());
+            schema.dynamic_constraints.sort();
+        }
+        hash_call(schema);
     }
 }
 
@@ -833,52 +990,16 @@ pub(crate) fn parse_schema_call<'a>(
 
     // Chained constraint/refine methods (schema.number().min(0), .refine(fn, msg),
     // .maxLength(20), ...) are runtime-only: they do not change the rendered type
-    // or the wire format. Parse the receiver as the real schema and drop the
-    // constraint, so the metadata reflects only the underlying kind.
-    //
-    // Two things are kept. A length bound caps the encoded size, so it is
-    // recorded for a signal's size check (see max_encoded_payload_bytes). The
-    // rest go into constraints_hash, so the store gate can tell they changed.
+    // or the wire format. Parse the receiver as the real schema and record the
+    // constraint on it (see `record_constraint`), for the contract diff, the
+    // store gate, and a payload's size bound.
     let constraint = member.property.name.as_str();
     if is_chain_constraint_method(constraint) {
         if let Expression::CallExpression(inner_call) = unwrap_schema_expression(&member.object) {
             let mut parsed = parse_schema_call(
                 file, action_id, export_name, role, inner_call, scope, diagnostics,
             )?;
-            let bound = literal_length_bound(call);
-            if let Some(bound) = bound {
-                let tighten = |current: Option<u32>, bytes: u32| {
-                    Some(current.map_or(bytes, |value| value.min(bytes)))
-                };
-                match (parsed.kind.as_str(), constraint) {
-                    ("string", "maxLength" | "length") => {
-                        parsed.max_length = tighten(parsed.max_length, bound)
-                    }
-                    // A character is at most four UTF-8 bytes.
-                    ("string", "maxChars") => {
-                        parsed.max_length = tighten(parsed.max_length, bound.saturating_mul(4))
-                    }
-                    ("array", "maxItems" | "length") => {
-                        parsed.max_items = tighten(parsed.max_items, bound)
-                    }
-                    _ => {}
-                }
-            }
-            // A literal upper bound is fully described by max_length / max_items,
-            // so a change to it is judged from those. Everything else, `length`
-            // (it is a lower bound too) and `maxChars` (bytes are not characters)
-            // included, is only visible through the hash.
-            let recorded = bound.is_some()
-                && matches!(
-                    (parsed.kind.as_str(), constraint),
-                    ("string", "maxLength") | ("array", "maxItems")
-                );
-            if !recorded {
-                parsed.constraints_hash = Some(extend_constraints_hash(
-                    parsed.constraints_hash.as_deref(),
-                    &canonical_constraint_call(constraint, call, scope.source),
-                ));
-            }
+            record_constraint(&mut parsed, constraint, call, scope);
             return Some(parsed);
         }
     }

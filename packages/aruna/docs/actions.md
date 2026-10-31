@@ -212,6 +212,27 @@ in-process (and the test harness's `invoke` and `client`) is trusted server code
 never charged to the budget nor refused for having too many calls running. Validation, the
 per-action rate limit, middleware, and idempotency apply to it as on the wire.
 
+### Bounding input
+
+The wire walk caps how many values an input holds, not how long a string in it is, and
+an array or record is validated entry by entry up to that cap. A declared bound is where
+the server refuses an oversized payload itself, before your code sees it:
+
+```ts
+input: schema.object({
+  name: schema.string().maxChars(20),
+  tags: schema.array(schema.string().maxLength(32)).maxItems(8),
+  scores: schema.record(schema.u16()).maxEntries(16),
+}),
+```
+
+The compiler reports an action whose input leaves a string, array, or record without an
+upper bound as `aruna::514 unbounded-action-input`, listing every such path
+(`input.tags[]`). A bound computed at runtime counts as one. It is a warning by default;
+`strict.unboundedInput` makes it an `"error"` or turns it `"off"`, and
+`diagnostics.ignore` drops it project-wide. Outputs and signal payloads are
+server-authored and not checked.
+
 ## Errors the client sees
 
 An error reaches the client with its own `name` and `message` only when it is public.
@@ -326,6 +347,30 @@ button), pass your own: `invokeAction(id, input, { idempotencyKey })`, or
 
 Dropping `idempotent` from an action is a breaking change in `aruna contract diff`: a
 client built against the old contract still retries the action's timeouts.
+
+## Contract changes
+
+`aruna contract diff` compares the contract snapshot of two builds and sorts every change
+by what it does to a client built against the older one. Input travels client → server
+and output server → client, so the same edit can mean opposite things on each side:
+
+| Change | Input | Output |
+| --- | --- | --- |
+| A field added | **breaking** if required, non-breaking if optional | non-breaking |
+| A field removed | info (unknown input fields are ignored) | **breaking** |
+| A field's type changed | **breaking** | **breaking** |
+| A bound tightened: `maxLength` lowered, `min` raised, `.int()` or a `.refine()` added, a bound added where there was none | **breaking** — an old client may send what the server now refuses | non-breaking |
+| A bound loosened: the reverse | non-breaking | **breaking** — an old client may receive what it was promised it would not |
+| A `.refine()` predicate or a computed bound changed (seen, not judged) | warning | warning |
+| The rate limit's throughput lowered / raised | **breaking** / non-breaking | |
+| `idempotent` dropped / added | **breaking** / non-breaking | |
+
+A signal payload follows the output column. The bounds come from what the compiler
+records for each schema ([Schema](./schema.md#what-the-compiler-records)); a change to a
+bound inside a union member is reported as the union changing. A version 1 snapshot,
+written before bounds were recorded, is still read, but no bounds are compared against
+it: the diff says so in an info entry, and `aruna contract update` writes the current
+format.
 
 ## Testing without a transport
 

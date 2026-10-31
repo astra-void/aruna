@@ -37,15 +37,26 @@ pub fn signal_message_bytes(signal_id: &str, payload_bytes: u64) -> u64 {
     payload_bytes + signal_id.len() as u64 + WIRE_SIGNAL_FRAME_OVERHEAD_BYTES
 }
 
+// The most UTF-8 bytes a string schema admits: `.maxLength(n)` (or `.length`),
+// or four bytes a character of `.maxChars(n)`, whichever is smaller.
+pub fn max_string_bytes(schema: &ArunaSchemaMetadata) -> Option<u64> {
+    let bytes = schema.max_length.map(u64::from);
+    let chars = schema.max_chars.map(|chars| u64::from(chars) * 4);
+    match (bytes, chars) {
+        (Some(bytes), Some(chars)) => Some(bytes.min(chars)),
+        (bytes, chars) => bytes.or(chars),
+    }
+}
+
 // The largest payload `encodeBinary` can produce for a schema, frame header
 // excluded, or None when nothing bounds it. Follows the codec's layout
 // (packages/aruna/roblox/binary.ts): a string needs `.maxLength` or `.maxChars`, an
-// array `.maxItems`;
-// a record has no size bound at all; optionals and unions take their largest
-// branch.
+// array `.maxItems`; a record has no size bound at all, `.maxEntries` or not,
+// since its keys are strings of any length; optionals and unions take their
+// largest branch.
 pub fn max_encoded_payload_bytes(schema: &ArunaSchemaMetadata) -> Option<u64> {
     match schema.kind.as_str() {
-        "string" => schema.max_length.map(|length| 4 + u64::from(length)),
+        "string" => max_string_bytes(schema).map(|bytes| 4 + bytes),
         "number" => Some(match schema.numeric_format.as_deref() {
             Some("u8") | Some("i8") => 1,
             Some("u16") | Some("i16") => 2,

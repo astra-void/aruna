@@ -101,6 +101,11 @@ pub struct StrictConfig {
     // by default, unlike the others: what it guards is a player's save file.
     #[serde(default = "default_store_compatibility")]
     pub store_compatibility: StrictSeverity,
+    // An action input that leaves a string, array, or record without an upper
+    // bound (aruna::514): the server validates whatever size a client sends. A
+    // warning by default, like the other shape checks.
+    #[serde(default)]
+    pub unbounded_input: StrictSeverity,
 }
 
 fn default_shared_safety() -> bool {
@@ -119,6 +124,7 @@ impl Default for StrictConfig {
             unresolved_imports: StrictSeverity::default(),
             domain_boundary: StrictSeverity::default(),
             store_compatibility: default_store_compatibility(),
+            unbounded_input: StrictSeverity::default(),
         }
     }
 }

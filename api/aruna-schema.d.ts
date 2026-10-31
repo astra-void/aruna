@@ -21,6 +21,18 @@ export interface NumberSchemaChain extends Schema<number> {
     readonly default: (value: number) => Schema<number>;
 }
 
+export interface RecordSchemaChain<T = unknown> extends Schema<{
+    [key: string]: T;
+}> {
+    readonly maxEntries: (value: number) => RecordSchemaChain<T>;
+    readonly refine: (check: (value: unknown) => boolean, message: string) => RecordSchemaChain<T>;
+    readonly default: (value: {
+        readonly [key: string]: T;
+    }) => Schema<{
+        [key: string]: T;
+    }>;
+}
+
 export interface Refinement {
     readonly check: (value: unknown) => boolean;
     readonly message: string;
@@ -80,7 +92,7 @@ export declare const schema: {
     boolean: typeof booleanSchema;
     array: <S extends Schema>(item: S) => ArraySchemaChain<Infer<S>>;
     optional: typeof optionalSchema;
-    record: typeof recordSchema;
+    record: <S extends Schema>(value: S) => RecordSchemaChain<Infer<S>>;
     tuple: typeof tupleSchema;
     object: typeof objectSchema;
     literal: typeof literalSchema;
@@ -141,10 +153,6 @@ declare function literalSchema<const TValue extends SchemaLiteral>(value: TValue
 declare function objectSchema<F extends FieldRecord>(fields: F): Schema<InferFields<F>>;
 
 declare function optionalSchema<S extends Schema>(inner: S): Schema<Infer<S> | undefined>;
-
-declare function recordSchema<S extends Schema>(value: S): Schema<{
-    [key: string]: Infer<S>;
-}>;
 
 declare function tupleSchema<const TItems extends readonly Schema[]>(items: TItems): Schema<InferTupleItems<TItems>>;
 

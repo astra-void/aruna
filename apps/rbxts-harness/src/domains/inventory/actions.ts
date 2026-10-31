@@ -6,9 +6,9 @@ import { createActionResult } from "../../shared/result";
 export const restockItem = defineAction({
   id: "inventory.restockItem",
   input: schema.object({
-    itemIds: schema.array(schema.string()),
+    itemIds: schema.array(schema.string().maxLength(64)).maxItems(50),
     warehouse: schema.literal("central"),
-    auditTag: schema.optional(schema.string()),
+    auditTag: schema.optional(schema.string().maxLength(64)),
   }),
   output: schema.object({
     result: schema.object({

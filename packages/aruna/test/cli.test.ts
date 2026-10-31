@@ -196,8 +196,8 @@ describe("store contract gate", () => {
     expect(check.status).toBe(1);
     const messages = gateDiagnostics(String(check.stdout)).map((diagnostic) => diagnostic.message);
     expect(messages).toEqual([
-      "player.profile schema.name maxLength lowered from 32 to 16; saved records up to 32 bytes long will fail to load.",
-      "player.profile schema.tags gained maxItems 10; saved records may be longer and will fail to load.",
+      "player.profile schema.name maxLength lowered from 32 to 16; saved records may not satisfy it and will fail to load.",
+      "player.profile schema.tags gained maxItems 10; saved records may not satisfy it and will fail to load.",
     ]);
 
     // Raising title's maxLength is compatible, so it is not listed at all.

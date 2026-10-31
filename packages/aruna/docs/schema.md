@@ -43,6 +43,7 @@ schema.number().min(0).max(100).int()
 schema.string().minLength(1).maxLength(64)      // UTF-8 bytes
 schema.string().minChars(2).maxChars(16)        // characters (code points)
 schema.array(schema.string()).minItems(1).maxItems(8)
+schema.record(schema.u16()).maxEntries(32)       // at most 32 entries
 schema.number().refine((value) => value % 2 === 0, "expected an even number")
 ```
 
@@ -59,10 +60,28 @@ surrogate). Both can be chained when a field needs both kinds of limit:
 schema.string().maxChars(40).maxLength(120)  // 40 characters, and never over 120 bytes
 ```
 
-The compiler reads a literal `.maxLength(n)` / `.maxItems(n)` (and `.maxChars(n)`, as at
-most 4n bytes) to size signal payloads, and the [store gate](./stores.md#the-compatibility-gate)
-compares them across builds. Every other constraint is runtime code it cannot evaluate;
-it records a hash of the chain so the gate can at least tell one changed.
+### What the compiler records
+
+Each bound whose argument the compiler can read — a number literal, or a module-level
+`const` bound to one (`const NAME_LIMIT = 20`) — goes into the manifest and the contract
+snapshot as a value: `maxLength: 64`, `min: 0`, `int: true`, `maxEntries: 32`. That is
+what lets [`aruna contract diff`](./actions.md#contract-changes) tell a tighter contract
+from a looser one, the [store gate](./stores.md#the-compatibility-gate) check saved
+records against a new bound, and the compiler size a signal payload (`.maxChars(n)`
+counts as at most 4n bytes there). `aruna inspect` shows them after the type:
+`string (maxLength 64)`.
+
+What it cannot read, it still records as best it can:
+
+- **A `.refine()` predicate** is runtime code. The compiler counts the calls, so one
+  added or removed is a tighter or looser schema, and hashes their source, so a changed
+  one is seen, though not judged.
+- **A bound computed at runtime** (`.maxLength(limits.name)`, `.max(config.cap())`) is
+  recorded as present but not comparable (`dynamicConstraints`): the value is bounded,
+  by an amount only the running game knows.
+
+An action's input should bound every string, array, and record it accepts; the compiler
+flags one that does not ([`aruna::514`](./actions.md#bounding-input)).
 
 ## Collections & composition
 
@@ -85,6 +104,8 @@ schema.tuple([schema.string(), schema.u8()]) // [string, number] — exact lengt
 
 `record` is a homogeneous string-keyed map: every key must be a string (non-string keys
 don't survive the plain-data boundary) and every value must match the value schema.
+`.maxEntries(n)` caps how many entries it holds; the keys are still strings of any
+length, so a record has no size bound in bytes.
 `tuple` is a fixed-length heterogeneous array validated positionally — a value with a
 different length fails. Both cross the binary codec with a deterministic layout
 (records encode entries sorted by key; tuples encode a fixed sequence with no length

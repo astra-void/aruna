@@ -6,7 +6,7 @@ export const purchaseItem = defineAction({
   id: "shop.purchaseItem",
   rateLimit: { key: "player", windowMs: 1000, max: 5 },
   input: schema.object({
-    itemId: schema.string(),
+    itemId: schema.string().maxLength(64),
   }),
   output: schema.object({
     ok: schema.boolean(),

@@ -35,48 +35,78 @@
       "warnings": []
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 6,
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
 === inspect signals (exit 0)
 {
   "signals": [],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 6,
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
 === inspect stores (exit 0)
 {
   "stores": [],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 6,
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
 === inspect contract (exit 0)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -117,7 +147,17 @@
       "warnings": []
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "generatedAt": null
 }
 
@@ -190,14 +230,24 @@
       "reasonDetail": "matched recommended entry file"
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 6,
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -245,14 +295,24 @@
       "to": "src/domains/shop/model.ts"
     }
   ],
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "summary": {
     "errors": 0,
     "imports": 6,
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -320,10 +380,21 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "manifest": {
     "actions": [
       {
@@ -346,7 +417,17 @@
         }
       }
     ],
-    "diagnostics": [],
+    "diagnostics": [
+      {
+        "code": "aruna::514",
+        "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/server/actions.ts",
+        "message": "Server action shop.buyItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      }
+    ],
     "imports": [
       {
         "from": "src/client.tsx",
@@ -468,7 +549,7 @@
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 
@@ -536,10 +617,21 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "Server action shop.buyItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
   "generatedFiles": [
     {
       "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport type BuyItemInput = { itemId: string; };\n\nexport type BuyItemOutput = void;\n\nexport const buyItem = (input: BuyItemInput): Promise<BuyItemOutput> => {\n  return invokeAction(\"shop.buyItem\", input) as Promise<BuyItemOutput>;\n};\n\nexport const contractHash = \"141c2c406e76f04d\";\n",
@@ -550,7 +642,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/client/state.ts\",\n      \"path\": \"src/domains/shop/client/state.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/model.ts\",\n      \"path\": \"src/domains/shop/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/schema/buy.ts\",\n      \"path\": \"src/domains/shop/schema/buy.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/server/actions.ts\",\n      \"path\": \"src/domains/shop/server/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/domains/shop/server/pricing.ts\",\n      \"path\": \"src/domains/shop/server/pricing.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/ui/panel.tsx\",\n      \"path\": \"src/domains/shop/ui/panel.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/client.tsx\",\n      \"to\": \"src/domains/shop/ui/panel.tsx\",\n      \"specifier\": \"./domains/shop/ui/panel\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/schema/buy.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/shop/schema/buy.ts\",\n      \"specifier\": \"../schema/buy\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/shop/server/pricing.ts\",\n      \"specifier\": \"./pricing\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/ui/panel.tsx\",\n      \"to\": \"src/domains/shop/model.ts\",\n      \"specifier\": \"../model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.buyItem\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"exportName\": \"buyItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": []\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/client.tsx\",\n      \"path\": \"src/client.tsx\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/client/state.ts\",\n      \"path\": \"src/domains/shop/client/state.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/model.ts\",\n      \"path\": \"src/domains/shop/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/schema/buy.ts\",\n      \"path\": \"src/domains/shop/schema/buy.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/server/actions.ts\",\n      \"path\": \"src/domains/shop/server/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/domains/shop/server/pricing.ts\",\n      \"path\": \"src/domains/shop/server/pricing.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/ui/panel.tsx\",\n      \"path\": \"src/domains/shop/ui/panel.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/client.tsx\",\n      \"to\": \"src/domains/shop/ui/panel.tsx\",\n      \"specifier\": \"./domains/shop/ui/panel\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/schema/buy.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/shop/schema/buy.ts\",\n      \"specifier\": \"../schema/buy\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/shop/server/pricing.ts\",\n      \"specifier\": \"./pricing\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/ui/panel.tsx\",\n      \"to\": \"src/domains/shop/model.ts\",\n      \"specifier\": \"../model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.buyItem\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"exportName\": \"buyItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": false,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action shop.buyItem accepts input with no size limit.\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"details\": \"export name: buyItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -576,7 +668,17 @@
         }
       }
     ],
-    "diagnostics": [],
+    "diagnostics": [
+      {
+        "code": "aruna::514",
+        "details": "export name: buyItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+        "file": "src/domains/shop/server/actions.ts",
+        "message": "Server action shop.buyItem accepts input with no size limit.",
+        "name": "unbounded-action-input",
+        "severity": "warning",
+        "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+      }
+    ],
     "imports": [
       {
         "from": "src/client.tsx",
@@ -698,7 +800,7 @@
     "infos": 0,
     "modules": 10,
     "resolvedImports": 4,
-    "warnings": 0
+    "warnings": 1
   }
 }
 

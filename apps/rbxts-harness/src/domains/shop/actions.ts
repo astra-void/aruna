@@ -11,10 +11,10 @@ export const purchaseItem = defineAction({
     max: 5,
   },
   input: schema.object({
-    itemId: schema.string(),
+    itemId: schema.string().maxLength(64),
     quantity: schema.number(),
     currency: schema.literal("coins"),
-    coupon: schema.optional(schema.string()),
+    coupon: schema.optional(schema.string().maxLength(32)),
   }),
   output: schema.object({
     result: schema.object({

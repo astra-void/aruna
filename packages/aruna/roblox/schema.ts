@@ -38,8 +38,8 @@ export type SchemaLiteral = string | number | boolean;
 // A runtime-only validation refinement: a predicate plus the message reported
 // when it fails. Constraints like `.min(0)` / `.maxLength(20)` are built-in
 // refinements. They run after the structural check passes and never change the
-// wire format or the rendered type. The compiler keeps only a literal length
-// bound and a hash of the chain's source.
+// wire format or the rendered type. The compiler records each bound it can read
+// in the contract, counts the `.refine(...)` calls, and hashes the rest.
 export interface Refinement {
 	readonly check: (value: unknown) => boolean;
 	readonly message: string;
@@ -408,10 +408,14 @@ function objectSchema<F extends FieldRecord>(fields: F): Schema<InferFields<F>> 
 // A homogeneous string-keyed map (`{ [key: string]: V }`). Keys must be strings
 // — a table with a non-string key fails validation, since non-string keys don't
 // survive the plain-data boundary. Carried on the shared `item` field.
-function recordSchema<S extends Schema>(value: S): Schema<{ [key: string]: Infer<S> }> {
+function recordSchemaCore<S extends Schema>(
+	value: S,
+	refinements: readonly Refinement[],
+): Schema<{ [key: string]: Infer<S> }> {
 	return {
 		typeName: "record",
 		item: value,
+		refinements,
 		validate: (candidate) => {
 			if (!typeIs(candidate, "table")) {
 				return false;
@@ -424,8 +428,51 @@ function recordSchema<S extends Schema>(value: S): Schema<{ [key: string]: Infer
 					return false;
 				}
 			}
-			return true;
+			return refinementsPass(refinements, candidate);
 		},
+	};
+}
+
+export interface RecordSchemaChain<T = unknown> extends Schema<{ [key: string]: T }> {
+	// At most `value` entries. The keys are strings of any length, so this bounds
+	// how many values a record holds, not its size in bytes.
+	readonly maxEntries: (value: number) => RecordSchemaChain<T>;
+	readonly refine: (check: (value: unknown) => boolean, message: string) => RecordSchemaChain<T>;
+	readonly default: (value: { readonly [key: string]: T }) => Schema<{ [key: string]: T }>;
+}
+
+// Whether a table has at most `limit` entries, without counting past it.
+function hasAtMostEntries(candidate: unknown, limit: number): boolean {
+	if (!typeIs(candidate, "table")) {
+		return false;
+	}
+	let count = 0;
+	for (const [key] of pairs(candidate as { [key: string]: unknown })) {
+		count += key !== undefined ? 1 : 0;
+		if (count > limit) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function recordSchemaChain<S extends Schema>(
+	value: S,
+	refinements: readonly Refinement[],
+): RecordSchemaChain<Infer<S>> {
+	const core = recordSchemaCore(value, refinements);
+	return {
+		...core,
+		maxEntries: (limit) =>
+			recordSchemaChain(value, [
+				...refinements,
+				{
+					check: (candidate) => hasAtMostEntries(candidate, limit),
+					message: `expected at most ${limit} entries`,
+				},
+			]),
+		refine: (check, message) => recordSchemaChain(value, [...refinements, { check, message }]),
+		default: (fallback) => defaultSchema(core, fallback),
 	};
 }
 
@@ -789,7 +836,7 @@ export function firstSchemaIssue(schema: Schema, value: unknown, path?: string):
 				}
 			}
 		}
-		return undefined;
+		return firstRefinementIssue(schema.refinements, value, at);
 	} else if (typeName === "tuple") {
 		if (!typeIs(value, "table")) {
 			return withPath(at, "expected tuple");
@@ -903,7 +950,7 @@ export const schema = {
 	boolean: booleanSchema,
 	array: <S extends Schema>(item: S) => arraySchemaChain(item, []),
 	optional: optionalSchema,
-	record: recordSchema,
+	record: <S extends Schema>(value: S) => recordSchemaChain(value, []),
 	tuple: tupleSchema,
 	object: objectSchema,
 	literal: literalSchema,

@@ -95,7 +95,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "u8[]",
+        "summary": "u8[] (maxItems 860)",
         "schema": {
           "items": {
             "kind": "number",
@@ -118,7 +118,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "object { at: Vector3, by: string, power: u8 }",
+        "summary": "object { at: Vector3, by: string (maxLength 16), power: u8 }",
         "schema": {
           "kind": "object",
           "properties": {
@@ -149,7 +149,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "u8[]",
+        "summary": "u8[] (maxItems 616)",
         "schema": {
           "items": {
             "kind": "number",
@@ -171,7 +171,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "string[]",
+        "summary": "(string (maxLength 32))[] (maxItems 64)",
         "schema": {
           "items": {
             "kind": "string",
@@ -343,7 +343,7 @@
 
 === inspect contract (exit 1)
 {
-  "version": 1,
+  "version": 2,
   "project": {
     "root": "<root>",
     "generatedDir": "src/.aruna",
@@ -378,7 +378,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "u8[]",
+        "summary": "u8[] (maxItems 860)",
         "schema": {
           "items": {
             "kind": "number",
@@ -401,7 +401,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "object { at: Vector3, by: string, power: u8 }",
+        "summary": "object { at: Vector3, by: string (maxLength 16), power: u8 }",
         "schema": {
           "kind": "object",
           "properties": {
@@ -432,7 +432,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "u8[]",
+        "summary": "u8[] (maxItems 616)",
         "schema": {
           "items": {
             "kind": "number",
@@ -454,7 +454,7 @@
       "moduleKind": "shared",
       "direction": "server-to-client",
       "payload": {
-        "summary": "string[]",
+        "summary": "(string (maxLength 32))[] (maxItems 64)",
         "schema": {
           "items": {
             "kind": "string",
@@ -775,6 +775,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },
@@ -1121,6 +1122,7 @@
       "rawRemoteUsage": "warning",
       "sharedSafety": true,
       "storeCompatibility": "error",
+      "unboundedInput": "warning",
       "unresolvedImports": "warning"
     }
   },

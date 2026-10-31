@@ -49,13 +49,18 @@
         "kind": "object",
         "properties": {
           "level": {
-            "constraintsHash": "653eede104d35803",
-            "kind": "number"
+            "kind": "number",
+            "min": 0,
+            "constraintsHash": "783c24327886b922",
+            "refinements": 1
           },
           "nickname": {
-            "constraintsHash": "adf33a6a2904437d",
             "kind": "string",
-            "maxLength": 20
+            "minLength": 2,
+            "constraintsHash": "61e8cf8d09ae395a",
+            "dynamicConstraints": [
+              "maxLength"
+            ]
           }
         }
       },
