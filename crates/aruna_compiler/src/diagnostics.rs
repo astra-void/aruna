@@ -129,6 +129,11 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::580" => Some(("invalid-runtime-definition", DiagnosticSeverity::Error)),
         "aruna::581" => Some(("duplicate-runtime-id", DiagnosticSeverity::Error)),
         "aruna::582" => Some(("unresolved-runtime-order", DiagnosticSeverity::Error)),
+        // An action's `errors` the compiler cannot read, or one that names an
+        // error a client could not tell apart: an error, like 560, since the
+        // generated client types and the contract are built from it.
+        "aruna::584" => Some(("invalid-action-errors", DiagnosticSeverity::Error)),
+        "aruna::585" => Some(("action-error-data-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

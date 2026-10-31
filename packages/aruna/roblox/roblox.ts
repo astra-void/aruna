@@ -7,7 +7,7 @@ import {
 	type ContractHandshakeOptions,
 	type VersionMismatchInfo,
 } from "./client-runtime";
-import type { ActionDefinition } from "./server";
+import type { ActionDefinition, ActionErrorMap } from "./server";
 import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding, ServerTransport } from "./server-app";
 import type { Schema } from "./schema";
@@ -71,9 +71,10 @@ export function defineAction<
 	TOutput extends Schema | undefined = undefined,
 	TPlayer = Player,
 	TSignals extends SignalMap = SignalMap,
+	TErrors extends ActionErrorMap = {},
 >(
-	definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals>,
-): ActionDefinition<TInput, TOutput, TPlayer, TSignals> {
+	definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>,
+): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors> {
 	return definition;
 }
 
@@ -94,6 +95,7 @@ interface ActionResponsePayload {
 	readonly retryAfterMs?: number;
 	readonly resetAtMs?: number;
 	readonly errorId?: string;
+	readonly errorData?: unknown;
 }
 
 // The structured rejection every failed invoke carries: `message` is always
@@ -101,13 +103,15 @@ interface ActionResponsePayload {
 // "ActionValidationError", "ActionTimeoutError", ...) and rate limits carry
 // `retryAfterMs`/`resetAtMs` so callers can back off instead of string-matching.
 // An `ActionInternalError` carries `errorId`, which the server's `onError` got
-// for the same failure.
+// for the same failure. An error the action declares with data carries it as
+// `data`; `isActionError` (aruna/client) narrows it to the declared type.
 export interface ActionError {
 	readonly message: string;
 	readonly name?: string;
 	readonly retryAfterMs?: number;
 	readonly resetAtMs?: number;
 	readonly errorId?: string;
+	readonly data?: unknown;
 }
 
 function toActionError(payload: ActionResponsePayload): ActionError {
@@ -117,6 +121,7 @@ function toActionError(payload: ActionResponsePayload): ActionError {
 		...(payload.retryAfterMs !== undefined ? { retryAfterMs: payload.retryAfterMs } : {}),
 		...(payload.resetAtMs !== undefined ? { resetAtMs: payload.resetAtMs } : {}),
 		...(payload.errorId !== undefined ? { errorId: payload.errorId } : {}),
+		...(payload.errorData !== undefined ? { data: payload.errorData } : {}),
 	};
 }
 

@@ -129,6 +129,7 @@ declaration that it sends no response.
 | `errorName` | string, optional | `ActionValidationError`, `ActionRateLimitError`, `ActionNotFoundError`, `ActionSerializationError`, `ActionInternalError`, or an `actionError` name. |
 | `retryAfterMs`, `resetAtMs` | number, optional | On a rate-limit refusal. |
 | `errorId` | string, optional | On `ActionInternalError`: the id the server's `onError` got. |
+| `errorData` | any wire-safe value, optional | On an error the action declares with `data`: the data, checked against the declared schema ([declared errors](../packages/aruna/docs/actions.md#declared-errors)). |
 
 ### Signal (`t = 3`, server → client)
 

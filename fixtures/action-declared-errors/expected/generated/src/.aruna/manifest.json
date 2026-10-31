@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "projectRoot": ".",
+  "modules": [
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/client.tsx",
+      "path": "src/client.tsx",
+      "kind": "clientEntry",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "path": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "path": "src/server.ts",
+      "kind": "serverEntry",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/schema",
+      "resolved": false,
+      "kind": "static"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "specifier": "aruna/server",
+      "resolved": false,
+      "kind": "static"
+    }
+  ],
+  "actions": [
+    {
+      "id": "shop.browse",
+      "file": "src/domains/shop/actions.ts",
+      "exportName": "browse",
+      "hasInputSchema": false,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "outputSchema": {
+        "kind": "array",
+        "items": {
+          "kind": "string"
+        }
+      }
+    },
+    {
+      "id": "shop.purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "exportName": "purchaseItem",
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "serialization": {
+        "policy": "plain-data-v1"
+      },
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "outputSchema": {
+        "kind": "object",
+        "properties": {
+          "ok": {
+            "kind": "boolean"
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "NotEnoughCoins",
+          "hasData": false
+        },
+        {
+          "name": "OutOfStock",
+          "hasData": true,
+          "dataSchema": {
+            "kind": "object",
+            "properties": {
+              "itemId": {
+                "kind": "string"
+              },
+              "restockIn": {
+                "kind": "number",
+                "numericFormat": "u16"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "diagnostics": []
+}

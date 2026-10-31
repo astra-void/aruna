@@ -8,14 +8,15 @@ export interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = S
     readonly store?: StoreDocument<unknown>;
 }
 
-export interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap> {
+export interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}> {
     readonly id: string;
     readonly rateLimit?: ActionRateLimitOptions;
     readonly fireAndForget?: boolean;
     readonly idempotent?: boolean;
     readonly input?: TInput;
     readonly output?: TOutput;
-    run(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+    readonly errors?: TErrors;
+    run(context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
 
 export interface ActionDispatchResult {
@@ -26,6 +27,15 @@ export interface ActionDispatchResult {
     readonly retryAfterMs?: number;
     readonly resetAtMs?: number;
     readonly errorId?: string;
+    readonly errorData?: unknown;
+}
+
+export type ActionErrorDataArgs<TDeclaration> = TDeclaration extends {
+    readonly data: infer S;
+} ? S extends Schema ? [data: Infer<S>] : [] : [];
+
+export interface ActionErrorDeclaration {
+    readonly data?: Schema;
 }
 
 export type ActionErrorHandler<TPlayer = unknown> = (error: unknown, info: {
@@ -33,6 +43,16 @@ export type ActionErrorHandler<TPlayer = unknown> = (error: unknown, info: {
     readonly player: TPlayer;
     readonly errorId?: string;
 }) => void;
+
+export type ActionErrorMap = {
+    readonly [name: string]: ActionErrorDeclaration;
+};
+
+export type ActionFail<TErrors extends ActionErrorMap> = <TName extends keyof TErrors & string>(name: TName, ...data: ActionErrorDataArgs<TErrors[TName]>) => never;
+
+export interface ActionFailContext<TErrors extends ActionErrorMap> {
+    readonly fail: ActionFail<TErrors>;
+}
 
 export type ActionMap<TPlayer> = {
     readonly [actionId: string]: AnyActionDefinition<TPlayer>;
@@ -218,8 +238,8 @@ export type PublishingActionContext<TPlayer, TSignals extends SignalMap, TSessio
     readonly store?: StoreDocument<TStore>;
 };
 
-export type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals>, "run"> & {
-    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+export type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TErrors extends ActionErrorMap = {}> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
+    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
 
 export type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: RequestAbuseInfo) => void;
@@ -513,7 +533,7 @@ export declare function actionError(name: string, message: string): PublicAction
 
 export declare function classifyStoreError(cause: unknown): StoreErrorClassification;
 
-export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals>;
+export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>, options?: ActionRegistryOptions<TPlayer>): ActionRegistry<TPlayer>;
 
@@ -533,7 +553,7 @@ export declare function defaultPlayerStoreKey(player: unknown): StoreResult<stri
 
 export declare const defaultStoreScheduler: StoreScheduler;
 
-export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals>): ActionDefinition<TInput, TOutput, TPlayer, TSignals>;
+export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function definePlayerStore<TSchema extends Schema, TPlayer = Player>(definition: PlayerStoreDefinition<TSchema, TPlayer>): PlayerStoreDefinition<TSchema, TPlayer>;
 
@@ -587,7 +607,9 @@ export declare function validateStoreKey(key: string): StoreResult<string>;
 
 // Referenced by the exports above, not exported from this entry:
 
-type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer>;
+type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer, SignalMap, ActionErrorMap>;
+
+type FailContextFor<TErrors extends ActionErrorMap> = keyof TErrors extends never ? {} : ActionFailContext<TErrors>;
 
 type Infer<S> = S extends Schema<infer T> ? T : never;
 

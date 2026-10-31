@@ -54,6 +54,22 @@ pub struct ArunaActionRecord {
     pub input_schema: Option<ArunaSchemaMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<ArunaSchemaMetadata>,
+    // The errors the action declares (`errors: { Name: { data? } }`), sorted by
+    // name. Omitted from JSON when there are none, so other actions' manifests
+    // stay byte-stable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<ArunaActionErrorRecord>,
+}
+
+// One error an action declares: a failure the client can tell apart by `name`,
+// with the schema of the data it carries when it carries any.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArunaActionErrorRecord {
+    pub name: String,
+    pub has_data: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_schema: Option<ArunaSchemaMetadata>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -391,6 +407,170 @@ pub(crate) fn extract_action_idempotent(
     }
 }
 
+// The framework's own error names. A declared error may not take one: a client
+// could not tell the action's failure from Aruna's.
+const RESERVED_ERROR_NAMES: &[&str] = &[
+    "ActionCancelledError",
+    "ActionInternalError",
+    "ActionNotFoundError",
+    "ActionRateLimitError",
+    "ActionSerializationError",
+    "ActionTimeoutError",
+    "ActionValidationError",
+    "ActionVersionMismatchError",
+];
+
+// An error name is an identifier: it becomes a property of the generated
+// client type.
+fn is_error_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
+}
+
+pub(crate) fn invalid_errors_diagnostic(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    span: DiagnosticSpan,
+    details: String,
+) -> ArunaDiagnostic {
+    create_diagnostic(
+        "aruna::584",
+        format!("Server action {action_id} has an invalid errors declaration."),
+        Some(file.to_string()),
+        Some(span),
+        Some(format!("export name: {export_name}\n{details}")),
+        Some(
+            "Use errors: { OutOfStock: { data: schema.object({ ... }) }, NotEnoughCoins: {} }: an object literal of error names, each one an object literal with an optional data schema."
+                .to_string(),
+        ),
+    )
+}
+
+fn span_of(node: &impl GetSpan) -> DiagnosticSpan {
+    DiagnosticSpan {
+        start: node.span().start as usize,
+        end: node.span().end as usize,
+    }
+}
+
+// Reads the optional `errors` of a defineAction object. What it cannot read is
+// reported (aruna::584) and left out; the rest is recorded, sorted by name.
+pub(crate) fn extract_action_errors<'a>(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    object: &'a ObjectExpression<'a>,
+    scope: &SchemaScope<'a>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> Vec<ArunaActionErrorRecord> {
+    let Some(property) = find_object_property(object, "errors") else {
+        return Vec::new();
+    };
+    let invalid = |span: DiagnosticSpan, details: String, diagnostics: &mut Vec<ArunaDiagnostic>| {
+        diagnostics.push(invalid_errors_diagnostic(file, action_id, export_name, span, details));
+    };
+    let Expression::ObjectExpression(errors_object) = &property.value else {
+        invalid(span_of(&property.value), "errors must be an object literal.".to_string(), diagnostics);
+        return Vec::new();
+    };
+
+    let mut records: BTreeMap<String, ArunaActionErrorRecord> = BTreeMap::new();
+    for entry in &errors_object.properties {
+        let ObjectPropertyKind::ObjectProperty(error_property) = entry else {
+            invalid(
+                span_of(entry),
+                "errors must be a plain object literal without spread properties.".to_string(),
+                diagnostics,
+            );
+            continue;
+        };
+        let Some(name) = property_name(&error_property.key) else {
+            invalid(
+                span_of(&error_property.key),
+                "Error names must be static identifiers or string literals.".to_string(),
+                diagnostics,
+            );
+            continue;
+        };
+        let problem = if !is_error_name(&name) {
+            Some(format!(
+                "{name} is not a valid error name: use letters, digits, and underscores, not starting with a digit."
+            ))
+        } else if RESERVED_ERROR_NAMES.contains(&name.as_str()) {
+            Some(format!("{name} is one of Aruna's own error names."))
+        } else if records.contains_key(&name) {
+            Some(format!("{name} is declared more than once."))
+        } else {
+            None
+        };
+        if let Some(problem) = problem {
+            invalid(span_of(&error_property.key), problem, diagnostics);
+            continue;
+        }
+
+        let Expression::ObjectExpression(declaration) = &error_property.value else {
+            invalid(
+                span_of(&error_property.value),
+                format!("errors.{name} must be an object literal: {{}} or {{ data: schema... }}."),
+                diagnostics,
+            );
+            continue;
+        };
+        let mut record = ArunaActionErrorRecord {
+            name: name.clone(),
+            has_data: false,
+            data_schema: None,
+        };
+        let mut readable = true;
+        for field in &declaration.properties {
+            let key = match field {
+                ObjectPropertyKind::ObjectProperty(field_property) => {
+                    property_name(&field_property.key).map(|key| (key, field_property))
+                }
+                _ => None,
+            };
+            match key {
+                Some((key, field_property)) if key == "data" => {
+                    record.has_data = true;
+                    record.data_schema = parse_schema_expression(
+                        file,
+                        action_id,
+                        export_name,
+                        SchemaRole::ErrorData,
+                        &field_property.value,
+                        scope,
+                        diagnostics,
+                    );
+                }
+                Some((key, _)) => {
+                    invalid(
+                        span_of(field),
+                        format!("errors.{name} does not support the {key} key; only data."),
+                        diagnostics,
+                    );
+                    readable = false;
+                }
+                None => {
+                    invalid(
+                        span_of(field),
+                        format!("errors.{name} must be a plain object literal with static keys."),
+                        diagnostics,
+                    );
+                    readable = false;
+                }
+            }
+        }
+        if readable {
+            records.insert(name, record);
+        }
+    }
+    records.into_values().collect()
+}
+
 pub(crate) fn analyze_define_action_call<'a>(
     file: &str,
     export_name: &str,
@@ -476,6 +656,22 @@ pub(crate) fn analyze_define_action_call<'a>(
     let fire_and_forget =
         extract_action_fire_and_forget(file, &id, export_name, object, diagnostics);
     let idempotent = extract_action_idempotent(file, &id, export_name, object, diagnostics);
+    let mut errors = extract_action_errors(file, &id, export_name, object, scope, diagnostics);
+    // A one-way action sends no response, so a declared error would never
+    // reach a client.
+    if fire_and_forget && !errors.is_empty() {
+        if let Some(property) = find_object_property(object, "errors") {
+            diagnostics.push(invalid_errors_diagnostic(
+                file,
+                &id,
+                export_name,
+                span_of(property),
+                "A fireAndForget action sends no response, so no client would ever see its errors."
+                    .to_string(),
+            ));
+        }
+        errors.clear();
+    }
 
     let Some(run_property) = find_object_property(object, "run") else {
         diagnostics.push(create_diagnostic(
@@ -499,6 +695,7 @@ pub(crate) fn analyze_define_action_call<'a>(
             rate_limit,
             input_schema,
             output_schema,
+            errors,
         });
     };
 
@@ -530,6 +727,7 @@ pub(crate) fn analyze_define_action_call<'a>(
         rate_limit,
         input_schema,
         output_schema,
+        errors,
     })
 }
 

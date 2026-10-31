@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "jsx": "preserve",
+    "strict": true
+  },
+  "include": ["src/**/*"]
+}

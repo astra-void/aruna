@@ -1126,3 +1126,88 @@ export const ticked = defineSignal({
         .as_ref()
         .is_some_and(|details| details.contains("refers to itself")));
 }
+
+#[test]
+fn records_declared_errors_sorted_by_name() {
+    let (action, diagnostics) = collect_single_action(
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const buy = defineAction({
+  id: "shop.buy",
+  errors: {
+    OutOfStock: { data: schema.object({ itemId: schema.string() }) },
+    NotEnoughCoins: {},
+    "Banned": {},
+  },
+  run(ctx) {
+    throw ctx.fail("NotEnoughCoins");
+  },
+});
+"#,
+    );
+
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    let names: Vec<_> = action.errors.iter().map(|error| error.name.as_str()).collect();
+    assert_eq!(names, vec!["Banned", "NotEnoughCoins", "OutOfStock"]);
+    assert!(!action.errors[1].has_data);
+    assert!(action.errors[1].data_schema.is_none());
+    assert!(action.errors[2].has_data);
+    assert_eq!(action.errors[2].data_schema.as_ref().map(|schema| schema.kind.as_str()), Some("object"));
+}
+
+#[test]
+fn reports_an_errors_declaration_it_cannot_read() {
+    let (action, diagnostics) = collect_single_action(
+        r#"
+import { defineAction } from "aruna/server";
+import { schema } from "aruna/schema";
+
+export const buy = defineAction({
+  id: "shop.buy",
+  errors: {
+    ActionValidationError: {},
+    "not a name": {},
+    Typo: { date: schema.string() },
+    Loose: schema.object({}),
+    Kept: { data: schema.number() },
+  },
+  run() {},
+});
+"#,
+    );
+
+    // Each problem is reported on its own; what could be read is kept.
+    let details: Vec<_> = diagnostics
+        .iter()
+        .map(|diagnostic| (diagnostic.code.as_str(), diagnostic.details.clone().unwrap_or_default()))
+        .collect();
+    assert_eq!(details.len(), 4, "{details:?}");
+    assert!(details.iter().all(|(code, _)| *code == "aruna::584"));
+    assert!(details[0].1.contains("ActionValidationError is one of Aruna's own error names."));
+    assert!(details[1].1.contains("not a name is not a valid error name"));
+    assert!(details[2].1.contains("errors.Typo does not support the date key; only data."));
+    assert!(details[3].1.contains("errors.Loose must be an object literal"));
+    assert_eq!(action.errors.iter().map(|error| error.name.as_str()).collect::<Vec<_>>(), vec!["Kept"]);
+}
+
+#[test]
+fn reports_errors_on_a_fire_and_forget_action() {
+    let (action, diagnostics) = collect_single_action(
+        r#"
+import { defineAction } from "aruna/server";
+
+export const wave = defineAction({
+  id: "emote.wave",
+  fireAndForget: true,
+  errors: { TooSoon: {} },
+  run() {},
+});
+"#,
+    );
+
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].code, "aruna::584");
+    assert!(action.errors.is_empty());
+}

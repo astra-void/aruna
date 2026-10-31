@@ -46,8 +46,11 @@ type ActionDefinition<TInput, TOutput, TPlayer> = {
   readonly idempotent?: boolean;
   readonly input?: Schema;
   readonly output?: Schema;
+  // The failures a client can tell apart; see "Declared errors".
+  readonly errors?: { readonly [name: string]: { readonly data?: Schema } };
   run(
-    ctx: { player?: TPlayer; publisher?: SignalPublisher },
+    // `fail` is there only when the action declares `errors`.
+    ctx: { player?: TPlayer; publisher?: SignalPublisher; fail?: ActionFail },
     input: InferInput,
   ): InferOutput | Promise<InferOutput>;
 };
@@ -295,8 +298,9 @@ server-authored and not checked.
 ## Errors the client sees
 
 An error reaches the client with its own `name` and `message` only when it is public.
-Public means one of the framework's own failures about the request listed above, or an
-error your action throws through `actionError`. An action's *output* failing its schema
+Public means one of the framework's own failures about the request listed above, an
+error your action throws through `actionError`, or one it declared and threw with
+`ctx.fail` ([declared errors](#declared-errors)). An action's *output* failing its schema
 or not being wire-safe is a server bug, not a client error: middleware and `onError` see
 the real `ActionValidationError` / `ActionSerializationError`, and the client gets
 `ActionInternalError` with an `errorId` (unless `exposeInternalErrors` is set).
@@ -333,6 +337,74 @@ createServerApp({
 `createServerApp({ exposeInternalErrors: true })` sends a masked error's own name and
 message instead, which is useful while developing. `createTestServerApp` turns it on by
 default so a spec sees the real failure. `app.dispatch` follows the same rule.
+
+### Declared errors
+
+`actionError` reaches the client, but nothing tells the client which names to expect or
+what comes with them. Declare the failures a client should be able to tell apart in the
+action's `errors`, and throw them with `ctx.fail`:
+
+```ts
+export const purchaseItem = defineAction({
+  id: "shop.purchaseItem",
+  input: schema.object({ itemId: schema.string().maxLength(64) }),
+  errors: {
+    OutOfStock: { data: schema.object({ itemId: schema.string(), restockIn: schema.u16() }) },
+    NotEnoughCoins: {},
+  },
+  run(ctx, input) {
+    if (stock(input.itemId) === 0) {
+      throw ctx.fail("OutOfStock", { itemId: input.itemId, restockIn: 30 });
+    }
+    if (!canAfford(ctx.player, input.itemId)) {
+      throw ctx.fail("NotEnoughCoins");
+    }
+    // ...
+  },
+});
+```
+
+`ctx.fail` exists only on an action that declares `errors`, takes only a declared name,
+and checks the data against that error's schema at compile time (none for an error
+declared without `data`). It throws; write `throw ctx.fail(...)` (or `return`) so the code
+after it is known to be unreachable. The client receives the error's `name` as both
+`name` and `message`, and its data as `data`.
+
+The server checks every error of a declared name against its declaration before it goes
+out, whether `ctx.fail` threw it or middleware threw an `actionError` of that name: the
+data must be wire-safe and pass the declared schema, an error declared without data must
+carry none, and `ctx.fail` may not name an undeclared error. A mismatch is a server bug,
+so it is handled like a failing output: `onError` gets an `ActionValidationError` that
+says what did not match (an `ActionSerializationError` when the data is not wire-safe),
+and the client gets `ActionInternalError` with the `errorId`.
+An `actionError` of a name the action does not declare still goes out as before,
+untyped.
+
+The generated client stub carries the declared errors in its type, and `isActionError`
+(from `aruna/client`) narrows a rejection to one of them:
+
+```ts
+import { isActionError } from "aruna/client";
+import { purchaseItem } from "$aruna/actions/client";
+
+purchaseItem({ itemId }).catch((err: unknown) => {
+  if (isActionError(err, purchaseItem, "OutOfStock")) {
+    showRestockTimer(err.data.restockIn); // err.data: { itemId: string; restockIn: number }
+  } else if (isActionError(err, purchaseItem, "NotEnoughCoins")) {
+    openCoinShop();
+  }
+});
+```
+
+The check is by name. Pass the stub the rejection came from: another action may declare
+the same name with other data.
+
+`errors` must be an object literal of error names, each an object literal with an
+optional `data` schema (`aruna::584 invalid-action-errors` otherwise, as is a name that is
+not an identifier, one of Aruna's own error names, or `errors` on a `fireAndForget` action,
+which sends no response). A `data` schema the compiler cannot read is
+`aruna::585 action-error-data-schema-invalid`. The manifest, `aruna inspect actions`, and
+the contract snapshot list each action's errors, and the contract hash covers them.
 
 ## Middleware & error observability
 
@@ -424,6 +496,9 @@ and output server → client, so the same edit can mean opposite things on each 
 | The rate limit's throughput lowered / raised | **breaking** / non-breaking | |
 | The rate limit's `strategy` changed | info | |
 | `idempotent` dropped / added | **breaking** / non-breaking | |
+| A declared error added | | non-breaking — an old client reads it as any other failure |
+| A declared error removed | | info — an old client's handling of it goes unused |
+| An error's `data` changed | | as an output: a field removed or retyped is **breaking**, one added non-breaking; data appearing is non-breaking, data dropped **breaking** |
 
 A signal payload follows the output column. The bounds come from what the compiler
 records for each schema ([Schema](./schema.md#what-the-compiler-records)); a change to a

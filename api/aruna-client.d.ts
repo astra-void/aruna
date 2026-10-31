@@ -5,6 +5,10 @@ export declare const ACTION_CANCELLED_ERROR_NAME = "ActionCancelledError";
 
 export declare const ACTION_VERSION_MISMATCH_ERROR_NAME = "ActionVersionMismatchError";
 
+export type ActionErrorTypes = {
+    readonly [name: string]: unknown;
+};
+
 export interface ActionInvokeOptions {
     readonly fireAndForget?: boolean;
     readonly signal?: CancelToken;
@@ -13,6 +17,10 @@ export interface ActionInvokeOptions {
 }
 
 export type ActionInvoker = (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
+
+export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = ((input: TInput) => Promise<TOutput>) & {
+    readonly __arunaErrors?: TErrors;
+};
 
 export interface CancelToken {
     readonly isCancelled: boolean;
@@ -64,6 +72,12 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap> 
     readonly retry?: ClientRetryPolicy;
 }
 
+export interface DeclaredActionFailure<TName extends string, TData> {
+    readonly message: string;
+    readonly name: TName;
+    readonly data: TData;
+}
+
 export interface VersionMismatchInfo {
     readonly expected: string;
     readonly actual: string;
@@ -78,6 +92,8 @@ export declare function createClientApp<TSignals extends SignalMap = SignalMap>(
 export declare function invokeAction(actionId: string, input: unknown, options?: ActionInvokeOptions): Promise<unknown>;
 
 export declare function isActionCancelledError(value: unknown): boolean;
+
+export declare function isActionError<TErrors extends ActionErrorTypes, TName extends keyof TErrors & string>(value: unknown, _action: ActionStub<never, unknown, TErrors>, name: TName): value is DeclaredActionFailure<TName, TErrors[TName]>;
 
 export declare function isActionVersionMismatchError(value: unknown): boolean;
 

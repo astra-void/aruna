@@ -1,6 +1,6 @@
 // Aruna roblox-ts native runtime — server action registry and dispatch.
 
-import type { ActionContext, ActionDefinition, ActionRateLimitOptions } from "./server";
+import type { ActionContext, ActionDefinition, ActionErrorMap, ActionRateLimitOptions } from "./server";
 import type { StoreDocument } from "./player-store";
 import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
@@ -21,7 +21,10 @@ import {
 	ACTION_INTERNAL_ERROR_NAME,
 	actionError,
 	createErrorId,
+	declaredActionError,
+	isDeclaredActionError,
 	isPublicActionError,
+	publicErrorData,
 	type PublicActionError,
 } from "./action-error";
 
@@ -40,6 +43,9 @@ export interface ActionDispatchResult {
 	// Present on an `ActionInternalError`: the id `onError` was given for the
 	// same failure, so a client report can be matched to the server log.
 	readonly errorId?: string;
+	// Present on an error the action declares with a `data` schema: the data,
+	// already checked against it.
+	readonly errorData?: unknown;
 }
 
 export interface ActionRegistry<TPlayer = unknown> {
@@ -92,7 +98,13 @@ export interface ActionRegistry<TPlayer = unknown> {
 	readonly isFireAndForget: (actionId: string) => boolean;
 }
 
-type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer>;
+type AnyActionDefinition<TPlayer> = ActionDefinition<
+	Schema | undefined,
+	Schema | undefined,
+	TPlayer,
+	SignalMap,
+	ActionErrorMap
+>;
 
 export type ActionMap<TPlayer> = { readonly [actionId: string]: AnyActionDefinition<TPlayer> };
 
@@ -176,9 +188,48 @@ function validationFailure(
 	return actionError("ActionValidationError", issue !== undefined ? `${prefix}: ${issue}` : prefix);
 }
 
+// A public error whose name the action declares has to match the declaration,
+// however it was thrown (`ctx.fail`, or an `actionError` from middleware): the
+// client is promised that an error of that name carries that data. And
+// `ctx.fail` only throws declared names. Returns the failure to report instead
+// when either does not hold — a server bug, so it is masked like a failing
+// output. `undefined` means the error may go out as it is; that includes an
+// `actionError` of a name the action does not declare, which stays untyped.
+function declaredErrorMismatch(
+	actionId: string,
+	errors: ActionErrorMap | undefined,
+	failure: PublicActionError,
+): PublicActionError | undefined {
+	const prefix = `Aruna action ${actionId} error ${failure.name}`;
+	const declaration = errors !== undefined ? errors[failure.name] : undefined;
+	if (declaration === undefined) {
+		return isDeclaredActionError(failure)
+			? actionError("ActionValidationError", `${prefix} is not declared in its errors`)
+			: undefined;
+	}
+	const data = publicErrorData(failure);
+	const dataSchema = declaration.data;
+	if (dataSchema === undefined) {
+		return data === undefined ? undefined : actionError("ActionValidationError", `${prefix} declares no data`);
+	}
+	// Server-authored, so not held to the client's node budget.
+	if (!isWireSafe(data, math.huge, dataSchema)) {
+		return actionError("ActionSerializationError", `${prefix} data is not serializable`);
+	}
+	if (!dataSchema.validate(data)) {
+		const issue = firstSchemaIssue(dataSchema, data);
+		return actionError(
+			"ActionValidationError",
+			issue !== undefined ? `${prefix} data validation failed: ${issue}` : `${prefix} data validation failed`,
+		);
+	}
+	return undefined;
+}
+
 // The response for a rejection from the execution chain. A public error keeps
-// its name and message; anything else is masked unless `exposeInternalErrors`.
-// `isPublic` is false for a public-typed output failure (see `runAction`).
+// its name and message (and a declared error its data); anything else is
+// masked unless `exposeInternalErrors`. `isPublic` is false for a public-typed
+// output failure (see `runAction`).
 function rejectionResult(
 	reason: unknown,
 	isPublic: boolean,
@@ -186,7 +237,13 @@ function rejectionResult(
 	errorId: string | undefined,
 ): ActionDispatchResult {
 	if (isPublic && isPublicActionError(reason)) {
-		return { ok: false, error: reason.message, errorName: reason.name };
+		const data = publicErrorData(reason);
+		return {
+			ok: false,
+			error: reason.message,
+			errorName: reason.name,
+			...(data !== undefined ? { errorData: data } : {}),
+		};
 	}
 	if (!exposeInternalErrors) {
 		return {
@@ -339,6 +396,12 @@ export function createActionRegistry<TPlayer>(
 					(context as { store?: StoreDocument<unknown> }).store = document;
 				}
 			}
+			// `ctx.fail(name, data)` for an action that declares `errors`.
+			if (definition.errors !== undefined) {
+				(context as { fail?: (name: string, data?: unknown) => never }).fail = (name, data) => {
+					throw declaredActionError(name, data);
+				};
+			}
 
 			// Invoke the handler inside a pcall so a *synchronous* throw becomes
 			// a result payload rather than rejecting the dispatch promise. A
@@ -355,7 +418,12 @@ export function createActionRegistry<TPlayer>(
 			// them like any other internal error.
 			const outputFailures = new Set<unknown>();
 			const runAction = (): Promise<unknown> => {
-				const [invoked, runResult] = pcall(() => definition.run(context, input as never));
+				// The erased definition's ctx type always has `fail`; the context
+				// carries it exactly when the action declares errors, which is when
+				// the action's own type has it.
+				const [invoked, runResult] = pcall(() =>
+					definition.run(context as Parameters<typeof definition.run>[0], input as never),
+				);
 				if (!invoked) {
 					return Promise.reject(runResult);
 				}
@@ -403,10 +471,24 @@ export function createActionRegistry<TPlayer>(
 				(output) => {
 					resolve({ ok: true, output });
 				},
-				(reason) => {
+				(rejection) => {
+					let reason = rejection;
+					let isPublic = isPublicActionError(reason) && !outputFailures.has(reason);
+					// An error of a declared name that does not match its
+					// declaration is reported, and masked, as the mismatch.
+					if (isPublic) {
+						const mismatch = declaredErrorMismatch(
+							actionId,
+							definition.errors,
+							reason as PublicActionError,
+						);
+						if (mismatch !== undefined) {
+							reason = mismatch;
+							isPublic = false;
+						}
+					}
 					// Every non-public failure gets an id for `onError`; the client
 					// is sent it only when the failure is masked.
-					const isPublic = isPublicActionError(reason) && !outputFailures.has(reason);
 					const errorId = isPublic ? undefined : createErrorId();
 					if (onError !== undefined) {
 						onError(reason, errorId !== undefined ? { actionId, player, errorId } : { actionId, player });

@@ -38,6 +38,7 @@ export const fixtureCases = [
   { name: "raw-remote-usage-generated-dir", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },
   { name: "action-generated-export-collision", mode: "build" },
+  { name: "action-declared-errors", mode: "build" },
   { name: "generated-entries", mode: "build" },
 ] as const;
 

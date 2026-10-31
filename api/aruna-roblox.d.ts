@@ -7,6 +7,7 @@ export interface ActionError {
     readonly retryAfterMs?: number;
     readonly resetAtMs?: number;
     readonly errorId?: string;
+    readonly data?: unknown;
 }
 
 export declare const CONTRACT_HASH_ATTRIBUTE_NAME = "ArunaContractHash";
@@ -145,7 +146,7 @@ export declare function bindActions<TPlayer>(registry: ActionRegistry<TPlayer>, 
 
 export declare function bindRemoteActions<TPlayer>(registry: ActionRegistry<TPlayer>, remote: WireCallReceiver<TPlayer>, channel: ServerChannel<TPlayer>): ServerAppBinding;
 
-export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals>;
+export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function createActionInvoker(options?: CreateActionInvokerOptions): ActionInvoker;
 
@@ -171,7 +172,7 @@ export declare function createWireOutbox<TTarget>(send: (target: TTarget, frame:
 
 export declare function defaultWireProtocolErrorHandler(channel: string, reason: WireFrameRejection): void;
 
-export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = Player, TSignals extends SignalMap = SignalMap>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals>): ActionDefinition<TInput, TOutput, TPlayer, TSignals>;
+export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = Player, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function definePlayerStore<TSchema extends Schema, TPlayer = Player>(definition: PlayerStoreDefinition<TSchema, TPlayer>): PlayerStoreDefinition<TSchema, TPlayer>;
 
@@ -198,14 +199,15 @@ interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMa
     readonly store?: StoreDocument<unknown>;
 }
 
-interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap> {
+interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}> {
     readonly id: string;
     readonly rateLimit?: ActionRateLimitOptions;
     readonly fireAndForget?: boolean;
     readonly idempotent?: boolean;
     readonly input?: TInput;
     readonly output?: TOutput;
-    run(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+    readonly errors?: TErrors;
+    run(context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
 
 interface ActionDispatchResult {
@@ -216,6 +218,25 @@ interface ActionDispatchResult {
     readonly retryAfterMs?: number;
     readonly resetAtMs?: number;
     readonly errorId?: string;
+    readonly errorData?: unknown;
+}
+
+type ActionErrorDataArgs<TDeclaration> = TDeclaration extends {
+    readonly data: infer S;
+} ? S extends Schema ? [data: Infer<S>] : [] : [];
+
+interface ActionErrorDeclaration {
+    readonly data?: Schema;
+}
+
+type ActionErrorMap = {
+    readonly [name: string]: ActionErrorDeclaration;
+};
+
+type ActionFail<TErrors extends ActionErrorMap> = <TName extends keyof TErrors & string>(name: TName, ...data: ActionErrorDataArgs<TErrors[TName]>) => never;
+
+interface ActionFailContext<TErrors extends ActionErrorMap> {
+    readonly fail: ActionFail<TErrors>;
 }
 
 interface ActionInvokeOptions {
@@ -267,6 +288,8 @@ interface ContractHandshakeOptions {
     readonly rejectOnMismatch?: boolean;
 }
 
+type FailContextFor<TErrors extends ActionErrorMap> = keyof TErrors extends never ? {} : ActionFailContext<TErrors>;
+
 type Infer<S> = S extends Schema<infer T> ? T : never;
 
 type InferInput<S> = S extends Schema ? Infer<S> : unknown;
@@ -288,8 +311,8 @@ type PublishingActionContext<TPlayer, TSignals extends SignalMap, TSession = unk
     readonly store?: StoreDocument<TStore>;
 };
 
-type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals>, "run"> & {
-    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TErrors extends ActionErrorMap = {}> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
+    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
 
 interface Refinement {

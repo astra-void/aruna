@@ -1,0 +1,125 @@
+{
+  "actions": [
+    {
+      "exportName": "browse",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": false,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "id": "shop.browse",
+      "outputSchema": {
+        "items": {
+          "kind": "string"
+        },
+        "kind": "array"
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "errors": [
+        {
+          "hasData": false,
+          "name": "NotEnoughCoins"
+        },
+        {
+          "dataSchema": {
+            "kind": "object",
+            "properties": {
+              "itemId": {
+                "kind": "string"
+              },
+              "restockIn": {
+                "kind": "number",
+                "numericFormat": "u16"
+              }
+            }
+          },
+          "hasData": true,
+          "name": "OutOfStock"
+        }
+      ],
+      "exportName": "purchaseItem",
+      "file": "src/domains/shop/actions.ts",
+      "hasInputSchema": true,
+      "hasOutputSchema": true,
+      "hasRun": true,
+      "id": "shop.purchaseItem",
+      "inputSchema": {
+        "kind": "object",
+        "properties": {
+          "itemId": {
+            "kind": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "outputSchema": {
+        "kind": "object",
+        "properties": {
+          "ok": {
+            "kind": "boolean"
+          }
+        }
+      },
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    }
+  ],
+  "diagnostics": [],
+  "imports": [
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/shop/actions.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/.aruna/server/actions.server.generated.ts",
+      "kind": "serverAction",
+      "path": "src/.aruna/server/actions.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/.aruna/shared/actions.client.generated.ts",
+      "kind": "client",
+      "path": "src/.aruna/shared/actions.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/actions module"
+    },
+    {
+      "id": "src/client.tsx",
+      "kind": "clientEntry",
+      "path": "src/client.tsx",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    },
+    {
+      "id": "src/domains/shop/actions.ts",
+      "kind": "serverAction",
+      "path": "src/domains/shop/actions.ts",
+      "reason": "directive",
+      "reasonDetail": "defineAction(...) export detected"
+    },
+    {
+      "id": "src/server.ts",
+      "kind": "serverEntry",
+      "path": "src/server.ts",
+      "reason": "path",
+      "reasonDetail": "matched recommended entry file"
+    }
+  ],
+  "projectRoot": ".",
+  "version": 1
+}

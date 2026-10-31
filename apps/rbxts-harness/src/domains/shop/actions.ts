@@ -25,8 +25,15 @@ export const purchaseItem = defineAction({
     total: schema.number(),
     currency: schema.literal("coins"),
   }),
-  run(_ctx, input): PurchaseItemOutput {
+  // A failure the client can tell apart, with the data it needs to say why.
+  errors: {
+    OutOfStock: { data: schema.object({ itemId: schema.string().maxLength(64) }) },
+  },
+  run(ctx, input): PurchaseItemOutput {
     const typedInput: PurchaseItemInput = input;
+    if (typedInput.itemId === "sold-out") {
+      throw ctx.fail("OutOfStock", { itemId: typedInput.itemId });
+    }
     const total = typedInput.quantity * 50;
 
     return {

@@ -4,7 +4,7 @@
 // without the doctor aliases. Imports go through the same barrels the subpaths
 // export (roblox/<subpath>.ts). Lives outside roblox/ so it is never vendored
 // into consumers.
-import { createClientApp } from "../roblox/client";
+import { createClientApp, isActionError, type ActionStub } from "../roblox/client";
 import {
 	bindActions,
 	createActionInvoker,
@@ -226,5 +226,88 @@ const appWithPlayerStore = createServerApp<Player>({
 });
 
 appWithPlayerStore.playerStore?.saveAll();
+
+// --- Declared errors ----------------------------------------------------------
+// `errors` types `ctx.fail`: a declared name, and the data its schema infers
+// (none for an error declared without `data`).
+const buyWithErrors = defineRobloxAction({
+	id: "shop.buyWithErrors",
+	input: schema.object({ itemId: schema.string().maxLength(32) }),
+	errors: {
+		OutOfStock: { data: schema.object({ itemId: schema.string(), restockIn: schema.number() }) },
+		NotEnoughCoins: {},
+	},
+	run(ctx, input) {
+		type _FailNeverReturns = Expect<Equal<ReturnType<typeof ctx.fail>, never>>;
+		if (input.itemId === "") {
+			throw ctx.fail("NotEnoughCoins");
+		}
+		if (input.itemId === "gone") {
+			return ctx.fail("OutOfStock", { itemId: input.itemId, restockIn: 30 });
+		}
+		// @ts-expect-error an undeclared error name
+		ctx.fail("Unknown");
+		// @ts-expect-error data that does not match the declared schema
+		ctx.fail("OutOfStock", { itemId: input.itemId });
+		// @ts-expect-error a declared data schema needs data
+		ctx.fail("OutOfStock");
+		// @ts-expect-error an error declared without data takes none
+		ctx.fail("NotEnoughCoins", { reason: "poor" });
+		return undefined;
+	},
+});
+// An action with no `errors` has no `fail`.
+defineAction({
+	id: "shop.noErrors",
+	run(ctx) {
+		// @ts-expect-error no errors declared
+		ctx.fail("Anything");
+		return undefined;
+	},
+});
+
+// The definer's ctx carries `fail` too, beside the guaranteed publisher.
+definePublishingAction({
+	id: "score.reject",
+	errors: { TooLow: { data: schema.object({ min: schema.number() }) } },
+	run(ctx) {
+		ctx.publisher.toAll("scoreChanged", { score: 0 });
+		throw ctx.fail("TooLow", { min: 1 });
+	},
+});
+
+// An action with errors still slots into an app's action map, whichever
+// `defineAction` declared it: `aruna/server`'s leaves the player `unknown`.
+const serverDeclaredWithErrors = defineAction({
+	id: "shop.serverDeclared",
+	errors: { Closed: {} },
+	run(ctx) {
+		throw ctx.fail("Closed");
+	},
+});
+createServerApp<Player>({
+	actions: {
+		"shop.buyWithErrors": buyWithErrors,
+		"shop.serverDeclared": serverDeclaredWithErrors,
+		"score.peekAgain": defineAction({ id: "score.peekAgain", run: () => undefined }),
+	},
+});
+
+// `isActionError` narrows a rejection through the generated stub's type.
+declare const buyStub: ActionStub<
+	{ itemId: string },
+	void,
+	{ readonly OutOfStock: { itemId: string; restockIn: number }; readonly NotEnoughCoins: undefined }
+>;
+declare const rejection: unknown;
+if (isActionError(rejection, buyStub, "OutOfStock")) {
+	type _NarrowedName = Expect<Equal<typeof rejection.name, "OutOfStock">>;
+	type _NarrowedData = Expect<Equal<typeof rejection.data, { itemId: string; restockIn: number }>>;
+}
+if (isActionError(rejection, buyStub, "NotEnoughCoins")) {
+	type _NoData = Expect<Equal<typeof rejection.data, undefined>>;
+}
+// @ts-expect-error a name the action does not declare
+isActionError(rejection, buyStub, "Unknown");
 
 export {};

@@ -48,6 +48,8 @@ export type DiagnosticCode =
   | "aruna::569"
   | "aruna::578"
   | "aruna::579"
+  | "aruna::584"
+  | "aruna::585"
   | "aruna::555"
   | "aruna::556"
   | "aruna::557"
@@ -114,6 +116,17 @@ export type ActionRecord = {
     | undefined;
   inputSchema?: SchemaMetadata | undefined;
   outputSchema?: SchemaMetadata | undefined;
+  // The errors the action declares, sorted by name. Omitted from the manifest
+  // JSON when there are none.
+  errors?: ActionErrorRecord[] | undefined;
+};
+
+// One error an action declares: a failure the client can tell apart by name,
+// and the schema of its data when it has any.
+export type ActionErrorRecord = {
+  name: string;
+  hasData: boolean;
+  dataSchema?: SchemaMetadata | undefined;
 };
 
 // A server -> client signal discovered by the compiler. The push counterpart to

@@ -37,6 +37,34 @@ export function isPublicActionError(value: unknown): value is PublicActionError 
 	);
 }
 
+// An error from an action's own `errors` declaration, thrown by
+// `ctx.fail(name, data)`. Its `data` reaches the client, after the server has
+// checked it against the declared schema.
+export interface DeclaredActionError extends PublicActionError {
+	readonly data?: unknown;
+	readonly __arunaDeclared: true;
+}
+
+export function declaredActionError(name: string, data: unknown): DeclaredActionError {
+	return {
+		name,
+		message: name,
+		__arunaActionError: true,
+		__arunaDeclared: true,
+		...(data !== undefined ? { data } : {}),
+	};
+}
+
+// Whether a public error came from `ctx.fail`, which only names declared errors.
+export function isDeclaredActionError(failure: PublicActionError): failure is DeclaredActionError {
+	return (failure as { readonly __arunaDeclared?: unknown }).__arunaDeclared === true;
+}
+
+// The `data` a public error carries, if any: what `ctx.fail` attached.
+export function publicErrorData(failure: PublicActionError): unknown {
+	return (failure as { readonly data?: unknown }).data;
+}
+
 // A short id that ties a client's `ActionInternalError` to the server's
 // `onError` report. Not a secret and not unique across servers: it only has to
 // tell one failure in a log from the next.

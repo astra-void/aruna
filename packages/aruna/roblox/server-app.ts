@@ -353,6 +353,7 @@ export function createServerApp<
 						...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
 						...(result.resetAtMs !== undefined ? { resetAtMs: result.resetAtMs } : {}),
 						...(result.errorId !== undefined ? { errorId: result.errorId } : {}),
+						...(result.errorData !== undefined ? { data: result.errorData } : {}),
 					};
 				}),
 		...(binding !== undefined ? { binding } : {}),

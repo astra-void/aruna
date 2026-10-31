@@ -50,7 +50,15 @@ export type ActionContractRecord = {
   // Present (and true) only for an action declared `idempotent: true`, so the
   // snapshot of every other action is byte-stable with older baselines.
   readonly idempotent?: true;
+  // The errors the action declares, by name; present only when it declares
+  // some. `data` is null for an error that carries none.
+  readonly errors?: readonly ActionContractError[];
   readonly warnings: readonly string[];
+};
+
+export type ActionContractError = {
+  readonly name: string;
+  readonly data: ActionContractSchema | null;
 };
 
 export type SignalContractRecord = {
@@ -153,7 +161,19 @@ function summarizeAction(
   const outputSchema = action.hasOutputSchema
     ? formatActionSchemaSummary(action.outputSchema)
     : { summary: "void", warnings: [] as readonly string[] };
-  const warnings = sortWarnings([...input.warnings, ...outputSchema.warnings]);
+  const errors = (action.errors ?? []).map((error) => {
+    const data = error.hasData ? formatActionSchemaSummary(error.dataSchema) : undefined;
+    return {
+      name: error.name,
+      data: data === undefined ? null : { summary: data.summary, schema: error.dataSchema ?? null },
+      warnings: data?.warnings ?? [],
+    };
+  });
+  const warnings = sortWarnings([
+    ...input.warnings,
+    ...outputSchema.warnings,
+    ...errors.flatMap((error) => error.warnings),
+  ]);
 
   return {
     id: action.id,
@@ -180,6 +200,9 @@ function summarizeAction(
     },
     rateLimit: action.rateLimit ?? null,
     ...(action.idempotent === true ? { idempotent: true as const } : {}),
+    ...(errors.length > 0
+      ? { errors: errors.map((error) => ({ name: error.name, data: error.data })) }
+      : {}),
     warnings,
   };
 }

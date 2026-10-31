@@ -100,11 +100,53 @@ export interface ActionRateLimitOptions {
 export type InferInput<S> = S extends Schema ? Infer<S> : unknown;
 export type InferOutput<S> = S extends Schema ? Infer<S> : unknown;
 
+// One error an action declares it can fail with. `data` is what the client
+// receives with it; omit it for an error that carries none.
+export interface ActionErrorDeclaration {
+	readonly data?: Schema;
+}
+
+// An action's `errors`: each failure a client should be able to tell apart, by
+// name. The compiler records them in the contract, and the generated client
+// stub types them, so `isActionError(err, stub, "OutOfStock")` narrows `data`.
+export type ActionErrorMap = { readonly [name: string]: ActionErrorDeclaration };
+
+// The data a declared error takes, as `ctx.fail`'s rest arguments: one when the
+// declaration has a `data` schema, none otherwise.
+export type ActionErrorDataArgs<TDeclaration> = TDeclaration extends { readonly data: infer S }
+	? S extends Schema
+		? [data: Infer<S>]
+		: []
+	: [];
+
+// Throws the declared error `name`. The server checks `data` against the
+// declared schema before the client sees it; a mismatch is a server bug, sent
+// as ActionInternalError. Write `throw ctx.fail(...)` (or `return`), so the
+// line after it is known to be unreachable.
+export type ActionFail<TErrors extends ActionErrorMap> = <TName extends keyof TErrors & string>(
+	name: TName,
+	...data: ActionErrorDataArgs<TErrors[TName]>
+) => never;
+
+// What `run` gets besides the base context when the action declares `errors`.
+export interface ActionFailContext<TErrors extends ActionErrorMap> {
+	readonly fail: ActionFail<TErrors>;
+}
+
+// No declared errors: no `fail`. The erased `ActionErrorMap` (an action map's
+// element type) keeps a required one: its `fail` takes any name and no data,
+// which every declared `fail` accepts in its place, so an action of any player
+// type with errors still slots into an app's action map.
+type FailContextFor<TErrors extends ActionErrorMap> = keyof TErrors extends never
+	? {}
+	: ActionFailContext<TErrors>;
+
 export interface ActionDefinition<
 	TInput extends Schema | undefined = undefined,
 	TOutput extends Schema | undefined = undefined,
 	TPlayer = unknown,
 	TSignals extends SignalMap = SignalMap,
+	TErrors extends ActionErrorMap = {},
 > {
 	readonly id: string;
 	readonly rateLimit?: ActionRateLimitOptions;
@@ -120,8 +162,12 @@ export interface ActionDefinition<
 	readonly idempotent?: boolean;
 	readonly input?: TInput;
 	readonly output?: TOutput;
+	// The failures a client can tell apart, thrown with `ctx.fail(name, data)`.
+	// Must be an object literal of `{ data?: schema }` objects (the compiler reads
+	// it into the manifest and the contract).
+	readonly errors?: TErrors;
 	run(
-		context: ActionContext<TPlayer, TSignals>,
+		context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>,
 		input: InferInput<TInput>,
 	): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
@@ -135,9 +181,10 @@ export type PublishingActionDefinition<
 	TSignals extends SignalMap,
 	TSession = unknown,
 	TStore = unknown,
-> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals>, "run"> & {
+	TErrors extends ActionErrorMap = {},
+> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
 	run(
-		context: PublishingActionContext<TPlayer, TSignals, TSession, TStore>,
+		context: PublishingActionContext<TPlayer, TSignals, TSession, TStore> & FailContextFor<TErrors>,
 		input: InferInput<TInput>,
 	): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
@@ -147,9 +194,10 @@ export function defineAction<
 	TOutput extends Schema | undefined = undefined,
 	TPlayer = unknown,
 	TSignals extends SignalMap = SignalMap,
+	TErrors extends ActionErrorMap = {},
 >(
-	definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals>,
-): ActionDefinition<TInput, TOutput, TPlayer, TSignals> {
+	definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>,
+): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors> {
 	return definition;
 }
 
@@ -168,9 +216,13 @@ export function createActionDefiner<
 >() {
 	// Anonymous arrow (not a named function expression): roblox-ts rejects named
 	// function expressions, and this runtime is compiled to Luau by rbxtsc.
-	return <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined>(
-		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore>,
-	): ActionDefinition<TInput, TOutput, TPlayer, TSignals> => definition;
+	return <
+		TInput extends Schema | undefined = undefined,
+		TOutput extends Schema | undefined = undefined,
+		TErrors extends ActionErrorMap = {},
+	>(
+		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>,
+	): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors> => definition;
 }
 
 // Re-exported so `aruna/server` is the single server entry. The imports these

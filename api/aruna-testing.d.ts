@@ -113,14 +113,15 @@ interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMa
     readonly store?: StoreDocument<unknown>;
 }
 
-interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap> {
+interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}> {
     readonly id: string;
     readonly rateLimit?: ActionRateLimitOptions;
     readonly fireAndForget?: boolean;
     readonly idempotent?: boolean;
     readonly input?: TInput;
     readonly output?: TOutput;
-    run(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+    readonly errors?: TErrors;
+    run(context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
 
 interface ActionDispatchResult {
@@ -131,6 +132,15 @@ interface ActionDispatchResult {
     readonly retryAfterMs?: number;
     readonly resetAtMs?: number;
     readonly errorId?: string;
+    readonly errorData?: unknown;
+}
+
+type ActionErrorDataArgs<TDeclaration> = TDeclaration extends {
+    readonly data: infer S;
+} ? S extends Schema ? [data: Infer<S>] : [] : [];
+
+interface ActionErrorDeclaration {
+    readonly data?: Schema;
 }
 
 type ActionErrorHandler<TPlayer = unknown> = (error: unknown, info: {
@@ -138,6 +148,16 @@ type ActionErrorHandler<TPlayer = unknown> = (error: unknown, info: {
     readonly player: TPlayer;
     readonly errorId?: string;
 }) => void;
+
+type ActionErrorMap = {
+    readonly [name: string]: ActionErrorDeclaration;
+};
+
+type ActionFail<TErrors extends ActionErrorMap> = <TName extends keyof TErrors & string>(name: TName, ...data: ActionErrorDataArgs<TErrors[TName]>) => never;
+
+interface ActionFailContext<TErrors extends ActionErrorMap> {
+    readonly fail: ActionFail<TErrors>;
+}
 
 interface ActionInvokeOptions {
     readonly fireAndForget?: boolean;
@@ -185,7 +205,7 @@ interface ActionRegistry<TPlayer = unknown> {
     readonly isFireAndForget: (actionId: string) => boolean;
 }
 
-type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer>;
+type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer, SignalMap, ActionErrorMap>;
 
 interface AnyPlayerStore<TPlayer = Player> {
     readonly id: string;
@@ -246,6 +266,8 @@ interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap
     readonly onAbuse?: RequestAbuseHandler<TPlayer>;
     readonly players?: PlayersSource<TPlayer>;
 }
+
+type FailContextFor<TErrors extends ActionErrorMap> = keyof TErrors extends never ? {} : ActionFailContext<TErrors>;
 
 type Infer<S> = S extends Schema<infer T> ? T : never;
 

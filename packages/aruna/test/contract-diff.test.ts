@@ -448,6 +448,90 @@ describe("contract diff for constraints", () => {
   });
 });
 
+describe("contract diff for declared errors", () => {
+  const stock = (properties: Record<string, unknown>) => ({
+    name: "OutOfStock",
+    data: { summary: "object", schema: objectSchema(properties) },
+  });
+  const withErrors = (errors: ReadonlyArray<{ name: string; data: unknown }>) =>
+    action({ errors } as Record<string, unknown>);
+  const diff = (before: ActionContractRecord, after: ActionContractRecord) =>
+    diffActionContractSnapshots(snapshot([before]), snapshot([after]));
+
+  it("treats an added error as non-breaking and a removed one as info", () => {
+    const added = diff(action(), withErrors([{ name: "NotEnoughCoins", data: null }]));
+    expect(added.entries).toEqual([
+      {
+        severity: "non-breaking",
+        kind: "error-added",
+        actionId: "shop.purchaseItem",
+        path: "errors.NotEnoughCoins",
+        message: "shop.purchaseItem error NotEnoughCoins added.",
+      },
+    ]);
+    const removed = diff(withErrors([{ name: "NotEnoughCoins", data: null }]), action());
+    expect(removed.entries).toEqual([
+      expect.objectContaining({ severity: "info", kind: "error-removed", path: "errors.NotEnoughCoins" }),
+    ]);
+  });
+
+  it("compares an error's data by the output rules", () => {
+    const before = withErrors([stock({ itemId: { kind: "string" } })]);
+    const dropped = diff(before, withErrors([stock({})]));
+    expect(dropped.entries).toEqual([
+      expect.objectContaining({
+        severity: "breaking",
+        kind: "error-data-field-removed",
+        path: "errors.OutOfStock.data.itemId",
+      }),
+    ]);
+    const added = diff(before, withErrors([stock({ itemId: { kind: "string" }, restockIn: { kind: "number" } })]));
+    expect(added.entries).toEqual([
+      expect.objectContaining({ severity: "non-breaking", kind: "error-data-field-added" }),
+    ]);
+    const loosened = diff(
+      withErrors([stock({ itemId: { kind: "string", maxLength: 16 } })]),
+      withErrors([stock({ itemId: { kind: "string", maxLength: 64 } })]),
+    );
+    expect(loosened.entries).toEqual([
+      expect.objectContaining({
+        severity: "breaking",
+        kind: "constraint-loosened",
+        path: "errors.OutOfStock.data.itemId",
+      }),
+    ]);
+    const retyped = diff(before, withErrors([{ name: "OutOfStock", data: { summary: "number", schema: { kind: "number" } } }]));
+    expect(retyped.entries).toEqual([
+      expect.objectContaining({
+        severity: "breaking",
+        kind: "error-data-changed",
+        path: "errors.OutOfStock.data",
+        message: "shop.purchaseItem error data schema changed from object { itemId: string } to number.",
+      }),
+    ]);
+  });
+
+  it("allows data to appear on an error, and breaks when it goes away", () => {
+    const bare = withErrors([{ name: "OutOfStock", data: null }]);
+    const carrying = withErrors([stock({ itemId: { kind: "string" } })]);
+    expect(diff(bare, carrying).entries).toEqual([
+      expect.objectContaining({ severity: "non-breaking", kind: "error-data-changed" }),
+    ]);
+    expect(diff(carrying, bare).entries).toEqual([
+      expect.objectContaining({ severity: "breaking", kind: "error-data-changed" }),
+    ]);
+  });
+
+  it("keeps declared errors when a snapshot round-trips through JSON", () => {
+    const original = snapshot([
+      withErrors([{ name: "NotEnoughCoins", data: null }, stock({ itemId: { kind: "string", maxLength: 8 } })]),
+    ]);
+    const parsed = parseActionContractSnapshotJson(JSON.parse(JSON.stringify(original)));
+    expect(parsed.actions).toEqual(original.actions);
+    expect(diffActionContractSnapshots(parsed, original).entries).toEqual([]);
+  });
+});
+
 describe("contract diff for store constraints", () => {
   const level = (constraints: Record<string, unknown>) =>
     store({ schema: storeSchema({ level: { kind: "number", ...constraints } }) });

@@ -383,7 +383,35 @@ fn action_import_alias(action: &ArunaActionRecord) -> String {
     )
 }
 
-fn client_stub_lines(action: &ArunaActionRecord, input_type: &str, output_type: &str) -> Vec<String> {
+// The type of an action's declared errors, by name: each one's data type, or
+// `undefined` for an error declared without data. `isActionError` reads it
+// off the stub to narrow a rejection.
+fn render_errors_type(action: &ArunaActionRecord) -> String {
+    let fields = action
+        .errors
+        .iter()
+        .map(|error| {
+            let data = if error.has_data {
+                error
+                    .data_schema
+                    .as_ref()
+                    .map(render_schema_metadata)
+                    .unwrap_or_else(|| "unknown".to_string())
+            } else {
+                "undefined".to_string()
+            };
+            format!("readonly {}: {};", error.name, data)
+        })
+        .collect::<Vec<_>>();
+    format!("{{ {} }}", fields.join(" "))
+}
+
+fn client_stub_lines(
+    action: &ArunaActionRecord,
+    input_type: &str,
+    output_type: &str,
+    errors_type: Option<&str>,
+) -> Vec<String> {
     // Fire-and-forget actions are one-way: the client does not wait for a server
     // ack, so the stub resolves void and tells the invoker to skip the response
     // roundtrip. The declared output type is intentionally ignored — there is no
@@ -410,11 +438,21 @@ fn client_stub_lines(action: &ArunaActionRecord, input_type: &str, output_type: 
         ""
     };
 
-    vec![
-        format!(
+    // An action that declares errors is typed as an ActionStub that carries
+    // them, so `isActionError(err, stub, name)` can narrow its rejections.
+    let signature = match errors_type {
+        Some(errors_type) => format!(
+            "export const {}: ActionStub<{}, {}, {}> = (input) => {{",
+            action.export_name, input_type, output_type, errors_type
+        ),
+        None => format!(
             "export const {} = (input: {}): Promise<{}> => {{",
             action.export_name, input_type, output_type
         ),
+    };
+
+    vec![
+        signature,
         format!(
             "  return invokeAction(\"{}\", input{}) as Promise<{}>;",
             action.id, invoke_options, output_type
@@ -431,10 +469,14 @@ fn render_client_file(
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
     let path = generated_file_path(generated_dir, GENERATED_CLIENT_ACTIONS_FILE);
-    let mut lines = vec![
-        "import { invokeAction } from \"aruna/client\";".to_string(),
-        "".to_string(),
-    ];
+    // The stub type is imported only where an action needs it, so a file with
+    // no declared errors is what it has always been.
+    let import = if actions.iter().any(|action| !action.errors.is_empty()) {
+        "import { invokeAction, type ActionStub } from \"aruna/client\";"
+    } else {
+        "import { invokeAction } from \"aruna/client\";"
+    };
+    let mut lines = vec![import.to_string(), "".to_string()];
 
     if preserve_generated_comments {
         lines.splice(
@@ -479,7 +521,25 @@ fn render_client_file(
         lines.push(String::new());
         lines.push(format!("export type {} = {};", output_alias, output_type));
         lines.push(String::new());
-        lines.extend(client_stub_lines(action, &input_alias, &output_alias));
+        let errors_alias = if action.errors.is_empty() {
+            None
+        } else {
+            let alias = reserve_alias(
+                type_alias_name(&action.export_name, "Errors"),
+                action,
+                &mut alias_reservations,
+                diagnostics,
+            );
+            lines.push(format!("export type {} = {};", alias, render_errors_type(action)));
+            lines.push(String::new());
+            Some(alias)
+        };
+        lines.extend(client_stub_lines(
+            action,
+            &input_alias,
+            &output_alias,
+            errors_alias.as_deref(),
+        ));
         lines.push(String::new());
     }
 
@@ -631,6 +691,17 @@ pub fn compute_contract_hash(
         canonical.push_str(&schema_part(&action.input_schema));
         canonical.push('|');
         canonical.push_str(&schema_part(&action.output_schema));
+        // Declared errors reach the client as data it is typed against.
+        // Appended only when there are some, so other hashes are unchanged.
+        if !action.errors.is_empty() {
+            canonical.push_str("|errors:");
+            for error in &action.errors {
+                canonical.push_str(&error.name);
+                canonical.push('=');
+                canonical.push_str(&schema_part(&error.data_schema));
+                canonical.push(';');
+            }
+        }
         canonical.push('\n');
     }
     for signal in signals {
@@ -1127,6 +1198,7 @@ mod tests {
             rate_limit: None,
             input_schema: None,
             output_schema: None,
+            errors: Vec::new(),
         }
     }
 
@@ -1270,6 +1342,55 @@ mod tests {
         assert!(output.files[1]
             .contents
             .contains("\"spray.paint\": src_shared_spray_actions_paint,"));
+    }
+
+    #[test]
+    fn renders_declared_errors_as_a_typed_stub() {
+        let mut buy = action("shop.buy", "src/shared/shop/actions.ts", "buy");
+        buy.errors = vec![
+            crate::primitives::ArunaActionErrorRecord {
+                name: "NotEnoughCoins".to_string(),
+                has_data: false,
+                data_schema: None,
+            },
+            crate::primitives::ArunaActionErrorRecord {
+                name: "OutOfStock".to_string(),
+                has_data: true,
+                data_schema: Some(ArunaSchemaMetadata {
+                    kind: "object".to_string(),
+                    properties: Some(BTreeMap::from([(
+                        "itemId".to_string(),
+                        ArunaSchemaMetadata {
+                            kind: "string".to_string(),
+                            ..Default::default()
+                        },
+                    )])),
+                    ..Default::default()
+                }),
+            },
+        ];
+        let plain = action("shop.look", "src/shared/shop/actions.ts", "look");
+
+        let output = generate_action_files("src/.aruna", &[buy.clone(), plain.clone()], &[], &test_rate_limit(), false);
+
+        assert!(output.diagnostics.is_empty());
+        let client = &output.files[0].contents;
+        assert!(client.starts_with("import { invokeAction, type ActionStub } from \"aruna/client\";"));
+        assert!(client.contains(
+            "export type BuyErrors = { readonly NotEnoughCoins: undefined; readonly OutOfStock: { itemId: string; }; };"
+        ));
+        assert!(client.contains("export const buy: ActionStub<BuyInput, BuyOutput, BuyErrors> = (input) => {"));
+        // An action without errors keeps the plain stub.
+        assert!(client.contains("export const look = (input: LookInput): Promise<LookOutput> => {"));
+
+        // Without any declared errors the import is what it always was.
+        let without = generate_action_files("src/.aruna", &[plain.clone()], &[], &test_rate_limit(), false);
+        assert!(without.files[0].contents.starts_with("import { invokeAction } from \"aruna/client\";"));
+
+        // Errors reach the client, so they are part of the contract hash.
+        let mut without_errors = buy.clone();
+        without_errors.errors.clear();
+        assert_ne!(compute_contract_hash(&[buy], &[]), compute_contract_hash(&[without_errors], &[]));
     }
 
     #[test]
@@ -1603,6 +1724,7 @@ mod tests {
                 )])),
                 ..Default::default()
             }),
+            errors: Vec::new(),
         };
 
         let output = generate_action_files("src/.aruna", &[action], &[], &test_rate_limit(), true);

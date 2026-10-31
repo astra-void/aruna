@@ -28,7 +28,7 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
 ## Docs
 
 - [Getting started](./docs/getting-started.md): install, project shape, the build loop, a full minimal action round-trip.
-- [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits (fixed window or token bucket), the request budget and `onAbuse`, fire-and-forget, `ctx.player`, `ctx.publisher`, contract change rules.
+- [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits (fixed window or token bucket), the request budget and `onAbuse`, declared `errors` and `ctx.fail`, fire-and-forget, `ctx.player`, `ctx.publisher`, contract change rules.
 - [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber, publishing from inside an action (`ctx.publisher` / `createActionDefiner`).
 - [Stores](./docs/stores.md): `defineStore` / `definePlayerStore`, `StoreResult` error taxonomy, session locking, migrations, `createServerApp({ playerStore })` and `ctx.store`.
 - [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
@@ -69,3 +69,8 @@ The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases written by
   `.maxItems`, `.maxEntries`): the compiler warns on unbounded input (`aruna::514`), and
   the bounds go into the contract, where `aruna contract diff` treats a tightened input
   bound as breaking.
+- A failure the client should handle by name belongs in the action's `errors`
+  (`errors: { OutOfStock: { data: schema.object(...) } }`), thrown with
+  `throw ctx.fail("OutOfStock", data)`. On the client, narrow a rejection with
+  `isActionError(err, generatedStub, "OutOfStock")` from `aruna/client`; `err.data` is
+  then typed. Data that does not match the declaration is masked as `ActionInternalError`.

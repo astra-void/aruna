@@ -8,6 +8,7 @@ import type {
 } from "@arunajs/core";
 import {
   buildActionContractSnapshot,
+  type ActionContractError,
   type ActionContractRecord,
   type ActionContractSnapshot,
   type SignalContractRecord,
@@ -76,15 +77,22 @@ export type ContractDiffKind =
   | "store-field-type-changed"
   | "store-bound-tightened"
   | "store-constraint-changed"
-  // A bound on an action's input or output, or a signal's payload, moved:
-  // tighter (`maxLength` lowered, `.int()` added), looser, or changed in a way
-  // the compiler cannot judge (a `.refine()` predicate). The severity depends on
-  // the direction the value travels.
+  // A bound on an action's input or output, a signal's payload, or a declared
+  // error's data moved: tighter (`maxLength` lowered, `.int()` added), looser,
+  // or changed in a way the compiler cannot judge (a `.refine()` predicate). The
+  // severity depends on the direction the value travels.
   | "constraint-tightened"
   | "constraint-loosened"
   | "constraint-changed"
   // One side is a version 1 snapshot, which predates recorded constraints.
   | "constraints-not-compared"
+  // An error the action declares (`errors`), and the data it carries.
+  | "error-added"
+  | "error-removed"
+  | "error-data-changed"
+  | "error-data-field-added"
+  | "error-data-field-removed"
+  | "error-data-field-type-changed"
   | "metadata-changed";
 
 export type ContractDiffEntry = {
@@ -527,10 +535,42 @@ export function parseActionRecord(value: unknown, location: string): ParsedActio
         ? null
         : parseRateLimit(value["rateLimit"], `${location}.rateLimit`),
     ...(value["idempotent"] === true ? { idempotent: true as const } : {}),
+    ...(value["errors"] !== undefined
+      ? { errors: parseActionErrors(value["errors"], `${location}.errors`) }
+      : {}),
     warnings: parsedWarnings,
   };
 
   return parsed;
+}
+
+function parseActionErrors(value: unknown, location: string): ActionContractError[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${location} must be an array.`);
+  }
+  return value.map((entry, index) => {
+    const at = `${location}[${index}]`;
+    if (!isRecordLike(entry) || typeof entry["name"] !== "string") {
+      throw new Error(`${at}.name must be a string.`);
+    }
+    const data = entry["data"];
+    if (data === null || data === undefined) {
+      return { name: entry["name"], data: null };
+    }
+    if (!isRecordLike(data) || typeof data["summary"] !== "string") {
+      throw new Error(`${at}.data must be null or an object with a summary.`);
+    }
+    return {
+      name: entry["name"],
+      data: {
+        summary: data["summary"],
+        schema:
+          data["schema"] === null || data["schema"] === undefined
+            ? null
+            : parseSchemaMetadata(data["schema"], `${at}.data.schema`),
+      },
+    };
+  });
 }
 
 export function parseStoreRecord(value: unknown, location: string): StoreContractRecord {
@@ -1044,6 +1084,91 @@ export function diffActions(
     diffIdempotent(actionId, previous.idempotent === true, current.idempotent === true, entries);
     diffSchema("input", actionId, previous.input.schema, current.input.schema, entries);
     diffSchema("output", actionId, previous.output.schema, current.output.schema, entries);
+    diffErrors(actionId, previous.errors ?? [], current.errors ?? [], entries);
+  }
+}
+
+// The errors a client is built to tell apart. A new one is a name an old client
+// does not know, which it reads as any other failure; one removed only leaves
+// an old client's handling of it unused. The data travels server → client, so
+// it follows the output rules — except that data appearing where there was
+// none is harmless to a client that never read it.
+function diffErrors(
+  actionId: string,
+  before: readonly ActionContractError[],
+  after: readonly ActionContractError[],
+  entries: ContractDiffEntry[],
+): void {
+  const beforeByName = new Map(before.map((error) => [error.name, error] as const));
+  const afterByName = new Map(after.map((error) => [error.name, error] as const));
+  const names = [...new Set([...beforeByName.keys(), ...afterByName.keys()])].sort(compareStrings);
+
+  for (const name of names) {
+    const was = beforeByName.get(name);
+    const now = afterByName.get(name);
+    const path = `errors.${name}`;
+    if (was === undefined && now !== undefined) {
+      makeEntry(
+        {
+          severity: "non-breaking",
+          kind: "error-added",
+          actionId,
+          path,
+          message: `${actionId} error ${name} added${now.data !== null ? ` with data ${now.data.summary}` : ""}.`,
+          ...(now.data !== null ? { after: now.data.summary } : {}),
+        },
+        entries,
+      );
+      continue;
+    }
+    if (was !== undefined && now === undefined) {
+      makeEntry(
+        {
+          severity: "info",
+          kind: "error-removed",
+          actionId,
+          path,
+          message: `${actionId} error ${name} removed; a client's handling of it is no longer reached.`,
+          ...(was.data !== null ? { before: was.data.summary } : {}),
+        },
+        entries,
+      );
+      continue;
+    }
+    if (was === undefined || now === undefined) {
+      continue;
+    }
+    if (was.data === null && now.data !== null) {
+      makeEntry(
+        {
+          severity: "non-breaking",
+          kind: "error-data-changed",
+          actionId,
+          path: `${path}.data`,
+          message: `${actionId} error ${name} now carries data ${now.data.summary}.`,
+          after: now.data.summary,
+        },
+        entries,
+      );
+      continue;
+    }
+    if (was.data !== null && now.data === null) {
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "error-data-changed",
+          actionId,
+          path: `${path}.data`,
+          message: `${actionId} error ${name} no longer carries data.`,
+          before: was.data.summary,
+        },
+        entries,
+      );
+      continue;
+    }
+    if (was.data !== null && now.data !== null) {
+      diffSchema("error", actionId, was.data.schema, now.data.schema, entries, `${path}.data`);
+    }
   }
 }
 
@@ -1221,26 +1346,41 @@ function diffRateLimit(
   }
 }
 
+// Whose schema is compared: an action's input or output, a signal's payload, or
+// the data of an error an action declares. Everything but input travels server
+// → client and follows the output rules.
+type SchemaDiffRole = "input" | "output" | "payload" | "error";
+
+// Where a role's schema starts: `input`, or `errors.<Name>.data` for an error.
+function isSchemaRoot(role: SchemaDiffRole, path: string): boolean {
+  return role === "error" ? /^errors\.[^.]+\.data$/.test(path) : path === role;
+}
+
 function diffSchema(
-  role: "input" | "output" | "payload",
+  role: SchemaDiffRole,
   actionId: string,
   before: ParsedSchema | null | undefined,
   after: ParsedSchema | null | undefined,
   entries: ContractDiffEntry[],
   pathPrefix: string = role,
 ): void {
-  const kindForPath: ContractDiffKind =
-    pathPrefix === role
-      ? role === "input"
-        ? "input-schema-changed"
-        : role === "output"
-          ? "output-schema-changed"
+  const atRoot = isSchemaRoot(role, pathPrefix);
+  const kindForPath: ContractDiffKind = atRoot
+    ? role === "input"
+      ? "input-schema-changed"
+      : role === "output"
+        ? "output-schema-changed"
+        : role === "error"
+          ? "error-data-changed"
           : "signal-payload-changed"
-      : role === "input"
-        ? "input-field-type-changed"
-        : role === "output"
-          ? "output-field-type-changed"
+    : role === "input"
+      ? "input-field-type-changed"
+      : role === "output"
+        ? "output-field-type-changed"
+        : role === "error"
+          ? "error-data-field-type-changed"
           : "signal-payload-field-type-changed";
+  const subject = role === "error" ? "error data" : role;
 
   if (schemaNodesEqual(before, after)) {
     return;
@@ -1259,8 +1399,8 @@ function diffSchema(
         path: pathPrefix,
         message:
           !before && after
-            ? `${actionId} ${role} schema added with ${schemaSummary(after)}.`
-            : `${actionId} ${role} schema removed.`,
+            ? `${actionId} ${subject} schema added with ${schemaSummary(after)}.`
+            : `${actionId} ${subject} schema removed.`,
         before: before ? schemaSummary(before) : undefined,
         after: after ? schemaSummary(after) : undefined,
       },
@@ -1276,7 +1416,7 @@ function diffSchema(
         kind: kindForPath,
         actionId,
         path: pathPrefix,
-        message: `${actionId} ${role} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
+        message: `${actionId} ${subject} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
         before: schemaSummary(before),
         after: schemaSummary(after),
       },
@@ -1300,7 +1440,7 @@ function diffSchema(
             kind: kindForPath,
             actionId,
             path: pathPrefix,
-            message: `${actionId} ${role} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
+            message: `${actionId} ${subject} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
             before: schemaSummary(before),
             after: schemaSummary(after),
           },
@@ -1316,7 +1456,7 @@ function diffSchema(
             kind: kindForPath,
             actionId,
             path: pathPrefix,
-            message: `${actionId} ${role} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
+            message: `${actionId} ${subject} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
             before: schemaSummary(before),
             after: schemaSummary(after),
           },
@@ -1358,7 +1498,7 @@ function diffSchema(
             kind: kindForPath,
             actionId,
             path: pathPrefix,
-            message: `${actionId} ${role} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
+            message: `${actionId} ${subject} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
             before: schemaSummary(before),
             after: schemaSummary(after),
           },
@@ -1395,7 +1535,7 @@ function diffSchema(
           kind: kindForPath,
           actionId,
           path: pathPrefix,
-          message: `${actionId} ${role} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
+          message: `${actionId} ${subject} schema changed from ${schemaSummary(before)} to ${schemaSummary(after)}.`,
           before: schemaSummary(before),
           after: schemaSummary(after),
         },
@@ -1407,11 +1547,12 @@ function diffSchema(
 // The severity of a bound that moved, by the direction the value travels. An
 // input goes client → server: a tighter bound refuses what a client built
 // against the old contract may still send, while a looser one only accepts
-// more. An output or a signal payload goes the other way, so it is the looser
-// bound that hands such a client a value outside what it was promised. A change
-// the compiler cannot judge (a `.refine()` predicate) is a warning either way.
+// more. An output, a signal payload, or an error's data goes the other way, so
+// it is the looser bound that hands such a client a value outside what it was
+// promised. A change the compiler cannot judge (a `.refine()` predicate) is a
+// warning either way.
 function constraintSeverity(
-  role: "input" | "output" | "payload",
+  role: SchemaDiffRole,
   change: ConstraintChange,
 ): ContractDiffSeverity {
   if (change.direction === "changed") {
@@ -1422,7 +1563,7 @@ function constraintSeverity(
 }
 
 function diffConstraints(
-  role: "input" | "output" | "payload",
+  role: SchemaDiffRole,
   actionId: string,
   before: ParsedSchema,
   after: ParsedSchema,
@@ -1451,10 +1592,11 @@ function diffConstraints(
 }
 
 function diffObjectSchema(
-  // `payload` (a signal's push body) follows `output` compatibility rules — both
-  // travel server → client, so an added field is ignored by old clients while a
-  // removed or retyped field breaks them.
-  role: "input" | "output" | "payload",
+  // `payload` (a signal's push body) and `error` (a declared error's data)
+  // follow `output` compatibility rules — all three travel server → client, so
+  // an added field is ignored by old clients while a removed or retyped field
+  // breaks them.
+  role: SchemaDiffRole,
   actionId: string,
   before: ParsedSchema,
   after: ParsedSchema,
@@ -1487,7 +1629,9 @@ function diffObjectSchema(
                 : "input-field-added-required"
               : role === "output"
                 ? "output-field-added"
-                : "signal-payload-field-added",
+                : role === "error"
+                  ? "error-data-field-added"
+                  : "signal-payload-field-added",
           actionId,
           path: fieldPath,
           message:
@@ -1512,7 +1656,9 @@ function diffObjectSchema(
               ? "input-field-removed"
               : role === "output"
                 ? "output-field-removed"
-                : "signal-payload-field-removed",
+                : role === "error"
+                  ? "error-data-field-removed"
+                  : "signal-payload-field-removed",
           actionId,
           path: fieldPath,
           message:
@@ -2166,6 +2312,14 @@ function withoutSnapshotConstraints(snapshot: ActionContractSnapshot): ActionCon
       ...action,
       input: strip(action.input),
       output: strip(action.output),
+      ...(action.errors !== undefined
+        ? {
+            errors: action.errors.map((error) => ({
+              ...error,
+              data: error.data === null ? null : strip(error.data),
+            })),
+          }
+        : {}),
     })),
     ...(snapshot.signals !== undefined
       ? { signals: snapshot.signals.map((signal) => ({ ...signal, payload: strip(signal.payload) })) }

@@ -61,12 +61,25 @@ function renderRateLimit(
   return `    rate limit: ${rateLimit.key}, max ${rateLimit.max} / ${rateLimit.windowMs}ms${strategy}`;
 }
 
+// The errors an action declares, each with its data: `OutOfStock (object {
+// itemId: string }), NotEnoughCoins`. Only for an action that declares some.
+function renderErrors(errors: ActionInspectionEntry["errors"]): string[] {
+  if (errors === undefined || errors.length === 0) {
+    return [];
+  }
+  const rendered = errors.map((error) =>
+    error.data === null ? error.name : `${error.name} (${error.data.summary})`,
+  );
+  return [`    errors: ${rendered.join(", ")}`];
+}
+
 function renderActionBlock(action: ActionInspectionEntry, colors: CliColorMode): string[] {
   const lines = [
     `  ${strong(action.id, colors)}`,
     `    source: ${action.source}`,
     `    input: ${action.input.summary}`,
     `    output: ${action.output.summary}`,
+    ...renderErrors(action.errors),
     `    serialization: ${action.serialization.policy}`,
     renderRateLimit(action.rateLimit, colors),
     `    idempotent: ${action.idempotent === true ? "yes (timeouts are retried)" : "no"}`,

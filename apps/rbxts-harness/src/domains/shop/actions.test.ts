@@ -40,6 +40,26 @@ describe("shop.purchaseItem", () => {
     harness.dispose();
   });
 
+  it("fails with a declared error and its data", async () => {
+    const harness = createTestServerApp({ actions });
+
+    const refused = await harness
+      .invoke(createTestPlayer(), "shop.purchaseItem", {
+        itemId: "sold-out",
+        quantity: 1,
+        currency: "coins",
+      })
+      .then(
+        () => undefined,
+        (reason) => reason as { name?: string; data?: { itemId?: string } },
+      );
+
+    expect(refused?.name).toBe("OutOfStock");
+    expect(refused?.data?.itemId).toBe("sold-out");
+
+    harness.dispose();
+  });
+
   it("rejects input the schema does not accept", async () => {
     const harness = createTestServerApp({ actions });
 

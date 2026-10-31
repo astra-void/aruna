@@ -128,6 +128,52 @@ export type ActionInvoker = (
 	options?: ActionInvokeOptions,
 ) => Promise<unknown>;
 
+// The errors an action declares, by name, with the type of each one's data
+// (`undefined` for an error without). The generated client module emits one
+// per action that declares `errors`.
+export type ActionErrorTypes = { readonly [name: string]: unknown };
+
+// A generated client stub. `TErrors` is type-only: it is what lets
+// `isActionError(err, stub, name)` narrow a rejection to the declared error.
+export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = ((
+	input: TInput,
+) => Promise<TOutput>) & {
+	readonly __arunaErrors?: TErrors;
+};
+
+// A rejection narrowed to one declared error: its name, and its data typed as
+// the action declared it.
+export interface DeclaredActionFailure<TName extends string, TData> {
+	readonly message: string;
+	readonly name: TName;
+	readonly data: TData;
+}
+
+// Whether a rejection from `action` is its declared error `name`, narrowing
+// `data` to the declared type:
+//
+//   try {
+//     await purchaseItem(input);
+//   } catch (err) {
+//     if (isActionError(err, purchaseItem, "OutOfStock")) {
+//       print(err.data.itemId);
+//     }
+//   }
+//
+// The check itself is by name: the server only lets an error of a declared
+// name through with data that matches the declaration. Pass the stub the
+// rejection came from; another action may declare the same name differently.
+export function isActionError<
+	TErrors extends ActionErrorTypes,
+	TName extends keyof TErrors & string,
+>(
+	value: unknown,
+	_action: ActionStub<never, unknown, TErrors>,
+	name: TName,
+): value is DeclaredActionFailure<TName, TErrors[TName]> {
+	return typeIs(value, "table") && (value as { readonly name?: unknown }).name === name;
+}
+
 // What a client middleware layer observes about the call it wraps.
 export type ClientActionInfo = {
 	readonly actionId: string;

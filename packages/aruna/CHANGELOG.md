@@ -17,6 +17,25 @@ the game build like any other module.
 
 ### Added
 
+- **Declared action errors.** `defineAction({ errors: { OutOfStock: { data:
+  schema.object({ ... }) }, NotEnoughCoins: {} } })` declares the failures a
+  client can tell apart, and `run` throws them with `throw ctx.fail(name, data)`,
+  typed against the declaration (`ctx.fail` exists only when `errors` does). The
+  server checks every error of a declared name against its declaration — data
+  wire-safe and matching the schema, none for an error declared without it, and
+  `ctx.fail` naming only declared errors — and masks a mismatch as
+  `ActionInternalError`, with `onError` told what did not match. The data
+  travels as the response's new `errorData` field and reaches the client
+  rejection (and `app.dispatch`'s) as `data`. The compiler reads `errors` into
+  the manifest, `aruna inspect actions`, the contract snapshot, and the contract
+  hash; `aruna::584 invalid-action-errors` (an unreadable declaration, a
+  non-identifier or reserved name, `errors` on a `fireAndForget` action) and
+  `aruna::585 action-error-data-schema-invalid`. The generated client stub of
+  an action with errors is typed `ActionStub<Input, Output, Errors>`, and
+  `isActionError(err, stub, name)` from `aruna/client` narrows a rejection to
+  the declared error, `data` included. `contract diff`: an error added is
+  non-breaking, removed is info, and its data follows the output rules.
+
 - **Schema constraints in the contract.** The compiler records every bound
   whose argument it can read (a number literal, or a module-level `const` bound
   to one) as a value on the schema — `minLength`/`maxLength`,
@@ -24,8 +43,8 @@ the game build like any other module.
   `maxEntries` — counts `.refine()` calls, names a bound computed at runtime in
   `dynamicConstraints`, and hashes only what it cannot read. `aruna contract
   diff` judges each change by the direction the value travels: a tighter input
-  bound is breaking and a looser one non-breaking; for an output or a signal
-  payload, the other way round; a changed predicate is a
+  bound is breaking and a looser one non-breaking; for an output, a signal
+  payload, or an error's data, the other way round; a changed predicate is a
   warning. `aruna inspect` shows the bounds after the type
   (`string (maxLength 64)`).
 
