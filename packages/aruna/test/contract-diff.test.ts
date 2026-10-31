@@ -697,6 +697,45 @@ describe("contract diff", () => {
     });
   });
 
+  it("reports a rate-limit strategy change as info, beside any throughput change", () => {
+    const limit = (max: number, strategy?: "tokenBucket") => ({
+      rateLimit: { key: "player", windowMs: 1000, max, ...(strategy !== undefined ? { strategy } : {}) },
+    });
+    const switched = diffActionContractSnapshots(
+      snapshot([action(limit(5))]),
+      snapshot([action(limit(5, "tokenBucket"))]),
+    );
+    expect(switched.entries).toEqual([
+      {
+        severity: "info",
+        kind: "metadata-changed",
+        actionId: "shop.purchaseItem",
+        path: "rateLimit.strategy",
+        message: "shop.purchaseItem rate limit strategy changed from fixedWindow to tokenBucket.",
+        before: "fixedWindow",
+        after: "tokenBucket",
+      },
+    ]);
+
+    const tightened = diffActionContractSnapshots(
+      snapshot([action(limit(5, "tokenBucket"))]),
+      snapshot([action(limit(2))]),
+    );
+    expect(tightened.entries.map((entry) => [entry.severity, entry.kind])).toEqual([
+      ["breaking", "rate-limit-tightened"],
+      ["info", "metadata-changed"],
+    ]);
+    expect(tightened.entries[0]?.message).toBe(
+      "shop.purchaseItem rate limit tightened: changed from player, max 5 / 1000ms (token bucket) to player, max 2 / 1000ms.",
+    );
+
+    // A strategy survives the snapshot's JSON form.
+    const original = snapshot([action(limit(5, "tokenBucket"))]);
+    expect(parseActionContractSnapshotJson(JSON.parse(JSON.stringify(original))).actions).toEqual(
+      original.actions,
+    );
+  });
+
   it("treats dropping idempotent as breaking and adding it as non-breaking", () => {
     const removed = diffActionContractSnapshots(
       snapshot([action({ idempotent: true })]),

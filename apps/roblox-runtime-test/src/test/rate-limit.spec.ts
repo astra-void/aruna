@@ -67,7 +67,15 @@ function counter() {
   const calls = { count: 0 };
   return {
     calls,
-    action(id: string, rateLimit?: { key: "player" | "global"; windowMs: number; max: number }) {
+    action(
+      id: string,
+      rateLimit?: {
+        key: "player" | "global";
+        windowMs: number;
+        max: number;
+        strategy?: "fixedWindow" | "tokenBucket";
+      },
+    ) {
       return defineAction({
         id,
         ...(rateLimit !== undefined ? { rateLimit } : {}),
@@ -480,6 +488,92 @@ describe("action rate limits", () => {
     // The retired Node runtime's check result also carried remaining: 0.
     expect(second).toEqual({ ok: true });
     expectAbsent(second, ["remaining"]);
+  });
+
+  it("lets a token bucket burst to max, then refill continuously", async () => {
+    const fixture = counter();
+    const harness = harnessAt1000({
+      "shop.purchaseItem": fixture.action("shop.purchaseItem", {
+        key: "player",
+        windowMs: 1000,
+        max: 2,
+        strategy: "tokenBucket",
+      }),
+    });
+    const player = createTestPlayer();
+
+    expect(await harness.invoke(player, "shop.purchaseItem", {})).toEqual({ ok: true });
+    expect(await harness.invoke(player, "shop.purchaseItem", {})).toEqual({ ok: true });
+    // Empty: the next token is half a window away (2 per 1000 ms).
+    expect(await rejectionOf(harness.invoke(player, "shop.purchaseItem", {}))).toEqual({
+      name: "ActionRateLimitError",
+      message: "Aruna action shop.purchaseItem is rate limited. Retry after 500ms.",
+      retryAfterMs: 500,
+      resetAtMs: 1500,
+    });
+
+    harness.advance(500);
+    expect(await harness.invoke(player, "shop.purchaseItem", {})).toEqual({ ok: true });
+    harness.advance(250);
+    const early = await rejectionOf(harness.invoke(player, "shop.purchaseItem", {}));
+    expect((early as unknown as Fields)["retryAfterMs"]).toBe(250);
+    expect(fixture.calls.count).toBe(3);
+    harness.dispose();
+  });
+
+  it("never lets a token bucket through twice max at a window boundary", async () => {
+    const limit = { key: "player" as const, windowMs: 1000, max: 2 };
+    const fixed = counter();
+    const bucket = counter();
+    const harness = createTestServerApp({
+      actions: {
+        "fixed.call": fixed.action("fixed.call", limit),
+        "bucket.call": bucket.action("bucket.call", { ...limit, strategy: "tokenBucket" }),
+      },
+    });
+    const player = createTestPlayer();
+
+    // 1900 ms, the end of the window [1000, 2000): spend both calls of each.
+    harness.advance(1900);
+    for (const actionId of ["fixed.call", "bucket.call", "fixed.call", "bucket.call"]) {
+      expect(await harness.invoke(player, actionId, {})).toEqual({ ok: true });
+    }
+    // 100 ms later a fixed window has reset; the bucket has 0.2 of a token.
+    harness.advance(100);
+    expect(await harness.invoke(player, "fixed.call", {})).toEqual({ ok: true });
+    expect(await harness.invoke(player, "fixed.call", {})).toEqual({ ok: true });
+    expect((await rejectionOf(harness.invoke(player, "bucket.call", {}))).name).toBe(
+      "ActionRateLimitError",
+    );
+    expect([fixed.calls.count, bucket.calls.count]).toEqual([4, 2]);
+    harness.dispose();
+  });
+
+  it("applies a token-bucket defaultRateLimit", async () => {
+    const fixture = counter();
+    const harness = createTestServerApp({
+      actions: { "shop.purchaseItem": fixture.action("shop.purchaseItem") },
+      defaultRateLimit: { key: "player", windowMs: 1000, max: 1, strategy: "tokenBucket" },
+    });
+    harness.advance(1000);
+    const player = createTestPlayer();
+
+    expect(await harness.invoke(player, "shop.purchaseItem", {})).toEqual({ ok: true });
+    const refused = await rejectionOf(harness.invoke(player, "shop.purchaseItem", {}));
+    expect((refused as unknown as Fields)["retryAfterMs"]).toBe(1000);
+    harness.advance(1000);
+    expect(await harness.invoke(player, "shop.purchaseItem", {})).toEqual({ ok: true });
+    harness.dispose();
+  });
+
+  it("purges a token bucket once it has refilled", () => {
+    const config = { key: "player" as const, windowMs: 1000, max: 2, strategy: "tokenBucket" as const };
+    const limiter = createActionRateLimiter();
+
+    // One token spent at 1 s comes back half a second later.
+    limiter.check("shop.purchaseItem", "alpha", config, 1);
+    expect(limiter.purge(1.49)).toBe(0);
+    expect(limiter.purge(1.5)).toBe(1);
   });
 
   it("lets createServerApp share limiter state across dispatch calls", async () => {

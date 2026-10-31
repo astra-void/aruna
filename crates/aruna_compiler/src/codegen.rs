@@ -499,8 +499,14 @@ fn render_client_file(
 }
 
 fn render_default_rate_limit(rate_limit: &ActionRateLimitConfig) -> String {
+    let strategy = rate_limit
+        .strategy
+        .as_deref()
+        .filter(|strategy| *strategy == "tokenBucket")
+        .map(|strategy| format!(", strategy: \"{strategy}\""))
+        .unwrap_or_default();
     format!(
-        "export const defaultRateLimit = {{ key: \"{}\", windowMs: {}, max: {} }} as const;",
+        "export const defaultRateLimit = {{ key: \"{}\", windowMs: {}, max: {}{strategy} }} as const;",
         rate_limit.key, rate_limit.window_ms, rate_limit.max
     )
 }
@@ -1170,6 +1176,7 @@ mod tests {
             key: "player".to_string(),
             window_ms: 1000,
             max: 5,
+            strategy: None,
         });
         assert_eq!(compute_contract_hash(&with_rate_limit, &signals), hash);
 
@@ -1230,6 +1237,18 @@ mod tests {
         assert!(output.files[1].contents.contains(
             "export const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;"
         ));
+    }
+
+    #[test]
+    fn renders_a_token_bucket_default_rate_limit() {
+        let bucket = ActionRateLimitConfig {
+            strategy: Some("tokenBucket".to_string()),
+            ..ActionRateLimitConfig::default()
+        };
+        assert_eq!(
+            render_default_rate_limit(&bucket),
+            "export const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20, strategy: \"tokenBucket\" } as const;"
+        );
     }
 
     #[test]

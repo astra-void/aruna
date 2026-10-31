@@ -789,6 +789,7 @@ export const demo = defineAction({
             key: "player".to_string(),
             window_ms: 1000,
             max: 5,
+            strategy: None,
         })
     );
 }
@@ -836,8 +837,72 @@ export const demo = defineAction({
             key: "custom".to_string(),
             window_ms: 1000,
             max: 5,
+            strategy: None,
         })
     );
+}
+
+#[test]
+fn records_a_token_bucket_strategy_and_rejects_an_unknown_one() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const bucket = defineAction({
+  id: "demo.bucket",
+  rateLimit: { key: "player", windowMs: 1000, max: 5, strategy: "tokenBucket" },
+  run() {},
+});
+
+export const window = defineAction({
+  id: "demo.window",
+  rateLimit: { key: "player", windowMs: 1000, max: 5, strategy: "fixedWindow" },
+  run() {},
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+    assert!(output.ok);
+    let strategy_of = |id: &str| {
+        output
+            .manifest
+            .actions
+            .iter()
+            .find(|action| action.id == id)
+            .and_then(|action| action.rate_limit.as_ref())
+            .map(|rate_limit| rate_limit.strategy.clone())
+    };
+    assert_eq!(strategy_of("demo.bucket"), Some(Some("tokenBucket".to_string())));
+    // The default is recorded as no strategy, written or not.
+    assert_eq!(strategy_of("demo.window"), Some(None));
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const leaky = defineAction({
+  id: "demo.leaky",
+  rateLimit: { key: "player", windowMs: 1000, max: 5, strategy: "leakyBucket" },
+  run() {},
+});
+"#,
+    );
+    let output = check_project(compiler_input(root));
+    assert!(!output.ok);
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::560".to_string()]);
+    assert!(output.diagnostics[0]
+        .details
+        .as_deref()
+        .unwrap_or_default()
+        .contains("rateLimit.strategy must be \"fixedWindow\" or \"tokenBucket\"."));
 }
 
 #[test]

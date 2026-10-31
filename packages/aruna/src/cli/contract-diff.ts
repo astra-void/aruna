@@ -416,11 +416,15 @@ function parseRateLimit(value: unknown, location: string): ParsedActionContractR
   if (typeof value["max"] !== "number" || !Number.isFinite(value["max"])) {
     throw new Error(`${location}.max must be a finite number.`);
   }
+  if (value["strategy"] !== undefined && value["strategy"] !== "tokenBucket") {
+    throw new Error(`${location}.strategy must be "tokenBucket" when present.`);
+  }
 
   return {
     key: value["key"] as "player",
     windowMs: value["windowMs"],
     max: value["max"],
+    ...(value["strategy"] === "tokenBucket" ? { strategy: "tokenBucket" as const } : {}),
   };
 }
 
@@ -1080,6 +1084,13 @@ function diffIdempotent(
   );
 }
 
+// A rate limit as the diff prints it. The default fixed window is not named, so
+// its text is what it has always been.
+function describeRateLimit(limit: NonNullable<ActionContractRecord["rateLimit"]>): string {
+  const strategy = limit.strategy === "tokenBucket" ? " (token bucket)" : "";
+  return `${limit.key}, max ${limit.max} / ${limit.windowMs}ms${strategy}`;
+}
+
 function diffRateLimit(
   actionId: string,
   before: ActionContractRecord["rateLimit"],
@@ -1097,8 +1108,8 @@ function diffRateLimit(
         kind: "rate-limit-added",
         actionId,
         path: "rateLimit",
-        message: `${actionId} rate limit added: ${after.key}, max ${after.max} / ${after.windowMs}ms.`,
-        after: `rate limit ${after.key}, max ${after.max} / ${after.windowMs}ms`,
+        message: `${actionId} rate limit added: ${describeRateLimit(after)}.`,
+        after: `rate limit ${describeRateLimit(after)}`,
       },
       entries,
     );
@@ -1113,7 +1124,7 @@ function diffRateLimit(
         actionId,
         path: "rateLimit",
         message: `${actionId} rate limit removed.`,
-        before: `rate limit ${before.key}, max ${before.max} / ${before.windowMs}ms`,
+        before: `rate limit ${describeRateLimit(before)}`,
       },
       entries,
     );
@@ -1140,6 +1151,26 @@ function diffRateLimit(
     return;
   }
 
+  // The strategy changes how a burst is counted, not how many calls a window
+  // allows: a client that keeps to `max` in any `windowMs` is admitted by
+  // either, so a change is reported but breaks nothing on its own.
+  const beforeStrategy = before.strategy ?? "fixedWindow";
+  const afterStrategy = after.strategy ?? "fixedWindow";
+  if (beforeStrategy !== afterStrategy) {
+    makeEntry(
+      {
+        severity: "info",
+        kind: "metadata-changed",
+        actionId,
+        path: "rateLimit.strategy",
+        message: `${actionId} rate limit strategy changed from ${beforeStrategy} to ${afterStrategy}.`,
+        before: beforeStrategy,
+        after: afterStrategy,
+      },
+      entries,
+    );
+  }
+
   const beforeThroughput = before.max / before.windowMs;
   const afterThroughput = after.max / after.windowMs;
   if (afterThroughput < beforeThroughput) {
@@ -1149,9 +1180,9 @@ function diffRateLimit(
         kind: "rate-limit-tightened",
         actionId,
         path: "rateLimit",
-        message: `${actionId} rate limit tightened: changed from ${before.key}, max ${before.max} / ${before.windowMs}ms to ${after.key}, max ${after.max} / ${after.windowMs}ms.`,
-        before: `rate limit ${before.key}, max ${before.max} / ${before.windowMs}ms`,
-        after: `rate limit ${after.key}, max ${after.max} / ${after.windowMs}ms`,
+        message: `${actionId} rate limit tightened: changed from ${describeRateLimit(before)} to ${describeRateLimit(after)}.`,
+        before: `rate limit ${describeRateLimit(before)}`,
+        after: `rate limit ${describeRateLimit(after)}`,
       },
       entries,
     );
@@ -1165,9 +1196,9 @@ function diffRateLimit(
         kind: "rate-limit-loosened",
         actionId,
         path: "rateLimit",
-        message: `${actionId} rate limit loosened: changed from ${before.key}, max ${before.max} / ${before.windowMs}ms to ${after.key}, max ${after.max} / ${after.windowMs}ms.`,
-        before: `rate limit ${before.key}, max ${before.max} / ${before.windowMs}ms`,
-        after: `rate limit ${after.key}, max ${after.max} / ${after.windowMs}ms`,
+        message: `${actionId} rate limit loosened: changed from ${describeRateLimit(before)} to ${describeRateLimit(after)}.`,
+        before: `rate limit ${describeRateLimit(before)}`,
+        after: `rate limit ${describeRateLimit(after)}`,
       },
       entries,
     );
@@ -1181,7 +1212,7 @@ function diffRateLimit(
         kind: "metadata-changed",
         actionId,
         path: "rateLimit",
-        message: `${actionId} rate limit changed from ${before.key}, max ${before.max} / ${before.windowMs}ms to ${after.key}, max ${after.max} / ${after.windowMs}ms.`,
+        message: `${actionId} rate limit changed from ${describeRateLimit(before)} to ${describeRateLimit(after)}.`,
         before,
         after,
       },

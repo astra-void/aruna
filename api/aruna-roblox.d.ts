@@ -241,7 +241,10 @@ interface ActionRateLimitOptions {
     readonly key: ActionRateLimitKey;
     readonly windowMs: number;
     readonly max: number;
+    readonly strategy?: ActionRateLimitStrategy;
 }
+
+type ActionRateLimitStrategy = "fixedWindow" | "tokenBucket";
 
 interface ActionRegistry<TPlayer = unknown> {
     readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;

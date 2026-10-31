@@ -82,10 +82,19 @@ export type ActionRateLimitKeyFn = (info: ActionRateLimitKeyInfo) => string;
 // key function.
 export type ActionRateLimitKey = "player" | "global" | ActionRateLimitKeyFn;
 
+// How a limit counts calls. "fixedWindow" (the default) allows `max` calls per
+// `windowMs` window, counted from a window boundary, so two full windows back to
+// back can let up to 2 × `max` through in quick succession. "tokenBucket" holds
+// at most `max` calls' worth of tokens and refills `max` of them evenly over
+// `windowMs`: a burst is never more than `max`, and the sustained rate is the
+// same.
+export type ActionRateLimitStrategy = "fixedWindow" | "tokenBucket";
+
 export interface ActionRateLimitOptions {
 	readonly key: ActionRateLimitKey;
 	readonly windowMs: number;
 	readonly max: number;
+	readonly strategy?: ActionRateLimitStrategy;
 }
 
 export type InferInput<S> = S extends Schema ? Infer<S> : unknown;

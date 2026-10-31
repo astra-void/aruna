@@ -43,6 +43,9 @@ export type ActionContractRecord = {
     readonly key: "player" | "global";
     readonly windowMs: number;
     readonly max: number;
+    // Present only for a token bucket, so fixed-window snapshots stay
+    // byte-stable.
+    readonly strategy?: "tokenBucket" | undefined;
   } | null;
   // Present (and true) only for an action declared `idempotent: true`, so the
   // snapshot of every other action is byte-stable with older baselines.

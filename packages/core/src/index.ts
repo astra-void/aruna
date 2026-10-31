@@ -108,6 +108,8 @@ export type ActionRecord = {
         key: "player" | "global";
         windowMs: number;
         max: number;
+        // Present only for a token bucket; the default fixed window omits it.
+        strategy?: "tokenBucket" | undefined;
       }
     | undefined;
   inputSchema?: SchemaMetadata | undefined;
@@ -238,8 +240,16 @@ export type CompilerConfig = {
   readonly preserveGeneratedComments?: boolean | undefined;
 };
 
+export type DefaultRateLimitConfig = {
+  readonly key: "player" | "global";
+  readonly windowMs: number;
+  readonly max: number;
+  // "fixedWindow" (the default) or "tokenBucket".
+  readonly strategy?: "fixedWindow" | "tokenBucket" | undefined;
+};
+
 export type ActionsConfig = {
-  readonly defaultRateLimit?: NonNullable<ActionRecord["rateLimit"]> | undefined;
+  readonly defaultRateLimit?: DefaultRateLimitConfig | undefined;
 };
 
 // Classification globs. The arrays *extend* the built-in Recommended Layout

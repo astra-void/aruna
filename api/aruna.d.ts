@@ -17,13 +17,14 @@ export type ActionRecord = {
         key: "player" | "global";
         windowMs: number;
         max: number;
+        strategy?: "tokenBucket" | undefined;
     } | undefined;
     inputSchema?: SchemaMetadata | undefined;
     outputSchema?: SchemaMetadata | undefined;
 };
 
 export type ActionsConfig = {
-    readonly defaultRateLimit?: NonNullable<ActionRecord["rateLimit"]> | undefined;
+    readonly defaultRateLimit?: DefaultRateLimitConfig | undefined;
 };
 
 export type CompilerConfig = {
@@ -202,6 +203,13 @@ type CompilerSummary = {
 
 type ContractConfig = {
     readonly snapshot?: string | undefined;
+};
+
+type DefaultRateLimitConfig = {
+    readonly key: "player" | "global";
+    readonly windowMs: number;
+    readonly max: number;
+    readonly strategy?: "fixedWindow" | "tokenBucket" | undefined;
 };
 
 type DevConfig = {

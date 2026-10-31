@@ -36,7 +36,12 @@ Definition shape:
 ```ts
 type ActionDefinition<TInput, TOutput, TPlayer> = {
   readonly id: string;
-  readonly rateLimit?: { key: "player"; windowMs: number; max: number };
+  readonly rateLimit?: {
+    key: "player" | "global" | ((info) => string);
+    windowMs: number;
+    max: number;
+    strategy?: "fixedWindow" | "tokenBucket"; // default "fixedWindow"
+  };
   readonly fireAndForget?: boolean;
   readonly idempotent?: boolean;
   readonly input?: Schema;
@@ -161,10 +166,30 @@ defineAction({ id: "world.regen", rateLimit: { key: "global", windowMs: 60_000, 
 defineConfig({ actions: { defaultRateLimit: { key: "player", windowMs: 1000, max: 20 } } });
 ```
 
-The default key resolver uses `ctx.player.UserId`; players that are missing collapse to a
-shared `"anonymous"` bucket. Override with `rateLimitKey` if you need finer buckets. When
-a limit is exceeded the dispatcher throws `ActionRateLimitError` (`retryAfterMs`,
-`resetAtMs`, `max`, `windowMs`).
+`key: "player"` buckets by `ctx.player.UserId`. For finer buckets, pass a function:
+`` key: (info) => `target:${(info.input as { targetId: string }).targetId}` ``
+throttles per target, and every call that returns the same string shares one bucket.
+When a limit is exceeded the dispatcher refuses the call with `ActionRateLimitError`,
+carrying `retryAfterMs` and `resetAtMs`.
+
+### Fixed window or token bucket
+
+`strategy` decides how calls are counted. Both allow `max` calls per `windowMs`
+sustained; they differ in the bursts they let through.
+
+| `strategy` | Counts | A burst | `retryAfterMs` on a refusal |
+| --- | --- | --- | --- |
+| `"fixedWindow"` (default) | calls since the current window began | up to 2 × `max` across a window boundary: `max` at the end of one window, `max` at the start of the next | until the window resets |
+| `"tokenBucket"` | tokens: the bucket holds `max`, a call takes one, and `max` come back evenly over `windowMs` | never more than `max` | until the next token arrives |
+
+```ts
+// At most 10 shots at once, then 10 a second.
+defineAction({ id: "combat.fire", rateLimit: { key: "player", windowMs: 1000, max: 10, strategy: "tokenBucket" } /* ... */ });
+```
+
+A client that keeps to `max` calls in any `windowMs` is admitted by either one, so
+`aruna contract diff` reports a strategy change as info. `actions.defaultRateLimit`
+takes `strategy` too.
 
 **Failures are typed across the wire.** A rejected invoke carries a structured error:
 `err.message` plus `err.name` (`"ActionRateLimitError"`, `"ActionValidationError"`,
@@ -363,6 +388,7 @@ and output server → client, so the same edit can mean opposite things on each 
 | A bound loosened: the reverse | non-breaking | **breaking** — an old client may receive what it was promised it would not |
 | A `.refine()` predicate or a computed bound changed (seen, not judged) | warning | warning |
 | The rate limit's throughput lowered / raised | **breaking** / non-breaking | |
+| The rate limit's `strategy` changed | info | |
 | `idempotent` dropped / added | **breaking** / non-breaking | |
 
 A signal payload follows the output column. The bounds come from what the compiler

@@ -52,6 +52,7 @@ type MutableActionsConfig = {
     key?: string;
     windowMs?: number;
     max?: number;
+    strategy?: "fixedWindow" | "tokenBucket";
   };
 };
 
@@ -507,15 +508,31 @@ function normalizeConfigObject(value: unknown): {
         } else {
           validateUnsupportedKeys(
             defaultRateLimitValue,
-            ["key", "windowMs", "max"],
+            ["key", "windowMs", "max", "strategy"],
             diagnostics,
             "actions.defaultRateLimit",
           );
-          const defaultRateLimit: { key: "player" | "global"; windowMs: number; max: number } = {
+          const defaultRateLimit: {
+            key: "player" | "global";
+            windowMs: number;
+            max: number;
+            strategy?: "fixedWindow" | "tokenBucket";
+          } = {
             key: "player",
             windowMs: 1000,
             max: 20,
           };
+
+          if (defaultRateLimitValue["strategy"] !== undefined) {
+            const strategyValue = defaultRateLimitValue["strategy"];
+            if (strategyValue !== "fixedWindow" && strategyValue !== "tokenBucket") {
+              diagnostics.push(
+                'actions.defaultRateLimit.strategy must be "fixedWindow" or "tokenBucket"',
+              );
+            } else {
+              defaultRateLimit.strategy = strategyValue;
+            }
+          }
 
           if (defaultRateLimitValue["key"] !== undefined) {
             const keyValue = defaultRateLimitValue["key"];
@@ -784,6 +801,8 @@ function normalizeResolvedConfig(config: Config): NormalizedConfig {
         key: defaultRateLimit.key,
         windowMs: defaultRateLimit.windowMs,
         max: defaultRateLimit.max,
+        // Only a token bucket is spelled out; the fixed window is the default.
+        ...(defaultRateLimit.strategy === "tokenBucket" ? { strategy: "tokenBucket" as const } : {}),
       },
     },
     conventions: {

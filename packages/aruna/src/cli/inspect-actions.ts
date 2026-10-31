@@ -57,7 +57,8 @@ function renderRateLimit(
     return `    rate limit: ${success("none", colors)}`;
   }
 
-  return `    rate limit: ${rateLimit.key}, max ${rateLimit.max} / ${rateLimit.windowMs}ms`;
+  const strategy = rateLimit.strategy === "tokenBucket" ? " (token bucket)" : "";
+  return `    rate limit: ${rateLimit.key}, max ${rateLimit.max} / ${rateLimit.windowMs}ms${strategy}`;
 }
 
 function renderActionBlock(action: ActionInspectionEntry, colors: CliColorMode): string[] {

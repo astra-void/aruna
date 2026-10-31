@@ -209,6 +209,7 @@ import { defineConfig } from "aruna";
 
 export default defineConfig({
   actions: {
+    // strategy: "fixedWindow" (default) | "tokenBucket"
     defaultRateLimit: { key: "player", windowMs: 1000, max: 20 },
   },
   conventions: {

@@ -21,6 +21,10 @@ pub struct ArunaActionRateLimitMetadata {
     pub key: String,
     pub window_ms: u32,
     pub max: u32,
+    // "tokenBucket" when declared so; omitted for the default fixed window, so
+    // existing manifests and snapshots stay byte-stable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -103,6 +107,7 @@ pub(crate) fn parse_rate_limit_object(
     let mut key: Option<String> = None;
     let mut window_ms: Option<u32> = None;
     let mut max: Option<u32> = None;
+    let mut strategy: Option<String> = None;
 
     for property in &object.properties {
         let ObjectPropertyKind::ObjectProperty(object_property) = property else {
@@ -210,6 +215,28 @@ pub(crate) fn parse_rate_limit_object(
                     max = Some(integer_value);
                 }
             }
+            // How calls are counted. The default fixed window is recorded as no
+            // strategy at all.
+            "strategy" => match &object_property.value {
+                Expression::StringLiteral(literal)
+                    if matches!(literal.value.as_str(), "fixedWindow" | "tokenBucket") =>
+                {
+                    strategy = (literal.value.as_str() == "tokenBucket").then(|| "tokenBucket".to_string());
+                }
+                _ => {
+                    diagnostics.push(rate_limit_invalid_diagnostic(
+                        file,
+                        action_id,
+                        export_name,
+                        DiagnosticSpan {
+                            start: object_property.value.span().start as usize,
+                            end: object_property.value.span().end as usize,
+                        },
+                        "rateLimit.strategy must be \"fixedWindow\" or \"tokenBucket\".".to_string(),
+                    ));
+                    return None;
+                }
+            },
             _ => {
                 let details = format!("rateLimit does not support the {property_name} key.");
                 diagnostics.push(rate_limit_invalid_diagnostic(
@@ -264,6 +291,7 @@ pub(crate) fn parse_rate_limit_object(
         key,
         window_ms,
         max,
+        strategy,
     })
 }
 

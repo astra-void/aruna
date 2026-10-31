@@ -28,6 +28,9 @@ pub struct ActionRateLimitConfig {
     pub window_ms: u32,
     #[serde(default = "default_action_rate_limit_max")]
     pub max: u32,
+    // "tokenBucket", or absent for the default fixed window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<String>,
 }
 
 fn default_action_rate_limit_key() -> String {
@@ -48,6 +51,7 @@ impl Default for ActionRateLimitConfig {
             key: default_action_rate_limit_key(),
             window_ms: default_action_rate_limit_window_ms(),
             max: default_action_rate_limit_max(),
+            strategy: None,
         }
     }
 }

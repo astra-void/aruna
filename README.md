@@ -169,7 +169,7 @@ export default defineConfig({
 
 - `compiler.generatedDir` controls where generated files are written.
 - `compiler.manifest` accepts a manifest path string or `{ output }`.
-- `actions.defaultRateLimit` uses `key`, `windowMs`, and `max`.
+- `actions.defaultRateLimit` uses `key`, `windowMs`, `max`, and an optional `strategy` (`"fixedWindow"`, the default, or `"tokenBucket"`).
 - `conventions.client`, `conventions.server`, and `conventions.shared` are arrays of glob strings.
 - `domains.roots` are globs matching a domain *directory* (`src/domains/*` matches
   `src/domains/shop`), and `strict.domainBoundary` sets the severity of a
@@ -438,7 +438,7 @@ Future Linux cross-compiles use real `cargo zigbuild --target x86_64-unknown-lin
 - runtime serialization policy now runs on action input and output at dispatch time using the default `plain-data-v1` boundary
 - action input/output rejects function, class-instance, cyclic, non-finite (NaN, ±inf, also inside Roblox value types), and other non-plain values; an `Instance` (a `Player` included) is accepted only where the schema declares `schema.instance()`, so an action without an input schema rejects one
 - client input is checked for wire safety before anything else reads it, and the walk stops at 2048 values as well as at depth 32
-- basic fixed-window action rate limiting now runs per action and player/key before `run()`
+- action rate limiting runs per action and player/key before `run()`, as a fixed window (the default) or a token bucket (`strategy: "tokenBucket"`)
 - invalid input and serialization failures do not consume per-action quota; every envelope is charged to a per-player request budget (60 burst, 30 per second) before it is read, and a player's wire dispatches in flight are capped (32; in-process `app.dispatch` is exempt), so malformed payloads are not free
 - the default client retry retries a timeout only for an action declared `idempotent: true`, and every attempt of a call carries one idempotency key, so the server runs it once
 - manifest action records now include serialization policy metadata and optional `rateLimit` metadata

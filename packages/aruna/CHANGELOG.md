@@ -38,6 +38,14 @@ the game build like any other module.
 - **`schema.record(...).maxEntries(n)`**, with `.refine()` and `.default()` on
   records like on arrays.
 
+- **Token-bucket rate limits.** `rateLimit: { ..., strategy: "tokenBucket" }`
+  (and `actions.defaultRateLimit.strategy`) holds at most `max` tokens and
+  refills `max` of them evenly over `windowMs`, so a burst never exceeds `max`,
+  where a fixed window lets up to 2 × `max` through across a boundary. A
+  refusal's `retryAfterMs` is the time until the next token. `"fixedWindow"`
+  stays the default; the manifest and the contract record the strategy only for
+  a token bucket, and `contract diff` reports a strategy change as info.
+
 - **`aruna migrate`: codemods for breaking changes.** `aruna migrate --list`
   shows them; `aruna migrate <name> --dry-run` prints a unified diff without
   writing; `aruna migrate <name>` applies it. Codemods edit only what they

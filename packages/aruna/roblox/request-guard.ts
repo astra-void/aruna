@@ -7,6 +7,8 @@
 // charges every envelope against a token bucket before any of that runs, and
 // caps how many of a player's dispatches can be running at once.
 
+import { refilledTokens } from "./rate-limit";
+
 export interface RequestBudgetOptions {
 	// Envelopes a player may send in a burst. Default 60.
 	readonly burst?: number;
@@ -167,8 +169,7 @@ export function createRequestGuard<TPlayer>(options?: {
 			}
 			const state = stateFor(player);
 			const at = readNow();
-			const elapsedMs = math.max(0, at - state.refilledAtMs);
-			state.tokens = math.min(burst, state.tokens + (elapsedMs / 1000) * perSecond);
+			state.tokens = refilledTokens(state.tokens, (at - state.refilledAtMs) / 1000, perSecond, burst);
 			state.refilledAtMs = at;
 			if (state.tokens < 1) {
 				return false;
