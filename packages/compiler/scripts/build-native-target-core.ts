@@ -14,7 +14,6 @@ import { stageNativePackage } from "./stage-native-package.js";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = path.resolve(packageRoot, "../..");
-const manifestPath = path.join(workspaceRoot, "crates", "aruna_napi", "Cargo.toml");
 const profile = process.env.ARUNA_NATIVE_PROFILE === "release" ? "release" : "debug";
 
 export type BuildNativeTargetDeps = {
@@ -22,6 +21,11 @@ export type BuildNativeTargetDeps = {
   stageNativePackage?: typeof stageNativePackage;
   stageCompilerPackage?: typeof stageCompilerPackage;
   readVersion?: () => Promise<string>;
+  // The root `.npm/` is staged under and the Cargo manifest is read from;
+  // defaults to this repository. A test passes its own directory: the
+  // repository's `.npm/` is where release.test.ts stages a whole release, and
+  // removing a stale wrapper there from another test races it.
+  workspaceRoot?: string;
 };
 
 export type BuildNativeTargetResult = {
@@ -133,6 +137,7 @@ export async function runBuildNativeTarget(
   const stageNativePackageFn = deps.stageNativePackage ?? stageNativePackage;
   const stageCompilerPackageFn = deps.stageCompilerPackage ?? stageCompilerPackage;
   const readVersion = deps.readVersion ?? readPackageVersion;
+  const root = deps.workspaceRoot ?? workspaceRoot;
 
   const hostTarget = resolveHostNativeTarget();
   const requestedTarget = readRequestedTarget();
@@ -145,31 +150,31 @@ export async function runBuildNativeTarget(
   }
 
   const buildResult = await buildNativeArtifactFn({
-    workspaceRoot,
+    workspaceRoot: root,
     target: hostTarget,
     hostTarget,
     profile,
-    manifestPath,
+    manifestPath: path.join(root, "crates", "aruna_napi", "Cargo.toml"),
   });
 
   console.info(`Raw artifact: ${buildResult.sourceArtifactPath}`);
 
   const version = await ensureVersion(readVersion);
   const stagedNativePackage = await stageNativePackageFn({
-    workspaceRoot,
+    workspaceRoot: root,
     version,
     target: hostTarget,
     sourceArtifactPath: buildResult.sourceArtifactPath,
   });
   console.info(`Staged artifact: ${stagedNativePackage.artifactPath}`);
   const stagedCompilerPackage = await stageCompilerPackageFn({
-    workspaceRoot,
+    workspaceRoot: root,
     version,
     nativeTargets: [hostTarget],
     allowMissingDist: true,
   });
   if (stagedCompilerPackage === null) {
-    await fs.rm(stagedCompilerPackageDirectory(workspaceRoot), { recursive: true, force: true });
+    await fs.rm(stagedCompilerPackageDirectory(root), { recursive: true, force: true });
     console.info(
       "Skipped wrapper package staging because packages/compiler/dist does not exist. Run pnpm build before release packaging.",
     );

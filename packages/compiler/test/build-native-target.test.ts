@@ -65,6 +65,7 @@ describe("build-native-target core", () => {
       stageNativePackage,
       stageCompilerPackage,
       readVersion,
+      workspaceRoot,
     });
 
     expect(result.hostTarget).toBe(hostTarget);
@@ -72,14 +73,16 @@ describe("build-native-target core", () => {
     expect(result.sourceArtifactPath).toBe(sourceArtifactPath);
     expect(buildNativeArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
+        workspaceRoot,
         target: hostTarget,
         hostTarget,
         profile: "debug",
-        manifestPath: expect.stringContaining("crates/aruna_napi/Cargo.toml"),
+        manifestPath: path.join(workspaceRoot, "crates", "aruna_napi", "Cargo.toml"),
       }),
     );
     expect(stageNativePackage).toHaveBeenCalledWith(
       expect.objectContaining({
+        workspaceRoot,
         target: hostTarget,
         sourceArtifactPath,
         version: "0.1.0",
@@ -87,6 +90,7 @@ describe("build-native-target core", () => {
     );
     expect(stageCompilerPackage).toHaveBeenCalledWith(
       expect.objectContaining({
+        workspaceRoot,
         version: "0.1.0",
         nativeTargets: [hostTarget],
         allowMissingDist: true,
@@ -122,14 +126,20 @@ describe("build-native-target core", () => {
     const stageCompilerPackage = vi.fn().mockResolvedValue(null);
     const readVersion = vi.fn().mockResolvedValue("0.1.0");
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    // A wrapper staged by an earlier build, which must not outlive this one.
+    const staleWrapperDirectory = path.join(workspaceRoot, ".npm", "compiler");
+    await fs.mkdir(staleWrapperDirectory, { recursive: true });
+    await fs.writeFile(path.join(staleWrapperDirectory, "package.json"), "{}");
 
     const result = await runBuildNativeTarget({
       buildNativeArtifact,
       stageNativePackage,
       stageCompilerPackage,
       readVersion,
+      workspaceRoot,
     });
 
+    await expect(fs.access(staleWrapperDirectory)).rejects.toThrow();
     expect(stageNativePackage).toHaveBeenCalledTimes(1);
     expect(stageCompilerPackage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -152,6 +162,7 @@ describe("build-native-target core", () => {
     await expect(
       runBuildNativeTarget({
         readVersion: vi.fn().mockResolvedValue("0.1.0"),
+        workspaceRoot: await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-build-core-cross-")),
       }),
     ).rejects.toThrow(
       `Explicit native target "${requestedTarget}" does not match the current host target "${hostTarget}".`,
@@ -177,6 +188,7 @@ describe("build-native-target core", () => {
         stageNativePackage,
         stageCompilerPackage,
         readVersion: vi.fn().mockResolvedValue("0.1.0"),
+        workspaceRoot: await fs.mkdtemp(path.join(os.tmpdir(), "aruna-native-build-core-missing-")),
       }),
     ).rejects.toThrow("missing native build output");
 
