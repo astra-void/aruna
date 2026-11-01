@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { CompilerOutput, Diagnostic, Manifest } from "@arunajs/core";
@@ -38,6 +39,7 @@ import {
 } from "./contract-gate.js";
 import { findRbxtscBin, runRbxtsc, rbxtscOk, type RbxtscResult } from "./rbxtsc.js";
 import {
+  buildCacheRoot,
   compileTestPartition,
   runPartitionedRbxtsc,
   startPartitionedRbxtscWatch,
@@ -237,7 +239,35 @@ type BuildCliOptions = CliOptions & {
   emitRuntime?: boolean;
   emitLuau?: boolean;
   watch?: boolean;
+  // Print how long each phase took (also in --json as `timings`).
+  timings?: boolean;
+  // Commander's --no-cache negation: false compiles in a fresh stage.
+  cache?: boolean;
 };
+
+// How long each phase of one build pass took, in milliseconds. Measured, not
+// estimated; absent phases did not run.
+export type BuildTimings = {
+  tsconfig?: number;
+  compile?: number;
+  contractGate?: number;
+  vendorRuntime?: number;
+  // True when the vendored runtime already matched its source, so nothing
+  // was written.
+  vendorRuntimeUnchanged?: boolean;
+  ledger?: number;
+  rbxtsc?: number;
+  total?: number;
+};
+
+async function timed<T>(timings: BuildTimings, phase: keyof BuildTimings, run: () => Promise<T> | T): Promise<T> {
+  const started = performance.now();
+  try {
+    return await run();
+  } finally {
+    (timings as Record<string, number>)[phase] = Math.round((performance.now() - started) * 10) / 10;
+  }
+}
 
 // Long enough to coalesce an editor's save burst (format-on-save, multi-file
 // save-all) into one rebuild, short enough to feel immediate.
@@ -383,9 +413,35 @@ export async function validateRobloxRuntimeSource(sourceDir: string): Promise<st
 // Returns the vendored runtime file paths relative to generatedDir (posix), or
 // undefined when no runtime source is available — so the build can record them in
 // the owned-file ledger and prune a previously-vendored runtime that moved.
+// Whether `targetDir` already holds exactly `runtimeFiles` with the bytes in
+// `sourceDir`: then there is nothing to vendor, and not rewriting it keeps the
+// files' mtimes, so a watcher downstream (rbxtsc, Rojo) does not see a change
+// that is not one.
+async function vendoredRuntimeMatches(
+  sourceDir: string,
+  targetDir: string,
+  runtimeFiles: readonly string[],
+): Promise<boolean> {
+  const present = await fs.readdir(targetDir).catch(() => undefined);
+  if (present === undefined || present.length !== runtimeFiles.length) {
+    return false;
+  }
+  for (const name of runtimeFiles) {
+    const [source, target] = await Promise.all([
+      fs.readFile(path.join(sourceDir, name)),
+      fs.readFile(path.join(targetDir, name)).catch(() => undefined),
+    ]);
+    if (target === undefined || !source.equals(target)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 async function emitRobloxRuntime(
   root: string,
   generatedDir: string,
+  timings?: BuildTimings,
 ): Promise<string[] | undefined> {
   const sourceDir = await findRobloxRuntimeSourceDir();
   if (sourceDir === undefined) {
@@ -399,6 +455,13 @@ async function emitRobloxRuntime(
   const baseDir = path.join(root, generatedDir, "shared");
   const targetDir = path.join(baseDir, "runtime");
   const stagingDir = path.join(baseDir, ".runtime.tmp");
+
+  if (await vendoredRuntimeMatches(sourceDir, targetDir, runtimeFiles)) {
+    if (timings !== undefined) {
+      timings.vendorRuntimeUnchanged = true;
+    }
+    return runtimeFiles.map((name) => `${GENERATED_RUNTIME_DIR}/${name}`);
+  }
 
   await fs.rm(stagingDir, { recursive: true, force: true });
   await fs.mkdir(stagingDir, { recursive: true });
@@ -466,16 +529,20 @@ export type BuildRunResult = {
 async function runBuild(
   options: BuildCliOptions,
   session?: CompilerSessionHandle,
+  timings: BuildTimings = {},
 ): Promise<BuildRunResult> {
   const input = compilerInput(options);
-  const tsconfig = session === undefined ? setUpProjectTsconfig(options) : undefined;
-  const compiled = session !== undefined ? await session.run() : await buildProject(input);
+  const tsconfig =
+    session === undefined ? await timed(timings, "tsconfig", () => setUpProjectTsconfig(options)) : undefined;
+  const compiled = await timed(timings, "compile", () =>
+    session !== undefined ? session.run() : buildProject(input),
+  );
   // A store change that would leave saved records unreadable stops the build
   // before anything is vendored or compiled to Luau.
   const output = compiled.ok
     ? withExtraDiagnostics(
         compiled,
-        await collectContractGateDiagnostics(compiled),
+        await timed(timings, "contractGate", () => collectContractGateDiagnostics(compiled)),
         options.warningsAsErrors,
       )
     : compiled;
@@ -488,7 +555,9 @@ async function runBuild(
 
   let runtimeRel: string[] | undefined;
   if (options.emitRuntime !== false) {
-    runtimeRel = await emitRobloxRuntime(input.root, generatedDir);
+    runtimeRel = await timed(timings, "vendorRuntime", () =>
+      emitRobloxRuntime(input.root, generatedDir, timings),
+    );
   }
 
   // Files the compiler wrote, made relative to the generatedDir. Anything that
@@ -507,17 +576,19 @@ async function runBuild(
   // default.project.json. Emitted unconditionally — a project that mounts its
   // node_modules by hand simply never points at this file.
   await fs.mkdir(generatedDirAbs, { recursive: true });
-  await fs.writeFile(
-    path.join(generatedDirAbs, NODE_MODULES_PROJECT_FILE),
-    arunaNodeModulesProjectContents(input.root, generatedDir),
-    "utf8",
-  );
+  const nodeModulesProject = path.join(generatedDirAbs, NODE_MODULES_PROJECT_FILE);
+  const nodeModulesContents = arunaNodeModulesProjectContents(input.root, generatedDir);
+  if ((await fs.readFile(nodeModulesProject, "utf8").catch(() => undefined)) !== nodeModulesContents) {
+    await fs.writeFile(nodeModulesProject, nodeModulesContents, "utf8");
+  }
   generatedRel.push(NODE_MODULES_PROJECT_FILE);
 
-  const { pruned } = await reconcileOwnedArtifacts({
-    generatedDirAbs,
-    current: { generated: generatedRel, runtime: runtimeRel },
-  });
+  const { pruned } = await timed(timings, "ledger", () =>
+    reconcileOwnedArtifacts({
+      generatedDirAbs,
+      current: { generated: generatedRel, runtime: runtimeRel },
+    }),
+  );
 
   return { output, pruned, tsconfig };
 }
@@ -674,27 +745,35 @@ async function executeBuildPass(
   session?: CompilerSessionHandle,
 ): Promise<{ ok: boolean; generatedDir: string; manifest?: Manifest | undefined }> {
   const startedAt = Date.now();
-  const { output, pruned, tsconfig } = await runBuild(options, session);
+  const passStarted = performance.now();
+  const timings: BuildTimings = {};
+  const { output, pruned, tsconfig } = await runBuild(options, session, timings);
   const projectRoot = compilerInput(options).root;
   let rbxtsc: RbxtscResult | undefined;
   if (output.ok && options.emitLuau !== false && mode === "compile") {
     // Partition the project into client/server/shared so the emitted out/ maps
     // onto the Roblox DataModel (server code stays in ServerScriptService).
     const bin = findRbxtscBin(projectRoot);
+    const rbxtscStarted = performance.now();
     rbxtsc =
       bin === undefined
         ? runRbxtsc({ projectRoot })
-        : runPartitionedRbxtsc({
-            projectRoot,
-            generatedDir: generatedDirFromOutput(output),
-            manifest: output.manifest,
-            rbxtscBin: bin,
-            // The staged compile inherits the consumer's compilerOptions, so it
-            // needs the tsconfig their config actually points at.
-            tsconfigPath: loadProjectConfig(projectRoot, compilerInput(options).configPath)
-              .tsconfigPath,
-          });
+        : runPartitionedRbxtsc(
+            {
+              projectRoot,
+              generatedDir: generatedDirFromOutput(output),
+              manifest: output.manifest,
+              rbxtscBin: bin,
+              // The staged compile inherits the consumer's compilerOptions, so
+              // it needs the tsconfig their config actually points at.
+              tsconfigPath: loadProjectConfig(projectRoot, compilerInput(options).configPath)
+                .tsconfigPath,
+            },
+            options.cache === false ? undefined : buildCacheRoot(projectRoot),
+          );
+    timings.rbxtsc = Math.round((performance.now() - rbxtscStarted) * 10) / 10;
   }
+  timings.total = Math.round((performance.now() - passStarted) * 10) / 10;
 
   if (options.json) {
     writeJson({
@@ -702,6 +781,7 @@ async function executeBuildPass(
       ...(tsconfigWritten(tsconfig) ? { tsconfig: tsconfigSetupSummary(tsconfig) } : {}),
       ...(pruned.length > 0 ? { pruned } : {}),
       ...(rbxtsc ? { rbxtsc } : {}),
+      ...(options.timings === true ? { timings } : {}),
     });
   } else {
     renderTsconfigSetup(tsconfig, options);
@@ -719,6 +799,10 @@ async function executeBuildPass(
     if (rbxtsc) {
       renderRbxtscResult(rbxtsc, options);
     }
+    if (options.timings === true) {
+      writeText("");
+      writeText(formatMuted(`timings: ${formatBuildTimings(timings)}`, resolveColorMode(options)));
+    }
   }
 
   const luauOk = rbxtsc === undefined || rbxtscOk(rbxtsc);
@@ -727,6 +811,19 @@ async function executeBuildPass(
     generatedDir: generatedDirFromOutput(output),
     manifest: output.ok ? output.manifest : undefined,
   };
+}
+
+function formatBuildTimings(timings: BuildTimings): string {
+  const parts: string[] = [];
+  for (const phase of ["tsconfig", "compile", "contractGate", "vendorRuntime", "ledger", "rbxtsc", "total"] as const) {
+    const value = timings[phase];
+    if (value !== undefined) {
+      parts.push(
+        `${phase} ${value}ms${phase === "vendorRuntime" && timings.vendorRuntimeUnchanged === true ? " (unchanged)" : ""}`,
+      );
+    }
+  }
+  return parts.join(", ");
 }
 
 // Holds the single `rbxtsc --watch` child that serves a whole watch session.
@@ -1301,6 +1398,11 @@ export async function main(): Promise<number> {
     .option(
       "--watch",
       "stay running and rebuild on source changes (generated/emitted trees are ignored)",
+    )
+    .option("--timings", "print how long each build phase took (in --json as `timings`)")
+    .option(
+      "--no-cache",
+      "compile in a fresh stage instead of the incremental one Aruna keeps in the OS temp dir",
     );
 
   build.action(async () => {

@@ -17,6 +17,16 @@ the game build like any other module.
 
 ### Added
 
+- **Incremental one-shot builds.** `aruna build` keeps its staged Luau compile
+  between runs (in the OS temp dir, keyed by the project) and compiles it with
+  TypeScript's `incremental` build info, so a rebuild re-emits only what
+  changed. On ARCANUM (122 modules) a warm build fell from ~5.0 s to 2.5–3.6 s
+  depending on the edit; `pnpm verify:incremental-build` checks every edit
+  builds byte-identically to `--no-cache`. `--no-cache` compiles in a fresh
+  stage, and a second concurrent build of a project does too.
+- **`aruna build --timings`**: how long each phase took (also `timings` in
+  `--json`).
+
 - **Network observability** ([observability.md](docs/observability.md)).
   `createNetworkMetrics()` (`aruna/server`) is an opt-in, bounded collector:
   per-action requests, rejections by error name, server time and pre-`run`
@@ -394,6 +404,12 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **Builds write only what changed.** The compiler leaves a generated file (and
+  the manifest) alone when its bytes are already on disk, the build skips
+  re-vendoring a runtime that matches its source, and the compiled `out/` and
+  `include/` are mirrored into the project instead of deleted and copied, so
+  `rojo serve` and editors see only real changes.
 
 - **Type-only imports no longer cross a boundary.** An import TypeScript
   erases — `import type`, every specifier `type`, `export type ... from`,

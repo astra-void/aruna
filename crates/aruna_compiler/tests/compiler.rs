@@ -1981,3 +1981,69 @@ fn reports_duplicate_resource_ids_and_colliding_bindings() {
     assert!(codes.contains(&"aruna::590".to_string()), "{codes:?}");
     assert_eq!(output.manifest.resources.len(), 3);
 }
+
+#[test]
+fn a_rebuild_with_nothing_changed_rewrites_no_generated_file() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_resource_project(root);
+    write_file(
+        root,
+        "src/domains/shop/actions.ts",
+        "import { defineAction } from \"aruna/server\";\nexport const ping = defineAction({ id: \"shop.ping\", run() { return undefined; } });\n",
+    );
+    let build = || {
+        check_project(CompilerInput {
+            write_generated: true,
+            ..compiler_input(root)
+        })
+    };
+    let first = build();
+    assert!(first.ok, "{:?}", first.diagnostics);
+    let generated = root.join("src/.aruna");
+    let mtimes = |dir: &Path| {
+        let mut found = BTreeMap::new();
+        for entry in walk(dir) {
+            found.insert(entry.clone(), fs::metadata(&entry).unwrap().modified().unwrap());
+        }
+        found
+    };
+    fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
+        let mut files = Vec::new();
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files.extend(walk(&path));
+            } else {
+                files.push(path);
+            }
+        }
+        files
+    }
+    let before = mtimes(&generated);
+    assert!(before.len() >= 5, "{before:?}");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let second = build();
+    assert_eq!(second.generated_files, first.generated_files);
+    assert_eq!(mtimes(&generated), before);
+
+    // An edit rewrites only what it changes.
+    write_file(
+        root,
+        "src/domains/shop/actions.ts",
+        "import { defineAction } from \"aruna/server\";\nexport const ping = defineAction({ id: \"shop.pong\", run() { return undefined; } });\n",
+    );
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    build();
+    let after = mtimes(&generated);
+    let changed: Vec<String> = after
+        .iter()
+        .filter(|(path, time)| before.get(*path) != Some(time))
+        .map(|(path, _)| path.strip_prefix(&generated).unwrap().to_string_lossy().replace('\\', "/"))
+        .collect();
+    assert!(changed.contains(&"shared/actions.client.generated.ts".to_string()), "{changed:?}");
+    assert!(changed.contains(&"manifest.json".to_string()), "{changed:?}");
+    // The resources did not change, but the contract hash in the action files
+    // did; the resource files carry no hash, so they stay as they were.
+    assert!(!changed.contains(&"shared/resources.client.generated.ts".to_string()), "{changed:?}");
+}

@@ -154,7 +154,14 @@ fn module_kind_label(kind: ModuleKind) -> &'static str {
     }
 }
 
+// Writes `contents` unless the file already holds exactly them. Leaving an
+// unchanged file alone keeps its mtime, so whatever watches the generated dir
+// (rbxtsc, Rojo, an editor) only sees the files a build actually changed. The
+// output is deterministic, so a rebuild with nothing changed writes nothing.
 fn write_text_file(absolute_path: &Path, contents: &str) -> Result<(), String> {
+    if fs::read(absolute_path).is_ok_and(|existing| existing == contents.as_bytes()) {
+        return Ok(());
+    }
     if let Some(parent) = absolute_path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
@@ -443,11 +450,8 @@ fn write_manifest_file(
     } else {
         project_root.join(manifest_path)
     };
-    if let Some(parent) = absolute_path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
     let json = serde_json::to_string_pretty(manifest).map_err(|error| error.to_string())?;
-    fs::write(&absolute_path, format!("{json}\n")).map_err(|error| error.to_string())?;
+    write_text_file(&absolute_path, &format!("{json}\n"))?;
     Ok(absolute_path.to_string_lossy().to_string())
 }
 

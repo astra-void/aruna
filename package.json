@@ -23,7 +23,8 @@
     "harness:package": "turbo run build --filter=@arunajs/package-consumption-harness",
     "package-consumption": "turbo run build --filter=@arunajs/package-consumption-harness",
     "verify:package-consumption": "tsx scripts/verify-package-consumption.ts",
-    "verify:package-consumption:keep-temp": "tsx scripts/verify-package-consumption.ts --keep-temp"
+    "verify:package-consumption:keep-temp": "tsx scripts/verify-package-consumption.ts --keep-temp",
+    "verify:incremental-build": "tsx scripts/verify-incremental-build.ts"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",

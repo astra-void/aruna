@@ -130,6 +130,85 @@ every file (the assembly is the largest step); return only what changed since th
 run (the CLI mostly needs diagnostics and the generated files); or parse the output off
 the main thread.
 
+## End-to-end builds (2026-11)
+
+The compiler is a small part of an `aruna build`. `aruna build --timings` prints each
+phase; on ARCANUM (122 modules, 135 Luau files out) a one-shot build was:
+
+| Phase | ms |
+| --- | ---: |
+| tsconfig upkeep | ~37 |
+| compile (config load + native check + codegen + manifest) | ~270 |
+| contract gate | <1 |
+| vendor runtime | ~8–14 |
+| ownership ledger | <1 |
+| **rbxtsc** (stage + compile + copy back) | **~4,500–4,900** |
+
+So the Luau compile was ~93% of a build, and it was always cold: every one-shot build
+staged the project into a fresh temp dir and deleted it afterwards, throwing away
+everything TypeScript could have reused. (The watch path, `aruna dev` / `build --watch`,
+has kept a resident `rbxtsc --watch` since 0.2.)
+
+What changed:
+
+- **A persistent, incremental stage.** One-shot builds now stage into a per-project
+  directory of the OS temp dir (keyed by the project's real path; `--no-cache` restores
+  the old fresh stage) and compile with `incremental` and a `tsBuildInfoFile` inside the
+  stage. Unchanged files are not restaged, rbxtsc reuses its build info and re-emits only
+  what changed — its own one-shot `cleanup` removes the output of a deleted source — and a
+  lock keeps two concurrent builds of one project from sharing the stage (the second
+  compiles in a temp stage, as before). Not under `node_modules/.cache`: TypeScript treats
+  files there as library code and resolves their symlinks, which broke the staged
+  `rootDir` the first time this was tried against a symlinked `node_modules`.
+- **Output mirrored, not replaced.** The staged `out/` and `include/` are mirrored into the
+  project: byte-identical files are left alone (so `rojo serve` syncs only what changed)
+  and stale ones are removed.
+- **No rewrite of unchanged generated files.** The compiler compares a generated file (and
+  the manifest) with what is on disk before writing it, and the build skips re-vendoring a
+  runtime that already matches its source. A rebuild with nothing changed writes nothing
+  into the generated dir (`tests/compiler.rs` checks the mtimes).
+
+Measured: Apple M1 Pro (10 cores), Node 22.23.2, roblox-ts 3.0.0, load average 6–9; wall
+time of one `aruna build --json --timings` process per row, after a warm-up. "Fresh" is
+the same build with `--no-cache`, i.e. what every build cost before. The edits are the
+scenarios in `scripts/verify-incremental-build.ts`.
+
+ARCANUM (122 modules):
+
+| Scenario | fresh (before) ms | cached (after) ms | rbxtsc after ms |
+| --- | ---: | ---: | ---: |
+| cold (empty cache) | 5,135 | — | 4,538 |
+| no-op rebuild | ~5,000 | 2,596 | 2,012 |
+| action body edit | 5,213 | 2,823 | 2,240 |
+| action id edit | 5,069 | 3,167 | 2,585 |
+| signal added | 5,067 | 3,049 | 2,485 |
+| shared type edit (`PlayerStats`) | 4,942 | 3,593 | 3,034 |
+| UI-only edit | 4,958 | 2,704 | 2,141 |
+| new file | 5,013 | 2,479 | 1,916 |
+| deleted file | 4,998 | 2,473 | 1,909 |
+
+apps/rbxts-harness (26 modules): cold 2,140 ms; no-op 1,122 ms; edits 1,127–1,186 ms
+cached against 1,930–1,951 ms fresh.
+
+Peak RSS of a whole `aruna build` on ARCANUM: ~550 MB (rbxtsc's TypeScript program; the
+Aruna process itself is a small part), unchanged by the cache.
+
+What a warm build still spends: ~2 s of rbxtsc that no edit avoids — creating the
+TypeScript program (parsing `@rbxts/types` and the project) and checking the changed
+files' dependents. A shared type edit costs the most because more files depend on it.
+`aruna dev` keeps the program resident and avoids even that.
+
+**Correctness.** `pnpm verify:incremental-build` copies a project, applies edits (an action
+body, a shared module, a new module, a deleted module, a client module), builds each with
+the cache and again with `--no-cache`, and fails unless the two `out/` trees are
+byte-identical; it passed on the rbxts harness and on ARCANUM (every scenario above, 135
+files). What invalidates the stage: TypeScript keys the build info on the compiler options
+and the content of every input (generated files and the vendored runtime included);
+roblox-ts hashes its own version, the project type, and the Rojo project into the same
+keys; a package removed from `node_modules` is unlinked from the stage. The compiler's own
+cache is covered by the session differential test below, which now also edits resource
+definitions.
+
 ## The design
 
 ### Query pipeline

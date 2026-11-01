@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -228,15 +229,38 @@ function pruneStagedFiles(root: string, keep: Set<string>): void {
   }
 }
 
-function copyDirSync(from: string, to: string): void {
+// Makes `to` hold exactly what `from` holds: byte-identical files are left
+// alone (their mtimes too, so `rojo serve` only syncs what changed), changed
+// ones are copied, and anything `from` does not have is removed.
+function mirrorDirSync(from: string, to: string): void {
+  if (fs.existsSync(to) && !fs.statSync(to).isDirectory()) {
+    fs.rmSync(to, { force: true });
+  }
   fs.mkdirSync(to, { recursive: true });
+  const wanted = new Set<string>();
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    wanted.add(entry.name);
     const src = path.join(from, entry.name);
     const dest = path.join(to, entry.name);
     if (entry.isDirectory()) {
-      copyDirSync(src, dest);
+      mirrorDirSync(src, dest);
     } else if (entry.isFile()) {
-      fs.copyFileSync(src, dest);
+      const source = fs.readFileSync(src);
+      let same = false;
+      try {
+        same = fs.readFileSync(dest).equals(source);
+      } catch {
+        // Missing, or a directory: replaced below.
+      }
+      if (!same) {
+        fs.rmSync(dest, { recursive: true, force: true });
+        fs.writeFileSync(dest, source);
+      }
+    }
+  }
+  for (const name of fs.readdirSync(to)) {
+    if (!wanted.has(name)) {
+      fs.rmSync(path.join(to, name), { recursive: true, force: true });
     }
   }
 }
@@ -253,6 +277,9 @@ export type PartitionOptions = {
   // The consumer's tsconfig, whose compilerOptions the staged build inherits.
   // Defaults to <projectRoot>/tsconfig.json.
   readonly tsconfigPath?: string | undefined;
+  // Compile with TypeScript's `incremental` build info kept in the stage, so a
+  // stage reused by the next build re-emits only what changed.
+  readonly incremental?: boolean | undefined;
 };
 
 // Relative `typeRoots` in an extended config are resolved by TypeScript against
@@ -416,15 +443,12 @@ export type StageResult =
 function syncStagedOutput(staged: StagedPartition): void {
   const stagedOut = path.join(staged.tempRoot, "out");
   if (fs.existsSync(stagedOut)) {
-    fs.rmSync(staged.outRoot, { recursive: true, force: true });
-    copyDirSync(stagedOut, staged.outRoot);
+    mirrorDirSync(stagedOut, staged.outRoot);
   }
   // Copy the rbxtsc-generated runtime library back so the Rojo `rbxts_include`
   // mount resolves when `rojo build` runs against the project.
   if (fs.existsSync(staged.stagedInclude)) {
-    const includeRoot = path.join(path.dirname(staged.outRoot), "include");
-    fs.rmSync(includeRoot, { recursive: true, force: true });
-    copyDirSync(staged.stagedInclude, includeRoot);
+    mirrorDirSync(staged.stagedInclude, path.join(path.dirname(staged.outRoot), "include"));
   }
   // Ensure every partition dir exists so the Rojo $path mounts resolve even
   // when a project declares no modules of a given kind.
@@ -457,6 +481,16 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
     // (not as one whole-directory symlink) so broken nested symlinks inside
     // packages like roblox-ts don't surface through the staged tree.
     fs.mkdirSync(path.join(tempRoot, "node_modules"), { recursive: true });
+    // A reused stage drops the links of packages the project no longer has, so
+    // an uninstalled dependency cannot still resolve in the staged compile.
+    if (reuseRoot !== undefined) {
+      const installed = new Set(fs.readdirSync(nodeModules));
+      for (const entry of fs.readdirSync(path.join(tempRoot, "node_modules"))) {
+        if (!installed.has(entry)) {
+          fs.rmSync(path.join(tempRoot, "node_modules", entry), { recursive: true, force: true });
+        }
+      }
+    }
     for (const entry of fs.readdirSync(nodeModules)) {
       // Skip hidden directories (.bin, .cache, .pnpm, .modules.yaml, …).
       if (entry.startsWith(".")) continue;
@@ -680,6 +714,13 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
         // jsx belongs to the consumer (react vs preserve, and the factory pair);
         // fall back to the roblox-ts default only when they say nothing.
         ...(inheritedOptions["jsx"] === undefined ? { jsx: "preserve" } : {}),
+        // The build info lives in the stage, outside out/, so it never reaches
+        // the project. TypeScript keys it on the compiler options and roblox-ts
+        // on its own version and the Rojo project, so a change to any of them
+        // re-emits everything.
+        ...(options.incremental === true
+          ? { incremental: true, tsBuildInfoFile: "./.aruna-rbxtsc.tsbuildinfo" }
+          : {}),
         paths,
       }),
       include: stagedIncludeGlobs(generatedDirRel),
@@ -720,11 +761,62 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
   }
 }
 
-// Stages a partitioned copy of the project, compiles it with rbxtsc, and copies
-// the resulting `out/client|server|shared` tree back into the project.
-export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult {
-  const stage = stagePartition(options);
+// Where a project's one-shot builds keep their stage between runs: a directory
+// of the OS temp dir keyed by the project's real path, so nothing is written
+// into the project and two checkouts never share a stage. Not under
+// node_modules: TypeScript treats files there as library code (and resolves
+// their symlinks), and a node_modules shared between checkouts would be shared
+// here too.
+export function buildCacheRoot(projectRoot: string): string {
+  const key = createHash("sha256").update(fs.realpathSync(projectRoot)).digest("hex").slice(0, 16);
+  return path.join(fs.realpathSync(os.tmpdir()), "aruna-rbxtsc-cache", key);
+}
+
+// Claims the cache for one build. A second build of the same project while one
+// runs gets no claim and compiles in a temp stage instead; a lock left by a
+// build that died is taken over once its process is gone.
+function claimBuildCache(cacheRoot: string): (() => void) | undefined {
+  const lockPath = `${cacheRoot}.lock`;
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      fs.writeFileSync(lockPath, String(process.pid), { flag: "wx" });
+      return () => fs.rmSync(lockPath, { force: true });
+    } catch {
+      let alive = false;
+      try {
+        const holder = Number(fs.readFileSync(lockPath, "utf8").trim());
+        alive = Number.isInteger(holder) && holder > 0 && process.kill(holder, 0);
+      } catch {
+        alive = false;
+      }
+      if (alive) {
+        return undefined;
+      }
+      fs.rmSync(lockPath, { force: true });
+    }
+  }
+  return undefined;
+}
+
+// Stages a partitioned copy of the project, compiles it with rbxtsc, and
+// mirrors the resulting `out/client|server|shared` tree back into the project.
+//
+// With `cacheRoot`, the stage is kept there between builds and compiled
+// incrementally: unchanged files are not restaged, rbxtsc reuses its build
+// info and re-emits only what changed (its own cleanup drops the output of a
+// removed file), and only changed outputs are copied back. Without it, or when
+// another build holds the cache, the stage is a temp dir, compiled from scratch
+// and removed.
+export function runPartitionedRbxtsc(options: PartitionOptions, cacheRoot?: string): PartitionResult {
+  const release = cacheRoot !== undefined ? claimBuildCache(cacheRoot) : undefined;
+  const reuse = release !== undefined ? cacheRoot : undefined;
+  if (reuse !== undefined) {
+    fs.mkdirSync(reuse, { recursive: true });
+  }
+  const stage = stagePartition(reuse !== undefined ? { ...options, incremental: true } : options, reuse);
   if (!stage.ok) {
+    release?.();
     return { kind: "skipped", reason: stage.reason };
   }
   const { staged } = stage;
@@ -742,7 +834,10 @@ export function runPartitionedRbxtsc(options: PartitionOptions): PartitionResult
     }
     return { kind: "ran", status, stdout: result.stdout ?? "", stderr: result.stderr ?? "" };
   } finally {
-    fs.rmSync(staged.tempRoot, { recursive: true, force: true });
+    if (reuse === undefined) {
+      fs.rmSync(staged.tempRoot, { recursive: true, force: true });
+    }
+    release?.();
   }
 }
 

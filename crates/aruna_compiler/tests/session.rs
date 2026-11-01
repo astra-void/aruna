@@ -107,6 +107,22 @@ fn store_source(rng: &mut Rng, domain: &str) -> String {
     )
 }
 
+// Resource definitions in every shape the primitive reads: player and global
+// scope, a schema imported from ./schema (a discovery dependency), an invalid
+// scope, a missing load, and an id shared across domains (a duplicate).
+fn resources_source(rng: &mut Rng, domain: &str) -> String {
+    let scope = rng.pick(&["", "scope: \"global\",", "scope: \"team\","]);
+    let ids = [format!("{domain}.state"), "shop.state".to_string()];
+    let id = rng.pick(&ids);
+    let load = rng.pick(&["load: () => ({ coins: 0 }),", ""]);
+    let authorize = rng.pick(&["", "authorize: () => true,"]);
+    format!(
+        "import {{ defineResource }} from \"aruna/server\";\n\
+         import {{ {domain}Record }} from \"./schema\";\n\n\
+         export const state = defineResource({{ id: \"{id}\", {scope} schema: {domain}Record, {load} {authorize} }});\n"
+    )
+}
+
 fn model_source(rng: &mut Rng, domain: &str) -> String {
     let body = rng.below(1000);
     let import = rng.pick(&["", "import { formatAmount } from \"../../shared/format\";\n", "import { act } from \"./actions\";\n"]);
@@ -125,6 +141,7 @@ fn domain_files(domain: &str) -> Vec<(String, fn(&mut Rng, &str) -> String)> {
         (format!("src/domains/{domain}/actions.ts"), actions_source),
         (format!("src/domains/{domain}/signals.ts"), signals_source),
         (format!("src/domains/{domain}/server/store.ts"), store_source),
+        (format!("src/domains/{domain}/resources.ts"), resources_source),
         (format!("src/domains/{domain}/model.ts"), model_source),
         (format!("src/domains/{domain}/ui.tsx"), ui_source),
     ]
@@ -305,13 +322,13 @@ fn a_schema_edit_rediscovers_the_files_that_import_it() {
     session.inspect();
     let before = session.stats();
 
-    // shop's actions, signals, and store read shop/schema.ts through the import
-    // hop; the schema module itself is rediscovered too.
+    // shop's actions, signals, store, and resources read shop/schema.ts through
+    // the import hop; the schema module itself is rediscovered too.
     let schema = root.join("src/domains/shop/schema.ts");
     fs::write(&schema, schema_source(&mut Rng(99), "shop")).unwrap();
     session.update(&[&schema]);
     let incremental = serde_json::to_string(&session.inspect()).unwrap();
     let clean = serde_json::to_string(&inspect_project(input(root))).unwrap();
     assert_eq!(incremental, clean);
-    assert_eq!(session.stats().discoveries - before.discoveries, 4);
+    assert_eq!(session.stats().discoveries - before.discoveries, 5);
 }
