@@ -120,7 +120,8 @@ end
 
 -- Mirrors one directory of compiled output as an Instance subtree. A `foo.luau`
 -- next to a `foo/` directory becomes one ModuleScript holding that directory's
--- children, which is how Rojo merges the same pair.
+-- children, which is how Rojo merges the same pair. So does a directory holding
+-- an `init.luau`: rbxtsc emits one for every `index.ts`, and packages ship them.
 local function buildTree(directory, name, parent)
 	local root = newFolder(name, parent)
 	if not fs.isDir(directory) then
@@ -136,6 +137,12 @@ local function buildTree(directory, name, parent)
 		elseif isModuleFile(entry) then
 			moduleFiles[moduleBaseName(entry)] = entryPath
 		end
+	end
+
+	if moduleFiles.init ~= nil then
+		root.ClassName = "ModuleScript"
+		root._file = moduleFiles.init
+		moduleFiles.init = nil
 	end
 
 	for base, filePath in moduleFiles do
@@ -206,12 +213,50 @@ local function makeLoader(options)
 	local cache = {}
 	local requireModule
 
+	-- A string require, Luau's require-by-string, resolved the way Roblox maps it
+	-- onto the tree: `./x` is a sibling of the requiring module, `../x` a sibling
+	-- of its parent, `@self/x` its own child. Packages written in plain Luau use
+	-- it; compiled roblox-ts code never does.
+	local function resolveRequire(from, path)
+		local segments = string.split(path, "/")
+		local node
+		if segments[1] == "@self" then
+			node = from
+		elseif segments[1] == "." then
+			node = from.Parent
+		elseif segments[1] == ".." then
+			node = from.Parent and from.Parent.Parent
+		else
+			error(`aruna test: {instanceMethods.GetFullName(from)} requires "{path}", which is not a relative path`, 3)
+		end
+		for index = 2, #segments do
+			local segment = segments[index]
+			if node == nil then
+				break
+			end
+			if segment == ".." then
+				node = node.Parent
+			elseif segment ~= "." and segment ~= "" then
+				node = rawget(node._children, if isModuleFile(segment) then moduleBaseName(segment) else segment)
+			end
+		end
+		if node == nil then
+			error(`aruna test: {instanceMethods.GetFullName(from)} requires "{path}", which resolves to nothing`, 3)
+		end
+		return node
+	end
+
 	local function environmentFor(node)
 		local environment = {
 			script = node,
 			_G = sharedG,
 			game = game,
-			require = requireModule,
+			require = function(target)
+				if type(target) == "string" then
+					return requireModule(resolveRequire(node, target))
+				end
+				return requireModule(target)
+			end,
 		}
 		for key, value in options.globals do
 			environment[key] = value

@@ -309,6 +309,13 @@ too. If you would rather have CI skip the specs than fail on a machine without t
 toolchain, probe for Lune in your own script and call `aruna test` only when it is there
 (`apps/rbxts-harness/scripts/run-specs.ts` in this repo does exactly that).
 
+**Dependencies that ship Luau load as they do in a game.** A directory with an
+`init.luau` is a module (rbxtsc emits one for every `index.ts`), and a string require
+(`require("./x")`, `"../x"`, `"@self/x"`) resolves against the same tree. The fake game
+covers what a UI library touches when it loads (`ReflectionService`, `Enum` items, the
+profiler markers), so a spec can drive Vide roots, sources, and effects; see
+[ui.md](ui.md#testing).
+
 ## Conventions
 
 The spec globs are conventions like any other, and can be extended:

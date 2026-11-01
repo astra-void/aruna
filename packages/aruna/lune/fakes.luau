@@ -176,6 +176,14 @@ local function makeFakes(services)
 		end,
 	}
 
+	-- UI libraries read the class list at load (Vide maps lowercase JSX tags to
+	-- class names with it). A spec builds no instances, so the list is empty.
+	local reflectionService = {
+		GetClasses = function()
+			return {}
+		end,
+	}
+
 	local httpService = {
 		JSONEncode = function(_self, value)
 			return serde.encode("json", value)
@@ -212,6 +220,8 @@ local function makeFakes(services)
 				return httpService
 			elseif name == "DataStoreService" then
 				return dataStoreService
+			elseif name == "ReflectionService" then
+				return reflectionService
 			end
 			error(
 				`aruna test: {name} is not available under Lune. Specs run outside a game, `

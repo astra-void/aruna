@@ -51,13 +51,34 @@ local globals = {
 			return { UnixTimestampMillis = millis }
 		end,
 	},
-	Enum = {
+	-- The DataStore request types the store runtime compares against, and a
+	-- stand-in for every other item, so a UI library that builds a table of
+	-- property defaults at load (`Enum.Material.SmoothPlastic`) loads.
+	Enum = setmetatable({
 		DataStoreRequestType = {
 			GetAsync = "GetAsync",
 			SetIncrementAsync = "SetIncrementAsync",
 			UpdateAsync = "UpdateAsync",
 		},
-	},
+	}, {
+		__index = function(enums, enumName)
+			local items = setmetatable({}, {
+				__index = function(known, itemName)
+					local item = `Enum.{enumName}.{itemName}`
+					rawset(known, itemName, item)
+					return item
+				end,
+			})
+			rawset(enums, enumName, items)
+			return items
+		end,
+	}),
+	-- Roblox's profiler markers, which Lune's debug library lacks; Vide's
+	-- scheduler marks every frame.
+	debug = setmetatable({
+		profilebegin = function() end,
+		profileend = function() end,
+	}, { __index = debug }),
 	-- The Promise library warns on unhandled rejections, and a spec asserting a
 	-- rejection is exactly that. Test output stays about the tests.
 	warn = function() end,
