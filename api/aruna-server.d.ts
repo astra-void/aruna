@@ -6,6 +6,9 @@ export interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = S
     readonly publisher?: SignalPublisher<TSignals, unknown>;
     readonly session?: TSession;
     readonly store?: StoreDocument<unknown>;
+    readonly stores?: {
+        readonly [name: string]: StoreDocument<unknown> | undefined;
+    };
     readonly resources?: ResourceContext<unknown>;
 }
 
@@ -104,6 +107,9 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
     readonly publisher?: SignalPublisher<SignalMap, unknown>;
     readonly getSession?: (player: TPlayer) => unknown;
     readonly getStore?: (player: TPlayer) => StoreDocument<unknown> | undefined;
+    readonly getStores?: (player: TPlayer) => {
+        readonly [name: string]: StoreDocument<unknown> | undefined;
+    };
     readonly resources?: ResourceHost<TPlayer>;
     readonly middleware?: readonly ActionMiddleware<TPlayer>[];
     readonly onError?: ActionErrorHandler<TPlayer>;
@@ -119,6 +125,7 @@ export interface AnyPlayerStore<TPlayer = Player> {
     readonly load: (player: TPlayer) => Promise<StoreResult<AnyStoreDocument>>;
     readonly get: (player: TPlayer) => AnyStoreDocument | undefined;
     readonly waitFor: (player: TPlayer) => Promise<StoreResult<AnyStoreDocument>>;
+    readonly status: (player: TPlayer) => PlayerStoreStatus;
     readonly save: (player: TPlayer) => Promise<StoreResult<unknown>>;
     readonly release: (player: TPlayer) => Promise<StoreResult<undefined>>;
     readonly saveAll: () => Promise<Array<StoreResult<unknown>>>;
@@ -163,6 +170,8 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
     readonly exposeInternalErrors?: boolean;
     readonly createSession?: (player: TPlayer) => TSession;
     readonly playerStore?: AnyPlayerStore<TPlayer>;
+    readonly playerStores?: PlayerStoreMap<TPlayer>;
+    readonly onStoresReady?: (player: TPlayer, report: PlayerStoresReport) => void;
     readonly shutdownTimeoutSeconds?: number;
     readonly onPlayerAdded?: (player: TPlayer, session: TSession) => void;
     readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
@@ -201,6 +210,7 @@ export type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;
 export interface MemoryStoreBackend extends StoreBackend {
     readonly snapshot: () => Map<string, unknown>;
     readonly reset: () => void;
+    readonly memory: true;
 }
 
 export interface PlayerStore<TSchema extends Schema = Schema, TPlayer = Player> {
@@ -211,6 +221,7 @@ export interface PlayerStore<TSchema extends Schema = Schema, TPlayer = Player> 
     readonly load: (player: TPlayer) => Promise<StoreResult<StoreDocument<Infer<TSchema>>>>;
     readonly get: (player: TPlayer) => StoreDocument<Infer<TSchema>> | undefined;
     readonly waitFor: (player: TPlayer) => Promise<StoreResult<StoreDocument<Infer<TSchema>>>>;
+    readonly status: (player: TPlayer) => PlayerStoreStatus;
     readonly save: (player: TPlayer) => Promise<StoreResult<Infer<TSchema>>>;
     readonly release: (player: TPlayer) => Promise<StoreResult<undefined>>;
     readonly saveAll: () => Promise<Array<StoreResult<unknown>>>;
@@ -223,10 +234,44 @@ export interface PlayerStoreDefinition<TSchema extends Schema = Schema, TPlayer 
     readonly session?: StoreSessionOptions;
 }
 
+export type PlayerStoreMap<TPlayer> = {
+    readonly [name: string]: AnyPlayerStore<TPlayer>;
+};
+
 export interface PlayerStoreOptions<TPlayer = Player> extends StoreRuntimeOptions {
     readonly owner?: string;
     readonly onLoadFailed?: (player: TPlayer, error: StoreError) => void;
     readonly onSaveFailed?: (player: TPlayer, error: StoreError) => void;
+}
+
+export interface PlayerStoreSet<TPlayer> {
+    readonly status: (player: TPlayer) => {
+        readonly [name: string]: PlayerStoreStatus;
+    };
+    readonly isReady: (player: TPlayer, names?: readonly string[]) => boolean;
+    readonly ready: (player: TPlayer) => Promise<PlayerStoresReport>;
+    readonly get: (name: string) => AnyPlayerStore<TPlayer> | undefined;
+}
+
+export type PlayerStoreState = "idle" | "loading" | "ready" | "failed" | "released";
+
+export interface PlayerStoreStatus {
+    readonly state: PlayerStoreState;
+    readonly isNew: boolean;
+    readonly memoryOnly: boolean;
+    readonly locked: boolean;
+    readonly error?: StoreError;
+}
+
+export interface PlayerStoresReport {
+    readonly ok: boolean;
+    readonly failed: readonly string[];
+    readonly statuses: {
+        readonly [name: string]: PlayerStoreStatus;
+    };
+    readonly errors: {
+        readonly [name: string]: StoreError;
+    };
 }
 
 export interface PlayersSource<TPlayer> {
@@ -249,14 +294,21 @@ export interface PublicActionError {
     readonly __arunaActionError: true;
 }
 
-export type PublishingActionContext<TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown> = ActionContext<TPlayer, TSignals, TSession> & {
+export type PublishingActionContext<TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TStores = {
+    readonly [name: string]: unknown;
+}> = ActionContext<TPlayer, TSignals, TSession> & {
     readonly publisher: SignalPublisher<TSignals, TPlayer>;
     readonly session: TSession;
     readonly store?: StoreDocument<TStore>;
+    readonly stores?: {
+        readonly [K in keyof TStores]?: StoreDocument<TStores[K]>;
+    };
 };
 
-export type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TErrors extends ActionErrorMap = {}> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
-    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+export type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TErrors extends ActionErrorMap = {}, TStores = {
+    readonly [name: string]: unknown;
+}> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
+    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore, TStores> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
 
 export type RequestAbuseHandler<TPlayer = unknown> = (player: TPlayer, info: RequestAbuseInfo) => void;
@@ -348,6 +400,8 @@ export declare const STORE_MAX_VALUE_BYTES = 4194304;
 
 export declare const STORE_MUST_UNDERSTAND_PREFIX = "!";
 
+export declare const STORE_NOT_READY_ERROR_NAME = "StoreNotReadyError";
+
 export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
     readonly actions: ActionMap<TPlayer>;
     readonly dispatch: (actionId: string, ctx: {
@@ -357,6 +411,7 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
     readonly publisher?: SignalPublisher<TSignals, TPlayer>;
     readonly resources?: ResourceHost<TPlayer>;
     readonly playerStore?: AnyPlayerStore<TPlayer>;
+    readonly stores?: PlayerStoreSet<TPlayer>;
     readonly dispose: () => void;
 }
 
@@ -620,7 +675,9 @@ export declare function actionError(name: string, message: string): PublicAction
 
 export declare function classifyStoreError(cause: unknown): StoreErrorClassification;
 
-export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
+export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown, TStores = {
+    readonly [name: string]: unknown;
+}>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors, TStores>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>, options?: ActionRegistryOptions<TPlayer>): ActionRegistry<TPlayer>;
 
@@ -652,6 +709,8 @@ export declare function defineSignal<TId extends string, TPayload extends Schema
 
 export declare function defineStore<TSchema extends Schema>(definition: StoreDefinition<TSchema>): StoreDefinition<TSchema>;
 
+export declare function describeStoreError(failure: StoreError, info?: StoreErrorInfo): string;
+
 export declare function emptyStoreMeta(): StoreMeta;
 
 export declare function encodeStoreValue(definition: {
@@ -664,6 +723,10 @@ export declare function findStoreValueViolation(value: unknown, path?: string, s
 
 export declare function hasStoreReceipt(meta: StoreMeta, receiptId: string): boolean;
 
+export declare function isMemoryStoreBackend(backend: StoreBackend): boolean;
+
+export declare function isPlayerStoreReady(status: PlayerStoreStatus): boolean;
+
 export declare function isStoreEnvelope(value: unknown): value is StoreEnvelope;
 
 export declare function measureStoreValueBytes(value: unknown): number;
@@ -671,6 +734,8 @@ export declare function measureStoreValueBytes(value: unknown): number;
 export declare function readStoreRecord(raw: unknown): StoreRecord;
 
 export declare function recordStoreReceipt(meta: StoreMeta, receiptId: string): StoreResult<StoreMeta>;
+
+export declare function requireStores<TPlayer = unknown>(...names: string[]): ActionMiddleware<TPlayer>;
 
 export declare function resolveStoreDefault(definition: {
     readonly defaultValue: unknown;

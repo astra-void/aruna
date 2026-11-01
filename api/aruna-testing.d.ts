@@ -159,6 +159,44 @@ export interface TestSignalRecord<TPlayer extends defined = Player> {
     readonly player?: TPlayer;
 }
 
+export interface TestStoreBackend extends MemoryStoreBackend {
+    readonly seed: (key: string, value: unknown, options?: TestStoreRecordOptions) => void;
+    readonly seedRaw: (key: string, raw: unknown) => void;
+    readonly record: (key: string) => TestStoreRecord;
+    readonly failNext: (kind: StoreBackendRequestKind, count?: number, message?: string) => void;
+    readonly failAll: (kind: StoreBackendRequestKind, message?: string) => void;
+    readonly heal: (kind?: StoreBackendRequestKind) => void;
+    readonly hold: (kind: StoreBackendRequestKind) => void;
+    readonly resume: (kind: StoreBackendRequestKind) => void;
+    readonly requests: (kind: StoreBackendRequestKind) => number;
+    readonly writes: () => number;
+}
+
+export type TestStoreRecord = {
+    readonly kind: "absent";
+} | {
+    readonly kind: "legacy";
+    readonly value: unknown;
+} | {
+    readonly kind: "envelope";
+    readonly version: number;
+    readonly value: unknown;
+    readonly updatedAtMs: number;
+    readonly lock: StoreLockState | undefined;
+} | {
+    readonly kind: "unreadable";
+    readonly reason: string;
+};
+
+export interface TestStoreRecordOptions {
+    readonly version?: number;
+    readonly lock?: {
+        readonly owner: string;
+        readonly heartbeatMs?: number;
+    };
+    readonly updatedAtMs?: number;
+}
+
 export declare function afterEach(hook: TestHook): void;
 
 export declare function beforeEach(hook: TestHook): void;
@@ -170,6 +208,8 @@ export declare function createTestNetwork<TSignals extends SignalMap = SignalMap
 export declare function createTestPlayer(options?: CreateTestPlayerOptions): Player;
 
 export declare function createTestServerApp<TPlayer extends defined = Player, TSignals extends SignalMap = SignalMap, TSession = unknown>(options: CreateTestServerAppOptions<TPlayer, TSignals, TSession>): TestServerApp<TPlayer, TSignals>;
+
+export declare function createTestStoreBackend(nowMs?: () => number): TestStoreBackend;
 
 export declare function deepEquals(actual: unknown, expected: unknown): boolean;
 
@@ -194,6 +234,9 @@ interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMa
     readonly publisher?: SignalPublisher<TSignals, unknown>;
     readonly session?: TSession;
     readonly store?: StoreDocument<unknown>;
+    readonly stores?: {
+        readonly [name: string]: StoreDocument<unknown> | undefined;
+    };
     readonly resources?: ResourceContext<unknown>;
 }
 
@@ -302,6 +345,7 @@ interface AnyPlayerStore<TPlayer = Player> {
     readonly load: (player: TPlayer) => Promise<StoreResult<AnyStoreDocument>>;
     readonly get: (player: TPlayer) => AnyStoreDocument | undefined;
     readonly waitFor: (player: TPlayer) => Promise<StoreResult<AnyStoreDocument>>;
+    readonly status: (player: TPlayer) => PlayerStoreStatus;
     readonly save: (player: TPlayer) => Promise<StoreResult<unknown>>;
     readonly release: (player: TPlayer) => Promise<StoreResult<undefined>>;
     readonly saveAll: () => Promise<Array<StoreResult<unknown>>>;
@@ -358,6 +402,8 @@ interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap
     readonly exposeInternalErrors?: boolean;
     readonly createSession?: (player: TPlayer) => TSession;
     readonly playerStore?: AnyPlayerStore<TPlayer>;
+    readonly playerStores?: PlayerStoreMap<TPlayer>;
+    readonly onStoresReady?: (player: TPlayer, report: PlayerStoresReport) => void;
     readonly shutdownTimeoutSeconds?: number;
     readonly onPlayerAdded?: (player: TPlayer, session: TSession) => void;
     readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
@@ -377,7 +423,47 @@ type InferOutput<S> = S extends Schema ? Infer<S> : unknown;
 
 type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;
 
+interface MemoryStoreBackend extends StoreBackend {
+    readonly snapshot: () => Map<string, unknown>;
+    readonly reset: () => void;
+    readonly memory: true;
+}
+
 type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
+
+type PlayerStoreMap<TPlayer> = {
+    readonly [name: string]: AnyPlayerStore<TPlayer>;
+};
+
+interface PlayerStoreSet<TPlayer> {
+    readonly status: (player: TPlayer) => {
+        readonly [name: string]: PlayerStoreStatus;
+    };
+    readonly isReady: (player: TPlayer, names?: readonly string[]) => boolean;
+    readonly ready: (player: TPlayer) => Promise<PlayerStoresReport>;
+    readonly get: (name: string) => AnyPlayerStore<TPlayer> | undefined;
+}
+
+type PlayerStoreState = "idle" | "loading" | "ready" | "failed" | "released";
+
+interface PlayerStoreStatus {
+    readonly state: PlayerStoreState;
+    readonly isNew: boolean;
+    readonly memoryOnly: boolean;
+    readonly locked: boolean;
+    readonly error?: StoreError;
+}
+
+interface PlayerStoresReport {
+    readonly ok: boolean;
+    readonly failed: readonly string[];
+    readonly statuses: {
+        readonly [name: string]: PlayerStoreStatus;
+    };
+    readonly errors: {
+        readonly [name: string]: StoreError;
+    };
+}
 
 interface PlayersSource<TPlayer> {
     readonly PlayerAdded?: {
@@ -520,6 +606,7 @@ interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
     readonly publisher?: SignalPublisher<TSignals, TPlayer>;
     readonly resources?: ResourceHost<TPlayer>;
     readonly playerStore?: AnyPlayerStore<TPlayer>;
+    readonly stores?: PlayerStoreSet<TPlayer>;
     readonly dispose: () => void;
 }
 
@@ -564,6 +651,18 @@ interface SignalSubscriber<TSignals extends SignalMap> {
     readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
     readonly dispose: () => void;
 }
+
+interface StoreBackend {
+    readonly get: (key: string) => Promise<unknown>;
+    readonly set: (key: string, value: unknown, userIds?: Array<number>) => Promise<void>;
+    readonly update: (key: string, transform: StoreBackendTransform, userIds?: Array<number>) => Promise<unknown>;
+    readonly remove: (key: string) => Promise<void>;
+    readonly getBudget?: (kind: StoreBackendRequestKind) => number;
+}
+
+type StoreBackendRequestKind = "get" | "set" | "update" | "remove";
+
+type StoreBackendTransform = (current: unknown) => unknown;
 
 interface StoreDocument<TValue> {
     readonly key: string;

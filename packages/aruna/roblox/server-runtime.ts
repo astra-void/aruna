@@ -166,6 +166,10 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Supplied by `createServerApp` from its `playerStore`. Returns undefined
 	// while the locked read is in flight or after the document was released.
 	readonly getStore?: (player: TPlayer) => StoreDocument<unknown> | undefined;
+	// Resolves the calling player's named store documents, injected as
+	// `ctx.stores` (each undefined until it lands). Supplied by `createServerApp`
+	// from its `playerStores`.
+	readonly getStores?: (player: TPlayer) => { readonly [name: string]: StoreDocument<unknown> | undefined };
 	// The app's resources, injected as `ctx.resources` with invalidation bound
 	// to the calling player.
 	readonly resources?: ResourceHost<TPlayer>;
@@ -298,6 +302,7 @@ export function createActionRegistry<TPlayer>(
 	const getSession = options?.getSession;
 	const getStore = options?.getStore;
 	const resources = options?.resources;
+	const getStores = options?.getStores;
 	const middleware = options?.middleware;
 	const onError = options?.onError;
 	const exposeInternalErrors = options?.exposeInternalErrors === true;
@@ -412,6 +417,9 @@ export function createActionRegistry<TPlayer>(
 				if (document !== undefined) {
 					(context as { store?: StoreDocument<unknown> }).store = document;
 				}
+			}
+			if (getStores !== undefined) {
+				(context as { stores?: unknown }).stores = getStores(player);
 			}
 			if (resources !== undefined) {
 				const bound: ResourceContext<TPlayer> = {

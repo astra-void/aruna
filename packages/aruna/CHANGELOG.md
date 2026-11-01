@@ -17,6 +17,25 @@ the game build like any other module.
 
 ### Added
 
+- **Several player stores per app**: `createServerApp({ playerStores: { progress,
+  inventory } })` loads each on join, releases each on leave (independently:
+  one store's failure, or a throwing `onPlayerRemoving`/`onPlayerAdded` hook,
+  never skips another's release), and flushes them all at shutdown. Actions
+  see `ctx.stores.<name>` (typed by `createActionDefiner`'s new fifth
+  parameter); `onStoresReady(player, report)` reports a partial failure once
+  every load settled; `requireStores(...names)` middleware refuses an action
+  with the public `StoreNotReadyError` until the named documents are open.
+- **Readiness**: `PlayerStore.status(player)` — `idle`, `loading`, `ready`
+  (`isNew`, `memoryOnly`), `failed` (`locked`, `error`), `released` — and
+  `app.stores` (`status`, `isReady`, `ready`). `MemoryStoreBackend` is marked
+  `memory: true` (`isMemoryStoreBackend`).
+- **`describeStoreError(error, info)`**: one log line per store failure with its
+  store, operation, key, category, retryability, attempts, and retry delay, and
+  none of the record's data.
+- **`createTestStoreBackend`** (`aruna/testing`): seed records as an older build
+  (or another server) wrote them, inject failures and outages, hold requests in
+  flight, and read back exactly what a key holds.
+
 - **`createTestNetwork` (`aruna/testing`): deterministic multiplayer specs.**
   One real server app and a real client app per player, joined by simulated
   links on a virtual clock (`advance(ms)`, `flush()`), through the shipping
@@ -720,6 +739,20 @@ the game build like any other module.
 
 ### Fixed
 
+- **A player store's `waitFor` re-locked a player who had left.** With no load
+  in flight and no document, it started a new load, so a late `waitFor` after
+  `release` took the session lock again and kept heartbeating it. It now
+  answers `StoreClosedError` for a released player.
+- **Shutdown skipped loads still in flight.** `releaseAll` (what `BindToClose`
+  runs) released only open documents; a load that landed after it kept its lock
+  until the server died. It releases in-flight loads too.
+- **A load that settled at once stayed "in flight".** With a backend that
+  answers synchronously (the memory backend, specs), the load was recorded as
+  pending after it had finished, and never removed.
+- **A document's `snapshot` described the record after the lock claim.**
+  `existed`, `migrated`, `version`, and `updatedAtMs` now describe the record as
+  it was before the load's claim rewrote it, so a new player's document reports
+  `existed: false` and a migrated one `migrated: true`.
 - **A late envelope no longer brings a departed player's state back.** Leave
   dropped the player's request budget and idempotency keys, but an envelope
   Roblox delivered after `PlayerRemoving` created them again, and nothing

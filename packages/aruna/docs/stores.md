@@ -250,6 +250,74 @@ For a typed `ctx.store`, bind a definer:
 export const defineAction = createActionDefiner<Signals, Player, Session, Profile>();
 ```
 
+### Several player stores
+
+Most games keep more than one record per player — progression, inventory, settings —
+and a separate store per record keeps each one's schema, versioning, and migration
+independent. `createServerApp({ playerStores })` owns all of them:
+
+```ts
+const app = createServerApp<Player>({
+  actions,
+  transport: robloxRemoteEvent(),
+  playerStores: {
+    progress: createPlayerStore(progressStore, { createBackend: robloxDataStoreBackend }),
+    inventory: createPlayerStore(inventoryStore, { createBackend: robloxDataStoreBackend }),
+  },
+  middleware: [requireStores("progress")], // or per action, see below
+  onStoresReady: (player, report) => {
+    if (!report.ok) {
+      warn(`${player.Name}: ${report.failed.join(", ")} did not load`);
+      // kick, retry, or run without that data: the game's call
+    }
+  },
+});
+```
+
+- **Lifecycle.** Every store loads on join (started at once, not waited on), flushes and
+  releases on leave, and is flushed at shutdown, **each on its own**: a store that fails
+  never skips another's release, and a throwing `onPlayerRemoving` (or `onPlayerAdded`)
+  hook is reported with `warn` and the lifecycle carries on. A player who leaves while a
+  load is in flight is released once it lands, and shutdown releases loads still in
+  flight too.
+- **Actions** see the open documents as `ctx.stores.<name>`, each undefined until it
+  lands and after a failed load — never a default. Type them with the definer's fifth
+  parameter: `createActionDefiner<Signals, Player, Session, Profile, { progress:
+  Progress; inventory: Inventory }>()`.
+- **`requireStores("progress", "inventory")`** is middleware that refuses an action with
+  `StoreNotReadyError` (a public error the client sees, and can retry) until the named
+  documents are open, so a sensitive mutation never runs against data that has not
+  loaded. `requireStores()` with no names means the single `playerStore` (`ctx.store`).
+- **Partial failure** is explicit: `onStoresReady(player, report)` runs once every load
+  settled, with `report.ok`, `report.failed` (names), `report.statuses`, and
+  `report.errors`. Nothing is defaulted after an unknown failure.
+- The single `playerStore` keeps working (`ctx.store`), and is named `"store"` in
+  `app.stores`.
+
+### Readiness
+
+`app.stores` (present whenever the app owns a store) and every `PlayerStore` report where
+a player's document is:
+
+```ts
+app.stores!.status(player);              // { progress: PlayerStoreStatus, inventory: ... }
+app.stores!.isReady(player, ["progress"]); // an open document for each named store
+await app.stores!.ready(player);          // every load settled: a PlayerStoresReport
+progressStore.status(player);             // one store
+```
+
+| `status.state` | Meaning |
+| --- | --- |
+| `idle` | Nothing was asked for this player. |
+| `loading` | The locked read is in flight. |
+| `ready` | The document is open. `isNew`: the key held nothing, so it is the default. `memoryOnly`: the backend persists nothing (Studio fallback, specs). |
+| `failed` | The load gave up; `error` says why. `locked`: another server holds the session lock. |
+| `released` | The document was flushed and closed (reported for 30 s after the player left). |
+
+`isPlayerStoreReady(status)` is `status.state === "ready"`. `waitFor(player)` resolves
+with the in-flight load, the open document, the last failure, or — for a player whose
+document was just released — `StoreClosedError`; it never re-locks a player who left.
+
 ## Studio without API access
 
 `robloxDataStore()` probes once at creation. In Studio with "Enable Studio Access to API
@@ -343,6 +411,15 @@ The snapshot path is `contract.snapshot` in `aruna.config.ts` (default
 | `aruna::577` | `store-version-without-migrate` | warning |
 | `aruna::578` | `store-incompatible-change` | error (`strict.storeCompatibility`) |
 | `aruna::579` | `contract-snapshot-invalid` | error |
+
+Every runtime failure reaches `onError` as a `StoreError` (`name` is its category,
+`retryable`, `attempts`, `retryAfterMs`) with a `StoreErrorInfo` (`storeId`, `key`,
+`operation`). `describeStoreError(error, info)` turns the pair into one log line with
+none of the record's data:
+
+```
+[aruna store player.progress] lock player_6: StoreLockedError (retryable, retry after 118000ms): Store player.progress key player_6 is locked by another server (server-a).
+```
 
 ## Persisted format v1
 

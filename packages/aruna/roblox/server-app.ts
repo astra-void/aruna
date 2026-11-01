@@ -1,5 +1,6 @@
 // Aruna roblox-ts native runtime — server app wiring.
 
+import { actionError } from "./action-error";
 import {
 	createActionRegistry,
 	type ActionErrorHandler,
@@ -10,7 +11,8 @@ import {
 } from "./server-runtime";
 import type { ActionRateLimitOptions } from "./server";
 import type { RequestAbuseHandler, RequestBudgetOptions } from "./request-guard";
-import type { AnyPlayerStore, StoreDocument } from "./player-store";
+import type { AnyPlayerStore, PlayerStoreStatus, StoreDocument } from "./player-store";
+import type { StoreError } from "./store";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import {
 	createResourceHost,
@@ -39,6 +41,65 @@ export type ServerTransport<TPlayer> = (
 export type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = (
 	signals: TSignals,
 ) => SignalPublisher<TSignals, TPlayer>;
+
+// Several player stores the app owns, by the name actions read them under
+// (`ctx.stores.<name>`).
+export type PlayerStoreMap<TPlayer> = { readonly [name: string]: AnyPlayerStore<TPlayer> };
+
+// Every owned store's outcome for one player, once each load has settled.
+export interface PlayerStoresReport {
+	// True when every store opened a document.
+	readonly ok: boolean;
+	// The stores whose load gave up, by name.
+	readonly failed: readonly string[];
+	readonly statuses: { readonly [name: string]: PlayerStoreStatus };
+	readonly errors: { readonly [name: string]: StoreError };
+}
+
+// `app.stores`: readiness across every player store the app owns.
+export interface PlayerStoreSet<TPlayer> {
+	readonly status: (player: TPlayer) => { readonly [name: string]: PlayerStoreStatus };
+	// Whether the named stores (all of them by default) have an open document.
+	readonly isReady: (player: TPlayer, names?: readonly string[]) => boolean;
+	// Resolves once every store's load for the player has settled.
+	readonly ready: (player: TPlayer) => Promise<PlayerStoresReport>;
+	readonly get: (name: string) => AnyPlayerStore<TPlayer> | undefined;
+}
+
+// The error an action refused by `requireStores` fails with. Public: the client
+// sees the name and can try again once the data has loaded.
+export const STORE_NOT_READY_ERROR_NAME = "StoreNotReadyError";
+
+// Middleware that refuses an action until the calling player's documents are
+// open, so nothing mutates data that has not loaded (or failed to). Name the
+// `playerStores` the action needs; "store" (and no names at all) is the single
+// `playerStore`. Names, not "everything in `ctx.stores`": a store that has not
+// loaded is a nil field, which a Luau table does not hold, so it cannot be
+// found by looking. Refused with StoreNotReadyError before `run`.
+export function requireStores<TPlayer = unknown>(...names: string[]): ActionMiddleware<TPlayer> {
+	const required = names.size() > 0 ? names : ["store"];
+	return (info, nextLayer) => {
+		const missing = new Array<string>();
+		const stores = info.ctx.stores;
+		for (const name of required) {
+			const named = stores !== undefined ? stores[name] : undefined;
+			const document = named === undefined && name === "store" ? info.ctx.store : named;
+			if (document === undefined) {
+				missing.push(name);
+			}
+		}
+		if (missing.size() > 0) {
+			missing.sort();
+			return Promise.reject(
+				actionError(
+					STORE_NOT_READY_ERROR_NAME,
+					`Aruna action ${info.actionId} needs player data that is not loaded: ${missing.join(", ")}.`,
+				),
+			);
+		}
+		return nextLayer();
+	};
+}
 
 export interface AppDispatchOptions {
 	readonly idempotencyKey?: string;
@@ -73,6 +134,10 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// for everything else — reading a document outside an action, or an extra
 	// `saveAll()` around a risky operation.
 	readonly playerStore?: AnyPlayerStore<TPlayer>;
+	// Present when `playerStore` or `playerStores` was supplied: per-player
+	// readiness across every owned store. The single `playerStore` is named
+	// "store".
+	readonly stores?: PlayerStoreSet<TPlayer>;
 	// Disposes the owned transport binding (no-op when no `transport` was given).
 	readonly dispose: () => void;
 }
@@ -152,6 +217,17 @@ export interface CreateServerAppOptions<
 	// the load failed. That is deliberate: the alternative is handing out a
 	// default value that the next save would write over a real record.
 	readonly playerStore?: AnyPlayerStore<TPlayer>;
+	// Several session-locked player stores, by name: each loads on join, flushes
+	// and releases on leave, and is flushed at shutdown, independently — one
+	// store's failure never skips another's release. Actions see the open
+	// documents as `ctx.stores.<name>`, each undefined until it lands and after a
+	// failed load (a default would overwrite the real record at the next save).
+	readonly playerStores?: PlayerStoreMap<TPlayer>;
+	// Called once per join when every owned store's load has settled, with what
+	// each one did. The place to decide about a partial failure: kick, retry, or
+	// run the player without the data that failed. A player who left before the
+	// loads settled is reported too.
+	readonly onStoresReady?: (player: TPlayer, report: PlayerStoresReport) => void;
 	// Seconds to spend flushing held documents during BindToClose. Roblox allows
 	// 30; the default leaves headroom for the rest of your shutdown work.
 	readonly shutdownTimeoutSeconds?: number;
@@ -204,6 +280,81 @@ export function createServerApp<
 	const createSession = options.createSession;
 	const playerStore = options.playerStore;
 
+	// Every owned store, by name. The single `playerStore` is "store"; a store
+	// given both ways is owned once.
+	const ownedStores = new Array<{ readonly name: string; readonly store: AnyPlayerStore<TPlayer> }>();
+	if (playerStore !== undefined) {
+		ownedStores.push({ name: "store", store: playerStore });
+	}
+	if (options.playerStores !== undefined) {
+		for (const [name, store] of pairs(options.playerStores as { [name: string]: AnyPlayerStore<TPlayer> })) {
+			if (store !== playerStore) {
+				ownedStores.push({ name: name as string, store });
+			}
+		}
+	}
+	const namedStores = options.playerStores;
+	const getStores =
+		namedStores !== undefined
+			? (player: TPlayer) => {
+					const documents: { [name: string]: StoreDocument<unknown> | undefined } = {};
+					for (const [name, store] of pairs(namedStores as { [name: string]: AnyPlayerStore<TPlayer> })) {
+						documents[name as string] = store.get(player) as StoreDocument<unknown> | undefined;
+					}
+					return documents;
+				}
+			: undefined;
+
+	const reportFor = (player: TPlayer): PlayerStoresReport => {
+		const statuses: { [name: string]: PlayerStoreStatus } = {};
+		const errors: { [name: string]: StoreError } = {};
+		const failed = new Array<string>();
+		for (const owned of ownedStores) {
+			const status = owned.store.status(player);
+			statuses[owned.name] = status;
+			if (status.state !== "ready") {
+				failed.push(owned.name);
+				if (status.error !== undefined) {
+					errors[owned.name] = status.error;
+				}
+			}
+		}
+		return { ok: failed.size() === 0, failed, statuses, errors };
+	};
+
+	const storeSet: PlayerStoreSet<TPlayer> | undefined =
+		ownedStores.size() > 0
+			? {
+					status: (player) => reportFor(player).statuses,
+					isReady: (player, names) => {
+						for (const owned of ownedStores) {
+							if (names !== undefined && !names.includes(owned.name)) {
+								continue;
+							}
+							if (owned.store.status(player).state !== "ready") {
+								return false;
+							}
+						}
+						return true;
+					},
+					ready: (player) => {
+						const settled = new Array<Promise<unknown>>();
+						for (const owned of ownedStores) {
+							settled.push(owned.store.waitFor(player));
+						}
+						return Promise.all(settled).then(() => reportFor(player));
+					},
+					get: (name) => {
+						for (const owned of ownedStores) {
+							if (owned.name === name) {
+								return owned.store;
+							}
+						}
+						return undefined;
+					},
+				}
+			: undefined;
+
 	const resources =
 		options.resources !== undefined
 			? createResourceHost<TPlayer>(options.resources, {
@@ -214,6 +365,7 @@ export function createServerApp<
 									playerStore.get(player) as StoreDocument<unknown> | undefined,
 							}
 						: {}),
+					...(getStores !== undefined ? { getStores } : {}),
 					...(options.onResourceError !== undefined ? { onResourceError: options.onResourceError } : {}),
 				})
 			: undefined;
@@ -239,6 +391,7 @@ export function createServerApp<
 						playerStore.get(player) as StoreDocument<unknown> | undefined,
 				}
 			: {}),
+		...(getStores !== undefined ? { getStores } : {}),
 		...(resources !== undefined ? { resources } : {}),
 		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
 		...(options.onError !== undefined ? { onError: options.onError } : {}),
@@ -261,36 +414,60 @@ export function createServerApp<
 	// `onPlayerAdded` wants to observe the join. Session creation precedes the
 	// hook.
 	const needsAddedHandling =
-		createSession !== undefined || onPlayerAdded !== undefined || playerStore !== undefined;
+		createSession !== undefined || onPlayerAdded !== undefined || ownedStores.size() > 0;
+
+	// A hook that throws is reported and does not stop the lifecycle around it:
+	// a thrown `onPlayerRemoving` must not leave a store lock held or a player's
+	// state behind.
+	const runHook = (name: string, hook: () => void): void => {
+		const [ran, failure] = pcall(hook);
+		if (!ran) {
+			warn(`Aruna server app: ${name} threw: ${tostring(failure)}`);
+		}
+	};
 
 	const handlePlayerAdded = (player: TPlayer): void => {
 		// A player who left and came back (the same object, as a test harness
 		// reuses one) is no longer departed.
 		registry.readmitPlayer(player);
+		// Started first, and not waited on: the join handler must not block on a
+		// locked DataStore read, and a session factory that throws must not cost
+		// the player their data. The stores report their own failures through
+		// `onLoadFailed`, and each document stays undefined until it lands.
+		const loads = new Array<Promise<unknown>>();
+		for (const owned of ownedStores) {
+			const [started, load] = pcall(() => owned.store.load(player));
+			if (started) {
+				loads.push(load);
+			} else {
+				warn(`Aruna server app: store ${owned.name} load threw: ${tostring(load)}`);
+			}
+		}
+		const onStoresReady = options.onStoresReady;
+		if (onStoresReady !== undefined && ownedStores.size() > 0) {
+			Promise.all(loads).then(() => runHook("onStoresReady", () => onStoresReady(player, reportFor(player))));
+		}
 		let session: TSession | undefined;
 		if (createSession !== undefined) {
 			session = createSession(player);
 			sessions.set(player, session);
 		}
-		// Started, not waited on: the join handler must not block on a locked
-		// DataStore read. The store reports its own failures through `onLoadFailed`,
-		// and `ctx.store` stays undefined until the document lands.
-		if (playerStore !== undefined) {
-			playerStore.load(player);
-		}
 		if (onPlayerAdded !== undefined) {
-			onPlayerAdded(player, session as TSession);
+			runHook("onPlayerAdded", () => onPlayerAdded(player, session as TSession));
 		}
 	};
 
 	const handlePlayerRemoving = (player: TPlayer): void => {
 		if (onPlayerRemoving !== undefined) {
-			onPlayerRemoving(player, sessions.get(player));
+			runHook("onPlayerRemoving", () => onPlayerRemoving(player, sessions.get(player)));
 		}
 		// After the user hook, so a last write from `onPlayerRemoving` is included
-		// in the final flush rather than racing the release.
-		if (playerStore !== undefined) {
-			playerStore.release(player);
+		// in the final flush rather than racing the release. Each store on its own:
+		// one that throws does not skip the rest.
+		for (const owned of ownedStores) {
+			runHook(`store ${owned.name} release`, () => {
+				owned.store.release(player);
+			});
 		}
 		sessions.delete(player);
 		registry.forgetPlayer(player);
@@ -355,12 +532,16 @@ export function createServerApp<
 	// than the promise — the release chain resolves on its own threads. Documents
 	// that do not finish in time keep their lock, and the next server takes it
 	// over once the TTL lapses; that is the safe end of the trade.
-	if (playerStore !== undefined) {
+	if (ownedStores.size() > 0) {
 		const timeoutSeconds =
 			options.shutdownTimeoutSeconds !== undefined ? options.shutdownTimeoutSeconds : 20;
 		game.BindToClose(() => {
 			let finished = false;
-			playerStore.releaseAll().then(() => {
+			const releases = new Array<Promise<unknown>>();
+			for (const owned of ownedStores) {
+				releases.push(owned.store.releaseAll());
+			}
+			Promise.all(releases).then(() => {
 				finished = true;
 			});
 			const deadline = os.clock() + timeoutSeconds;
@@ -399,6 +580,7 @@ export function createServerApp<
 		...(publisher !== undefined ? { publisher } : {}),
 		...(resources !== undefined ? { resources } : {}),
 		...(playerStore !== undefined ? { playerStore } : {}),
+		...(storeSet !== undefined ? { stores: storeSet } : {}),
 		dispose: () => {
 			if (binding !== undefined) {
 				binding.disconnect();

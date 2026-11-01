@@ -21,8 +21,10 @@
 //     server can start immediately instead of waiting out the TTL.
 
 import type { Infer, Schema } from "./schema";
+import { createDepartedPlayers } from "./request-guard";
 import {
 	createStore,
+	isMemoryStoreBackend,
 	createStoreEnvelope,
 	defaultStoreScheduler,
 	decodeStoreValue,
@@ -136,6 +138,29 @@ export interface StoreDocument<TValue> {
 	readonly snapshot: StoreSnapshot<TValue>;
 }
 
+// Where a player's document is. `loading`: the locked read is in flight.
+// `ready`: the document is open (see `isNew` and `memoryOnly`). `failed`: the
+// load gave up (`error` says why; `locked` when another server holds the lock).
+// `released`: the document was flushed and closed (reported for a while after
+// the player left). `idle`: nothing was asked for this player.
+export type PlayerStoreState = "idle" | "loading" | "ready" | "failed" | "released";
+
+export interface PlayerStoreStatus {
+	readonly state: PlayerStoreState;
+	// Ready, and the key held nothing: the document is the store's default.
+	readonly isNew: boolean;
+	// Ready on a backend that persists nothing (the Studio fallback, a spec).
+	readonly memoryOnly: boolean;
+	// Failed because another server holds the session lock.
+	readonly locked: boolean;
+	readonly error?: StoreError;
+}
+
+// Whether a status is one game code can read and write: an open document.
+export function isPlayerStoreReady(status: PlayerStoreStatus): boolean {
+	return status.state === "ready";
+}
+
 export interface PlayerStoreOptions<TPlayer = Player> extends StoreRuntimeOptions {
 	// Identifies this server in the lock. Defaults to `${JobId}:${PlaceId}`.
 	readonly owner?: string;
@@ -160,8 +185,11 @@ export interface PlayerStore<TSchema extends Schema = Schema, TPlayer = Player> 
 	// after a release.
 	readonly get: (player: TPlayer) => StoreDocument<Infer<TSchema>> | undefined;
 	// Resolves once the in-flight load for this player settles, so an action that
-	// needs the record can wait instead of failing on a mid-join call.
+	// needs the record can wait instead of failing on a mid-join call. Starts a
+	// load for a player with nothing in flight, except one whose document was
+	// just released (StoreClosedError): waiting must not re-lock a player who left.
 	readonly waitFor: (player: TPlayer) => Promise<StoreResult<StoreDocument<Infer<TSchema>>>>;
+	readonly status: (player: TPlayer) => PlayerStoreStatus;
 	readonly save: (player: TPlayer) => Promise<StoreResult<Infer<TSchema>>>;
 	readonly release: (player: TPlayer) => Promise<StoreResult<undefined>>;
 	// Flushes every held document. `createServerApp` wires this to BindToClose so
@@ -205,6 +233,7 @@ export interface AnyPlayerStore<TPlayer = Player> {
 	readonly load: (player: TPlayer) => Promise<StoreResult<AnyStoreDocument>>;
 	readonly get: (player: TPlayer) => AnyStoreDocument | undefined;
 	readonly waitFor: (player: TPlayer) => Promise<StoreResult<AnyStoreDocument>>;
+	readonly status: (player: TPlayer) => PlayerStoreStatus;
 	readonly save: (player: TPlayer) => Promise<StoreResult<unknown>>;
 	readonly release: (player: TPlayer) => Promise<StoreResult<undefined>>;
 	readonly saveAll: () => Promise<Array<StoreResult<unknown>>>;
@@ -319,11 +348,24 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 
 	const documents = new Map<TPlayer, ErasedDocument>();
 	const loading = new Map<TPlayer, Promise<StoreResult<ErasedDocument>>>();
+	// Why a player's last load gave up, until they leave or load again.
+	const failures = new Map<TPlayer, StoreError>();
+	// Players whose document was released, for a while (DEPARTED_PLAYER_TTL_MS):
+	// long enough that a late `waitFor` cannot re-lock them, short enough not
+	// to pin the Player.
+	const released = createDepartedPlayers<TPlayer>(nowMs);
+	const memoryOnly = isMemoryStoreBackend(backend);
 
 	// One UpdateAsync that claims the lock and returns the record under it. The
 	// read and the claim cannot be separated, which is the entire point.
 	const acquire = (key: string): Promise<StoreResult<StoreSnapshot<unknown>>> => {
 		let failure: StoreFailure | undefined;
+		// The record as it was before this claim rewrote it: whether it existed,
+		// whether it had to be migrated, the version and time it was stored at.
+		// That is what the document's `snapshot` (and `status().isNew`) reports;
+		// read after the write, every record would look like it existed at the
+		// current version.
+		let before: StoreSnapshot<unknown> | undefined;
 
 		return runStoreRequest(
 			() =>
@@ -336,6 +378,7 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 							failure = decoded;
 							return undefined;
 						}
+						before = decoded.value;
 
 						const lock = decoded.value.lock;
 						if (isLockBlocking(lock, at)) {
@@ -376,7 +419,17 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			if (!written.ok) {
 				return written;
 			}
-			return decodeStoreValue(codec, written.value);
+			const snapshot = decodeStoreValue(codec, written.value);
+			if (!snapshot.ok || before === undefined) {
+				return snapshot;
+			}
+			return storeOk({
+				...snapshot.value,
+				existed: before.existed,
+				migrated: before.migrated,
+				version: before.version,
+				updatedAtMs: before.updatedAtMs,
+			});
 		});
 	};
 
@@ -590,6 +643,9 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		if (inFlight !== undefined) {
 			return inFlight;
 		}
+		// An explicit load is a new session for the player.
+		released.remove(player);
+		failures.delete(player);
 
 		const keyResult = keyFor(player);
 		if (!keyResult.ok) {
@@ -650,15 +706,26 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			});
 		};
 
+		// A backend that answers at once settles the load inside this call, before
+		// it could be recorded as in flight: only a load still running is.
+		let settled = false;
 		const pending = attempt(1, undefined).then((result) => {
+			settled = true;
 			loading.delete(player);
+			if (!result.ok) {
+				failures.set(player, result.error);
+			}
 			return result;
 		});
-		loading.set(player, pending);
+		if (!settled) {
+			loading.set(player, pending);
+		}
 		return pending;
 	};
 
 	const release = (player: TPlayer): Promise<StoreResult<undefined>> => {
+		released.add(player);
+		failures.delete(player);
 		// A player who leaves mid-load must still be released, or the lock lingers
 		// until the TTL lapses and their next server stalls behind it.
 		const pending = loading.get(player);
@@ -691,7 +758,49 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		},
 		waitFor: (player: TPlayer) => {
 			const pending = loading.get(player);
-			return pending !== undefined ? pending : load(player);
+			if (pending !== undefined) {
+				return pending;
+			}
+			const document = documents.get(player);
+			if (document !== undefined && document.isActive()) {
+				return Promise.resolve(storeOk(document));
+			}
+			if (released.has(player)) {
+				return Promise.resolve(
+					storeFail(
+						"StoreClosedError",
+						`Store ${definition.id} released this player's document; load(player) opens a new one.`,
+					),
+				);
+			}
+			const failure = failures.get(player);
+			if (failure !== undefined) {
+				return Promise.resolve({ ok: false, error: failure } as StoreFailure);
+			}
+			return load(player);
+		},
+		status: (player: TPlayer): PlayerStoreStatus => {
+			if (loading.has(player)) {
+				return { state: "loading", isNew: false, memoryOnly: false, locked: false };
+			}
+			const document = documents.get(player);
+			if (document !== undefined && document.isActive()) {
+				return { state: "ready", isNew: !document.snapshot.existed, memoryOnly, locked: false };
+			}
+			const failure = failures.get(player);
+			if (failure !== undefined) {
+				return {
+					state: "failed",
+					isNew: false,
+					memoryOnly: false,
+					locked: failure.name === "StoreLockedError",
+					error: failure,
+				};
+			}
+			if (released.has(player)) {
+				return { state: "released", isNew: false, memoryOnly: false, locked: false };
+			}
+			return { state: "idle", isNew: false, memoryOnly: false, locked: false };
 		},
 		save: (player: TPlayer) => {
 			const document = documents.get(player);
@@ -713,9 +822,19 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			}
 			return Promise.all(pending);
 		},
+		// Players whose load is still in flight are released too: at shutdown a
+		// load that lands after BindToClose would otherwise keep its lock (and a
+		// heartbeat) until the server dies.
 		releaseAll: () => {
-			const pending: Array<Promise<StoreResult<undefined>>> = [];
+			const players = new Set<TPlayer>();
 			for (const [player] of documents) {
+				players.add(player);
+			}
+			for (const [player] of loading) {
+				players.add(player);
+			}
+			const pending: Array<Promise<StoreResult<undefined>>> = [];
+			for (const player of players) {
 				pending.push(release(player));
 			}
 			return Promise.all(pending);
@@ -723,6 +842,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		dispose: () => {
 			documents.clear();
 			loading.clear();
+			failures.clear();
+			released.clear();
 		},
 	};
 

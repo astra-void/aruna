@@ -141,16 +141,36 @@ untouched. Passing your own `nowMs` to `createTestServerApp` keeps that clock an
 
 ## Persistence in a spec
 
-Stores need no special harness support: pair the store definition with the in-memory
-backend the runtime already ships.
+Stores need no special harness support: pair the store definition with an in-memory
+backend. `createTestStoreBackend()` from `aruna/testing` is the memory backend plus what a
+persistence spec needs:
 
 ```ts
-import { createPlayerStore, createMemoryStoreBackend } from "aruna/server";
+import { createPlayerStore } from "aruna/server";
+import { createTestStoreBackend, createTestServerApp } from "aruna/testing";
 
-const profiles = createPlayerStore(profile, { createBackend: createMemoryStoreBackend() });
-const harness = createTestServerApp({ actions, playerStore: profiles });
-harness.join(player); // loads the document, so ctx.store is populated
+const backend = createTestStoreBackend();
+backend.seed("player_7", { lvl: 12 }, { version: 1 });          // as an older build wrote it
+backend.seed("player_8", { level: 3 }, { lock: { owner: "server-a" } }); // a live foreign lock
+backend.seedRaw("player_9", "corrupt");                          // anything at all
+
+const profiles = createPlayerStore(profile, { backend, owner: "server-b" });
+const harness = createTestServerApp({ actions, playerStores: { profile: profiles } });
+harness.join(player);
+
+backend.failNext("update", 1, "403: API Services rejected"); // the next save fails (permanent)
+backend.failAll("update");   // an outage, until backend.heal()
+backend.hold("update");      // a request in flight, until backend.resume("update")
+backend.record("player_7");  // what the key holds now: { kind: "envelope", version, value, lock }
+backend.writes();            // writes that changed a key — 0 proves nothing was overwritten
 ```
+
+A store retries a transient failure and waits out a held lock on its `scheduler`; pass
+`retry: { attempts: 1 }` and `session: { acquireAttempts: 1 }` in a spec, or a scheduler
+you step, so nothing waits on real time. `apps/roblox-runtime-test/src/test/persistence.spec.ts`
+covers migrations, missing fields, invalid records, failed migrations, lock contention and
+takeover, a leave mid-load, a failed save, shutdown, partial failure across stores, and a
+throwing leave hook.
 
 ## Resources
 

@@ -49,6 +49,12 @@ export interface ActionContext<
 	// binding it here would stop an untyped action from being assignable into a
 	// typed app's registry. The precise type lives on `PublishingActionContext`.
 	readonly store?: StoreDocument<unknown>;
+	// The calling player's documents from `createServerApp({ playerStores })`, by
+	// name. Each is undefined until its load lands and after a failed load, for
+	// the reason `store` is; `requireStores(...)` refuses an action until they
+	// are there. Value-erased like `store`; `createActionDefiner`'s `TStores`
+	// types it.
+	readonly stores?: { readonly [name: string]: StoreDocument<unknown> | undefined };
 	// Invalidation for the app's resources, injected when `createServerApp` was
 	// given `resources`: `ctx.resources?.invalidate(questProgress)` re-reads the
 	// calling player's value and sends it to them. Player-erased for the same
@@ -66,12 +72,16 @@ export type PublishingActionContext<
 	TSignals extends SignalMap,
 	TSession = unknown,
 	TStore = unknown,
+	TStores = { readonly [name: string]: unknown },
 > = ActionContext<TPlayer, TSignals, TSession> & {
 	readonly publisher: SignalPublisher<TSignals, TPlayer>;
 	readonly session: TSession;
 	// Narrows the erased `store` from the base context to the value your player
 	// store holds. Still optional: the document may not be loaded yet.
 	readonly store?: StoreDocument<TStore>;
+	// Narrows `stores` to your named stores' values. Present when the app owns
+	// `playerStores`; each document still optional.
+	readonly stores?: { readonly [K in keyof TStores]?: StoreDocument<TStores[K]> };
 };
 
 // What a custom rate-limit key function receives about the throttled call. The
@@ -192,9 +202,10 @@ export type PublishingActionDefinition<
 	TSession = unknown,
 	TStore = unknown,
 	TErrors extends ActionErrorMap = {},
+	TStores = { readonly [name: string]: unknown },
 > = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
 	run(
-		context: PublishingActionContext<TPlayer, TSignals, TSession, TStore> & FailContextFor<TErrors>,
+		context: PublishingActionContext<TPlayer, TSignals, TSession, TStore, TStores> & FailContextFor<TErrors>,
 		input: InferInput<TInput>,
 	): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
@@ -218,11 +229,15 @@ export function defineAction<
 // `TStore` types `ctx.store` against the value your player store holds — pass
 // the store's value type to get `ctx.store?.get()` typed instead of `unknown`.
 // It stays optional on the ctx by design; see the note on ActionContext.
+//
+// `TStores` types `ctx.stores` from `createServerApp({ playerStores })`: pass
+// `{ progress: ProgressValue; inventory: InventoryValue }`.
 export function createActionDefiner<
 	TSignals extends SignalMap,
 	TPlayer = Player,
 	TSession = unknown,
 	TStore = unknown,
+	TStores = { readonly [name: string]: unknown },
 >() {
 	// Anonymous arrow (not a named function expression): roblox-ts rejects named
 	// function expressions, and this runtime is compiled to Luau by rbxtsc.
@@ -231,7 +246,7 @@ export function createActionDefiner<
 		TOutput extends Schema | undefined = undefined,
 		TErrors extends ActionErrorMap = {},
 	>(
-		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>,
+		definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors, TStores>,
 	): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors> => definition;
 }
 

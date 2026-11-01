@@ -675,6 +675,14 @@ export type StoreBackendFactory = (definition: StoreBackendTarget) => StoreBacke
 export interface MemoryStoreBackend extends StoreBackend {
 	readonly snapshot: () => Map<string, unknown>;
 	readonly reset: () => void;
+	// Marks a backend that persists nothing: what a player store reports as
+	// `memoryOnly` (the Studio fallback, a spec's backend).
+	readonly memory: true;
+}
+
+// Whether a backend keeps nothing past the server: an in-memory one.
+export function isMemoryStoreBackend(backend: StoreBackend): boolean {
+	return (backend as { readonly memory?: unknown }).memory === true;
 }
 
 // An in-memory backend with DataStore semantics. Backs the Studio fallback when
@@ -718,6 +726,7 @@ export function createMemoryStoreBackend(initial?: Map<string, unknown>): Memory
 		reset: () => {
 			entries = new Map<string, unknown>();
 		},
+		memory: true,
 	};
 }
 
@@ -1102,6 +1111,23 @@ export interface StoreErrorInfo {
 }
 
 export type StoreErrorReporter = (error: StoreError, info: StoreErrorInfo) => void;
+
+// One line for a log, with what a failure is and none of the data: the store,
+// the operation, the key, the error's category, whether the store will retry
+// it, how many attempts it took, and when to retry. Never the record's value.
+export function describeStoreError(failure: StoreError, info?: StoreErrorInfo): string {
+	const facts = new Array<string>();
+	facts.push(failure.retryable ? "retryable" : "not retryable");
+	if (failure.attempts !== undefined) {
+		facts.push(`${failure.attempts} ${failure.attempts === 1 ? "attempt" : "attempts"}`);
+	}
+	if (failure.retryAfterMs !== undefined) {
+		facts.push(`retry after ${math.ceil(failure.retryAfterMs)}ms`);
+	}
+	const where =
+		info !== undefined ? `[aruna store ${info.storeId}] ${info.operation} ${info.key}` : "[aruna store]";
+	return `${where}: ${failure.name} (${facts.join(", ")}): ${failure.message}`;
+}
 
 export interface StoreRuntimeOptions {
 	// A ready backend, or a factory called with the store's id and scope. Pass

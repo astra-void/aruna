@@ -233,7 +233,9 @@ export declare function bindActions<TPlayer>(registry: ActionRegistry<TPlayer>, 
 
 export declare function bindRemoteActions<TPlayer>(registry: ActionRegistry<TPlayer>, remote: WireCallReceiver<TPlayer>, channel: ServerChannel<TPlayer>, resources?: ResourceHost<TPlayer>): ServerAppBinding;
 
-export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
+export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown, TStores = {
+    readonly [name: string]: unknown;
+}>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors, TStores>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function createActionInvoker(options?: CreateActionInvokerOptions): ActionInvoker;
 
@@ -295,6 +297,9 @@ interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMa
     readonly publisher?: SignalPublisher<TSignals, unknown>;
     readonly session?: TSession;
     readonly store?: StoreDocument<unknown>;
+    readonly stores?: {
+        readonly [name: string]: StoreDocument<unknown> | undefined;
+    };
     readonly resources?: ResourceContext<unknown>;
 }
 
@@ -409,14 +414,21 @@ interface PlayerStoreDefinition<TSchema extends Schema = Schema, TPlayer = Playe
     readonly session?: StoreSessionOptions;
 }
 
-type PublishingActionContext<TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown> = ActionContext<TPlayer, TSignals, TSession> & {
+type PublishingActionContext<TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TStores = {
+    readonly [name: string]: unknown;
+}> = ActionContext<TPlayer, TSignals, TSession> & {
     readonly publisher: SignalPublisher<TSignals, TPlayer>;
     readonly session: TSession;
     readonly store?: StoreDocument<TStore>;
+    readonly stores?: {
+        readonly [K in keyof TStores]?: StoreDocument<TStores[K]>;
+    };
 };
 
-type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TErrors extends ActionErrorMap = {}> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
-    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
+type PublishingActionDefinition<TInput extends Schema | undefined, TOutput extends Schema | undefined, TPlayer, TSignals extends SignalMap, TSession = unknown, TStore = unknown, TErrors extends ActionErrorMap = {}, TStores = {
+    readonly [name: string]: unknown;
+}> = Omit<ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>, "run"> & {
+    run(context: PublishingActionContext<TPlayer, TSignals, TSession, TStore, TStores> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 };
 
 interface Refinement {
