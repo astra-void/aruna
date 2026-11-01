@@ -406,12 +406,29 @@ fn render_errors_type(action: &ArunaActionRecord) -> String {
     format!("{{ {} }}", fields.join(" "))
 }
 
+// Whether an action can be called with no input at all: it declares no input
+// schema, or one that accepts `undefined` (`schema.optional(...)`). Its stub
+// then takes `input?`, so `ready()` type-checks — and `ready(undefined)` still
+// does — while an action whose input is required keeps a required parameter.
+// An omitted input is `nil` in Luau, so the call item carries no `d` field.
+fn input_is_optional(action: &ArunaActionRecord) -> bool {
+    action
+        .input_schema
+        .as_ref()
+        .is_none_or(|schema| schema.kind == "optional")
+}
+
 fn client_stub_lines(
     action: &ArunaActionRecord,
     input_type: &str,
     output_type: &str,
     errors_type: Option<&str>,
 ) -> Vec<String> {
+    let input_param = if input_is_optional(action) {
+        format!("input?: {input_type}")
+    } else {
+        format!("input: {input_type}")
+    };
     // Fire-and-forget actions are one-way: the client does not wait for a server
     // ack, so the stub resolves void and tells the invoker to skip the response
     // roundtrip. The declared output type is intentionally ignored — there is no
@@ -419,8 +436,8 @@ fn client_stub_lines(
     if action.fire_and_forget {
         return vec![
             format!(
-                "export const {} = (input: {}): Promise<void> => {{",
-                action.export_name, input_type
+                "export const {} = ({}): Promise<void> => {{",
+                action.export_name, input_param
             ),
             format!(
                 "  return invokeAction(\"{}\", input, {{ fireAndForget: true }}) as Promise<void>;",
@@ -446,8 +463,8 @@ fn client_stub_lines(
             action.export_name, input_type, output_type, errors_type
         ),
         None => format!(
-            "export const {} = (input: {}): Promise<{}> => {{",
-            action.export_name, input_type, output_type
+            "export const {} = ({}): Promise<{}> => {{",
+            action.export_name, input_param, output_type
         ),
     };
 
@@ -834,6 +851,10 @@ fn render_signal_file(
         ));
     }
     lines.push("} as const;".to_string());
+    lines.push(String::new());
+    // The registry's type, for `createActionDefiner<Signals, Player>()` and
+    // `SignalPublisher<Signals, Player>`.
+    lines.push("export type Signals = typeof signals;".to_string());
 
     if !signals.is_empty() {
         lines.push(String::new());
@@ -1284,7 +1305,7 @@ mod tests {
             .contains("return invokeAction(\"inventory.restockItem\", input) as Promise<RestockItemOutput>;"));
         assert!(output.files[0]
             .contents
-            .contains("export const restockItem = (input: RestockItemInput): Promise<RestockItemOutput> => {"));
+            .contains("export const restockItem = (input?: RestockItemInput): Promise<RestockItemOutput> => {"));
         assert!(output.files[0]
             .contents
             .contains("export type PurchaseItemInput = unknown;"));
@@ -1293,7 +1314,7 @@ mod tests {
             .contains("export type PurchaseItemOutput = void;"));
         assert!(output.files[0]
             .contents
-            .contains("export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {"));
+            .contains("export const purchaseItem = (input?: PurchaseItemInput): Promise<PurchaseItemOutput> => {"));
         assert!(output.files[1]
             .contents
             .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../../domains/inventory/actions\";"));
@@ -1334,7 +1355,7 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         let client = &output.files[0].contents;
         // One-way stub: resolves void and asks the invoker to skip the ack.
-        assert!(client.contains("export const paint = (input: PaintInput): Promise<void> => {"));
+        assert!(client.contains("export const paint = (input?: PaintInput): Promise<void> => {"));
         assert!(client.contains(
             "return invokeAction(\"spray.paint\", input, { fireAndForget: true }) as Promise<void>;"
         ));
@@ -1381,7 +1402,7 @@ mod tests {
         ));
         assert!(client.contains("export const buy: ActionStub<BuyInput, BuyOutput, BuyErrors> = (input) => {"));
         // An action without errors keeps the plain stub.
-        assert!(client.contains("export const look = (input: LookInput): Promise<LookOutput> => {"));
+        assert!(client.contains("export const look = (input?: LookInput): Promise<LookOutput> => {"));
 
         // Without any declared errors the import is what it always was.
         let without = generate_action_files("src/.aruna", &[plain.clone()], &[], &test_rate_limit(), false);
@@ -1421,6 +1442,44 @@ mod tests {
     }
 
     #[test]
+    fn renders_an_inputless_action_stub_with_an_optional_input() {
+        let mut ready = action("lobby.ready", "src/domains/lobby/actions.ts", "ready");
+        ready.input_schema = None;
+        ready.has_input_schema = false;
+        let mut maybe = action("lobby.maybe", "src/domains/lobby/actions.ts", "maybe");
+        maybe.input_schema = Some(ArunaSchemaMetadata {
+            kind: "optional".to_string(),
+            inner: Some(Box::new(ArunaSchemaMetadata {
+                kind: "string".to_string(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        });
+        let mut ping = action("lobby.ping", "src/domains/lobby/actions.ts", "ping");
+        ping.input_schema = None;
+        ping.fire_and_forget = true;
+        let mut required = action("lobby.join", "src/domains/lobby/actions.ts", "join");
+        required.input_schema = Some(ArunaSchemaMetadata {
+            kind: "string".to_string(),
+            ..Default::default()
+        });
+
+        let output = generate_action_files(
+            "src/.aruna",
+            &[ready, maybe, ping, required],
+            &[],
+            &test_rate_limit(),
+            true,
+        );
+        let client = &output.files[0].contents;
+        assert!(client.contains("export const ready = (input?: ReadyInput): Promise<ReadyOutput> => {"));
+        assert!(client.contains("export type ReadyInput = unknown;"));
+        assert!(client.contains("export const maybe = (input?: MaybeInput): Promise<MaybeOutput> => {"));
+        assert!(client.contains("export const ping = (input?: PingInput): Promise<void> => {"));
+        assert!(client.contains("export const join = (input: JoinInput): Promise<JoinOutput> => {"));
+    }
+
+    #[test]
     fn renders_typed_signal_registry_and_payload_aliases() {
         let signals = vec![
             signal(
@@ -1456,6 +1515,7 @@ mod tests {
         assert!(contents.contains("\"combat.damaged\": src_shared_combat_signals_damaged,"));
         assert!(contents.contains("\"world.tick\": src_shared_world_signals_tick,"));
         assert!(contents.contains("} as const;"));
+        assert!(contents.contains("export type Signals = typeof signals;"));
         assert!(contents.contains("export type DamagedPayload = { amount: number; };"));
         // A signal without a payload schema carries `unknown`.
         assert!(contents.contains("export type TickPayload = unknown;"));

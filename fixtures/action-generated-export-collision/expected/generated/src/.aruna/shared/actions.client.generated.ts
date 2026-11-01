@@ -7,7 +7,7 @@ export type PurchaseItemInput = unknown;
 
 export type PurchaseItemOutput = void;
 
-export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {
+export const purchaseItem = (input?: PurchaseItemInput): Promise<PurchaseItemOutput> => {
   return invokeAction("inventory.purchaseItem", input) as Promise<PurchaseItemOutput>;
 };
 

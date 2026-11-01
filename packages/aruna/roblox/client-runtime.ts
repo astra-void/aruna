@@ -134,10 +134,12 @@ export type ActionInvoker = (
 export type ActionErrorTypes = { readonly [name: string]: unknown };
 
 // A generated client stub. `TErrors` is type-only: it is what lets
-// `isActionError(err, stub, name)` narrow a rejection to the declared error.
-export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = ((
-	input: TInput,
-) => Promise<TOutput>) & {
+// `isActionError(err, stub, name)` narrow a rejection to the declared error. An
+// input that accepts `undefined` (no input schema, or an optional one) is an
+// optional parameter, so an inputless action is called as `ready()`.
+export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = (undefined extends TInput
+	? (input?: TInput) => Promise<TOutput>
+	: (input: TInput) => Promise<TOutput>) & {
 	readonly __arunaErrors?: TErrors;
 };
 
@@ -384,7 +386,7 @@ export function clearActionInvoker(): void {
 
 export function invokeAction(
 	actionId: string,
-	input: unknown,
+	input?: unknown,
 	options?: ActionInvokeOptions,
 ): Promise<unknown> {
 	const invoker = activeInvoker;

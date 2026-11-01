@@ -242,7 +242,7 @@ interface CancelToken {
 }
 
 interface ClientApp<TSignals extends SignalMap = SignalMap> {
-    readonly invoke: (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
+    readonly invoke: (actionId: string, input?: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
     readonly subscriber?: SignalSubscriber<TSignals>;
     readonly dispose: () => void;
 }

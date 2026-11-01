@@ -8,7 +8,11 @@ import type { StoreDocument } from "./player-store";
 // signal definitions import from the same entry as actions.
 export { defineSignal } from "./signal";
 export type { InferSignalPayload, SignalDefinition } from "./signal";
-export type { SignalMap } from "./signal-runtime";
+// The publisher surface, so a module that is handed one (`app.publisher`, an
+// action's `ctx.publisher`) can type it without reaching into the runtime's
+// internals: `SignalPublisher<Signals, Player>` with `Signals` from
+// `$aruna/signals`.
+export type { SignalBatchOptions, SignalMap, SignalPublisher } from "./signal-runtime";
 
 export interface ActionContext<
 	TPlayer = unknown,

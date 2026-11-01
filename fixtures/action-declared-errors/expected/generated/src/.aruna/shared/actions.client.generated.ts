@@ -7,7 +7,7 @@ export type BrowseInput = unknown;
 
 export type BrowseOutput = string[];
 
-export const browse = (input: BrowseInput): Promise<BrowseOutput> => {
+export const browse = (input?: BrowseInput): Promise<BrowseOutput> => {
   return invokeAction("shop.browse", input) as Promise<BrowseOutput>;
 };
 

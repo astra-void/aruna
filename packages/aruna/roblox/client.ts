@@ -16,6 +16,15 @@ import {
 import { createActionInvoker, type CreateActionInvokerOptions } from "./roblox";
 import type { SignalMap, SignalSubscriber } from "./signal-runtime";
 
+// The subscriber surface, so a client module can type one it is handed without
+// reaching into the runtime's internals.
+export type {
+	RemoteSignalConnection,
+	SignalHandler,
+	SignalMap,
+	SignalSubscriber,
+	SignalSubscriberOptions,
+} from "./signal-runtime";
 // The client counterpart of a server transport: the wire connection actions are
 // invoked through.
 export type ClientTransport = ActionInvoker;
@@ -33,7 +42,7 @@ export interface ClientApp<TSignals extends SignalMap = SignalMap> {
 	// handle to controllers) when call ordering is hard to guarantee.
 	readonly invoke: (
 		actionId: string,
-		input: unknown,
+		input?: unknown,
 		options?: ActionInvokeOptions,
 	) => Promise<unknown>;
 	// Present when both `signals` and `createSubscriber` were supplied. Built

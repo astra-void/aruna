@@ -8,7 +8,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { inspectProject } from "../src/index.ts";
+import os from "node:os";
+import { fixtureCases } from "./fixture-cases.js";
+import { buildProject, inspectProject } from "../src/index.ts";
 
 const fixturesRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures");
 
@@ -26,8 +28,32 @@ function sortKeys(value: unknown): unknown {
   return value;
 }
 
+async function writeIfChanged(target: string, contents: string): Promise<void> {
+  const current = await fs.readFile(target, "utf8").catch(() => undefined);
+  if (current === contents) {
+    return;
+  }
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, contents);
+  console.log(`updated ${path.relative(fixturesRoot, target)}`);
+}
+
 for (const name of process.argv.slice(2)) {
-  const output = await inspectProject({ root: path.join(fixturesRoot, name, "input") });
+  const mode = fixtureCases.find((fixture) => fixture.name === name)?.mode ?? "inspect";
+  const inputRoot = path.join(fixturesRoot, name, "input");
+  let output;
+  if (mode === "build") {
+    // A build writes into the project, so it runs on a copy, as the test does.
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aruna-fixture-update-"));
+    await fs.cp(inputRoot, tempRoot, { recursive: true });
+    output = await buildProject({ root: tempRoot });
+    for (const file of output.generatedFiles ?? []) {
+      await writeIfChanged(path.join(fixturesRoot, name, "expected", "generated", file.path), file.contents);
+    }
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  } else {
+    output = await inspectProject({ root: inputRoot });
+  }
   const expected: Record<string, unknown> = {
     "diagnostics.json": output.diagnostics,
     "manifest.json": output.manifest,

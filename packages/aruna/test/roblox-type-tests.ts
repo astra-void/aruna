@@ -4,7 +4,13 @@
 // without the doctor aliases. Imports go through the same barrels the subpaths
 // export (roblox/<subpath>.ts). Lives outside roblox/ so it is never vendored
 // into consumers.
-import { createClientApp, isActionError, type ActionStub } from "../roblox/client";
+import {
+	createClientApp,
+	invokeAction,
+	isActionError,
+	type ActionStub,
+	type SignalSubscriber,
+} from "../roblox/client";
 import {
 	bindActions,
 	createActionInvoker,
@@ -22,6 +28,7 @@ import {
 	type InferInput,
 	type InferOutput,
 	type ServerAppBinding,
+	type SignalPublisher,
 } from "../roblox/server";
 import { schema, type Infer } from "../roblox/schema";
 
@@ -309,5 +316,50 @@ if (isActionError(rejection, buyStub, "NotEnoughCoins")) {
 }
 // @ts-expect-error a name the action does not declare
 isActionError(rejection, buyStub, "Unknown");
+
+// --- Inputless actions ----------------------------------------------------------
+// A stub whose input accepts `undefined` takes it optionally; a required input
+// stays required.
+declare const readyStub: ActionStub<unknown, void, { readonly Closed: undefined }>;
+void readyStub();
+void readyStub(undefined);
+declare const maybeStub: ActionStub<string | undefined, number>;
+void maybeStub();
+void maybeStub("x");
+// @ts-expect-error a string input is not a number
+void maybeStub(1);
+// @ts-expect-error a required input cannot be omitted
+void buyStub();
+void buyStub({ itemId: "sword" });
+// Generated stubs (`(input?: T) => Promise<O>`) satisfy the stub type.
+const generatedReady: ActionStub<unknown, void> = (input?: unknown) =>
+	invokeAction("lobby.ready", input) as Promise<void>;
+void generatedReady;
+void invokeAction("lobby.ready");
+void createClientApp().invoke("lobby.ready");
+// `isActionError` still narrows through an inputless stub.
+if (isActionError(rejection, readyStub, "Closed")) {
+	type _InputlessNarrowed = Expect<Equal<typeof rejection.name, "Closed">>;
+}
+
+// --- Public signal types ----------------------------------------------------------
+const typedSignals = {
+	"score.changed": defineSignal({
+		id: "score.changed",
+		payload: schema.object({ score: schema.number() }),
+	}),
+} as const;
+type TypedSignals = typeof typedSignals;
+declare const typedPublisher: SignalPublisher<TypedSignals, Player>;
+declare const somePlayer: Player;
+typedPublisher.to(somePlayer, "score.changed", { score: 1 });
+// @ts-expect-error a payload that does not match the signal's schema
+typedPublisher.to(somePlayer, "score.changed", { score: "high" });
+// @ts-expect-error an id the registry does not declare
+typedPublisher.toAll("score.missing", { score: 1 });
+declare const typedSubscriber: SignalSubscriber<TypedSignals>;
+typedSubscriber.on("score.changed", (payload) => {
+	type _SubscribedPayload = Expect<Equal<typeof payload, { score: number }>>;
+});
 
 export {};

@@ -35,12 +35,33 @@ type SignalDefinition<TPayload> = {
 ## Generated registry
 
 After `aruna build`, `$aruna/signals` exports `signals` — a registry of every discovered
-signal — plus payload type aliases. Both the publisher and the subscriber are keyed by
-this registry, so signal ids and payload types stay in sync across both sides.
+signal — its type `Signals` (`typeof signals`), and a payload type alias per signal
+(`<ExportName>Payload`). Both the publisher and the subscriber are keyed by this registry,
+so signal ids and payload types stay in sync across both sides.
 
 ```ts
-import { signals } from "$aruna/signals";
+import { signals, type Signals, type PlayerDamagedPayload } from "$aruna/signals";
 ```
+
+The publisher and subscriber types are public, so a module that is handed one can type it
+without reaching into the runtime:
+
+```ts
+import type { SignalPublisher } from "aruna/server";   // also on aruna/roblox
+import type { SignalSubscriber } from "aruna/client";  // also on aruna/roblox
+import type { Signals } from "$aruna/signals";
+
+function announce(publisher: SignalPublisher<Signals, Player>, player: Player) {
+  publisher.to(player, "combat.playerDamaged", { amount: 5, source: "trap", position: Vector3.zero });
+}
+function listen(subscriber: SignalSubscriber<Signals>) {
+  subscriber.on("combat.playerDamaged", (payload) => print(payload.amount));
+}
+```
+
+`SignalPublisher<TSignals, TPlayer>` is keyed by the registry type and the player type
+the app runs with (`Player` in a game, the test double's type in specs);
+`SignalSubscriber<TSignals>` by the registry type alone.
 
 ## Server: publishing
 

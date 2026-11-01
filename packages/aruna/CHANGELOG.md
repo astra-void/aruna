@@ -17,6 +17,23 @@ the game build like any other module.
 
 ### Added
 
+- **Inputless actions take no argument.** The generated stub of an action with
+  no input schema, or an optional one, is `(input?: T) => Promise<O>`, so
+  `ready()` type-checks; `ready(undefined)` still does, and both send a call
+  with no payload. `ActionStub` makes its input optional by the same rule, and
+  `invokeAction` / `ClientApp.invoke` take `input?`. An action whose input is
+  required keeps a required parameter.
+
+- **`Signals` in `$aruna/signals`**: the generated module exports
+  `export type Signals = typeof signals`, which the docs already used for
+  `createActionDefiner<Signals, Player>()`.
+
+- **`SignalPublisher` and `SignalSubscriber` are public types**:
+  `SignalPublisher` and `SignalBatchOptions` from `aruna/server`;
+  `SignalSubscriber`, `SignalHandler`, `RemoteSignalConnection`, and
+  `SignalSubscriberOptions` from `aruna/client`; all of them, plus
+  `SignalServerLike` / `SignalClientLike`, from `aruna/roblox`.
+
 - **`strict.sharedSafety` is enforced.** It used to be parsed and ignored. Four
   checks now run under it (default on), beyond the per-import boundary rules
   that always run: `aruna::306 shared-transitive-server-dependency` and

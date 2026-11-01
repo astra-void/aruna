@@ -59,6 +59,14 @@ export type { PublicActionError } from "./action-error";
 // with FireClient/FireAllClients, or OnClientEvent). `createSignalPublisher` /
 // `createSignalSubscriber` below wrap them around the default Aruna remotes.
 export { createRemoteSignalPublisher, createRemoteSignalSubscriber };
+export type {
+	SignalClientLike,
+	SignalMap,
+	SignalPublisher,
+	SignalServerLike,
+	SignalSubscriber,
+	SignalSubscriberOptions,
+} from "./signal-runtime";
 // The DataStoreService adapter. Roblox-only by nature, so it lives on this entry
 // rather than `aruna/server`, alongside the RemoteEvent transport.
 export * from "./datastore";

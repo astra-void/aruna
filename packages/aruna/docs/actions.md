@@ -59,6 +59,29 @@ type ActionDefinition<TInput, TOutput, TPlayer> = {
 `input` and `output` are both optional. Omit `input` for a no-argument action; omit
 `output` for an action that returns nothing meaningful. `run` may be async.
 
+### Inputless actions
+
+The generated stub of an action with no `input` schema — or an input that accepts
+`undefined`, `schema.optional(...)` — takes its input as an optional parameter, so it is
+called with no argument:
+
+```ts
+// src/domains/lobby/actions.ts
+export const ready = defineAction({ id: "lobby.ready", run: (ctx) => markReady(ctx.player) });
+
+// client
+import { ready } from "$aruna/actions/client";
+await ready();          // the stub is (input?: ReadyInput) => Promise<ReadyOutput>
+await ready(undefined); // the same call; earlier stubs required this form
+```
+
+Both forms send a call item with no `d` field (an omitted input is `nil` in Luau), and
+the server runs the action with `input === undefined`. An action whose input schema is
+required keeps a required parameter: `purchaseItem()` is a type error, and a call that
+reaches the server without the input is refused with `ActionValidationError`.
+`ActionStub<TInput, TOutput, TErrors>` follows the same rule, so a stub with declared
+errors and no input is called as `stub()` too.
+
 ### Publishing signals from an action
 
 When `createServerApp` owns a publisher (`{ signals, createPublisher }`), it is injected as

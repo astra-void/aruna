@@ -18,7 +18,7 @@ export interface ActionInvokeOptions {
 
 export type ActionInvoker = (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
 
-export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = ((input: TInput) => Promise<TOutput>) & {
+export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = (undefined extends TInput ? (input?: TInput) => Promise<TOutput> : (input: TInput) => Promise<TOutput>) & {
     readonly __arunaErrors?: TErrors;
 };
 
@@ -38,7 +38,7 @@ export type ClientActionInfo = {
 };
 
 export interface ClientApp<TSignals extends SignalMap = SignalMap> {
-    readonly invoke: (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
+    readonly invoke: (actionId: string, input?: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
     readonly subscriber?: SignalSubscriber<TSignals>;
     readonly dispose: () => void;
 }
@@ -78,6 +78,25 @@ export interface DeclaredActionFailure<TName extends string, TData> {
     readonly data: TData;
 }
 
+export interface RemoteSignalConnection {
+    readonly disconnect: () => void;
+}
+
+export type SignalHandler<TPayload = unknown> = (payload: TPayload) => void;
+
+export type SignalMap = {
+    readonly [signalId: string]: SignalDefinition<Schema | undefined>;
+};
+
+export interface SignalSubscriber<TSignals extends SignalMap> {
+    readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
+    readonly dispose: () => void;
+}
+
+export interface SignalSubscriberOptions {
+    readonly onProtocolError?: WireProtocolErrorHandler;
+}
+
 export interface VersionMismatchInfo {
     readonly expected: string;
     readonly actual: string;
@@ -89,7 +108,7 @@ export declare function createCancelToken(): CancelTokenSource;
 
 export declare function createClientApp<TSignals extends SignalMap = SignalMap>(options?: CreateClientAppOptions<TSignals>): ClientApp<TSignals>;
 
-export declare function invokeAction(actionId: string, input: unknown, options?: ActionInvokeOptions): Promise<unknown>;
+export declare function invokeAction(actionId: string, input?: unknown, options?: ActionInvokeOptions): Promise<unknown>;
 
 export declare function isActionCancelledError(value: unknown): boolean;
 
@@ -114,10 +133,6 @@ type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
 interface Refinement {
     readonly check: (value: unknown) => boolean;
     readonly message: string;
-}
-
-interface RemoteSignalConnection {
-    readonly disconnect: () => void;
 }
 
 interface Schema<T = unknown> {
@@ -150,17 +165,10 @@ interface SignalDefinition<TPayload extends Schema | undefined = undefined, TId 
     readonly wire?: "binary";
 }
 
-type SignalHandler<TPayload = unknown> = (payload: TPayload) => void;
-
 type SignalId<TSignals extends SignalMap> = keyof TSignals & string;
-
-type SignalMap = {
-    readonly [signalId: string]: SignalDefinition<Schema | undefined>;
-};
 
 type SignalPayloadOf<TSignals extends SignalMap, TId extends SignalId<TSignals>> = TSignals[TId] extends SignalDefinition<infer TPayload> ? InferSignalPayload<TPayload> : unknown;
 
-interface SignalSubscriber<TSignals extends SignalMap> {
-    readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
-    readonly dispose: () => void;
-}
+type WireFrameRejection = "malformed-frame" | "unknown-protocol-version" | "oversize-batch";
+
+type WireProtocolErrorHandler = (channel: string, reason: WireFrameRejection) => void;

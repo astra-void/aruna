@@ -7,4 +7,6 @@ export const signals = {
   "combat.damaged": src_shared_combat_signals_damaged,
 } as const;
 
+export type Signals = typeof signals;
+
 export type DamagedPayload = { amount: number; };

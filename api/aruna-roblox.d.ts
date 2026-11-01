@@ -51,6 +51,30 @@ export declare const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemot
 
 export type ServerChannel<TPlayer> = WireOutbox<TPlayer>;
 
+export type SignalClientLike = WireClientRemote;
+
+export type SignalMap = {
+    readonly [signalId: string]: SignalDefinition<Schema | undefined>;
+};
+
+export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
+    readonly to: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
+    readonly toMany: <TId extends SignalId<TSignals>>(players: ReadonlyArray<TPlayer>, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
+    readonly toAll: <TId extends SignalId<TSignals>>(signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
+    readonly toBatched: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payloads: ReadonlyArray<SignalPayloadOf<TSignals, TId>>, options?: SignalBatchOptions) => Promise<void>;
+}
+
+export type SignalServerLike<TPlayer> = WireServerRemote<TPlayer>;
+
+export interface SignalSubscriber<TSignals extends SignalMap> {
+    readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
+    readonly dispose: () => void;
+}
+
+export interface SignalSubscriberOptions {
+    readonly onProtocolError?: WireProtocolErrorHandler;
+}
+
 export declare const WIRE_ITEM_CALL = 1;
 
 export declare const WIRE_ITEM_RESOURCE_PATCH = 4;
@@ -358,8 +382,6 @@ interface SignalBatchOptions {
     readonly yield?: () => void;
 }
 
-type SignalClientLike = WireClientRemote;
-
 interface SignalDefinition<TPayload extends Schema | undefined = undefined, TId extends string = string> {
     readonly id: TId;
     readonly payload?: TPayload;
@@ -371,29 +393,7 @@ type SignalHandler<TPayload = unknown> = (payload: TPayload) => void;
 
 type SignalId<TSignals extends SignalMap> = keyof TSignals & string;
 
-type SignalMap = {
-    readonly [signalId: string]: SignalDefinition<Schema | undefined>;
-};
-
 type SignalPayloadOf<TSignals extends SignalMap, TId extends SignalId<TSignals>> = TSignals[TId] extends SignalDefinition<infer TPayload> ? InferSignalPayload<TPayload> : unknown;
-
-interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
-    readonly to: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
-    readonly toMany: <TId extends SignalId<TSignals>>(players: ReadonlyArray<TPlayer>, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
-    readonly toAll: <TId extends SignalId<TSignals>>(signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
-    readonly toBatched: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payloads: ReadonlyArray<SignalPayloadOf<TSignals, TId>>, options?: SignalBatchOptions) => Promise<void>;
-}
-
-type SignalServerLike<TPlayer> = WireServerRemote<TPlayer>;
-
-interface SignalSubscriber<TSignals extends SignalMap> {
-    readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
-    readonly dispose: () => void;
-}
-
-interface SignalSubscriberOptions {
-    readonly onProtocolError?: WireProtocolErrorHandler;
-}
 
 interface StoreBackend {
     readonly get: (key: string) => Promise<unknown>;

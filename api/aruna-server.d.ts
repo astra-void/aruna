@@ -293,6 +293,11 @@ export type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = 
 
 export type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>) => ServerAppBinding;
 
+export interface SignalBatchOptions {
+    readonly chunkSize?: number;
+    readonly yield?: () => void;
+}
+
 export interface SignalDefinition<TPayload extends Schema | undefined = undefined, TId extends string = string> {
     readonly id: TId;
     readonly payload?: TPayload;
@@ -303,6 +308,13 @@ export interface SignalDefinition<TPayload extends Schema | undefined = undefine
 export type SignalMap = {
     readonly [signalId: string]: SignalDefinition<Schema | undefined>;
 };
+
+export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
+    readonly to: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
+    readonly toMany: <TId extends SignalId<TSignals>>(players: ReadonlyArray<TPlayer>, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
+    readonly toAll: <TId extends SignalId<TSignals>>(signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
+    readonly toBatched: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payloads: ReadonlyArray<SignalPayloadOf<TSignals, TId>>, options?: SignalBatchOptions) => Promise<void>;
+}
 
 export interface Store<TSchema extends Schema = Schema> {
     readonly id: string;
@@ -643,18 +655,6 @@ type SchemaLiteral = string | number | boolean;
 
 type SchemaTypeName = "string" | "number" | "boolean" | "object" | "array" | "optional" | "record" | "tuple" | "literal" | "enum" | "union" | "default" | "vector3" | "vector2" | "color3" | "cframe" | "udim" | "udim2" | "dateTime" | "brickColor" | "instance";
 
-interface SignalBatchOptions {
-    readonly chunkSize?: number;
-    readonly yield?: () => void;
-}
-
 type SignalId<TSignals extends SignalMap> = keyof TSignals & string;
 
 type SignalPayloadOf<TSignals extends SignalMap, TId extends SignalId<TSignals>> = TSignals[TId] extends SignalDefinition<infer TPayload> ? InferSignalPayload<TPayload> : unknown;
-
-interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
-    readonly to: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
-    readonly toMany: <TId extends SignalId<TSignals>>(players: ReadonlyArray<TPlayer>, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
-    readonly toAll: <TId extends SignalId<TSignals>>(signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
-    readonly toBatched: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payloads: ReadonlyArray<SignalPayloadOf<TSignals, TId>>, options?: SignalBatchOptions) => Promise<void>;
-}
