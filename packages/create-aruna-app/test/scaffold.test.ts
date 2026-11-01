@@ -71,8 +71,10 @@ describe("planScaffoldFiles", () => {
     expect(byName.get("aruna.config.ts")).toContain('entries: "generated"');
   });
 
-  it("manages rojo through rokit for the dev loop", () => {
+  it("manages rojo and lune through rokit for the dev loop and aruna test", () => {
     expect(byName.get("rokit.toml")).toContain("rojo = ");
+    expect(byName.get("rokit.toml")).toContain("lune = ");
+    expect(JSON.parse(byName.get("package.json")!).scripts.test).toBe("aruna test");
   });
 });
 

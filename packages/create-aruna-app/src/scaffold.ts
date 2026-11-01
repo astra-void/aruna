@@ -13,6 +13,9 @@ export const PINNED_TOOLCHAIN: Record<string, string> = {
 };
 
 export const ROKIT_ROJO_SPEC = "rojo-rbx/rojo@7.7.0";
+// `aruna test` runs the specs under Lune; without it pinned here a fresh app
+// cannot run the spec the scaffold tells it to.
+export const ROKIT_LUNE_SPEC = "lune-org/lune@0.10.0";
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -60,6 +63,7 @@ function packageJsonTemplate(appName: string, arunaVersion: string): string {
       dev: "aruna dev",
       build: "aruna build",
       check: "aruna check",
+      test: "aruna test",
     },
     dependencies: {
       "@arunajs/aruna": `^${arunaVersion}`,
@@ -100,10 +104,11 @@ src/.aruna/
 
 function rokitTemplate(): string {
   return `# Tools managed by Rokit (https://github.com/rojo-rbx/rokit).
-# \`aruna dev\` spawns \`rojo serve\` from here.
+# \`aruna dev\` spawns \`rojo serve\` from here; \`aruna test\` runs specs under Lune.
 
 [tools]
 rojo = "${ROKIT_ROJO_SPEC}"
+lune = "${ROKIT_LUNE_SPEC}"
 `;
 }
 

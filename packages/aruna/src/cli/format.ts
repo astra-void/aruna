@@ -96,9 +96,7 @@ export function formatBuildSummary(output: CompilerOutput, colors: CliColorMode)
   }
 
   lines.push("");
-  lines.push(
-    `  ${output.manifest.actions.length} ${output.manifest.actions.length === 1 ? "action" : "actions"} discovered`,
-  );
+  lines.push(`  ${discoveredSummary(output)} discovered`);
   lines.push(
     `  ${output.summary.errors} ${output.summary.errors === 1 ? "error" : "errors"} found`,
   );
@@ -285,4 +283,18 @@ export function formatGraphInspection(output: CompilerOutput, colors: CliColorMo
   }
 
   return lines.join("\n").trimEnd();
+}
+
+// "1 action, 2 signals, 1 resource": the actions always, the other primitives
+// only when the project declares some.
+function discoveredSummary(output: CompilerOutput): string {
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const parts = [count(output.manifest.actions.length, "action", "actions")];
+  const signals = output.manifest.signals?.length ?? 0;
+  const stores = output.manifest.stores?.length ?? 0;
+  const resources = output.manifest.resources?.length ?? 0;
+  if (signals > 0) parts.push(count(signals, "signal", "signals"));
+  if (stores > 0) parts.push(count(stores, "store", "stores"));
+  if (resources > 0) parts.push(count(resources, "resource", "resources"));
+  return parts.join(", ");
 }

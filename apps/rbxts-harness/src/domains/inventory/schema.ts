@@ -15,3 +15,8 @@ export const restockItemOutputSchema = schema.object({
 
 export type RestockItemInput = Infer<typeof restockItemInputSchema>;
 export type RestockItemOutput = Infer<typeof restockItemOutputSchema>;
+
+export const walletSchema = schema.object({ coins: schema.u32() });
+export type Wallet = Infer<typeof walletSchema>;
+
+export const dailyClaimedPayload = schema.object({ amount: schema.u16() });

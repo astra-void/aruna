@@ -47,14 +47,31 @@ Create-app **implementation** stays deferred until the starter contract is writt
 
 ## Deferred
 
-- `create-app`
+- ~~`create-app`~~ — shipped as `create-aruna-app` (0.2.0).
 - generated Rojo scaffolding
 - generated Roblox Instances
 - Studio runner flow
-- `defineResource`
+- ~~`defineResource`~~, ~~resource invalidation~~ — shipped 2026-11 (docs/rfcs/resources.md).
 - policies and capabilities
-- sessions
-- resource invalidation
+- ~~sessions~~ — `createServerApp({ createSession })`.
+
+## The starter contract (2026-11)
+
+What a fresh `npm create aruna-app` project is guaranteed to have and do, checked by
+`pnpm verify:starter` (the same steps against this checkout's packages):
+
+- `package.json` with `dev`, `build`, `check`, and `test` scripts and the pinned rbxts
+  toolchain; `aruna.config.ts` with `entries: "generated"`; `rokit.toml` pinning Rojo and
+  Lune; `.gitignore`, VS Code settings, README.
+- After `aruna init` and `aruna add domain shop --with ui`: one action
+  (`shop.ping`), one signal it publishes (`shop.pinged`), and a passing spec
+  (`actions.test.ts`); `--with resource` adds a player-scoped resource.
+- `aruna build` compiles it to Luau; `aruna test` passes the spec under Lune;
+  `aruna check` is clean. Generated entries wire the action registry, signals, and
+  resources.
+- Existing files are never overwritten: `init` and `add domain` skip what is there.
+- No UI framework is a dependency of Aruna or the starter; Vide, Vela, or Lattice are
+  the project's choice.
 
 ## Runtime split (resolved)
 

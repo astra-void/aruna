@@ -8,6 +8,10 @@ Aruna owns boundaries, actions, generated output, and diagnostics. Users own dom
 Aruna complements roblox-ts and TypeScript; it does not replace them.
 Its product value comes from compiler-discovered server actions, an inspectable action contract, and boundary-aware diagnostics, not from a typed remote wrapper alone. Server-owned resources and policy metadata are the intended direction, not yet implemented.
 
+> **Upgrading?** See [docs/migration-2026-11.md](docs/migration-2026-11.md) for this round's
+> changes (resources, shared safety, multi-store, the test network, metrics, incremental
+> builds) and what, if anything, to change.
+
 ## Recommended Layout v0
 
 This is the recommended project shape for starters, examples, docs, and MVP fixtures:

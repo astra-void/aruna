@@ -51,22 +51,26 @@ describe("pascalCase", () => {
 });
 
 describe("planDomainFiles", () => {
-  it("emits the base trio, adding ui/runtime only when requested", () => {
+  it("emits the base files, adding ui/runtime/resource only when requested", () => {
     // The spec is part of the base scaffold: a new domain starts with a passing
-    // test to extend rather than one to remember to write.
+    // test to extend rather than one to remember to write. So is a signal, which
+    // the starter action publishes.
     expect(planDomainFiles("shop", []).map((file) => file.name)).toEqual([
       "schema.ts",
       "model.ts",
       "actions.ts",
+      "signals.ts",
       "actions.test.ts",
     ]);
-    expect(planDomainFiles("shop", ["ui", "runtime"]).map((file) => file.name)).toEqual([
+    expect(planDomainFiles("shop", ["ui", "runtime", "resource"]).map((file) => file.name)).toEqual([
       "schema.ts",
       "model.ts",
       "actions.ts",
+      "signals.ts",
       "actions.test.ts",
       "ui.tsx",
       "runtime.ts",
+      "resources.ts",
     ]);
   });
 
@@ -136,6 +140,7 @@ describe("runAddDomain", () => {
       "src/domains/shop/schema.ts",
       "src/domains/shop/model.ts",
       "src/domains/shop/actions.ts",
+      "src/domains/shop/signals.ts",
       "src/domains/shop/actions.test.ts",
     ]);
     expect(first.skipped).toEqual([]);
@@ -147,6 +152,7 @@ describe("runAddDomain", () => {
       "src/domains/shop/schema.ts",
       "src/domains/shop/model.ts",
       "src/domains/shop/actions.ts",
+      "src/domains/shop/signals.ts",
       "src/domains/shop/actions.test.ts",
     ]);
     expect(fs.readFileSync(path.join(projectRoot, "src/domains/shop/actions.ts"), "utf8")).toBe(

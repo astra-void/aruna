@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 // Optional domain parts selectable with `--with`.
-export const ADD_DOMAIN_EXTRAS = ["ui", "runtime"] as const;
+export const ADD_DOMAIN_EXTRAS = ["ui", "runtime", "resource"] as const;
 export type AddDomainExtra = (typeof ADD_DOMAIN_EXTRAS)[number];
 
 export type AddDomainOptions = {
@@ -77,7 +77,16 @@ export const ping${pascal}OutputSchema = schema.object({
 
 export type Ping${pascal}Input = Infer<typeof ping${pascal}InputSchema>;
 export type Ping${pascal}Output = Infer<typeof ping${pascal}OutputSchema>;
+
+// What the server pushes to a player after they ping (see ./signals).
+export const ${lower(pascal)}PingedPayload = schema.object({
+  reply: schema.string().maxChars(240),
+});
 `;
+}
+
+function lower(pascal: string): string {
+  return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }
 
 function modelTemplate(name: string, pascal: string): string {
@@ -107,8 +116,49 @@ export const ping${pascal} = defineAction({
   id: "${name}.ping",
   input: ping${pascal}InputSchema,
   output: ping${pascal}OutputSchema,
-  run(_ctx, input): Ping${pascal}Output {
-    return { reply: format${pascal}Reply(input.message) };
+  run(ctx, input): Ping${pascal}Output {
+    const reply = format${pascal}Reply(input.message);
+    // The app-owned publisher (generated entries wire it): the caller also
+    // gets the reply as a push, before this action's response.
+    ctx.publisher?.to(ctx.player, "${name}.pinged", { reply });
+    return { reply };
+  },
+});
+`;
+}
+
+// The domain's server -> client signal. Shared by convention (**/signals.ts):
+// the generated registry imports it on both sides.
+function signalsTemplate(name: string, pascal: string): string {
+  return `import { defineSignal } from "aruna/server";
+import { ${lower(pascal)}PingedPayload } from "./schema";
+
+export const ${lower(pascal)}Pinged = defineSignal({
+  id: "${name}.pinged",
+  payload: ${lower(pascal)}PingedPayload,
+});
+`;
+}
+
+// A server-owned resource clients subscribe to (docs/resources.md). The file
+// defines a resource, so the compiler classifies it server code.
+function resourcesTemplate(name: string, pascal: string): string {
+  return `import { defineResource } from "aruna/roblox";
+import { schema } from "aruna/schema";
+
+// Per-player state the server owns. Replace the map with your store; call
+// \`ctx.resources?.invalidate(${lower(pascal)}State)\` from an action after a change.
+const pings = new Map<number, number>();
+
+export function record${pascal}Ping(userId: number): void {
+  pings.set(userId, (pings.get(userId) ?? 0) + 1);
+}
+
+export const ${lower(pascal)}State = defineResource({
+  id: "${name}.state",
+  schema: schema.object({ pings: schema.u32() }),
+  load(ctx) {
+    return { pings: pings.get(ctx.player.UserId) ?? 0 };
   },
 });
 `;
@@ -122,14 +172,16 @@ function actionsSpecTemplate(name: string, pascal: string): string {
   return `import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";
 import { ping${pascal} } from "./actions";
 import type { Ping${pascal}Output } from "./schema";
+import { ${lower(pascal)}Pinged } from "./signals";
 
 const actions = { "${name}.ping": ping${pascal} };
+const signals = { "${name}.pinged": ${lower(pascal)}Pinged };
 
 describe("${name}.ping", () => {
-  it("replies to the message it was sent", async () => {
+  it("replies to the message it was sent, and pushes the reply", async () => {
     // The harness owns the transport, the publisher, and the players source, so
     // this dispatch goes through the real validation and rate-limiting path.
-    const harness = createTestServerApp({ actions });
+    const harness = createTestServerApp({ actions, signals });
     const player = createTestPlayer();
 
     const output = (await harness.invoke(player, "${name}.ping", {
@@ -137,15 +189,20 @@ describe("${name}.ping", () => {
     })) as Ping${pascal}Output;
 
     expect(output.reply).toContain("hello");
+    const published = harness.takePublished();
+    expect(published.size()).toBe(1);
+    expect(published[0]!.signalId).toBe("${name}.pinged");
     harness.dispose();
   });
 
   it("rejects input the schema does not accept", async () => {
     const harness = createTestServerApp({ actions });
 
-    await expect(
-      harness.invoke(createTestPlayer(), "${name}.ping", { message: 42 }),
-    ).rejects.toThrow("invalid action input");
+    let rejection: { readonly name?: string } | undefined;
+    await harness.invoke(createTestPlayer(), "${name}.ping", { message: 42 }).catch((err: unknown) => {
+      rejection = err as { readonly name?: string };
+    });
+    expect(rejection?.name).toBe("ActionValidationError");
 
     harness.dispose();
   });
@@ -191,6 +248,7 @@ export function planDomainFiles(
     { name: "schema.ts", contents: schemaTemplate(pascal) },
     { name: "model.ts", contents: modelTemplate(name, pascal) },
     { name: "actions.ts", contents: actionsTemplate(name, pascal) },
+    { name: "signals.ts", contents: signalsTemplate(name, pascal) },
     { name: "actions.test.ts", contents: actionsSpecTemplate(name, pascal) },
   ];
   if (extras.includes("ui")) {
@@ -198,6 +256,9 @@ export function planDomainFiles(
   }
   if (extras.includes("runtime")) {
     files.push({ name: "runtime.ts", contents: runtimeTemplate(name, pascal) });
+  }
+  if (extras.includes("resource")) {
+    files.push({ name: "resources.ts", contents: resourcesTemplate(name, pascal) });
   }
   return files;
 }

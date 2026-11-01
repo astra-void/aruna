@@ -17,6 +17,13 @@ the game build like any other module.
 
 ### Added
 
+- **`aruna add domain` scaffolds a signal** (`signals.ts`, published by the
+  starter action and asserted by its spec), and `--with resource` adds a
+  player-scoped resource. The build summary counts signals, stores, and
+  resources as well as actions.
+- **`pnpm verify:starter`** (repo): scaffolds a starter, then runs `init`, `add
+  domain`, `build` (to Luau), `test` (under Lune), and `check`.
+
 - **Incremental one-shot builds.** `aruna build` keeps its staged Luau compile
   between runs (in the OS temp dir, keyed by the project) and compiles it with
   TypeScript's `incremental` build info, so a rebuild re-emits only what
@@ -773,6 +780,12 @@ the game build like any other module.
   outside this repo's own tests.
 
 ### Fixed
+
+- **A fresh starter could not run its own spec.** `create-aruna-app` pinned
+  Rojo but not Lune in `rokit.toml`, and the scaffolded spec expected a
+  rejection message ("invalid action input") the runtime never produced. Lune
+  is pinned, `package.json` gains `"test": "aruna test"`, and the spec checks
+  the error name.
 
 - **A player store's `waitFor` re-locked a player who had left.** With no load
   in flight and no document, it started a new load, so a late `waitFor` after

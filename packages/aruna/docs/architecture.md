@@ -21,11 +21,18 @@ Rule: action `run` implementations and server registration live in server-classi
 files. Schemas and pure helpers live in `shared`. UI and `invokeAction` calls live in
 client.
 
+An import TypeScript erases (`import type`, or bindings only used as types) never loads
+its module, so it crosses no boundary. Beyond each import, `strict.sharedSafety` checks
+what a shared module reaches through other shared modules (`aruna::306`/`307`) and the
+server-only services it reads (`aruna::308`/`309`); see
+[shared-safety.md](shared-safety.md), including what a static check cannot see.
+
 Every file-name convention also covers its folder form — `**/actions.ts` classifies
 `**/actions/**`, `**/ui.tsx` classifies `**/ui/**` — so a concern that outgrew one file
 splits into a folder without a config change. Definitions are found by their
-`defineAction`/`defineSignal`/`defineStore`/`defineRuntime` call, not by file name, so
-they can live in any file on the right side of the boundary. Ranking, strongest first:
+`defineAction`/`defineSignal`/`defineStore`/`defineRuntime`/`defineResource` call, not by
+file name, so they can live in any file on the right side of the boundary (a file that
+calls `defineResource` is server code). Ranking, strongest first:
 a directory glob (`**/server/**`), the derived concern folder (`**/actions/**`), then the
 file name. `src/shared/actions/util.ts` is therefore shared, not server.
 
@@ -55,7 +62,9 @@ path aliases:
 | --- | --- | --- |
 | `$aruna/actions/server` | `server/actions.server.generated.ts` (server-only) | `actions` registry, `defaultRateLimit` |
 | `$aruna/actions/client` | `shared/actions.client.generated.ts` | one typed call fn per action |
-| `$aruna/signals` | `shared/signals.generated.ts` | `signals` registry + payload aliases |
+| `$aruna/signals` | `shared/signals.generated.ts` | `signals` registry, `Signals`, payload aliases |
+| `$aruna/resources/server` | `server/resources.server.generated.ts` (server-only) | `resources` registry |
+| `$aruna/resources/client` | `shared/resources.client.generated.ts` | one typed binding per resource, `Resources`, value aliases |
 
 The `aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema` specifiers are also
 path aliases (written by `build` / `doctor --fix`) pointing at the runtime copied into
@@ -98,8 +107,17 @@ request id) and reliable signals: every item names its kind, and a player reads 
 the order the server produced them. `createActionInvoker()` / `createSignalSubscriber()`
 (client) and `robloxRemoteEvent()` / `createSignalPublisher()` (server) share that remote's
 channel — in the normal flow `createClientApp()` / `createServerApp()` own the wiring.
-Unreliable signals use their own `UnreliableRemoteEvent`. There is no transport to
-select: the RemoteEvent transport is the transport ([wire protocol](../../../docs/wire-protocol.md)).
+Resource state travels the same ordered stream (item kind 4), and resource subscriptions
+travel with calls (kind 5), admitted like a call. Unreliable signals use their own
+`UnreliableRemoteEvent`. There is no transport to select: the RemoteEvent transport is
+the transport ([wire protocol](../../../docs/wire-protocol.md)).
+
+## Observing it
+
+Static policy comes from the contract (`aruna inspect network|actions|signals|resources`);
+runtime traffic from `createNetworkMetrics()`, opt-in and bounded; refusals from
+`onAbuse` (before dispatch) and `onReject` (after). See
+[observability.md](observability.md).
 
 ## Common traps
 
