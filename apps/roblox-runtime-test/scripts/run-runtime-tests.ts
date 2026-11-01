@@ -28,6 +28,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -136,12 +137,28 @@ if (specFilters.length > 0 && stagedSpecCount === 0) {
   fail(`no TypeScript spec matches ${specFilters.map((filter) => `"${filter}"`).join(", ")}`);
 }
 // rbxtsc resolves @rbxts packages through node_modules, and the Rojo tree below
-// mounts them; a link avoids copying the whole directory per run.
-symlinkSync(
-  join(packageDir, "node_modules"),
-  join(workDir, "node_modules"),
-  process.platform === "win32" ? "junction" : "dir",
-);
+// mounts them; links avoid copying the whole directory per run. Each package is
+// linked to its real path: pnpm's links are relative, and on Windows a relative
+// link reached through a junction resolves from the junction's side, so one
+// link to the whole node_modules leaves every package missing.
+function linkPackages(from: string, to: string): void {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from)) {
+    if (entry.startsWith(".")) {
+      continue;
+    }
+    if (entry.startsWith("@")) {
+      linkPackages(join(from, entry), join(to, entry));
+      continue;
+    }
+    symlinkSync(
+      realpathSync(join(from, entry)),
+      join(to, entry),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+  }
+}
+linkPackages(join(packageDir, "node_modules"), join(workDir, "node_modules"));
 
 // rbxtsc refuses a project without one.
 writeJson(join(workDir, "package.json"), { name: "aruna-runtime-test-project", private: true });
