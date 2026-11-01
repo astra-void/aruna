@@ -8,3 +8,8 @@
 /api/*.d.ts text eol=lf
 /packages/aruna/test/__golden__/** text eol=lf
 /fixtures/** text eol=lf
+
+# The checked-in launcher ships as is (dist/ is emitted LF anyway). A CRLF
+# shebang line breaks it on Unix (`env: 'node\r'`), and pnpm pack refuses to
+# pack such a bin at all (ERR_PNPM_BIN_CRLF).
+/packages/aruna/bin/** text eol=lf
