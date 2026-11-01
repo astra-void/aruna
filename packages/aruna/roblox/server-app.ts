@@ -140,6 +140,9 @@ function rejectionKind(info: DispatchSettledInfo<unknown>): ActionRejectionKind 
 
 export interface AppDispatchOptions {
 	readonly idempotencyKey?: string;
+	// Tag the call's invalidations with `idempotencyKey`, as the wire does for a
+	// call marked `o` (docs/rfcs/ui-bindings.md).
+	readonly optimistic?: boolean;
 }
 
 export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
@@ -649,6 +652,7 @@ export function createServerApp<
 					actionId,
 					input,
 					dispatchOptions !== undefined ? dispatchOptions.idempotencyKey : undefined,
+					dispatchOptions !== undefined && dispatchOptions.optimistic === true,
 				)
 				.then((result) => {
 					if (result.ok) {

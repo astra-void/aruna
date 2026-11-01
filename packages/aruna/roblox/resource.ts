@@ -136,7 +136,19 @@ export interface ResourceObserver {
 // Where the host sends state items: the server channel (`replace` keeps one
 // item per resource per player per frame).
 export interface ResourceSink<TPlayer> {
-	readonly replace: (target: TPlayer, key: string, item: defined) => void;
+	readonly replace: (
+		target: TPlayer,
+		key: string,
+		item: defined,
+		merge?: (queued: defined, incoming: defined) => defined,
+	) => void;
+}
+
+// An optimistic call (docs/rfcs/ui-bindings.md): who made it, and the
+// idempotency key the client matches its updates by.
+export interface ResourceCallTag<TPlayer = unknown> {
+	readonly caller: TPlayer;
+	readonly key: string;
 }
 
 export interface ResourceHostOptions<TPlayer> {
@@ -154,6 +166,13 @@ export interface ResourceHost<TPlayer = unknown> {
 	// the one value, to everyone subscribed. Never carries a value itself: the
 	// state a client sees always comes from `load`.
 	readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+	// The registry's, for an invalidation from an optimistic call: tags the
+	// caller's key, when the caller is subscribed to it, before invalidating. The
+	// first item of that key loaded after the tag carries the call's key in `k`.
+	readonly invalidateForCall: (resource: ResourceRef, player: TPlayer | undefined, call: ResourceCallTag<TPlayer>) => void;
+	// The transport's, as it answers an optimistic call: the resources the call
+	// tagged for its caller whose item has not been queued yet (`p`).
+	readonly pendingTags: (caller: TPlayer, key: string) => ReadonlyArray<string>;
 	readonly has: (resourceId: string) => boolean;
 	readonly isSubscribed: (resource: ResourceRef, player: TPlayer) => boolean;
 	readonly subscriberCount: (resource: ResourceRef) => number;
@@ -186,10 +205,34 @@ interface KeyState<TPlayer> {
 	// The last value sent, kept for a global resource only, so a new subscriber
 	// can be answered without a load.
 	cached: WireResourceState | undefined;
+	// Optimistic calls whose invalidation of this key no item sent so far was
+	// loaded after. A load takes the ones recorded before it starts; its item
+	// delivers them, and an item that is never sent leaves them to the next.
+	tags: Array<ResourceCallTag<TPlayer>>;
 }
 
 function idOf(resource: ResourceRef): string {
 	return typeIs(resource, "string") ? resource : resource.id;
+}
+
+// What replaces a state item still queued for a player this frame: the newer
+// item, carrying the older one's keys too. Those were delivered when the older
+// item was queued, and the newer one is now the first that player receives.
+function mergeTags(queued: defined, incoming: defined): defined {
+	const older = (queued as WireResourceState).k;
+	if (older === undefined) {
+		return incoming;
+	}
+	const newer = incoming as WireResourceState;
+	const keys = [...older];
+	if (newer.k !== undefined) {
+		for (const key of newer.k) {
+			if (!keys.includes(key)) {
+				keys.push(key);
+			}
+		}
+	}
+	return { ...newer, k: keys };
 }
 
 function isPlayerScoped(definition: AnyResourceDefinition): boolean {
@@ -250,8 +293,20 @@ export function createResourceHost<TPlayer>(
 
 	const send = (player: TPlayer, item: WireResourceState): void => {
 		if (sink !== undefined && !disposed) {
-			sink.replace(player, item.r, item);
+			sink.replace(player, item.r, item, mergeTags);
 		}
+	};
+
+	// The item one subscriber gets: with the keys of that subscriber's own calls
+	// among the delivered tags, and nobody else's.
+	const tagged = (item: WireResourceState, covering: ReadonlyArray<ResourceCallTag<TPlayer>>, subscriber: TPlayer): WireResourceState => {
+		const keys = new Array<string>();
+		for (const tag of covering) {
+			if (tag.caller === subscriber) {
+				keys.push(tag.key);
+			}
+		}
+		return keys.size() > 0 ? { ...item, k: keys } : item;
 	};
 
 	const fail = (
@@ -327,6 +382,9 @@ export function createResourceHost<TPlayer>(
 		state.dirty = false;
 		revision += 1;
 		const at = revision;
+		// The calls tagged before this load started: it read state after their
+		// invalidations, so its item is the first to contain them.
+		const covering = state.tags.size() > 0 ? [...state.tags] : undefined;
 
 		const finish = (item: WireResourceState): void => {
 			state.loading = false;
@@ -343,8 +401,11 @@ export function createResourceHost<TPlayer>(
 				}
 				let recipients = 0;
 				for (const subscriber of state.subscribers) {
-					send(subscriber, item);
+					send(subscriber, covering !== undefined ? tagged(item, covering, subscriber) : item);
 					recipients += 1;
+				}
+				if (covering !== undefined) {
+					state.tags = state.tags.filter((tag) => !covering.includes(tag));
 				}
 				if (observer !== undefined && observer.onSnapshot !== undefined) {
 					observer.onSnapshot(definition.id, recipients);
@@ -382,6 +443,7 @@ export function createResourceHost<TPlayer>(
 		dirty: false,
 		sent: 0,
 		cached: undefined,
+		tags: [],
 	});
 
 	const stateFor = (definition: AnyResourceDefinition, player: TPlayer): KeyState<TPlayer> => {
@@ -429,6 +491,9 @@ export function createResourceHost<TPlayer>(
 			return;
 		}
 		state.subscribers.delete(player);
+		if (state.tags.size() > 0) {
+			state.tags = state.tags.filter((tag) => tag.caller !== player);
+		}
 		if (observer !== undefined && observer.onUnsubscribe !== undefined) {
 			observer.onUnsubscribe(definition.id);
 		}
@@ -472,7 +537,7 @@ export function createResourceHost<TPlayer>(
 		load(definition, state, isPlayerScoped(definition) ? player : undefined);
 	};
 
-	return {
+	const host: ResourceHost<TPlayer> = {
 		invalidate: (resource, player) => {
 			const definition = resolve(resource);
 			if (observer !== undefined && observer.onInvalidate !== undefined) {
@@ -516,6 +581,43 @@ export function createResourceHost<TPlayer>(
 			for (const key of keys) {
 				load(definition, key.state, key.subscriber);
 			}
+		},
+		invalidateForCall: (resource, player, call) => {
+			const definition = resolve(resource);
+			// Only the caller's own key is tagged: invalidating another player's
+			// value is not something the caller's updates predict.
+			const state = !isPlayerScoped(definition)
+				? global.get(definition.id)
+				: player === undefined || player === call.caller
+					? existingState(definition, call.caller)
+					: undefined;
+			// Tagged before the load starts: a synchronous load finishes inside
+			// `invalidate`, and its item must carry the tag.
+			if (
+				state !== undefined &&
+				state.subscribers.has(call.caller) &&
+				!state.tags.some((tag) => tag.key === call.key && tag.caller === call.caller)
+			) {
+				state.tags.push({ caller: call.caller, key: call.key });
+			}
+			host.invalidate(resource, player);
+		},
+		pendingTags: (caller, key) => {
+			const pending = new Array<string>();
+			const holds = (state: KeyState<TPlayer>) =>
+				state.tags.some((tag) => tag.key === key && tag.caller === caller);
+			for (const [resourceId, byPlayer] of perPlayer) {
+				const state = byPlayer.get(caller);
+				if (state !== undefined && holds(state)) {
+					pending.push(resourceId);
+				}
+			}
+			for (const [resourceId, state] of global) {
+				if (holds(state)) {
+					pending.push(resourceId);
+				}
+			}
+			return pending;
 		},
 		has: (resourceId) => definitions.has(resourceId),
 		isSubscribed: (resource, player) => {
@@ -566,6 +668,9 @@ export function createResourceHost<TPlayer>(
 			}
 			for (const [, state] of global) {
 				state.subscribers.delete(player);
+				if (state.tags.size() > 0) {
+					state.tags = state.tags.filter((tag) => tag.caller !== player);
+				}
 			}
 		},
 		dispose: () => {
@@ -575,6 +680,7 @@ export function createResourceHost<TPlayer>(
 			sink = undefined;
 		},
 	};
+	return host;
 }
 
 // The transport's gate for one subscription item, in the order a call is
@@ -616,6 +722,9 @@ export function admitResourceItem<TPlayer>(
 
 export interface ResourceUpdateInfo {
 	readonly revision: number;
+	// For an optimistic subscription: whether the value has pending optimistic
+	// updates applied.
+	readonly pending?: boolean;
 }
 
 export type ResourceListener<TValue> = (value: TValue, info: ResourceUpdateInfo) => void;
@@ -624,12 +733,20 @@ export interface ResourceSubscribeOptions {
 	// Told the error name (`ResourceLoadError`, `ResourceForbiddenError`) when an
 	// error item arrives. The last value stays.
 	readonly onError?: (errorName: string, info: ResourceUpdateInfo & { readonly errorId?: string }) => void;
+	// The value to show instead of the server's: the newest snapshot with the
+	// pending optimistic updates applied (docs/rfcs/ui-bindings.md). The listener
+	// also runs when an update comes or goes. Without it, a subscription never
+	// sees an optimistic update.
+	readonly optimistic?: boolean;
 }
 
 // One local subscription. Several share one wire subscription per resource.
 export interface ResourceSubscription<TValue> {
-	// The newest value applied, or undefined before the first one.
+	// The newest value applied, or undefined before the first one. With
+	// `optimistic`, that value with the pending updates applied.
 	readonly get: () => TValue | undefined;
+	// Whether the resource has pending optimistic updates.
+	readonly pending: () => boolean;
 	readonly status: () => ResourceStatus;
 	// The revision of the newest item applied (0 before any).
 	readonly revision: () => number;
@@ -669,6 +786,29 @@ export interface ResourceClientOptions extends WireBatchOptions {
 interface LocalListener {
 	readonly listener?: ResourceListener<unknown>;
 	readonly onError?: ResourceSubscribeOptions["onError"];
+	readonly optimistic: boolean;
+}
+
+// An optimistic update waiting for the snapshot that contains its call.
+interface PendingUpdate {
+	readonly key: string;
+	readonly updater: (current: unknown) => unknown;
+}
+
+// A resource client's side of the optimistic calls made through it.
+interface Overlay {
+	// Adds an update; false when the client is not subscribed to the resource.
+	readonly add: (resourceId: string, update: PendingUpdate) => boolean;
+	readonly remove: (resourceId: string, key: string) => void;
+}
+
+const overlays = new Map<ResourceClient, Overlay>();
+
+function warnInStudio(message: string): void {
+	const [ran, studio] = pcall(() => game.GetService("RunService").IsStudio());
+	if (ran && studio === true) {
+		warn(message);
+	}
 }
 
 interface LocalResource {
@@ -704,9 +844,116 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 	// still in flight from before a resubscription cannot roll it back.
 	const floors = new Map<string, number>();
 	let disposed = false;
+	// Pending optimistic updates per resource, oldest call first. Never sent and
+	// never part of a snapshot: what an optimistic subscription shows is the
+	// snapshot with these applied over it.
+	const updates = new Map<string, Array<PendingUpdate>>();
+	// Updates that threw, warned about once. Weak: a removed update is not kept.
+	const warned = new WeakSet<PendingUpdate>();
 
 	const request = (resourceId: string, operation: 0 | 1): void => {
 		outbox.push(sender, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: resourceId, o: operation } satisfies WireResourceSubscription);
+	};
+
+	const hasUpdates = (resourceId: string): boolean => {
+		const list = updates.get(resourceId);
+		return list !== undefined && list.size() > 0;
+	};
+
+	// The snapshot with every pending update applied, oldest first. An update
+	// re-runs against each new snapshot, so a push that lands while its call is
+	// pending shows through with the update on top. One that throws is skipped.
+	const shownOf = (resourceId: string, held: LocalResource): unknown => {
+		if (!held.hasValue) {
+			return undefined;
+		}
+		const list = updates.get(resourceId);
+		if (list === undefined) {
+			return held.value;
+		}
+		let shown = held.value;
+		for (const update of list) {
+			const base = shown;
+			const [applied, result] = pcall(() => update.updater(base));
+			if (applied) {
+				shown = result;
+			} else if (!warned.has(update)) {
+				warned.add(update);
+				warnInStudio(`Aruna optimistic update of ${resourceId} threw, and is skipped: ${tostring(result)}`);
+			}
+		}
+		return shown;
+	};
+
+	// Tells the optimistic listeners of a resource what it shows now.
+	const notifyShown = (resourceId: string): void => {
+		const held = active.get(resourceId);
+		if (held === undefined || !held.hasValue) {
+			return;
+		}
+		const shown = shownOf(resourceId, held);
+		const info: ResourceUpdateInfo = { revision: floors.get(resourceId) ?? 0, pending: hasUpdates(resourceId) };
+		const snapshot = new Array<ResourceListener<unknown>>();
+		for (const entry of held.listeners) {
+			if (entry.optimistic && entry.listener !== undefined) {
+				snapshot.push(entry.listener);
+			}
+		}
+		for (const listener of snapshot) {
+			listener(shown, info);
+		}
+	};
+
+	const replaceUpdates = (resourceId: string, kept: Array<PendingUpdate>): void => {
+		if (kept.size() === 0) {
+			updates.delete(resourceId);
+		} else {
+			updates.set(resourceId, kept);
+		}
+	};
+
+	// Removes the updates of the calls an item names in `k`: it is the first
+	// item to contain them. True when any was removed.
+	const settleKeys = (resourceId: string, keys: unknown): boolean => {
+		const list = updates.get(resourceId);
+		if (list === undefined || !typeIs(keys, "table")) {
+			return false;
+		}
+		const settled = new Set<string>();
+		for (const key of keys as Array<unknown>) {
+			if (typeIs(key, "string")) {
+				settled.add(key);
+			}
+		}
+		const kept = new Array<PendingUpdate>();
+		const removed = new Set<string>();
+		for (const update of list) {
+			if (settled.has(update.key)) {
+				removed.add(update.key);
+			} else {
+				kept.push(update);
+			}
+		}
+		if (removed.size() === 0) {
+			return false;
+		}
+		replaceUpdates(resourceId, kept);
+		for (const key of removed) {
+			settleResource(key, resourceId);
+		}
+		return true;
+	};
+
+	// Every update of a resource the client no longer shows.
+	const dropUpdates = (resourceId: string): void => {
+		const list = updates.get(resourceId);
+		if (list === undefined) {
+			return;
+		}
+		updates.delete(resourceId);
+		for (const update of list) {
+			settleResource(update.key, resourceId);
+		}
 	};
 
 	const removeHandler = channel.on(WIRE_ITEM_RESOURCE, (item) => {
@@ -716,10 +963,16 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 		if (!typeIs(resourceId, "string") || !isRevision(at)) {
 			return;
 		}
+		// The calls this item is the first to contain leave in the step that
+		// handles it, whether it is applied or stale.
+		const settled = settleKeys(resourceId, state.k);
 		const floor = floors.get(resourceId);
 		if (floor !== undefined && at <= floor) {
 			if (observer !== undefined && observer.onStale !== undefined) {
 				observer.onStale(resourceId);
+			}
+			if (settled) {
+				notifyShown(resourceId);
 			}
 			return;
 		}
@@ -746,15 +999,24 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 					entry.onError(state.e, errorInfo);
 				}
 			}
+			if (settled) {
+				notifyShown(resourceId);
+			}
 			return;
 		}
 		held.value = state.d;
 		held.hasValue = true;
 		held.status = "ready";
 		held.error = undefined;
+		const shown = shownOf(resourceId, held);
+		const shownInfo: ResourceUpdateInfo = { revision: at, pending: hasUpdates(resourceId) };
 		for (const entry of snapshot) {
 			if (entry.listener !== undefined) {
-				entry.listener(state.d, info);
+				if (entry.optimistic) {
+					entry.listener(shown, shownInfo);
+				} else {
+					entry.listener(state.d, info);
+				}
 			}
 		}
 	});
@@ -776,22 +1038,32 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 				};
 				active.set(resourceId, current);
 			}
+			const optimistic = subscribeOptions !== undefined && subscribeOptions.optimistic === true;
 			const entry: LocalListener = {
 				...(listener !== undefined ? { listener } : {}),
 				...(subscribeOptions !== undefined && subscribeOptions.onError !== undefined
 					? { onError: subscribeOptions.onError }
 					: {}),
+				optimistic,
 			};
 			current.listeners.add(entry);
 			const held = current;
 			if (first) {
 				request(resourceId, 1);
 			} else if (held.hasValue && listener !== undefined) {
-				listener(held.value, { revision: floors.get(resourceId) ?? 0 });
+				if (optimistic) {
+					listener(shownOf(resourceId, held), {
+						revision: floors.get(resourceId) ?? 0,
+						pending: hasUpdates(resourceId),
+					});
+				} else {
+					listener(held.value, { revision: floors.get(resourceId) ?? 0 });
+				}
 			}
 			let connected = true;
 			return {
-				get: () => (held.hasValue ? held.value : undefined),
+				get: () => (!held.hasValue ? undefined : optimistic ? shownOf(resourceId, held) : held.value),
+				pending: () => hasUpdates(resourceId),
 				status: () => held.status,
 				revision: () => floors.get(resourceId) ?? 0,
 				error: () => held.error,
@@ -808,6 +1080,7 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 					held.listeners.delete(entry);
 					if (held.listeners.size() === 0 && active.get(resourceId) === held) {
 						active.delete(resourceId);
+						dropUpdates(resourceId);
 						if (!disposed) {
 							request(resourceId, 0);
 						}
@@ -840,10 +1113,204 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 			}
 			outbox.dispose();
 			active.clear();
+			const pendingIds = new Array<string>();
+			for (const [resourceId] of updates) {
+				pendingIds.push(resourceId);
+			}
+			for (const resourceId of pendingIds) {
+				dropUpdates(resourceId);
+			}
+			overlays.delete(client as unknown as ResourceClient);
 		},
 	};
 
+	overlays.set(client as unknown as ResourceClient, {
+		add: (resourceId, update) => {
+			if (disposed || !active.has(resourceId)) {
+				warnInStudio(`Aruna optimistic update of ${resourceId} ignored: this client is not subscribed to it.`);
+				return false;
+			}
+			const list = updates.get(resourceId);
+			if (list === undefined) {
+				updates.set(resourceId, [update]);
+			} else {
+				list.push(update);
+			}
+			notifyShown(resourceId);
+			return true;
+		},
+		remove: (resourceId, key) => {
+			const list = updates.get(resourceId);
+			if (list === undefined) {
+				return;
+			}
+			const kept = list.filter((update) => update.key !== key);
+			if (kept.size() === list.size()) {
+				return;
+			}
+			replaceUpdates(resourceId, kept);
+			settleResource(key, resourceId);
+			notifyShown(resourceId);
+		},
+	});
+
 	return client as unknown as ResourceClient<TResources>;
+}
+
+// --- Optimistic calls (docs/rfcs/ui-bindings.md) ---------------------------------
+
+// How long an update outlives its call's response while the item that contains
+// the call is still on its way. A load that never settles must not pin it.
+export const DEFAULT_OPTIMISTIC_SETTLE_TIMEOUT_MS = 10_000;
+
+interface OptimisticCallRecord {
+	readonly key: string;
+	readonly overlay: Overlay;
+	readonly settleTimeoutMs: number;
+	// The resources the call still has updates on.
+	readonly resources: Set<string>;
+	// Whether its response arrived (and said what is still on its way).
+	answered: boolean;
+	// Bumped to cancel a scheduled timeout.
+	generation: number;
+}
+
+// Calls with updates still pending, by idempotency key: what a response is
+// matched to, whichever client app's invoker received it.
+const optimisticCalls = new Map<string, OptimisticCallRecord>();
+
+// A resource no longer has updates of a call (settled by an item, removed, or
+// dropped with its subscription).
+function settleResource(key: string, resourceId: string): void {
+	const record = optimisticCalls.get(key);
+	if (record === undefined) {
+		return;
+	}
+	record.resources.delete(resourceId);
+	if (record.resources.size() === 0) {
+		optimisticCalls.delete(key);
+		record.generation += 1;
+	}
+}
+
+function removeAll(record: OptimisticCallRecord): void {
+	const resourceIds = new Array<string>();
+	for (const resourceId of record.resources) {
+		resourceIds.push(resourceId);
+	}
+	for (const resourceId of resourceIds) {
+		record.overlay.remove(resourceId, record.key);
+	}
+	if (optimisticCalls.get(record.key) === record) {
+		optimisticCalls.delete(record.key);
+	}
+}
+
+function armSettleTimeout(record: OptimisticCallRecord): void {
+	record.generation += 1;
+	const generation = record.generation;
+	task.delay(record.settleTimeoutMs / 1000, () => {
+		if (record.generation === generation && optimisticCalls.get(record.key) === record) {
+			removeAll(record);
+		}
+	});
+}
+
+// One optimistic call's handle on a resource client.
+export interface OptimisticCallHandle {
+	// An update of a resource for this call; ignored (with a warning in Studio)
+	// when the client is not subscribed to it.
+	readonly update: (resourceId: string, updater: (current: unknown) => unknown) => void;
+	// The call's promise resolved. Without a response handed over first (a
+	// fire-and-forget action, a custom transport), the updates wait for their
+	// items or the settle timeout.
+	readonly succeeded: () => void;
+	// The call's promise rejected. Without a response (a timeout, a
+	// cancellation), nothing will confirm the updates, so they leave now.
+	readonly failed: () => void;
+}
+
+const NOOP_CALL: OptimisticCallHandle = { update: () => {}, succeeded: () => {}, failed: () => {} };
+
+// Starts an optimistic call through `client`. A key that already has a call is
+// the same logical call (the server runs it once), so its updates are not
+// added a second time.
+export function beginOptimisticCall(
+	client: ResourceClient,
+	key: string,
+	settleTimeoutMs: number = DEFAULT_OPTIMISTIC_SETTLE_TIMEOUT_MS,
+): OptimisticCallHandle {
+	const overlay = overlays.get(client);
+	if (overlay === undefined || optimisticCalls.has(key)) {
+		return NOOP_CALL;
+	}
+	const record: OptimisticCallRecord = {
+		key,
+		overlay,
+		settleTimeoutMs,
+		resources: new Set(),
+		answered: false,
+		generation: 0,
+	};
+	optimisticCalls.set(key, record);
+	return {
+		update: (resourceId, updater) => {
+			if (optimisticCalls.get(key) === record && overlay.add(resourceId, { key, updater })) {
+				record.resources.add(resourceId);
+			}
+		},
+		succeeded: () => {
+			if (!record.answered && optimisticCalls.get(key) === record) {
+				if (record.resources.size() === 0) {
+					optimisticCalls.delete(key);
+				} else {
+					armSettleTimeout(record);
+				}
+			}
+		},
+		failed: () => {
+			if (!record.answered) {
+				removeAll(record);
+			}
+		},
+	};
+}
+
+// The invoker's, as an optimistic call's response arrives: an update of a
+// resource the response does not name as still on its way leaves now (its item
+// came first, or the call did not invalidate it); the rest wait for their item,
+// or the settle timeout.
+export function answerOptimisticCall(key: string, pending: ReadonlyArray<string>): void {
+	const record = optimisticCalls.get(key);
+	if (record === undefined) {
+		return;
+	}
+	record.answered = true;
+	const resourceIds = new Array<string>();
+	for (const resourceId of record.resources) {
+		resourceIds.push(resourceId);
+	}
+	for (const resourceId of resourceIds) {
+		if (!pending.includes(resourceId)) {
+			record.overlay.remove(resourceId, key);
+		}
+	}
+	if (optimisticCalls.get(key) === record) {
+		armSettleTimeout(record);
+	}
+}
+
+// A response's `p`, kept to the strings in it.
+export function pendingResourceIds(value: unknown): ReadonlyArray<string> {
+	const ids = new Array<string>();
+	if (typeIs(value, "table")) {
+		for (const id of value as Array<unknown>) {
+			if (typeIs(id, "string")) {
+				ids.push(id);
+			}
+		}
+	}
+	return ids;
 }
 
 // --- Generated bindings ----------------------------------------------------------
@@ -854,13 +1321,20 @@ export function setResourceClient(client: ResourceClient): void {
 	activeResourceClient = client;
 }
 
+// The installed client, or undefined before `createClientApp({ resources })`.
+export function currentResourceClient(): ResourceClient | undefined {
+	return activeResourceClient;
+}
+
 export function clearResourceClient(client?: ResourceClient): void {
 	if (client === undefined || activeResourceClient === client) {
 		activeResourceClient = undefined;
 	}
 }
 
-function installedResourceClient(resourceId: string): ResourceClient {
+// The client `createClientApp({ resources })` installed. Also what `aruna/ui`
+// keys its shared subscriptions by, so a replaced client app starts them over.
+export function installedResourceClient(resourceId: string): ResourceClient {
 	const client = activeResourceClient;
 	if (client === undefined) {
 		throw `Aruna resource client is not installed: ${resourceId}. Create the client app with createClientApp({ resources: true }).`;

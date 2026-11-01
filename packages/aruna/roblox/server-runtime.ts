@@ -2,7 +2,7 @@
 
 import type { ActionContext, ActionDefinition, ActionErrorMap, ActionRateLimitOptions } from "./server";
 import type { StoreDocument } from "./player-store";
-import type { ResourceContext, ResourceHost } from "./resource";
+import type { ResourceCallTag, ResourceContext, ResourceHost } from "./resource";
 import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
@@ -56,12 +56,15 @@ export interface ActionRegistry<TPlayer = unknown> {
 	// refused with ActionRateLimitError. `idempotencyKey` is the key a retrying
 	// client sends with every attempt of one call: a valid key (a string of at
 	// most 64 characters) makes the action run once however many attempts
-	// arrive, and anything else is ignored.
+	// arrive, and anything else is ignored. `optimistic` (the call item's `o`)
+	// tags the call's invalidations with its key, when it has a valid one, for
+	// the client's optimistic updates (docs/rfcs/ui-bindings.md).
 	readonly dispatch: (
 		player: TPlayer,
 		actionId: string,
 		input: unknown,
 		idempotencyKey?: unknown,
+		optimistic?: boolean,
 	) => Promise<ActionDispatchResult>;
 	// The same dispatch for trusted server code (`app.dispatch`, specs): not a
 	// client's envelope, so not held to the in-flight cap. Validation, rate
@@ -71,6 +74,7 @@ export interface ActionRegistry<TPlayer = unknown> {
 		actionId: string,
 		input: unknown,
 		idempotencyKey?: unknown,
+		optimistic?: boolean,
 	) => Promise<ActionDispatchResult>;
 	// The transport's gate for one envelope, before it reads the input: the
 	// request and action ids must be bounded strings, the player's request
@@ -367,6 +371,7 @@ export function createActionRegistry<TPlayer>(
 		progress: { ran: boolean } | undefined,
 		fromClient: boolean,
 		timing?: { checkedAt?: number },
+		call?: ResourceCallTag<TPlayer>,
 	): Promise<ActionDispatchResult> => {
 		return new Promise<ActionDispatchResult>((resolve) => {
 			// Reject non-wire-safe input before anything else reads it. The input
@@ -455,12 +460,22 @@ export function createActionRegistry<TPlayer>(
 				(context as { stores?: unknown }).stores = getStores(player);
 			}
 			if (resources !== undefined) {
+				// An optimistic call's invalidations are tagged with its key.
 				const bound: ResourceContext<TPlayer> = {
 					invalidate: (resource, target) => {
-						resources.invalidate(resource, target !== undefined ? target : player);
+						const key = target !== undefined ? target : player;
+						if (call !== undefined) {
+							resources.invalidateForCall(resource, key, call);
+						} else {
+							resources.invalidate(resource, key);
+						}
 					},
 					invalidateAll: (resource) => {
-						resources.invalidate(resource);
+						if (call !== undefined) {
+							resources.invalidateForCall(resource, undefined, call);
+						} else {
+							resources.invalidate(resource);
+						}
 					},
 				};
 				(context as { resources?: ResourceContext<TPlayer> }).resources = bound;
@@ -587,6 +602,7 @@ export function createActionRegistry<TPlayer>(
 		input: unknown,
 		progress: { ran: boolean } | undefined,
 		timing: { checkedAt?: number } | undefined,
+		call: ResourceCallTag<TPlayer> | undefined,
 	): Promise<ActionDispatchResult> => {
 		const definition = actionsById.get(actionId);
 		if (definition === undefined) {
@@ -603,7 +619,7 @@ export function createActionRegistry<TPlayer>(
 				resetAtMs: now + IN_FLIGHT_RETRY_AFTER_MS,
 			});
 		}
-		const settled = dispatchDefined(definition, player, actionId, input, progress, true, timing);
+		const settled = dispatchDefined(definition, player, actionId, input, progress, true, timing, call);
 		settled.finally(() => {
 			guard.finish(player);
 		});
@@ -617,12 +633,13 @@ export function createActionRegistry<TPlayer>(
 		input: unknown,
 		progress: { ran: boolean } | undefined,
 		timing: { checkedAt?: number } | undefined,
+		call: ResourceCallTag<TPlayer> | undefined,
 	): Promise<ActionDispatchResult> => {
 		const definition = actionsById.get(actionId);
 		if (definition === undefined) {
 			return notFound(actionId);
 		}
-		return dispatchDefined(definition, player, actionId, input, progress, false, timing);
+		return dispatchDefined(definition, player, actionId, input, progress, false, timing, call);
 	};
 
 	type DispatchOnce = typeof dispatchCapped;
@@ -632,14 +649,18 @@ export function createActionRegistry<TPlayer>(
 		actionId: string,
 		input: unknown,
 		idempotencyKey: unknown,
+		optimistic: boolean,
 		timing: { checkedAt?: number } | undefined,
 	): Promise<ActionDispatchResult> => {
 		if (isIdempotencyKey(idempotencyKey)) {
+			// An optimistic call is tagged by its key; the action runs once per key,
+			// so a retried attempt tags nothing a second time.
+			const call = optimistic ? { caller: player, key: idempotencyKey } : undefined;
 			return idempotency.run(player, actionId, idempotencyKey, (progress) =>
-				dispatchOnce(player, actionId, input, progress, timing),
+				dispatchOnce(player, actionId, input, progress, timing, call),
 			);
 		}
-		return dispatchOnce(player, actionId, input, undefined, timing);
+		return dispatchOnce(player, actionId, input, undefined, timing, undefined);
 	};
 
 	// The entry both dispatch paths share: with an observer, one clock read at
@@ -652,13 +673,14 @@ export function createActionRegistry<TPlayer>(
 		actionId: string,
 		input: unknown,
 		idempotencyKey: unknown,
+		optimistic: boolean,
 	): Promise<ActionDispatchResult> => {
 		if (observer === undefined) {
-			return withIdempotency(dispatchOnce, player, actionId, input, idempotencyKey, undefined);
+			return withIdempotency(dispatchOnce, player, actionId, input, idempotencyKey, optimistic, undefined);
 		}
 		const startedAt = readClock();
 		const timing: { checkedAt?: number } = {};
-		return withIdempotency(dispatchOnce, player, actionId, input, idempotencyKey, timing).then((result) => {
+		return withIdempotency(dispatchOnce, player, actionId, input, idempotencyKey, optimistic, timing).then((result) => {
 			const durationMs = readClock() - startedAt;
 			const errorName = result.ok ? undefined : result.errorName;
 			const errors = actionsById.get(actionId)?.errors;
@@ -698,10 +720,10 @@ export function createActionRegistry<TPlayer>(
 			return true;
 		},
 		refuseFrame: (player, reason) => refuseFrame(guard, player, reason),
-		dispatch: (player, actionId, input, idempotencyKey) =>
-			observed(dispatchCapped, true, player, actionId, input, idempotencyKey),
-		dispatchInProcess: (player, actionId, input, idempotencyKey) =>
-			observed(dispatchUncapped, false, player, actionId, input, idempotencyKey),
+		dispatch: (player, actionId, input, idempotencyKey, optimistic) =>
+			observed(dispatchCapped, true, player, actionId, input, idempotencyKey, optimistic === true),
+		dispatchInProcess: (player, actionId, input, idempotencyKey, optimistic) =>
+			observed(dispatchUncapped, false, player, actionId, input, idempotencyKey, optimistic === true),
 		forgetPlayer: (player) => {
 			idempotency.forget(player);
 			guard.forget(player);

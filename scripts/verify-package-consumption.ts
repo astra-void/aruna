@@ -42,11 +42,13 @@ export const publicArunaSubpathFiles = [
   "schema.d.ts",
   "server.d.ts",
   "testing.d.ts",
+  "ui.d.ts",
   "dist/native/client.d.ts",
   "dist/native/roblox.d.ts",
   "dist/native/schema.d.ts",
   "dist/native/server.d.ts",
   "dist/native/testing.d.ts",
+  "dist/native/ui.d.ts",
 ] as const;
 
 // Shipped as package data for `aruna test`; resolved at runtime relative to
@@ -383,7 +385,7 @@ export async function assertPublicPackageSubpathFiles(packageRoot: string): Prom
     );
   }
 
-  for (const name of ["client", "roblox", "schema", "server", "testing"]) {
+  for (const name of ["client", "roblox", "schema", "server", "testing", "ui"]) {
     const subpath = `./${name}`;
     const actual = exportsRecord[subpath];
     // Types only: no `import` condition, so Node refuses the subpath outright

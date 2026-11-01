@@ -1,5 +1,5 @@
 // The runtime subpaths (`aruna/server`, `client`, `roblox`, `schema`,
-// `testing`) are type-only: a game compiles its vendored copy of the native
+// `testing`, `ui`) are type-only: a game compiles its vendored copy of the native
 // runtime, and the package ships that runtime's declarations so a project sees
 // the same types whether or not the doctor aliases are installed. These cases
 // pin the package shape that makes that true. Needs `pnpm build` (dist/native).
@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nativeTypesRoot = path.join(packageRoot, "dist", "native");
 
-const SUBPATHS = ["server", "client", "roblox", "schema", "testing"] as const;
+const SUBPATHS = ["server", "client", "roblox", "schema", "testing", "ui"] as const;
 
 const forbiddenFragments = [
   "node:fs",

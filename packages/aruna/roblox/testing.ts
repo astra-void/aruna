@@ -22,7 +22,13 @@ import {
 } from "./server-app";
 import { createClientApp, type ClientApp, type ClientTransport } from "./client";
 import { bindRemoteActions, createRemoteActionInvoker } from "./roblox";
-import { admitResourceItem, createResourceClient, type ResourceClient, type ResourceHost } from "./resource";
+import {
+	admitResourceItem,
+	answerOptimisticCall,
+	createResourceClient,
+	type ResourceClient,
+	type ResourceHost,
+} from "./resource";
 import type { ActionMap, ActionRegistry } from "./server-runtime";
 import {
 	createRemoteSignalPublisher,
@@ -403,16 +409,26 @@ export function createTestServerApp<
 						clientChannel,
 						{ frameScheduler: clientFrames },
 					)
-				: // The key `withRetry` minted travels on, as it would over the wire.
-					(actionId, input, invokeOptions) =>
-						app.dispatch(
+				: // The key `withRetry` minted travels on, as it would over the wire,
+					// and an optimistic call is answered with what is still pending
+					// before the caller resumes, as its response would be.
+					(actionId, input, invokeOptions) => {
+						const key = invokeOptions !== undefined ? invokeOptions.idempotencyKey : undefined;
+						const optimistic = invokeOptions !== undefined && invokeOptions.optimistic === true;
+						const dispatched = app.dispatch(
 							actionId,
 							{ player },
 							input,
-							invokeOptions !== undefined && invokeOptions.idempotencyKey !== undefined
-								? { idempotencyKey: invokeOptions.idempotencyKey }
-								: undefined,
+							key !== undefined ? { idempotencyKey: key, ...(optimistic ? { optimistic: true } : {}) } : undefined,
 						);
+						if (!optimistic || key === undefined) {
+							return dispatched;
+						}
+						return dispatched.finally(() => {
+							const resources = boundResources;
+							answerOptimisticCall(key, resources !== undefined ? resources.pendingTags(player, key) : []);
+						});
+					};
 			// The player's resource client: subscriptions travel the action binding
 			// when batched, or straight into the same admission when not; state
 			// items come back on the player's channel with everything else.

@@ -176,6 +176,10 @@ export function createClientApp<TSignals extends SignalMap = SignalMap>(
 	};
 }
 
+// Optimistic updates over resources (docs/rfcs/ui-bindings.md).
+export { invokeOptimistic } from "./optimistic";
+export type { InvokeOptimisticOptions, OptimisticUpdate } from "./optimistic";
+
 // The resource client surface, and the binding the generated
 // `$aruna/resources/client` module is made of.
 export { resourceBinding } from "./resource";

@@ -1,5 +1,7 @@
 // Aruna roblox-ts native runtime — client action invoker registry.
 
+import { createIdempotencyKey } from "./idempotency";
+
 // A cooperative cancellation token. Pass one as `ActionInvokeOptions.signal` to
 // abort a pending action invoke: the invoker stops waiting for the server ack
 // and rejects with a cancellation error. Build one with `createCancelToken()`.
@@ -120,6 +122,10 @@ export interface ActionInvokeOptions {
 	readonly signal?: CancelToken;
 	readonly idempotent?: boolean;
 	readonly idempotencyKey?: string;
+	// The call has optimistic updates (set by `invokeOptimistic`): the server
+	// tags its invalidations with `idempotencyKey`, so the client removes each
+	// update when the first snapshot containing the call arrives. Needs a key.
+	readonly optimistic?: boolean;
 }
 
 export type ActionInvoker = (
@@ -136,12 +142,34 @@ export type ActionErrorTypes = { readonly [name: string]: unknown };
 // A generated client stub. `TErrors` is type-only: it is what lets
 // `isActionError(err, stub, name)` narrow a rejection to the declared error. An
 // input that accepts `undefined` (no input schema, or an optional one) is an
-// optional parameter, so an inputless action is called as `ready()`.
+// optional parameter, so an inputless action is called as `ready()`. `options`
+// is per call (a cancel token, an idempotency key); what the action declares
+// (`idempotent`, fire-and-forget) is spread over it.
 export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = (undefined extends TInput
-	? (input?: TInput) => Promise<TOutput>
-	: (input: TInput) => Promise<TOutput>) & {
+	? (input?: TInput, options?: ActionInvokeOptions) => Promise<TOutput>
+	: (input: TInput, options?: ActionInvokeOptions) => Promise<TOutput>) & {
 	readonly __arunaErrors?: TErrors;
 };
+
+// Any generated client stub, and what its call takes and resolves to.
+export type AnyActionStub = (...args: never[]) => Promise<unknown>;
+export type ActionStubInput<TStub extends AnyActionStub> = TStub extends (
+	input: infer TInput,
+	...rest: never[]
+) => unknown
+	? TInput
+	: never;
+export type ActionStubOutput<TStub extends AnyActionStub> = TStub extends (
+	...args: never[]
+) => Promise<infer TOutput>
+	? TOutput
+	: never;
+
+// A call that takes what the stub takes: an inputless action's input stays
+// optional, a required one stays required.
+export type ActionCall<TStub extends AnyActionStub, TResult> = undefined extends ActionStubInput<TStub>
+	? (input?: ActionStubInput<TStub>, options?: ActionInvokeOptions) => TResult
+	: (input: ActionStubInput<TStub>, options?: ActionInvokeOptions) => TResult;
 
 // A rejection narrowed to one declared error: its name, and its data typed as
 // the action declared it.
@@ -266,16 +294,6 @@ function defaultRetryOn(value: unknown, idempotent: boolean): boolean {
 		name === ACTION_RATE_LIMIT_ERROR_NAME ||
 		(idempotent && name === ACTION_TIMEOUT_ERROR_NAME)
 	);
-}
-
-let idempotencyKeyCounter = 0;
-
-// One key per logical call. The counter keeps keys unique within this client;
-// the random part keeps a rejoining client from reusing a key the server may
-// still remember.
-function createIdempotencyKey(): string {
-	idempotencyKeyCounter += 1;
-	return `${idempotencyKeyCounter}:${math.random(0, 0x7fffffff)}`;
 }
 
 // How long to wait before retry N (0-based `retryIndex`): a rate-limit

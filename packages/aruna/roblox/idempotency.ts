@@ -8,6 +8,17 @@
 
 import type { DepartedPlayers } from "./request-guard";
 
+let idempotencyKeyCounter = 0;
+
+// One key per logical call, minted on the client (`withRetry`,
+// `invokeOptimistic`). The counter keeps keys unique within this client; the
+// random part keeps a rejoining client from reusing a key the server may still
+// remember.
+export function createIdempotencyKey(): string {
+	idempotencyKeyCounter += 1;
+	return `${idempotencyKeyCounter}:${math.random(0, 0x7fffffff)}`;
+}
+
 // The longest key the server accepts. Anything else (wrong type, too long) is
 // ignored and the call is dispatched without de-duplication.
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 64;

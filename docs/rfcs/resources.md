@@ -218,6 +218,17 @@ the server log, as for `ActionInternalError`.
   Unreliable signals stay on their own remote with no ordering promise; losing one never
   touches a resource.
 
+### Optimistic calls
+
+A call marked `o` (docs/rfcs/ui-bindings.md) carries tags into this protocol without
+changing any rule above. When such a call invalidates a key its caller is subscribed to,
+the server records a tag `(k, caller)` on the key before the load starts. A load takes
+the tags recorded before it starts, and its item, when sent, names them to their caller
+in `k` and drops them; an item that is not sent leaves them to the next load. The call's
+response lists in `p` the resources whose tags are still undelivered. The client uses
+both to remove its optimistic updates in the step that applies the first item containing
+the call. A snapshot never carries an optimistic value.
+
 ## Scope limits of this version
 
 - No client writes, no client-chosen scope, no implicit server mutation.

@@ -13,7 +13,9 @@ import type { ServerAppBinding, ServerTransport } from "./server-app";
 import type { Schema } from "./schema";
 import {
 	admitResourceItem,
+	answerOptimisticCall,
 	createResourceClient as createChannelResourceClient,
+	pendingResourceIds,
 	type ResourceClient,
 	type ResourceClientOptions,
 	type ResourceDefinition,
@@ -321,6 +323,9 @@ export interface CreateActionInvokerOptions extends ContractHandshakeOptions, Re
 
 interface PendingActionRequest {
 	readonly resolve: (payload: ActionResponsePayload) => void;
+	// An optimistic call's key: its response is handed to the client's pending
+	// updates before the call settles.
+	readonly optimisticKey?: string;
 	cancelTimeout?: () => void;
 	// Removes the CancelToken listener when the request settles by any means, so
 	// a resolved/timed-out request does not keep the token subscribed.
@@ -419,6 +424,11 @@ function invokerOver(
 			if (entry.unsubscribeCancel !== undefined) {
 				entry.unsubscribeCancel();
 			}
+			// What the response says is still on its way settles the call's
+			// optimistic updates before the caller's `await` resumes.
+			if (entry.optimisticKey !== undefined) {
+				answerOptimisticCall(entry.optimisticKey, pendingResourceIds(response.p));
+			}
 			entry.resolve(response.r as ActionResponsePayload);
 		}
 	});
@@ -434,11 +444,22 @@ function invokerOver(
 			} satisfies ActionError);
 		}
 
+		// An optimistic call (docs/rfcs/ui-bindings.md) is marked `o`, and needs
+		// its key on the wire for the server to tag its invalidations with.
+		const optimisticKey =
+			options !== undefined && options.optimistic === true ? options.idempotencyKey : undefined;
+
 		// Fire-and-forget: fire the request and resolve immediately. No pending
 		// entry is registered (the server's ignored ack, if any, is dropped) and
 		// no timeout is armed. Matches the server binder skipping its response.
 		if (options !== undefined && options.fireAndForget === true) {
-			sendCall({ t: WIRE_ITEM_CALL, i: createRequestId(), a: actionId, d: input });
+			sendCall({
+				t: WIRE_ITEM_CALL,
+				i: createRequestId(),
+				a: actionId,
+				d: input,
+				...(optimisticKey !== undefined ? { k: optimisticKey, o: 1 as const } : {}),
+			});
 			return Promise.resolve(undefined);
 		}
 
@@ -463,6 +484,7 @@ function invokerOver(
 						reject(toActionError(payload));
 					}
 				},
+				...(optimisticKey !== undefined ? { optimisticKey } : {}),
 			};
 			pending.set(requestId, entry);
 			// The idempotency key rides along only when there is one.
@@ -473,6 +495,7 @@ function invokerOver(
 				a: actionId,
 				d: input,
 				...(idempotencyKey !== undefined ? { k: idempotencyKey } : {}),
+				...(optimisticKey !== undefined ? { o: 1 as const } : {}),
 			});
 
 			// With `batching: false` the response may have arrived synchronously
@@ -627,10 +650,25 @@ export function bindRemoteActions<TPlayer>(
 			// dispatch ignores anything that is not a string of at most 64
 			// characters.
 			const fireAndForget = registry.isFireAndForget(actionId);
-			void registry.dispatch(sender, actionId, call.d, call.k).then((result) => {
-				if (!fireAndForget) {
-					channel.push(sender, { t: WIRE_ITEM_RESPONSE, i: requestId, r: result } satisfies WireResponse);
+			// `o` marks an optimistic call: its invalidations are tagged with its
+			// key, and its response names the tagged resources whose item has not
+			// been queued yet (docs/rfcs/ui-bindings.md).
+			const optimistic = call.o === 1;
+			const key = call.k;
+			void registry.dispatch(sender, actionId, call.d, key, optimistic).then((result) => {
+				if (fireAndForget) {
+					return;
 				}
+				const pending =
+					optimistic && resources !== undefined && typeIs(key, "string")
+						? resources.pendingTags(sender, key)
+						: undefined;
+				channel.push(sender, {
+					t: WIRE_ITEM_RESPONSE,
+					i: requestId,
+					r: result,
+					...(pending !== undefined && pending.size() > 0 ? { p: pending } : {}),
+				} satisfies WireResponse);
 			});
 		}
 	});

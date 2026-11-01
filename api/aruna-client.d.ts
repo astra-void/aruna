@@ -5,6 +5,8 @@ export declare const ACTION_CANCELLED_ERROR_NAME = "ActionCancelledError";
 
 export declare const ACTION_VERSION_MISMATCH_ERROR_NAME = "ActionVersionMismatchError";
 
+export type ActionCall<TStub extends AnyActionStub, TResult> = undefined extends ActionStubInput<TStub> ? (input?: ActionStubInput<TStub>, options?: ActionInvokeOptions) => TResult : (input: ActionStubInput<TStub>, options?: ActionInvokeOptions) => TResult;
+
 export type ActionErrorTypes = {
     readonly [name: string]: unknown;
 };
@@ -14,6 +16,7 @@ export interface ActionInvokeOptions {
     readonly signal?: CancelToken;
     readonly idempotent?: boolean;
     readonly idempotencyKey?: string;
+    readonly optimistic?: boolean;
 }
 
 export type ActionInvoker = (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
@@ -31,9 +34,15 @@ export interface ActionMetrics {
     readonly client: LatencySummary;
 }
 
-export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = (undefined extends TInput ? (input?: TInput) => Promise<TOutput> : (input: TInput) => Promise<TOutput>) & {
+export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = (undefined extends TInput ? (input?: TInput, options?: ActionInvokeOptions) => Promise<TOutput> : (input: TInput, options?: ActionInvokeOptions) => Promise<TOutput>) & {
     readonly __arunaErrors?: TErrors;
 };
+
+export type ActionStubInput<TStub extends AnyActionStub> = TStub extends (input: infer TInput, ...rest: never[]) => unknown ? TInput : never;
+
+export type ActionStubOutput<TStub extends AnyActionStub> = TStub extends (...args: never[]) => Promise<infer TOutput> ? TOutput : never;
+
+export type AnyActionStub = (...args: never[]) => Promise<unknown>;
 
 export interface CancelToken {
     readonly isCancelled: boolean;
@@ -94,6 +103,10 @@ export interface DeclaredActionFailure<TName extends string, TData> {
     readonly data: TData;
 }
 
+export interface InvokeOptimisticOptions extends ActionInvokeOptions {
+    readonly settleTimeoutMs?: number;
+}
+
 export interface LatencySummary {
     readonly samples: number;
     readonly p50?: number;
@@ -136,6 +149,8 @@ export interface NetworkMetricsReport {
     readonly wire: WireMetrics;
 }
 
+export type OptimisticUpdate = <TValue>(resource: ResourceBinding<TValue>, updater: (current: TValue) => TValue) => void;
+
 export interface RemoteSignalConnection {
     readonly disconnect: () => void;
 }
@@ -175,10 +190,12 @@ export interface ResourceSubscribeOptions {
     readonly onError?: (errorName: string, info: ResourceUpdateInfo & {
         readonly errorId?: string;
     }) => void;
+    readonly optimistic?: boolean;
 }
 
 export interface ResourceSubscription<TValue> {
     readonly get: () => TValue | undefined;
+    readonly pending: () => boolean;
     readonly status: () => ResourceStatus;
     readonly revision: () => number;
     readonly error: () => string | undefined;
@@ -188,6 +205,7 @@ export interface ResourceSubscription<TValue> {
 
 export interface ResourceUpdateInfo {
     readonly revision: number;
+    readonly pending?: boolean;
 }
 
 export type SignalHandler<TPayload = unknown> = (payload: TPayload) => void;
@@ -240,6 +258,8 @@ export declare function estimateWireBytes(value: unknown): number;
 export declare function formatNetworkReport(report: NetworkMetricsReport): string;
 
 export declare function invokeAction(actionId: string, input?: unknown, options?: ActionInvokeOptions): Promise<unknown>;
+
+export declare function invokeOptimistic<TStub extends AnyActionStub>(stub: TStub, input: ActionStubInput<TStub>, apply: (update: OptimisticUpdate) => void, options?: InvokeOptimisticOptions): Promise<ActionStubOutput<TStub>>;
 
 export declare function isActionCancelledError(value: unknown): boolean;
 

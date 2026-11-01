@@ -30,6 +30,7 @@ const ENTRIES: readonly Entry[] = [
   { specifier: "aruna/roblox", file: "roblox.d.ts", roblox: true },
   { specifier: "aruna/schema", file: "schema.d.ts", roblox: true },
   { specifier: "aruna/testing", file: "testing.d.ts", roblox: true },
+  { specifier: "aruna/ui", file: "ui.d.ts", roblox: true },
 ];
 
 // Declarations in these files belong to Aruna's public surface; anything else is

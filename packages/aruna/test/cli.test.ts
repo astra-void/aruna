@@ -1065,6 +1065,7 @@ describe("Roblox runtime vendoring integrity", () => {
       "testing-framework.ts": "export const expect = 0;\n",
       "testing.ts":
         'import "./server-app";\nimport "./client";\nimport "./signal-runtime";\nexport * from "./testing-framework";\n',
+      "ui.ts": 'import type { ActionInvoker } from "./client-runtime";\nexport const observeResource = 0;\n',
     };
     for (const [name, contents] of Object.entries(modules)) {
       fs.writeFileSync(path.join(dir, name), contents, "utf8");

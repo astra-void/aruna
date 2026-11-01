@@ -65,10 +65,12 @@ export interface ResourceSubscribeOptions {
     readonly onError?: (errorName: string, info: ResourceUpdateInfo & {
         readonly errorId?: string;
     }) => void;
+    readonly optimistic?: boolean;
 }
 
 export interface ResourceSubscription<TValue> {
     readonly get: () => TValue | undefined;
+    readonly pending: () => boolean;
     readonly status: () => ResourceStatus;
     readonly revision: () => number;
     readonly error: () => string | undefined;
@@ -78,6 +80,7 @@ export interface ResourceSubscription<TValue> {
 
 export interface ResourceUpdateInfo {
     readonly revision: number;
+    readonly pending?: boolean;
 }
 
 export interface RobloxDataStoreBackendOptions {
@@ -145,6 +148,7 @@ export interface WireCall {
     readonly a: string;
     readonly d?: unknown;
     readonly k?: string;
+    readonly o?: 1;
 }
 
 export interface WireCallReceiver<TPlayer> {
@@ -189,7 +193,7 @@ export interface WireFrameScheduler {
 
 export interface WireOutbox<TTarget> {
     readonly push: (target: TTarget, item: defined) => void;
-    readonly replace: (target: TTarget, key: string, item: defined) => void;
+    readonly replace: (target: TTarget, key: string, item: defined, merge?: (queued: defined, incoming: defined) => defined) => void;
     readonly pushAll: (item: defined) => void;
     readonly flush: () => void;
     readonly dispose: () => void;
@@ -204,6 +208,7 @@ export interface WireResourceState {
     readonly d?: unknown;
     readonly e?: string;
     readonly i?: string;
+    readonly k?: ReadonlyArray<string>;
 }
 
 export interface WireResourceSubscription {
@@ -216,6 +221,7 @@ export interface WireResponse {
     readonly t: typeof WIRE_ITEM_RESPONSE;
     readonly i: string;
     readonly r: ActionDispatchResult;
+    readonly p?: ReadonlyArray<string>;
 }
 
 export interface WireServerRemote<TPlayer> {
@@ -354,6 +360,7 @@ interface ActionInvokeOptions {
     readonly signal?: CancelToken;
     readonly idempotent?: boolean;
     readonly idempotencyKey?: string;
+    readonly optimistic?: boolean;
 }
 
 type ActionInvoker = (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
@@ -378,8 +385,8 @@ interface ActionRateLimitOptions {
 type ActionRateLimitStrategy = "fixedWindow" | "tokenBucket";
 
 interface ActionRegistry<TPlayer = unknown> {
-    readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
-    readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
+    readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown, optimistic?: boolean) => Promise<ActionDispatchResult>;
+    readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown, optimistic?: boolean) => Promise<ActionDispatchResult>;
     readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
     readonly refuseFrame: (player: TPlayer, reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch") => void;
     readonly forgetPlayer: (player: TPlayer) => void;
@@ -448,6 +455,11 @@ interface RemoteSignalConnection {
 
 type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
 
+interface ResourceCallTag<TPlayer = unknown> {
+    readonly caller: TPlayer;
+    readonly key: string;
+}
+
 interface ResourceClientObserver {
     readonly onApplied?: (resourceId: string) => void;
     readonly onStale?: (resourceId: string) => void;
@@ -472,6 +484,8 @@ interface ResourceGlobalContext {
 
 interface ResourceHost<TPlayer = unknown> {
     readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+    readonly invalidateForCall: (resource: ResourceRef, player: TPlayer | undefined, call: ResourceCallTag<TPlayer>) => void;
+    readonly pendingTags: (caller: TPlayer, key: string) => ReadonlyArray<string>;
     readonly has: (resourceId: string) => boolean;
     readonly isSubscribed: (resource: ResourceRef, player: TPlayer) => boolean;
     readonly subscriberCount: (resource: ResourceRef) => number;
@@ -499,7 +513,7 @@ type ResourceRef = string | {
 type ResourceScope = "player" | "global";
 
 interface ResourceSink<TPlayer> {
-    readonly replace: (target: TPlayer, key: string, item: defined) => void;
+    readonly replace: (target: TPlayer, key: string, item: defined, merge?: (queued: defined, incoming: defined) => defined) => void;
 }
 
 interface Schema<T = unknown> {

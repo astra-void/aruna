@@ -41,6 +41,9 @@
     },
     "./testing": {
       "types": "./testing.d.ts"
+    },
+    "./ui": {
+      "types": "./ui.d.ts"
     }
   },
   "scripts": {

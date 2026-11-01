@@ -42,7 +42,7 @@ CHANGELOG entry, and a breaking one follows the rules in [Versioning](#versionin
 
 | Surface | Where it is defined | How changes are caught |
 | --- | --- | --- |
-| **Subpath exports**: `aruna` (config and compiler), `aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema`, `aruna/testing` — every exported name, its type, and its runtime behavior | `packages/aruna/src/index.ts`, `packages/aruna/roblox/*.ts` | the API report (`api/`, below) |
+| **Subpath exports**: `aruna` (config and compiler), `aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema`, `aruna/testing`, `aruna/ui` — every exported name, its type, and its runtime behavior | `packages/aruna/src/index.ts`, `packages/aruna/roblox/*.ts` | the API report (`api/`, below) |
 | **Config schema**: every key `defineConfig` accepts, its type, default, and meaning | `@arunajs/core` (`Config`), `packages/compiler/src/config.ts` | the API report (`api/aruna.d.ts`) |
 | **CLI**: command names, flags, their defaults, exit codes, and `--json` output shapes | `packages/aruna/src/cli/cli.ts` | the compiler output guard (`--json` outputs), CLI tests |
 | **Diagnostic codes and names**: `aruna::NNN`, the kebab-case name, the default severity, and what a config `diagnostics.ignore` entry matches | `crates/aruna_compiler/src/diagnostics.rs` | the output guard, `diagnostics.rs` tests |

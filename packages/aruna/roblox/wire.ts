@@ -49,20 +49,26 @@ export const WIRE_ITEM_RESOURCE_PATCH = WIRE_ITEM_RESOURCE;
 // resource, by id. Travels the call remote and is admitted like a call.
 export const WIRE_ITEM_RESOURCE_SUBSCRIPTION = 5;
 
-// An action call: request id, action id, input, idempotency key.
+// An action call: request id, action id, input, idempotency key. `o` is 1 for a
+// call with optimistic updates (docs/rfcs/ui-bindings.md): the server tags its
+// invalidations with `k`, so the client can tell which snapshot contains it.
 export interface WireCall {
 	readonly t: typeof WIRE_ITEM_CALL;
 	readonly i: string;
 	readonly a: string;
 	readonly d?: unknown;
 	readonly k?: string;
+	readonly o?: 1;
 }
 
-// An action response: the request id it answers and the dispatch result.
+// An action response: the request id it answers and the dispatch result. `p`,
+// for an optimistic call: the resources it tagged for the caller whose item
+// has not been queued yet.
 export interface WireResponse {
 	readonly t: typeof WIRE_ITEM_RESPONSE;
 	readonly i: string;
 	readonly r: ActionDispatchResult;
+	readonly p?: ReadonlyArray<string>;
 }
 
 // A signal: its id and its payload (an `encodeBinary` buffer for a binary signal).
@@ -73,7 +79,9 @@ export interface WireSignal {
 }
 
 // A resource's state at a revision: the value in `d`, or an error name in `e`
-// (with the failure's id in `i`, for a load error).
+// (with the failure's id in `i`, for a load error). `k`: the idempotency keys
+// of this recipient's optimistic calls whose invalidations this item is the
+// first to contain.
 export interface WireResourceState {
 	readonly t: typeof WIRE_ITEM_RESOURCE;
 	readonly r: string;
@@ -81,6 +89,7 @@ export interface WireResourceState {
 	readonly d?: unknown;
 	readonly e?: string;
 	readonly i?: string;
+	readonly k?: ReadonlyArray<string>;
 }
 
 // `o` is 1 to subscribe (or resync) and 0 to unsubscribe.
@@ -209,8 +218,14 @@ export interface WireOutbox<TTarget> {
 	// matters (a resource's snapshot). The newer item therefore goes out ahead of
 	// anything queued between the two (an action response, a signal): a client
 	// can see state that already reflects a call before the call's answer.
-	// Unbatched, the same as `push`.
-	readonly replace: (target: TTarget, key: string, item: defined) => void;
+	// `merge`, when given, builds what replaces the queued item from it and the
+	// newer one. Unbatched, the same as `push`.
+	readonly replace: (
+		target: TTarget,
+		key: string,
+		item: defined,
+		merge?: (queued: defined, incoming: defined) => defined,
+	) => void;
 	// To every recipient at once (FireAllClients).
 	readonly pushAll: (item: defined) => void;
 	readonly flush: () => void;
@@ -326,7 +341,7 @@ export function createWireOutbox<TTarget>(
 				fire(target, [item], false);
 			}
 		},
-		replace: (target, key, item) => {
+		replace: (target, key, item, merge) => {
 			if (!batching) {
 				fire(target, [item], false);
 				return;
@@ -338,7 +353,7 @@ export function createWireOutbox<TTarget>(
 			}
 			const queued = byKey.get(key);
 			if (queued !== undefined) {
-				queued.item = item;
+				queued.item = merge !== undefined ? merge(queued.item, item) : item;
 				return;
 			}
 			const entry: QueuedItem<TTarget> = { target, item, key };

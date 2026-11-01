@@ -53,6 +53,9 @@ function buildFullPublicExports() {
     "./server": {
       types: "./server.d.ts",
     },
+    "./ui": {
+      types: "./ui.d.ts",
+    },
   };
 }
 

@@ -122,6 +122,11 @@ subscription.disconnect();
 - `subscribe(listener, { onError })` is told `ResourceLoadError` (a `load` that failed,
   with the `errorId` the server's `onResourceError` got) or `ResourceForbiddenError`.
   The last value stays; the next successful snapshot clears the error.
+- `subscribe(listener, { optimistic: true })` sees the value to show instead of the
+  server's: the newest snapshot with the pending optimistic updates of `invokeOptimistic`
+  applied, and it is told again when one comes or goes. `subscription.pending()` says
+  whether one applies. A plain subscription never sees them. See
+  [ui.md](ui.md#optimistic-updates).
 - `app.resources.resync()` asks for a fresh snapshot of everything subscribed.
 - The `Resources` type maps each id to its value type, and `<ExportName>Value` is each
   value type on its own.

@@ -113,6 +113,7 @@ app has resources, a resource subscription — as a malformed call (below).
 | `a` | string, ≤ 128 bytes | Action id. |
 | `d` | any wire-safe value, optional | The action's input. |
 | `k` | string, ≤ 64 bytes, optional | Idempotency key: every attempt of one call carries the same key, and the server runs the call once per key ([actions.md](../packages/aruna/docs/actions.md)). Anything else in `k` is ignored. |
+| `o` | `1`, optional | The call has optimistic updates ([rfcs/ui-bindings.md](rfcs/ui-bindings.md)): with a valid `k`, the server tags the call's invalidations with it. Anything else in `o` is ignored. |
 
 A fire-and-forget call is an ordinary call: the server knows from the action's
 declaration that it sends no response.
@@ -124,6 +125,7 @@ declaration that it sends no response.
 | `t` | `2` | Item kind. |
 | `i` | string | The request id of the call this answers. |
 | `r` | table | The dispatch result, below. |
+| `p` | array of strings, optional | For a call marked `o`: the resources it invalidated for the caller whose state item had not been queued when this response was. Absent when empty. |
 
 | `r` field | Type | Meaning |
 | --- | --- | --- |
@@ -153,9 +155,11 @@ declaration that it sends no response.
 | `d` | any wire-safe value, optional | The whole value (checked against the resource's schema before it is sent). Absent on an error item. |
 | `e` | string, optional | An error name instead of a value: `ResourceLoadError` or `ResourceForbiddenError`. |
 | `i` | string, optional | On `ResourceLoadError`: the id the server's `onResourceError` got. |
+| `k` | array of strings, optional | The keys of this recipient's `o` calls whose invalidations this item is the first to contain (it was loaded after them). Absent when empty. |
 
 A batched server channel keeps at most one state item per resource per player per
-frame: a newer one replaces the queued one in its place.
+frame: a newer one replaces the queued one in its place, and carries the replaced
+item's `k` as well.
 
 ### Resource subscription (`t = 5`, client → server)
 

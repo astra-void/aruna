@@ -9,7 +9,9 @@
   },
   "devDependencies": {
     "@rbxts/compiler-types": "3.0.0-types.0",
+    "@rbxts/react": "17.3.13-ts.1",
     "@rbxts/types": "^1.0.924",
+    "@rbxts/vide": "0.6.1",
     "roblox-ts": "3.0.0",
     "typescript": "5.5.3"
   }

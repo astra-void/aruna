@@ -395,7 +395,7 @@
       },
       {
         "key": "paths",
-        "change": "updated to add $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "updated to add $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing, aruna/ui",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -506,7 +506,8 @@ export const contractHash = "cbf29ce484222325";
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],
       "aruna/schema": ["./src/.aruna/shared/runtime/schema.ts"],
-      "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"]
+      "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"],
+      "aruna/ui": ["./src/.aruna/shared/runtime/ui.ts"]
     },
     "target": "ESNext",
     "module": "CommonJS",

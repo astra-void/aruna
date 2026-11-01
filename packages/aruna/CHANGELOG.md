@@ -17,6 +17,43 @@ the game build like any other module.
 
 ### Added
 
+- **UI bindings: `aruna/ui`** ([ui.md](docs/ui.md), RFC
+  `docs/rfcs/ui-bindings.md`). A renderer-agnostic core (`observeResource`,
+  `peekResource`, `observeAction`) and two adapters that take the renderer as an
+  argument, so Aruna never imports one: `createReactBindings(React)` gives
+  `useResource` and `useAction`, `createVideBindings({ source, cleanup, batch })`
+  gives `resourceState` and `actionState`. Every reader of a resource shares one
+  subscription, kept until the resumption cycle ends (or `keepAliveMs`), so a
+  screen swap never drops the value or resubscribes. A call's state follows the
+  latest call; `exclusive` drops a repeat while one is pending; a component that
+  goes away writes nothing and cancels nothing.
+
+- **Optimistic updates** ([ui.md](docs/ui.md#optimistic-updates)).
+  `invokeOptimistic(stub, input, (update) => ...)` on `aruna/client`, and
+  `optimistic` on `useAction` / `actionState`, show what a call will do until the
+  server's snapshot contains it. The server tags an optimistic call's invalidations
+  with its idempotency key (the call item's `o`); the first state item loaded after
+  them names the call (`k`), and the response names what is still on its way (`p`).
+  So an update leaves in the very step that applies the snapshot containing its
+  call: the old value never flashes back, and no update applies twice. Rollback is
+  removal, since nothing is written to a snapshot. `subscribe(listener, {
+  optimistic: true })` and `subscription.pending()` expose it without a renderer.
+  Wire protocol v1 gains the three optional fields.
+
+- **Per-call options on generated stubs.** Every stub takes an optional
+  `ActionInvokeOptions` after its input (`purchaseItem(input, { idempotencyKey })`),
+  and `ActionStub` carries it. What the action declares is spread over it, so an
+  idempotent action still says so and a fire-and-forget one stays one-way. Before,
+  a cancel token or an idempotency key could reach a call only by bypassing the
+  stub.
+
+- **`aruna test` loads packages that ship Luau the way a game does.** A directory
+  with an `init.luau` is a module (rbxtsc emits one for every `index.ts`, so a
+  domain barrel now loads too), and string requires (`require("./x")`,
+  `"../x"`, `"@self/x"`) resolve against the tree. The fake game gains
+  `ReflectionService`, a stand-in for every `Enum` item, and the profiler markers,
+  which is what Vide touches when it loads; Vide runs in specs.
+
 - **Retry backoff on the test network's clock.** `createTestNetwork({ retry })`
   gives every client app a retry policy whose backoff and `retryAfterMs` waits
   run on the virtual clock, so `advance` drives them; before, `withRetry` slept

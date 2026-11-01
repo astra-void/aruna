@@ -543,6 +543,32 @@ questProgress.subscribe((value) => updateQuestUI(value));
 See [docs/resources.md](packages/aruna/docs/resources.md) and the protocol in
 [docs/rfcs/resources.md](docs/rfcs/resources.md).
 
+## UI bindings (`aruna/ui`)
+
+Resources and actions in a component, for `@rbxts/react` and Vide. The renderer is
+passed in, because Aruna never imports one:
+
+```ts
+// React
+export const { useResource, useAction } = createReactBindings(React);
+// Vide
+export const { resourceState, actionState } = createVideBindings({ source, cleanup, batch });
+```
+
+- `useResource(questProgress)` / `resourceState(questProgress)` read a resource's value,
+  status, and error. Every reader shares one subscription, kept across a screen swap.
+- `useAction(purchaseItem, { exclusive: true })` / `actionState(...)` give a call's
+  pending, success, and error state. The latest call wins; a component that goes away
+  writes nothing and cancels nothing.
+- `optimistic(input, update)` on `useAction` / `actionState` (or `invokeOptimistic` from
+  `aruna/client`) shows what a call will do until the server's snapshot contains it. The
+  update leaves in the step that applies that snapshot, so the old value never flashes
+  back and nothing applies twice.
+- Generated stubs take per-call options: `purchaseItem(input, { idempotencyKey })`.
+
+See [docs/ui.md](packages/aruna/docs/ui.md) and the RFC in
+[docs/rfcs/ui-bindings.md](docs/rfcs/ui-bindings.md).
+
 ## Stores (DataStore persistence)
 
 A **store** is Aruna's safe front end to `DataStoreService`: declare the record shape once,

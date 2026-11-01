@@ -47,7 +47,7 @@ const specSource = join(packageDir, "src", "test");
 // The directory name stands in for a consumer's generatedDir: the shipped runner
 // finds `aruna/testing` at ReplicatedStorage.TS.<generatedDir>.runtime.testing.
 const GENERATED_DIR = "aruna";
-const RUNTIME_SUBPATHS = ["server", "client", "roblox", "schema", "testing"] as const;
+const RUNTIME_SUBPATHS = ["server", "client", "roblox", "schema", "testing", "ui"] as const;
 // Spawn rbxtsc's entry point with the running Node rather than the `.bin` shim:
 // on Windows the extensionless shim is a shell script (ENOENT) and its `.cmd`
 // sibling cannot be spawned without a shell (EINVAL since Node 20.12).

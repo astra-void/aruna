@@ -438,6 +438,11 @@ fn client_stub_lines(
     } else {
         format!("input: {input_type}")
     };
+    // Every stub takes per-call options (a cancel token, an idempotency key).
+    // What the declaration asks for is spread over them, so a caller cannot
+    // turn a fire-and-forget action into a two-way call.
+    let options_param = "options?: ActionInvokeOptions";
+
     // Fire-and-forget actions are one-way: the client does not wait for a server
     // ack, so the stub resolves void and tells the invoker to skip the response
     // roundtrip. The declared output type is intentionally ignored — there is no
@@ -445,11 +450,11 @@ fn client_stub_lines(
     if action.fire_and_forget {
         return vec![
             format!(
-                "export const {} = ({}): Promise<void> => {{",
-                action.export_name, input_param
+                "export const {} = ({}, {}): Promise<void> => {{",
+                action.export_name, input_param, options_param
             ),
             format!(
-                "  return invokeAction(\"{}\", input, {{ fireAndForget: true }}) as Promise<void>;",
+                "  return invokeAction(\"{}\", input, {{ ...options, fireAndForget: true }}) as Promise<void>;",
                 action.id
             ),
             "};".to_string(),
@@ -459,28 +464,28 @@ fn client_stub_lines(
     // An idempotent action tells the invoker so: the default retry policy only
     // retries a timeout when the call says it is safe to run twice.
     let invoke_options = if action.idempotent {
-        ", { idempotent: true }"
+        "{ ...options, idempotent: true }"
     } else {
-        ""
+        "options"
     };
 
     // An action that declares errors is typed as an ActionStub that carries
     // them, so `isActionError(err, stub, name)` can narrow its rejections.
     let signature = match errors_type {
         Some(errors_type) => format!(
-            "export const {}: ActionStub<{}, {}, {}> = (input) => {{",
+            "export const {}: ActionStub<{}, {}, {}> = (input, options) => {{",
             action.export_name, input_type, output_type, errors_type
         ),
         None => format!(
-            "export const {} = ({}): Promise<{}> => {{",
-            action.export_name, input_param, output_type
+            "export const {} = ({}, {}): Promise<{}> => {{",
+            action.export_name, input_param, options_param, output_type
         ),
     };
 
     vec![
         signature,
         format!(
-            "  return invokeAction(\"{}\", input{}) as Promise<{}>;",
+            "  return invokeAction(\"{}\", input, {}) as Promise<{}>;",
             action.id, invoke_options, output_type
         ),
         "};".to_string(),
@@ -495,14 +500,24 @@ fn render_client_file(
     preserve_generated_comments: bool,
 ) -> GeneratedFile {
     let path = generated_file_path(generated_dir, GENERATED_CLIENT_ACTIONS_FILE);
-    // The stub type is imported only where an action needs it, so a file with
-    // no declared errors is what it has always been.
-    let import = if actions.iter().any(|action| !action.errors.is_empty()) {
-        "import { invokeAction, type ActionStub } from \"aruna/client\";"
-    } else {
-        "import { invokeAction } from \"aruna/client\";"
-    };
-    let mut lines = vec![import.to_string(), "".to_string()];
+    // Each type is imported only where a stub names it: an ActionStub-typed stub
+    // (declared errors) gets its parameters from the stub type, every other one
+    // spells out `options?: ActionInvokeOptions`.
+    let mut imported = vec!["invokeAction"];
+    if actions
+        .iter()
+        .any(|action| action.fire_and_forget || action.errors.is_empty())
+    {
+        imported.push("type ActionInvokeOptions");
+    }
+    if actions
+        .iter()
+        .any(|action| !action.fire_and_forget && !action.errors.is_empty())
+    {
+        imported.push("type ActionStub");
+    }
+    let import = format!("import {{ {} }} from \"aruna/client\";", imported.join(", "));
+    let mut lines = vec![import, "".to_string()];
 
     if preserve_generated_comments {
         lines.splice(
@@ -1489,10 +1504,10 @@ mod tests {
             .contains("export type RestockItemOutput = void;"));
         assert!(output.files[0]
             .contents
-            .contains("return invokeAction(\"inventory.restockItem\", input) as Promise<RestockItemOutput>;"));
+            .contains("return invokeAction(\"inventory.restockItem\", input, options) as Promise<RestockItemOutput>;"));
         assert!(output.files[0]
             .contents
-            .contains("export const restockItem = (input?: RestockItemInput): Promise<RestockItemOutput> => {"));
+            .contains("export const restockItem = (input?: RestockItemInput, options?: ActionInvokeOptions): Promise<RestockItemOutput> => {"));
         assert!(output.files[0]
             .contents
             .contains("export type PurchaseItemInput = unknown;"));
@@ -1501,7 +1516,7 @@ mod tests {
             .contains("export type PurchaseItemOutput = void;"));
         assert!(output.files[0]
             .contents
-            .contains("export const purchaseItem = (input?: PurchaseItemInput): Promise<PurchaseItemOutput> => {"));
+            .contains("export const purchaseItem = (input?: PurchaseItemInput, options?: ActionInvokeOptions): Promise<PurchaseItemOutput> => {"));
         assert!(output.files[1]
             .contents
             .contains("import { restockItem as src_domains_inventory_actions_restockItem } from \"../../domains/inventory/actions\";"));
@@ -1542,9 +1557,9 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         let client = &output.files[0].contents;
         // One-way stub: resolves void and asks the invoker to skip the ack.
-        assert!(client.contains("export const paint = (input?: PaintInput): Promise<void> => {"));
+        assert!(client.contains("export const paint = (input?: PaintInput, options?: ActionInvokeOptions): Promise<void> => {"));
         assert!(client.contains(
-            "return invokeAction(\"spray.paint\", input, { fireAndForget: true }) as Promise<void>;"
+            "return invokeAction(\"spray.paint\", input, { ...options, fireAndForget: true }) as Promise<void>;"
         ));
         // The server registry still imports the definition unchanged.
         assert!(output.files[1]
@@ -1583,17 +1598,17 @@ mod tests {
 
         assert!(output.diagnostics.is_empty());
         let client = &output.files[0].contents;
-        assert!(client.starts_with("import { invokeAction, type ActionStub } from \"aruna/client\";"));
+        assert!(client.starts_with("import { invokeAction, type ActionInvokeOptions, type ActionStub } from \"aruna/client\";"));
         assert!(client.contains(
             "export type BuyErrors = { readonly NotEnoughCoins: undefined; readonly OutOfStock: { itemId: string; }; };"
         ));
-        assert!(client.contains("export const buy: ActionStub<BuyInput, BuyOutput, BuyErrors> = (input) => {"));
+        assert!(client.contains("export const buy: ActionStub<BuyInput, BuyOutput, BuyErrors> = (input, options) => {"));
         // An action without errors keeps the plain stub.
-        assert!(client.contains("export const look = (input?: LookInput): Promise<LookOutput> => {"));
+        assert!(client.contains("export const look = (input?: LookInput, options?: ActionInvokeOptions): Promise<LookOutput> => {"));
 
         // Without any declared errors the import is what it always was.
         let without = generate_action_files("src/.aruna", &[plain.clone()], &[], &[], &test_rate_limit(), false);
-        assert!(without.files[0].contents.starts_with("import { invokeAction } from \"aruna/client\";"));
+        assert!(without.files[0].contents.starts_with("import { invokeAction, type ActionInvokeOptions } from \"aruna/client\";"));
 
         // Errors reach the client, so they are part of the contract hash.
         let mut without_errors = buy.clone();
@@ -1612,7 +1627,7 @@ mod tests {
         assert!(output.diagnostics.is_empty());
         let client = &output.files[0].contents;
         assert!(client.contains(
-            "return invokeAction(\"quest.claim\", input, { idempotent: true }) as Promise<ClaimOutput>;"
+            "return invokeAction(\"quest.claim\", input, { ...options, idempotent: true }) as Promise<ClaimOutput>;"
         ));
     }
 
@@ -1660,11 +1675,11 @@ mod tests {
             true,
         );
         let client = &output.files[0].contents;
-        assert!(client.contains("export const ready = (input?: ReadyInput): Promise<ReadyOutput> => {"));
+        assert!(client.contains("export const ready = (input?: ReadyInput, options?: ActionInvokeOptions): Promise<ReadyOutput> => {"));
         assert!(client.contains("export type ReadyInput = unknown;"));
-        assert!(client.contains("export const maybe = (input?: MaybeInput): Promise<MaybeOutput> => {"));
-        assert!(client.contains("export const ping = (input?: PingInput): Promise<void> => {"));
-        assert!(client.contains("export const join = (input: JoinInput): Promise<JoinOutput> => {"));
+        assert!(client.contains("export const maybe = (input?: MaybeInput, options?: ActionInvokeOptions): Promise<MaybeOutput> => {"));
+        assert!(client.contains("export const ping = (input?: PingInput, options?: ActionInvokeOptions): Promise<void> => {"));
+        assert!(client.contains("export const join = (input: JoinInput, options?: ActionInvokeOptions): Promise<JoinOutput> => {"));
     }
 
     #[test]
@@ -1744,7 +1759,7 @@ mod tests {
         assert!(output
             .files[0]
             .contents
-            .contains("return invokeAction(\"inventory.restockItem\", input) as Promise<PurchaseItemOutput>;"));
+            .contains("return invokeAction(\"inventory.restockItem\", input, options) as Promise<PurchaseItemOutput>;"));
         assert!(!output.files[0].contents.contains("shop.purchaseItem"));
         assert!(output.files[1].contents.contains("inventory.restockItem"));
         assert!(output.files[1].contents.contains("shop.purchaseItem"));
@@ -1982,7 +1997,7 @@ mod tests {
         ));
         assert!(client.contains("export type PurchaseItemOutput = { ok: boolean; };"));
         assert!(client.contains(
-            "export const purchaseItem = (input: PurchaseItemInput): Promise<PurchaseItemOutput> => {"
+            "export const purchaseItem = (input: PurchaseItemInput, options?: ActionInvokeOptions): Promise<PurchaseItemOutput> => {"
         ));
     }
 }

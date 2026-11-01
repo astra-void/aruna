@@ -326,6 +326,7 @@ const ROBLOX_RUNTIME_ANCHOR_MODULES = [
   // The test surface is vendored like the rest of the runtime so `aruna/testing`
   // resolves in an editor and under `aruna check`; only `aruna test` compiles it.
   "testing",
+  "ui",
 ] as const;
 
 // Pulls every relative module specifier (`./x`, with or without a `.ts`

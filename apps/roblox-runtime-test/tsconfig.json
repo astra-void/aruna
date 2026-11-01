@@ -23,6 +23,7 @@
       "aruna/roblox": ["../../packages/aruna/roblox/roblox.ts"],
       "aruna/schema": ["../../packages/aruna/roblox/schema.ts"],
       "aruna/testing": ["../../packages/aruna/roblox/testing.ts"],
+      "aruna/ui": ["../../packages/aruna/roblox/ui.ts"],
       "aruna/internal/*": ["../../packages/aruna/roblox/*"]
     }
   },

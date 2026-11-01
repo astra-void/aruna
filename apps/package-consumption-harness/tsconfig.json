@@ -30,7 +30,8 @@
       ],
       "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"],
       "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
-      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"]
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
+      "aruna/ui": ["./src/.aruna/shared/runtime/ui.ts"]
     },
     "noLib": true,
     "outDir": "out",

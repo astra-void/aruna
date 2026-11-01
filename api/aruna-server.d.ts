@@ -101,8 +101,8 @@ export interface ActionRateLimitOptions {
 export type ActionRateLimitStrategy = "fixedWindow" | "tokenBucket";
 
 export interface ActionRegistry<TPlayer = unknown> {
-    readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
-    readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown) => Promise<ActionDispatchResult>;
+    readonly dispatch: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown, optimistic?: boolean) => Promise<ActionDispatchResult>;
+    readonly dispatchInProcess: (player: TPlayer, actionId: string, input: unknown, idempotencyKey?: unknown, optimistic?: boolean) => Promise<ActionDispatchResult>;
     readonly admitEnvelope: (player: TPlayer, requestId: unknown, actionId: unknown) => boolean;
     readonly refuseFrame: (player: TPlayer, reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch") => void;
     readonly forgetPlayer: (player: TPlayer) => void;
@@ -180,6 +180,7 @@ export interface AnyStoreDocument {
 
 export interface AppDispatchOptions {
     readonly idempotencyKey?: string;
+    readonly optimistic?: boolean;
 }
 
 export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap, TSession = unknown> {
@@ -438,6 +439,8 @@ export interface ResourceGlobalContext {
 
 export interface ResourceHost<TPlayer = unknown> {
     readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+    readonly invalidateForCall: (resource: ResourceRef, player: TPlayer | undefined, call: ResourceCallTag<TPlayer>) => void;
+    readonly pendingTags: (caller: TPlayer, key: string) => ReadonlyArray<string>;
     readonly has: (resourceId: string) => boolean;
     readonly isSubscribed: (resource: ResourceRef, player: TPlayer) => boolean;
     readonly subscriberCount: (resource: ResourceRef) => number;
@@ -885,6 +888,7 @@ interface ActionInvokeOptions {
     readonly signal?: CancelToken;
     readonly idempotent?: boolean;
     readonly idempotencyKey?: string;
+    readonly optimistic?: boolean;
 }
 
 type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer, SignalMap, ActionErrorMap>;
@@ -913,6 +917,11 @@ interface Refinement {
     readonly message: string;
 }
 
+interface ResourceCallTag<TPlayer = unknown> {
+    readonly caller: TPlayer;
+    readonly key: string;
+}
+
 interface ResourceObserver {
     readonly onSnapshot?: (resourceId: string, recipients: number) => void;
     readonly onInvalidate?: (resourceId: string) => void;
@@ -922,7 +931,7 @@ interface ResourceObserver {
 }
 
 interface ResourceSink<TPlayer> {
-    readonly replace: (target: TPlayer, key: string, item: defined) => void;
+    readonly replace: (target: TPlayer, key: string, item: defined, merge?: (queued: defined, incoming: defined) => defined) => void;
 }
 
 interface Schema<T = unknown> {
