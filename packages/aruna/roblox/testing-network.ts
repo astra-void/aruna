@@ -28,7 +28,7 @@
 //   * A disconnect drops whatever is in flight both ways, then the player leaves.
 
 import { createClientApp, type ClientApp } from "./client";
-import type { ActionInvokeOptions, ClientMiddleware } from "./client-runtime";
+import type { ActionInvokeOptions, ClientMiddleware, ClientRetryPolicy } from "./client-runtime";
 import { bindRemoteActions, createRemoteActionInvoker } from "./roblox";
 import { createServerApp, type CreateServerAppOptions, type ServerApp } from "./server-app";
 import type { ActionRegistry } from "./server-runtime";
@@ -80,6 +80,9 @@ export type CreateTestNetworkOptions<TSignals extends SignalMap = SignalMap, TSe
 	// Middleware every client app runs (a metrics collector's
 	// `clientMiddleware()`, for one).
 	readonly clientMiddleware?: readonly ClientMiddleware[];
+	// A retry policy every client app uses. Its backoff and `retryAfterMs` waits
+	// run on the virtual clock, so `advance` drives them.
+	readonly retry?: ClientRetryPolicy;
 };
 
 // One direction of one player's link.
@@ -570,6 +573,15 @@ export function createTestNetwork<TSignals extends SignalMap = SignalMap, TSessi
 			}),
 			resources,
 			...(options.clientMiddleware !== undefined ? { middleware: options.clientMiddleware } : {}),
+			...(options.retry !== undefined
+				? {
+						retry: options.retry,
+						retryDelay: (delayMs: number) =>
+							new Promise<void>((resolve) => {
+								virtualDelay(delayMs, resolve);
+							}),
+					}
+				: {}),
 			...(signals !== undefined
 				? {
 						signals,

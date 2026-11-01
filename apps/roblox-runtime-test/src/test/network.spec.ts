@@ -255,6 +255,54 @@ describe("test network: ordering and timing", () => {
     expect(g.runsOf("echo:lost")).toBe(0);
     net.dispose();
   });
+
+  it("waits out a rate limit's retryAfterMs on the virtual clock, then retries", () => {
+    const g = makeGame();
+    const net = createTestNetwork({ actions: g.actions, players: [101], retry: { maxRetries: 1 } });
+    const alice = net.client(101);
+    const results = new Array<string>();
+    for (let index = 0; index < 3; index += 1) {
+      alice.invoke("chat.shout").then(
+        () => results.push("ok"),
+        (err: unknown) => results.push((err as { name: string }).name),
+      );
+    }
+    net.flush();
+    // The third call was refused and is waiting, not failed.
+    expect(results).toEqual(["ok", "ok"]);
+    expect(g.runsOf("shout:101")).toBe(2);
+    net.advance(1100);
+    expect(results).toEqual(["ok", "ok", "ok"]);
+    expect(g.runsOf("shout:101")).toBe(3);
+    net.dispose();
+  });
+
+  it("retries an idempotent call whose request was lost, and runs it once", () => {
+    const g = makeGame();
+    const net = createTestNetwork({
+      actions: g.actions,
+      players: [101],
+      requestTimeoutMs: 200,
+      retry: { maxRetries: 1, baseDelayMs: 50 },
+    });
+    net.link(101).up.dropNext();
+    let outcome = "pending";
+    net
+      .client(101)
+      .invoke("debug.echo", "again", { idempotent: true })
+      .then(
+        (value) => (outcome = value as string),
+        (err: unknown) => (outcome = (err as { name: string }).name),
+      );
+    // Timed out at 200 ms; the retry waits its 50 ms backoff.
+    net.advance(240);
+    expect(outcome).toBe("pending");
+    expect(g.runsOf("echo:again")).toBe(0);
+    net.advance(200);
+    expect(outcome).toBe("again");
+    expect(g.runsOf("echo:again")).toBe(1);
+    net.dispose();
+  });
 });
 
 describe("test network: disconnects", () => {

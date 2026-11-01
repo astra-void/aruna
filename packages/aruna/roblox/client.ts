@@ -82,6 +82,9 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap>
 	// middleware on each attempt). Disabled by default; a policy with maxRetries 0
 	// is a no-op. See ClientRetryPolicy.
 	readonly retry?: ClientRetryPolicy;
+	// How `retry` waits between attempts. Defaults to a task.delay-backed sleep;
+	// a test passes a virtual clock's delay so backoff runs without real time.
+	readonly retryDelay?: (delayMs: number) => Promise<void>;
 	// The client end of the server's resources: `true` builds the default one over
 	// the Aruna RemoteEvent (`createResourceClient()`), or pass one you built. The
 	// app installs it for the generated bindings and disposes it with the app.
@@ -124,7 +127,7 @@ export function createClientApp<TSignals extends SignalMap = SignalMap>(
 	// Retry wraps the middleware-wrapped transport, so it is outermost and re-runs
 	// middleware (and re-mints the underlying request) on every attempt.
 	if (options !== undefined && options.retry !== undefined) {
-		transport = withRetry(transport, options.retry);
+		transport = withRetry(transport, options.retry, options.retryDelay);
 	}
 
 	setActionInvoker(transport);

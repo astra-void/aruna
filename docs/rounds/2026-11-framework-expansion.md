@@ -128,7 +128,6 @@ Lune: 421 TypeScript specs.
 
 - Resource patches (deltas) instead of whole snapshots; global-resource fan-out per frame
   for very large audiences.
-- `withRetry` sleeps on real time, so the test network cannot drive retry backoff.
 - Network metrics are per Luau VM; there is no built-in dev command or Studio panel that
   prints them.
 - `aruna inspect network` shows the runtime defaults for the request budget; an app's

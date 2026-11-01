@@ -84,6 +84,7 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap> 
     readonly requestTimeoutMs?: number;
     readonly middleware?: readonly ClientMiddleware[];
     readonly retry?: ClientRetryPolicy;
+    readonly retryDelay?: (delayMs: number) => Promise<void>;
     readonly resources?: boolean | ResourceClient;
 }
 

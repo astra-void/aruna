@@ -7,6 +7,7 @@ export type CreateTestNetworkOptions<TSignals extends SignalMap = SignalMap, TSe
     readonly requestTimeoutMs?: number;
     readonly seed?: number;
     readonly clientMiddleware?: readonly ClientMiddleware[];
+    readonly retry?: ClientRetryPolicy;
 };
 
 export interface CreateTestPlayerOptions {
@@ -421,6 +422,14 @@ interface ClientApp<TSignals extends SignalMap = SignalMap> {
 }
 
 type ClientMiddleware = (info: ClientActionInfo, next: () => Promise<unknown>) => Promise<unknown>;
+
+interface ClientRetryPolicy {
+    readonly maxRetries: number;
+    readonly baseDelayMs?: number;
+    readonly maxDelayMs?: number;
+    readonly respectRetryAfter?: boolean;
+    readonly retryOn?: (error: unknown, attempt: number) => boolean;
+}
 
 interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap, TSession = unknown> {
     readonly actions: ActionMap<TPlayer>;

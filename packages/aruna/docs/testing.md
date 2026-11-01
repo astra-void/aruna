@@ -223,8 +223,10 @@ expect(await earned).toBe(3);
 | `network.published()` | Every signal the server put on a link. |
 
 Options: `latencyMs` (a number, or `{ up, down }`), `requestTimeoutMs` (virtual ms,
-default 10000), `seed` (for loss rates), plus everything `createServerApp` takes except
-the transport, the publisher, the players source, and the clock.
+default 10000), `seed` (for loss rates), `clientMiddleware`, `retry` (a
+`ClientRetryPolicy` every client uses; its backoff and `retryAfterMs` waits run on the
+virtual clock), plus everything `createServerApp` takes except the transport, the
+publisher, the players source, and the clock.
 
 ### Faults, and which guarantees they model
 

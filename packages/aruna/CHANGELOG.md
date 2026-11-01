@@ -17,6 +17,12 @@ the game build like any other module.
 
 ### Added
 
+- **Retry backoff on the test network's clock.** `createTestNetwork({ retry })`
+  gives every client app a retry policy whose backoff and `retryAfterMs` waits
+  run on the virtual clock, so `advance` drives them; before, `withRetry` slept
+  on real time and a spec could not reach a retry. `createClientApp` takes the
+  matching `retryDelay` for any other clock.
+
 - **Network metrics on `aruna/client`.** `createNetworkMetrics`,
   `formatNetworkReport`, and `estimateWireBytes` (and their types) are exported
   from `aruna/client` as well as `aruna/server`, so a client collecting its own
