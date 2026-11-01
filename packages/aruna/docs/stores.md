@@ -140,6 +140,14 @@ The lifecycle:
 3. **Release** writes one final time and clears the lock, so the player's next server can
    load immediately instead of waiting out the TTL.
 
+**One session per key on a server.** A player who rejoins the same server is a new
+`Player` with the same key, and a server's own lock never blocks it. So a load ends the
+key's previous session on this server first: a departed player's document (still
+loading, or open because the game has not released it yet) is released, and a release
+still writing (a retried final save, say) is waited out. The new session therefore reads
+what the old one last wrote, and nothing the old one held can land on top of the new
+one's saves. A later `release` of the departed player is a no-op.
+
 ```ts
 readonly session?: {
   readonly lockTtlMs?: number;        // default 120_000; forced to at least 2 heartbeats

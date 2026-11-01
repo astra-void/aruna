@@ -11,7 +11,7 @@ import {
   type StoreBackend,
   type StoreScheduler,
 } from "aruna/server";
-import { describe, expect, it } from "aruna/testing";
+import { createTestStoreBackend, describe, expect, it } from "aruna/testing";
 
 const profileSchema = schema.object({
   coins: schema.number(),
@@ -590,6 +590,66 @@ describe("heartbeat", () => {
 
     await store.release(player);
     expect(scheduler.pending()).toBe(0);
+  });
+});
+
+// Roblox gives a player who rejoins the same server a new Player object with the
+// same UserId, so the same key. The departed session may still be loading or
+// still writing its release when the new one loads.
+describe("rejoining the same server", () => {
+  it("loads what the departed session's release wrote, even when that write is retried", async () => {
+    const backend = createTestStoreBackend();
+    const scheduler = manualScheduler();
+    const store = createPlayerStore(definition(), { backend, owner: "server-a", scheduler });
+    const loaded = await store.load(player);
+    if (!loaded.ok) {
+      throw "expected the first load to succeed";
+    }
+    loaded.value.update((current: Profile) => ({ ...current, coins: 5 }));
+
+    // The release's write fails once and waits on its retry backoff.
+    backend.failNext("update", 1);
+    const released = store.release(player);
+    const rejoined: FakePlayer = { UserId: 42 };
+    const reloading = store.load(rejoined);
+    scheduler.runAll();
+
+    expect((await released).ok).toBe(true);
+    const reloaded = await reloading;
+    if (!reloaded.ok) {
+      throw "expected the rejoin to load";
+    }
+    expect((reloaded.value.get() as Profile).coins).toBe(5);
+    // The rejoined session holds the lock the release cleared.
+    expect(storedLock(backend)).toBeDefined();
+  });
+
+  it("ends a departed session whose load was still in flight before the new one reads", async () => {
+    const inner = createMemoryStoreBackend();
+    const gate = gatedBackend(inner);
+    const store = createPlayerStore(definition(), {
+      backend: gate.backend,
+      owner: "server-a",
+      scheduler: parkedHeartbeats(),
+    });
+    const departing = store.load(player);
+    const rejoined: FakePlayer = { UserId: 42 };
+    const reloading = store.load(rejoined);
+    gate.open();
+    await departing;
+    const reloaded = await reloading;
+    if (!reloaded.ok) {
+      throw "expected the rejoin to load";
+    }
+    // The departed player's document is closed: only one session holds the key.
+    expect(store.get(player)).toBeUndefined();
+
+    reloaded.value.update((current: Profile) => ({ ...current, coins: 7 }));
+    expect((await store.save(rejoined)).ok).toBe(true);
+    // The game releases the departed player late; nothing of theirs lands now.
+    expect((await store.release(player)).ok).toBe(true);
+    expect(storedCoins(inner)).toBe(7);
+    expect(storedLock(inner)).toBeDefined();
   });
 });
 

@@ -356,6 +356,14 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 	// long enough that a late `waitFor` cannot re-lock them, short enough not
 	// to pin the Player.
 	const released = createDepartedPlayers<TPlayer>(nowMs);
+	// One session per key on this server. A player who rejoins is a new Player
+	// with the same key, and this server's own lock never blocks it, so without
+	// this the new session could read the record before the departed one's
+	// release lands, and the departed one's writes could land on top of the new
+	// one's saves. `holders`: the player whose session (loading or open) owns the
+	// key. `releasing`: the departed session's release, until it has written.
+	const holders = new Map<string, TPlayer>();
+	const releasing = new Map<string, Promise<unknown>>();
 	const memoryOnly = isMemoryStoreBackend(backend);
 
 	// One UpdateAsync that claims the lock and returns the record under it. The
@@ -635,6 +643,45 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		return document;
 	};
 
+	const release = (player: TPlayer): Promise<StoreResult<undefined>> => {
+		released.add(player);
+		failures.delete(player);
+		// Guarded: a custom `key` that throws must not stop a leave from releasing.
+		const [keyed, keyResult] = pcall(() => keyFor(player));
+		const key = keyed && keyResult.ok ? keyResult.value : undefined;
+		if (key !== undefined && holders.get(key) === player) {
+			holders.delete(key);
+		}
+		// A player who leaves mid-load must still be released, or the lock lingers
+		// until the TTL lapses and their next server stalls behind it.
+		const pending = loading.get(player);
+		const holding = pending !== undefined || documents.has(player);
+		const after = pending !== undefined ? pending.then(() => undefined) : Promise.resolve(undefined);
+
+		const result = after.then(() => {
+			const document = documents.get(player);
+			documents.delete(player);
+			if (document === undefined) {
+				return storeOk(undefined);
+			}
+			return document.release().then((result) => {
+				if (!result.ok && options !== undefined && options.onSaveFailed !== undefined) {
+					options.onSaveFailed(player, result.error);
+				}
+				return result;
+			});
+		});
+		if (key !== undefined && holding) {
+			releasing.set(key, result);
+			result.then(() => {
+				if (releasing.get(key) === result) {
+					releasing.delete(key);
+				}
+			});
+		}
+		return result;
+	};
+
 	const load = (player: TPlayer): Promise<StoreResult<ErasedDocument>> => {
 		const existing = documents.get(player);
 		if (existing !== undefined && existing.isActive()) {
@@ -669,6 +716,12 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			return Promise.resolve(keyResult);
 		}
 		const key = keyResult.value;
+		// The key's previous session on this server ends before this one reads:
+		// a departed player's (still loading or open) is released now, and a
+		// release still writing is waited out.
+		const previous = holders.get(key);
+		holders.set(key, player);
+		const handover = previous !== undefined && previous !== player ? release(previous) : releasing.get(key);
 
 		const attempt = (
 			index: number,
@@ -721,7 +774,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		// A backend that answers at once settles the load inside this call, before
 		// it could be recorded as in flight: only a load still running is.
 		let settled = false;
-		const pending = attempt(1, undefined).then((result) => {
+		const begin = () => attempt(1, undefined);
+		const pending = (handover !== undefined ? handover.then(begin) : begin()).then((result) => {
 			settled = true;
 			loading.delete(player);
 			// A player released mid-load is gone: their failure is not kept for them.
@@ -734,29 +788,6 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			loading.set(player, pending);
 		}
 		return pending;
-	};
-
-	const release = (player: TPlayer): Promise<StoreResult<undefined>> => {
-		released.add(player);
-		failures.delete(player);
-		// A player who leaves mid-load must still be released, or the lock lingers
-		// until the TTL lapses and their next server stalls behind it.
-		const pending = loading.get(player);
-		const after = pending !== undefined ? pending.then(() => undefined) : Promise.resolve(undefined);
-
-		return after.then(() => {
-			const document = documents.get(player);
-			documents.delete(player);
-			if (document === undefined) {
-				return storeOk(undefined);
-			}
-			return document.release().then((result) => {
-				if (!result.ok && options !== undefined && options.onSaveFailed !== undefined) {
-					options.onSaveFailed(player, result.error);
-				}
-				return result;
-			});
-		});
 	};
 
 	const implementation = {
@@ -855,6 +886,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		dispose: () => {
 			documents.clear();
 			loading.clear();
+			holders.clear();
+			releasing.clear();
 			failures.clear();
 			released.clear();
 		},

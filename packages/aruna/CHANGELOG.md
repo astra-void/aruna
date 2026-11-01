@@ -781,6 +781,17 @@ the game build like any other module.
 
 ### Fixed
 
+- **A rejoin on the same server could read a stale record or be overwritten by the
+  departed session.** The player store keyed documents by `Player`, and a server's own
+  lock never blocks it, so a player who left and came back to the same server (a new
+  `Player`, the same key) could load the record before the departed session's release
+  landed (a retried final save lost its progress), or hold the key alongside a departed
+  session whose load was still in flight (whose later release then wrote its older value
+  over the new session's saves). A load now ends the key's previous session on this
+  server first: it releases a departed player's document and waits out a release still
+  writing. Found by ARCANUM's persistence specs; regression specs in
+  `apps/roblox-runtime-test/src/test/player-store.spec.ts` ("rejoining the same server").
+
 - **Player store failure paths.** A throwing `onLoadFailed` no longer turns a
   failed load into a rejected one (which left the load in flight and
   `onStoresReady` unfired): the handler is called under `pcall` and warned
