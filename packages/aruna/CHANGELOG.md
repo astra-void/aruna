@@ -17,6 +17,18 @@ the game build like any other module.
 
 ### Added
 
+- **`createTestNetwork` (`aruna/testing`): deterministic multiplayer specs.**
+  One real server app and a real client app per player, joined by simulated
+  links on a virtual clock (`advance(ms)`, `flush()`), through the shipping
+  wire code end to end. Per-player faults keep Roblox's guarantees apart:
+  client → server drop/duplicate/reorder/inject (a hostile client), reliable
+  server → client latency and `hold()` (plus explicit guarantee-breaking
+  faults for client robustness tests), and loss on the unreliable remote;
+  `disconnect` / `reconnect` / `leave`, request timeouts on the virtual clock,
+  seeded loss. See [testing.md](docs/testing.md#multiplayer-networks).
+- `createRemoteActionInvoker({ delay })`: the timer the request timeout is
+  armed with (default `task.delay`), so a virtual clock can drive it.
+
 - **Resources: server-owned state clients observe** (`defineResource`, see
   [resources.md](docs/resources.md) and the protocol in `docs/rfcs/resources.md`).
   A resource declares an `id`, a `scope` (`"player"`, the default, or

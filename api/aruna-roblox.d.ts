@@ -35,6 +35,7 @@ export interface RemoteActionInvokerOptions extends WireBatchOptions {
     readonly createRequestId?: () => string;
     readonly requestTimeoutMs?: number;
     readonly onProtocolError?: WireProtocolErrorHandler;
+    readonly delay?: (delayMs: number, callback: () => void) => () => void;
 }
 
 export interface ResourceBinding<TValue> {

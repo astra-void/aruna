@@ -152,6 +152,95 @@ const harness = createTestServerApp({ actions, playerStore: profiles });
 harness.join(player); // loads the document, so ctx.store is populated
 ```
 
+## Resources
+
+`createTestServerApp({ resources })` runs the real resource host, and every
+`harness.client(player)` has a real resource client as `client.resources`, wired through
+the same admission the wire binding runs:
+
+```ts
+const harness = createTestServerApp({ actions, resources });
+const player = createTestPlayer({ userId: 1 });
+harness.join(player);
+const subscription = harness.client(player).resources!.subscribe("quests.progress");
+expect(subscription.get()).toEqual({ quest: "intro", step: 0 });
+
+harness.app.resources!.invalidate("quests.progress", player);
+```
+
+Unbatched (the default), a snapshot arrives inside the call that produced it; with
+`batching: true` it arrives on `step()`, in order with responses and signals.
+
+## Multiplayer networks
+
+`createTestNetwork` runs one real server app and a real client app per player, joined by
+simulated links on a virtual clock. Nothing is mocked between them: the wire frames, the
+action binding (admission, budget, validation, rate limits, middleware, idempotency, error
+masking), signals, and resources are all the shipping code.
+
+```ts
+import { createTestNetwork } from "aruna/testing";
+
+const network = createTestNetwork({ actions, resources, signals, players: [101, 202], latencyMs: 40 });
+const alice = network.client(101);
+const bob = network.client(202);
+
+alice.resources.subscribe("economy.wallet", render);
+const earned = alice.invoke("economy.earn", { amount: 3 });
+network.advance(250); // frames, deliveries, and timeouts up to t + 250 ms
+network.flush();      // step until nothing is in flight
+expect(await earned).toBe(3);
+```
+
+| | |
+| --- | --- |
+| `network.client(id)` | The player's client: `invoke`, `resources`, `app` (with `app.subscriber`), `connected()`. |
+| `network.join(id)` / `leave(id)` | A player joins with a fresh client / leaves cleanly. |
+| `network.disconnect(id)` | The connection drops: frames in flight both ways are lost, the client's pending calls time out on the virtual clock, the server sees the player leave. |
+| `network.reconnect(id)` | The same player joins again with a new client (Roblox has no in-session reconnect). |
+| `network.advance(ms)` / `flush()` / `now()` | The virtual clock. One frame is 16 ms (`TEST_NETWORK_FRAME_MS`); each frame delivers what is due, flushes every side's outbox (Heartbeat), and fires due timeouts. |
+| `network.link(id)` | Per-player faults (below) and `stats()` per direction. |
+| `network.published()` | Every signal the server put on a link. |
+
+Options: `latencyMs` (a number, or `{ up, down }`), `requestTimeoutMs` (virtual ms,
+default 10000), `seed` (for loss rates), plus everything `createServerApp` takes except
+the transport, the publisher, the players source, and the clock.
+
+### Faults, and which guarantees they model
+
+The links keep Roblox's guarantees apart, so a spec does not accidentally test against a
+transport that cannot exist:
+
+| Direction | Roblox guarantees | Faults |
+| --- | --- | --- |
+| `link.up` (client → server, RemoteEvent) | Ordered while connected. But a client can send anything. | `dropNext`, `duplicateNext`, `reorderNext`, `setLoss`, `setLatency`, and `inject(frame)` (a raw frame, as a hostile client would send). These model a broken or hostile client: what the server must survive. |
+| `link.reliable` (server → client, RemoteEvent) | Ordered, never lost while connected. | `setLatency` and `hold()` / `release()` keep the order. `duplicateNext`, `reorderNext`, `dropNext` break the guarantee on purpose, to test a client's defenses; Roblox's transport does not do this. |
+| `link.unreliable` (server → client, UnreliableRemoteEvent) | None: may drop or reorder. | `setLoss`, `dropNext`, `reorderNext`, `duplicateNext`, `setLatency`. Normal behavior here. |
+
+A disconnect is the only way the reliable direction loses frames in a real game.
+
+### What it is good for
+
+`apps/roblox-runtime-test/src/test/network.spec.ts` is the reference: per-player isolation
+of resource state, a forged subscription that names another player, per-player rate
+limits, invalid payloads and malformed frames, duplicated calls with and without an
+idempotency key, reordered calls, response latency past the request timeout, a lost
+request, a disconnect in the middle of a call, a rejoin restoring a snapshot,
+subscription cleanup on leave, reordered and duplicated snapshots, a held snapshot, lossy
+unreliable signals next to reliable state, and seed determinism.
+
+### Ordering guarantees a spec can rely on
+
+- One player's calls are dispatched in the order the server receives them. Two calls in
+  one frame arrive in the order they were made.
+- A synchronous action's signals, resource snapshots, and response leave in the order
+  they were produced; an async action's response leaves when it settles, so two async
+  calls can be answered in either order.
+- Nothing is ordered across players, or between the unreliable remote and anything else.
+
+Not simulated: retry backoff in `withRetry` (it sleeps on real time), and the
+DataStore — pass a store backend of your own (`createMemoryStoreBackend`) for that.
+
 ## The framework
 
 `aruna/testing` exports `describe`, `it`, `itSkip`, `beforeEach`, `afterEach`, and

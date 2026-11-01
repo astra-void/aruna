@@ -304,13 +304,24 @@ export interface RemoteActionInvokerOptions extends WireBatchOptions {
 	// Called for a frame the channel drops (docs/wire-protocol.md). Without it,
 	// the channel's default: a warning in Studio.
 	readonly onProtocolError?: WireProtocolErrorHandler;
+	// Arms the request timeout: runs `callback` after `delayMs` and returns a
+	// function that cancels it. Defaults to `task.delay`; the test network
+	// passes its virtual clock so a timeout elapses when a spec says it does.
+	readonly delay?: (delayMs: number, callback: () => void) => () => void;
+}
+
+function taskDelay(delayMs: number, callback: () => void): () => void {
+	const thread = task.delay(delayMs / 1000, callback);
+	return () => {
+		task.cancel(thread);
+	};
 }
 
 export interface CreateActionInvokerOptions extends ContractHandshakeOptions, RemoteActionInvokerOptions {}
 
 interface PendingActionRequest {
 	readonly resolve: (payload: ActionResponsePayload) => void;
-	timeoutThread?: thread;
+	cancelTimeout?: () => void;
 	// Removes the CancelToken listener when the request settles by any means, so
 	// a resolved/timed-out request does not keep the token subscribed.
 	unsubscribeCancel?: () => void;
@@ -376,6 +387,7 @@ function invokerOver(
 		options !== undefined && options.requestTimeoutMs !== undefined
 			? options.requestTimeoutMs
 			: DEFAULT_ACTION_REQUEST_TIMEOUT_MS;
+	const delay = options !== undefined && options.delay !== undefined ? options.delay : taskDelay;
 	const pending = new Map<string, PendingActionRequest>();
 	if (options !== undefined && options.onProtocolError !== undefined) {
 		channel.onProtocolError(options.onProtocolError);
@@ -401,8 +413,8 @@ function invokerOver(
 		const entry = pending.get(requestId);
 		if (entry !== undefined) {
 			pending.delete(requestId);
-			if (entry.timeoutThread !== undefined) {
-				task.cancel(entry.timeoutThread);
+			if (entry.cancelTimeout !== undefined) {
+				entry.cancelTimeout();
 			}
 			if (entry.unsubscribeCancel !== undefined) {
 				entry.unsubscribeCancel();
@@ -476,8 +488,8 @@ function invokerOver(
 						return;
 					}
 					pending.delete(requestId);
-					if (entry.timeoutThread !== undefined) {
-						task.cancel(entry.timeoutThread);
+					if (entry.cancelTimeout !== undefined) {
+						entry.cancelTimeout();
 					}
 					reject({
 						message: `Aruna action ${actionId} was cancelled.`,
@@ -486,9 +498,9 @@ function invokerOver(
 				});
 			}
 
-			// Arm a timeout only when enabled. task.delay uses seconds.
+			// Arm a timeout only when enabled.
 			if (requestTimeoutMs > 0) {
-				entry.timeoutThread = task.delay(requestTimeoutMs / 1000, () => {
+				entry.cancelTimeout = delay(requestTimeoutMs, () => {
 					if (pending.get(requestId) !== entry) {
 						return;
 					}
