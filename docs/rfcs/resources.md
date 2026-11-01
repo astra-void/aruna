@@ -155,7 +155,13 @@ read is the only source of what a client sees.
   On the wire, a batched channel replaces a state item for the same resource still
   queued for the same player this frame instead of adding a second one, keeping the
   first one's place. A burst of invalidations therefore costs one load in flight and one
-  item per frame per subscriber.
+  item per frame per subscriber. Keeping that place means the newer state overtakes
+  whatever was queued between the two items (a response, a signal): a client can apply
+  state that already reflects a call before the call's response arrives. It never
+  applies older state after newer.
+- **A load that never settles** holds its key: later invalidations mark it dirty and
+  wait behind it, and new subscribers to a global resource wait on it. There is no load
+  timeout; a `load` that can hang (an external request) should bound itself.
 - **Read-your-writes.** When `load` returns synchronously, an `invalidate` inside an
   action's `run` queues the new state before the action's response, on the same
   channel, so the client applies it before the caller's `await` resumes. An async
@@ -179,7 +185,12 @@ new join with a new client. That new client subscribes from scratch and receives
 snapshot (step 1). Within one session, `subscription.refresh()` (or
 `resources.resync()` for all) sends `subscribe` again, which the server treats as a
 resync: it loads and sends a fresh snapshot whatever the client holds. A resync is
-idempotent; any number of them leave the client on the newest value.
+idempotent; any number of them leave the client on the newest value. Each one is a
+subscription item, charged to the player's request budget like a call; resyncs that
+arrive while a load runs coalesce into one more load, synchronous ones do not. A resync
+is authorized again: one that is refused ends the subscription it was refreshing.
+
+`resources.dispose()` on the client unsubscribes everything it held.
 
 ## Errors
 
@@ -187,7 +198,8 @@ idempotent; any number of them leave the client on the newest value.
 | --- | --- | --- |
 | `load` throws or rejects | `status: "error"`, `error: "ResourceLoadError"`, last value kept | `onResourceError(error, { resourceId, player?, errorId })` |
 | `load` returns a value that fails the schema or is not wire-safe | the same `ResourceLoadError` | the same, with the validation failure |
-| `authorize` returns false or throws | `status: "error"`, `error: "ResourceForbiddenError"`; not subscribed | — |
+| `authorize` returns false or throws | `status: "error"`, `error: "ResourceForbiddenError"`; not subscribed (a refused resync unsubscribes) | — |
+| `onResourceError` or a schema `refine` throws | the same `ResourceLoadError` | a `warn`; the key is free for the next load |
 | subscription to an id the server does not define | nothing (dropped) | `onAbuse` `unknown-resource` |
 
 No message travels with an error, by design: a `load` failure is a server bug or an

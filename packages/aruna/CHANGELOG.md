@@ -781,6 +781,25 @@ the game build like any other module.
 
 ### Fixed
 
+- **Player store failure paths.** A throwing `onLoadFailed` no longer turns a
+  failed load into a rejected one (which left the load in flight and
+  `onStoresReady` unfired): the handler is called under `pcall` and warned
+  about. A load that fails after the player was released no longer records a
+  failure for them, and `status()` reports `released` before any failure.
+  `onStoresReady` and `app.stores.ready` wait for every load to settle, not
+  for all to succeed. `requireStores` refusals no longer name the stores
+  (the message reaches the client).
+
+- **Resource host failure paths** (new this release, fixed before it shipped):
+  a throwing `onResourceError` or schema `refine` is a load error, not an
+  escape that left the key loading forever; an invalidation of a global
+  resource while a load ran with nobody subscribed is no longer lost; a
+  cached global value is re-sent under a fresh revision, so a client that
+  had seen it (or a higher Forbidden revision) no longer drops it as stale;
+  a resync refused by `authorize` ends the subscription; invalidating every
+  player iterates a copy; the client's `dispose()` unsubscribes. The
+  outbox's `replace` is indexed instead of scanning the queue.
+
 - **A fresh starter could not run its own spec.** `create-aruna-app` pinned
   Rojo but not Lune in `rokit.toml`, and the scaffolded spec expected a
   rejection message ("invalid action input") the runtime never produced. Lune

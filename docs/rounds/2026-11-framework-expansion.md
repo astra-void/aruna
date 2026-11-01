@@ -108,7 +108,23 @@ was not modified): builds to Luau and passes its 160 specs and `tsc` on the new 
 before and after migrating its quest-progress handshake to a resource
 (`arcanum-quests-resource.patch`, applies cleanly; not applied).
 
+### Review fixes
+
+An independent review of the new runtime code (resources, stores, outbox) reported twelve
+defects; each was checked against the code and fixed, with a regression spec where it is
+behaviour (8 Lune specs, each failing without its fix): `onResourceError`/`refine` throws
+wedging a key, a lost global invalidation, a cached global value dropped as stale by a
+client that had seen it or a Forbidden revision, a refused resync staying subscribed,
+client `dispose` not unsubscribing, a throwing `onLoadFailed` leaving a load in flight
+and `onStoresReady` unfired, failures recorded for released players, store names in the
+`requireStores` refusal. Also: `invalidate` iterates a copy, the outbox `replace` is
+indexed, and the RFC states the `replace` ordering, the no-timeout load, and resync cost.
+Lune: 421 TypeScript specs.
+
 ## Left for later
+
+- A resource `load` that never settles holds its key (documented; no load timeout).
+- Synchronous resource resyncs are not coalesced; they are bounded by the request budget.
 
 - Resource patches (deltas) instead of whole snapshots; global-resource fan-out per frame
   for very large audiences.

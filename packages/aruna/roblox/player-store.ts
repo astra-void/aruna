@@ -188,6 +188,8 @@ export interface PlayerStore<TSchema extends Schema = Schema, TPlayer = Player> 
 	// needs the record can wait instead of failing on a mid-join call. Starts a
 	// load for a player with nothing in flight, except one whose document was
 	// just released (StoreClosedError): waiting must not re-lock a player who left.
+	// After a failed load it answers that failure again without retrying; call
+	// `load(player)` to try once more.
 	readonly waitFor: (player: TPlayer) => Promise<StoreResult<StoreDocument<Infer<TSchema>>>>;
 	readonly status: (player: TPlayer) => PlayerStoreStatus;
 	readonly save: (player: TPlayer) => Promise<StoreResult<Infer<TSchema>>>;
@@ -647,6 +649,20 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		released.remove(player);
 		failures.delete(player);
 
+		// The game's handler runs inside the load: a throw from it must not turn a
+		// failed load into a rejected one, which nothing (`onStoresReady`, the
+		// in-flight record) is waiting to catch.
+		const notifyLoadFailed = (failed: TPlayer, failure: StoreError): void => {
+			const onLoadFailed = options !== undefined ? options.onLoadFailed : undefined;
+			if (onLoadFailed === undefined) {
+				return;
+			}
+			const [reported, problem] = pcall(() => onLoadFailed(failed, failure));
+			if (!reported) {
+				warn(`Aruna store ${definition.id}: onLoadFailed threw: ${tostring(problem)}`);
+			}
+		};
+
 		const keyResult = keyFor(player);
 		if (!keyResult.ok) {
 			report(keyResult.error, "<unknown>", "lock");
@@ -668,9 +684,7 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 								retryable: true,
 							};
 				report(failure, key, "lock");
-				if (options !== undefined && options.onLoadFailed !== undefined) {
-					options.onLoadFailed(player, failure);
-				}
+				notifyLoadFailed(player, failure);
 				return Promise.resolve({ ok: false, error: failure });
 			}
 
@@ -685,9 +699,7 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 				// already retried everything transient.
 				if (acquired.error.name !== "StoreLockedError") {
 					report(acquired.error, key, "lock");
-					if (options !== undefined && options.onLoadFailed !== undefined) {
-						options.onLoadFailed(player, acquired.error);
-					}
+					notifyLoadFailed(player, acquired.error);
 					return acquired;
 				}
 
@@ -712,7 +724,8 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		const pending = attempt(1, undefined).then((result) => {
 			settled = true;
 			loading.delete(player);
-			if (!result.ok) {
+			// A player released mid-load is gone: their failure is not kept for them.
+			if (!result.ok && !released.has(player)) {
 				failures.set(player, result.error);
 			}
 			return result;
@@ -787,6 +800,9 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 			if (document !== undefined && document.isActive()) {
 				return { state: "ready", isNew: !document.snapshot.existed, memoryOnly, locked: false };
 			}
+			if (released.has(player)) {
+				return { state: "released", isNew: false, memoryOnly: false, locked: false };
+			}
 			const failure = failures.get(player);
 			if (failure !== undefined) {
 				return {
@@ -796,9 +812,6 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 					locked: failure.name === "StoreLockedError",
 					error: failure,
 				};
-			}
-			if (released.has(player)) {
-				return { state: "released", isNew: false, memoryOnly: false, locked: false };
 			}
 			return { state: "idle", isNew: false, memoryOnly: false, locked: false };
 		},

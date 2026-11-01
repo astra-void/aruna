@@ -206,7 +206,10 @@ export interface WireOutbox<TTarget> {
 	// `push`, except that an item already queued this frame for the same target
 	// under the same key is replaced in place: the newer item goes out where the
 	// older one would have, and only once. For state where only the latest value
-	// matters (a resource's snapshot). Unbatched, the same as `push`.
+	// matters (a resource's snapshot). The newer item therefore goes out ahead of
+	// anything queued between the two (an action response, a signal): a client
+	// can see state that already reflects a call before the call's answer.
+	// Unbatched, the same as `push`.
 	readonly replace: (target: TTarget, key: string, item: defined) => void;
 	// To every recipient at once (FireAllClients).
 	readonly pushAll: (item: defined) => void;
@@ -222,6 +225,9 @@ export function createWireOutbox<TTarget>(
 ): WireOutbox<TTarget> {
 	const batching = options === undefined || options.batching !== false;
 	let queue = new Array<QueuedItem<TTarget>>();
+	// This frame's keyed items by target and key, so `replace` finds the one to
+	// overwrite without scanning the queue.
+	let keyed = new Map<TTarget, Map<string, QueuedItem<TTarget>>>();
 
 	// Unbatched, a fire happens inside the call that produced the item, so a
 	// failure reaches that caller. Flushed, it happens on a frame no caller is
@@ -264,6 +270,7 @@ export function createWireOutbox<TTarget>(
 		}
 		const taken = queue;
 		queue = new Array<QueuedItem<TTarget>>();
+		keyed = new Map<TTarget, Map<string, QueuedItem<TTarget>>>();
 
 		// Targets are boxed: a player double may be anything, and an array holds
 		// only defined values.
@@ -324,13 +331,19 @@ export function createWireOutbox<TTarget>(
 				fire(target, [item], false);
 				return;
 			}
-			for (const queued of queue) {
-				if (queued.key === key && queued.target === target) {
-					queued.item = item;
-					return;
-				}
+			let byKey = keyed.get(target);
+			if (byKey === undefined) {
+				byKey = new Map<string, QueuedItem<TTarget>>();
+				keyed.set(target, byKey);
 			}
-			queue.push({ target, item, key });
+			const queued = byKey.get(key);
+			if (queued !== undefined) {
+				queued.item = item;
+				return;
+			}
+			const entry: QueuedItem<TTarget> = { target, item, key };
+			byKey.set(key, entry);
+			queue.push(entry);
 		},
 		pushAll: (item) => {
 			if (batching) {

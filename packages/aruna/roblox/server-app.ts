@@ -81,23 +81,17 @@ export const STORE_NOT_READY_ERROR_NAME = "StoreNotReadyError";
 export function requireStores<TPlayer = unknown>(...names: string[]): ActionMiddleware<TPlayer> {
 	const required = names.size() > 0 ? names : ["store"];
 	return (info, nextLayer) => {
-		const missing = new Array<string>();
 		const stores = info.ctx.stores;
 		for (const name of required) {
 			const named = stores !== undefined ? stores[name] : undefined;
 			const document = named === undefined && name === "store" ? info.ctx.store : named;
 			if (document === undefined) {
-				missing.push(name);
+				// The message reaches the client: it says what to do, not which
+				// stores the server holds.
+				return Promise.reject(
+					actionError(STORE_NOT_READY_ERROR_NAME, `Aruna action ${info.actionId} needs player data that is not loaded yet.`),
+				);
 			}
-		}
-		if (missing.size() > 0) {
-			missing.sort();
-			return Promise.reject(
-				actionError(
-					STORE_NOT_READY_ERROR_NAME,
-					`Aruna action ${info.actionId} needs player data that is not loaded: ${missing.join(", ")}.`,
-				),
-			);
 		}
 		return nextLayer();
 	};
@@ -396,7 +390,7 @@ export function createServerApp<
 						for (const owned of ownedStores) {
 							settled.push(owned.store.waitFor(player));
 						}
-						return Promise.all(settled).then(() => reportFor(player));
+						return Promise.allSettled(settled).then(() => reportFor(player));
 					},
 					get: (name) => {
 						for (const owned of ownedStores) {
@@ -538,7 +532,9 @@ export function createServerApp<
 		}
 		const onStoresReady = options.onStoresReady;
 		if (onStoresReady !== undefined && ownedStores.size() > 0) {
-			Promise.all(loads).then(() => runHook("onStoresReady", () => onStoresReady(player, reportFor(player))));
+			// Settled, not all fulfilled: a load that rejects (a backend double that
+			// throws) still ends in a report, with that store not ready.
+			Promise.allSettled(loads).then(() => runHook("onStoresReady", () => onStoresReady(player, reportFor(player))));
 		}
 		let session: TSession | undefined;
 		if (createSession !== undefined) {

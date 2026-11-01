@@ -262,13 +262,21 @@ export function createResourceHost<TPlayer>(
 		player: TPlayer | undefined,
 	): WireResourceState => {
 		const errorId = createErrorId();
-		if (options !== undefined && options.onResourceError !== undefined) {
-			options.onResourceError(
-				failure,
-				player !== undefined
-					? { resourceId: definition.id, player, errorId }
-					: { resourceId: definition.id, errorId },
+		const onResourceError = options !== undefined ? options.onResourceError : undefined;
+		if (onResourceError !== undefined) {
+			// The app's handler runs inside the load pipeline: a throw from it must
+			// not leave the key loading forever.
+			const [reported, problem] = pcall(() =>
+				onResourceError(
+					failure,
+					player !== undefined
+						? { resourceId: definition.id, player, errorId }
+						: { resourceId: definition.id, errorId },
+				),
 			);
+			if (!reported) {
+				warn(`Aruna resource ${definition.id}: onResourceError threw: ${tostring(problem)}`);
+			}
 		}
 		if (observer !== undefined && observer.onLoadError !== undefined) {
 			observer.onLoadError(definition.id);
@@ -347,20 +355,25 @@ export function createResourceHost<TPlayer>(
 			}
 		};
 
-		const context = player !== undefined ? playerContext(player) : {};
-		const [invoked, result] = pcall(() => definition.load(context as never));
+		// Validation runs the schema's `refine` callbacks, user code: a throw is a
+		// load error like any other, never an escape that leaves the key loading.
+		const settle = (value: unknown): void => {
+			const [checked, item] = pcall(() => stateItem(definition, state, at, value, player));
+			finish(checked ? item : fail(definition, state, at, item, player));
+		};
+
+		const [invoked, result] = pcall(() =>
+			definition.load((player !== undefined ? playerContext(player) : {}) as never),
+		);
 		if (!invoked) {
 			finish(fail(definition, state, at, result, player));
 			return;
 		}
 		if (Promise.is(result)) {
-			result.then(
-				(value) => finish(stateItem(definition, state, at, value, player)),
-				(rejection) => finish(fail(definition, state, at, rejection, player)),
-			);
+			result.then(settle, (rejection) => finish(fail(definition, state, at, rejection, player)));
 			return;
 		}
-		finish(stateItem(definition, state, at, result, player));
+		settle(result);
 	};
 
 	const newState = (): KeyState<TPlayer> => ({
@@ -410,31 +423,6 @@ export function createResourceHost<TPlayer>(
 		return ran && allowed === true;
 	};
 
-	const subscribe = (definition: AnyResourceDefinition, player: TPlayer): void => {
-		if (!authorized(definition, player)) {
-			revision += 1;
-			send(player, { t: WIRE_ITEM_RESOURCE, r: definition.id, v: revision, e: RESOURCE_FORBIDDEN_ERROR_NAME });
-			return;
-		}
-		const state = stateFor(definition, player);
-		const resync = state.subscribers.has(player);
-		state.subscribers.add(player);
-		if (observer !== undefined && observer.onSubscribe !== undefined) {
-			observer.onSubscribe(definition.id, resync);
-		}
-		// A new subscriber to a global resource is answered by the load already
-		// running, or by the value already out. A resync always loads fresh.
-		if (!resync && state.loading) {
-			return;
-		}
-		const cached = state.cached;
-		if (!resync && cached !== undefined) {
-			send(player, cached);
-			return;
-		}
-		load(definition, state, isPlayerScoped(definition) ? player : undefined);
-	};
-
 	const unsubscribe = (definition: AnyResourceDefinition, player: TPlayer): void => {
 		const state = existingState(definition, player);
 		if (state === undefined || !state.subscribers.has(player)) {
@@ -452,6 +440,38 @@ export function createResourceHost<TPlayer>(
 		}
 	};
 
+	const subscribe = (definition: AnyResourceDefinition, player: TPlayer): void => {
+		if (!authorized(definition, player)) {
+			// A resync refused after a change of mind (a role lost) ends the
+			// subscription it was refreshing: nothing more goes to this player.
+			unsubscribe(definition, player);
+			revision += 1;
+			send(player, { t: WIRE_ITEM_RESOURCE, r: definition.id, v: revision, e: RESOURCE_FORBIDDEN_ERROR_NAME });
+			return;
+		}
+		const state = stateFor(definition, player);
+		const resync = state.subscribers.has(player);
+		state.subscribers.add(player);
+		if (observer !== undefined && observer.onSubscribe !== undefined) {
+			observer.onSubscribe(definition.id, resync);
+		}
+		// A new subscriber to a global resource is answered by the load already
+		// running, or by the value already out. A resync always loads fresh.
+		if (!resync && state.loading) {
+			return;
+		}
+		const cached = state.cached;
+		if (!resync && cached !== undefined) {
+			// Under a fresh revision: the client may have seen this item before it
+			// unsubscribed, or a higher one (a Forbidden answer), and would drop the
+			// original as stale. No load is running, so every later one is higher.
+			revision += 1;
+			send(player, { ...cached, v: revision });
+			return;
+		}
+		load(definition, state, isPlayerScoped(definition) ? player : undefined);
+	};
+
 	return {
 		invalidate: (resource, player) => {
 			const definition = resolve(resource);
@@ -464,8 +484,13 @@ export function createResourceHost<TPlayer>(
 					return;
 				}
 				if (state.subscribers.size() === 0) {
-					// Nobody to tell; the next subscriber loads fresh.
+					// Nobody to tell; the next subscriber loads fresh. A load already
+					// running read the old state: whoever subscribes while it runs
+					// waits on it, so it must be followed by another.
 					state.cached = undefined;
+					if (state.loading) {
+						state.dirty = true;
+					}
 					return;
 				}
 				load(definition, state, undefined);
@@ -482,8 +507,14 @@ export function createResourceHost<TPlayer>(
 				}
 				return;
 			}
+			// A copy: a load that yields lets a join or leave change the map
+			// mid-iteration, which `pairs` does not allow for additions.
+			const keys = new Array<{ readonly subscriber: TPlayer; readonly state: KeyState<TPlayer> }>();
 			for (const [subscriber, state] of byPlayer) {
-				load(definition, state, subscriber);
+				keys.push({ subscriber, state });
+			}
+			for (const key of keys) {
+				load(definition, key.state, key.subscriber);
 			}
 		},
 		has: (resourceId) => definitions.has(resourceId),
@@ -802,7 +833,11 @@ export function createResourceClient<TResources = { readonly [resourceId: string
 			}
 			disposed = true;
 			removeHandler();
-			// What is queued (an unsubscribe) still goes out.
+			// The server stops sending, too: every wire subscription is ended, and
+			// what is queued goes out before the outbox stops.
+			for (const [resourceId] of active) {
+				request(resourceId, 0);
+			}
 			outbox.dispose();
 			active.clear();
 		},

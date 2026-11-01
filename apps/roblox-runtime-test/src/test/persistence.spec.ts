@@ -354,3 +354,66 @@ describe("player stores: over the test network", () => {
     net.dispose();
   });
 });
+
+describe("player stores: failure paths", () => {
+  it("still reports readiness when onLoadFailed throws, and the load does not stay in flight", async () => {
+    const backend = createTestStoreBackend(() => 1_000_000);
+    backend.failAll("update", OUTAGE);
+    const progress = createPlayerStore(progressDefinition(), {
+      backend,
+      owner: "server-a",
+      scheduler: parked,
+      nowMs: () => 1_000_000,
+      onLoadFailed: () => {
+        throw "handler exploded";
+      },
+    });
+    const reports = new Array<PlayerStoresReport>();
+    const harness = createTestServerApp({
+      actions: {},
+      playerStores: { progress },
+      onStoresReady: (_player, report) => reports.push(report),
+    });
+    const player = createTestPlayer({ userId: 11 });
+    harness.join(player);
+    await frame();
+    expect(reports.size()).toBe(1);
+    expect(reports[0]!.failed).toEqual(["progress"]);
+    expect(progress.status(player).state).toBe("failed");
+    harness.dispose();
+  });
+
+  it("keeps no failure for a player released while their load was failing", async () => {
+    const s = stores();
+    const player = createTestPlayer({ userId: 12 });
+    s.progressBackend.hold("update");
+    const loading = s.progress.load(player);
+    const released = s.progress.release(player);
+    s.progressBackend.failAll("update", OUTAGE);
+    s.progressBackend.resume("update");
+    expect((await loading).ok).toBe(false);
+    await released;
+    expect(s.progress.status(player).state).toBe("released");
+    const waited = await s.progress.waitFor(player);
+    expect(!waited.ok && waited.error.name).toBe("StoreClosedError");
+  });
+
+  it("does not name the server's stores in the refusal a client sees", async () => {
+    const s = stores();
+    s.inventoryBackend.failAll("update", OUTAGE);
+    const harness = createTestServerApp({
+      actions: { [grantItem.id]: grantItem },
+      playerStores: { progress: s.progress, inventory: s.inventory },
+      middleware: [requireStores("inventory")],
+    });
+    const player = createTestPlayer({ userId: 13 });
+    harness.join(player);
+    await frame();
+    let message: string | undefined;
+    await harness.invoke(player, "inventory.grant", "sword").catch((err: unknown) => {
+      message = (err as { message?: string }).message;
+    });
+    expect(message).toBe("Aruna action inventory.grant needs player data that is not loaded yet.");
+    harness.dispose();
+  });
+});

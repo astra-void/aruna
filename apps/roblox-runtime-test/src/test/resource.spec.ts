@@ -603,3 +603,163 @@ describe("resources: global scope and backpressure", () => {
     harness.dispose();
   });
 });
+
+describe("resources: failure paths", () => {
+  it("answers a returning subscriber of a global resource from its cache, past a revision it already saw", () => {
+    let allowed = false;
+    let loads = 0;
+    const board = defineResource({
+      id: "encounter.board",
+      scope: "global",
+      schema: schema.object({ health: schema.u16() }),
+      load() {
+        loads += 1;
+        return { health: 70 };
+      },
+      authorize: () => allowed,
+    });
+    const harness = createTestServerApp({ actions: {}, resources: { [board.id]: board } });
+    const holder = createTestPlayer({ userId: 1 });
+    const player = createTestPlayer({ userId: 2 });
+    harness.join(holder);
+    harness.join(player);
+    allowed = true;
+    harness.client(holder).resources!.subscribe("encounter.board");
+    // One client throughout: `harness.client` builds a new one per call, and
+    // the point is a client that remembers revisions.
+    const resources = harness.client(player).resources!;
+
+    // Refused first: the Forbidden answer raises this client's floor above the
+    // cached value's revision.
+    allowed = false;
+    const refused = resources.subscribe("encounter.board");
+    expect(refused.status()).toBe("error");
+    refused.disconnect();
+    allowed = true;
+    const granted = resources.subscribe("encounter.board");
+    expect(granted.status()).toBe("ready");
+    expect(granted.get()).toEqual({ health: 70 });
+
+    // Unsubscribing and coming back is answered from the same cache.
+    granted.disconnect();
+    const again = resources.subscribe("encounter.board");
+    expect(again.status()).toBe("ready");
+    expect(loads).toBe(1);
+    harness.dispose();
+  });
+
+  it("follows a global load that read stale state with another, when it was invalidated with nobody subscribed", () => {
+    let health = 100;
+    const pending = new Array<() => void>();
+    const boss = defineResource({
+      id: "encounter.slowboss",
+      scope: "global",
+      schema: schema.object({ health: schema.u16() }),
+      load() {
+        const read = health;
+        return new Promise<{ health: number }>((resolve) => {
+          pending.push(() => resolve({ health: read }));
+        });
+      },
+    });
+    const harness = createTestServerApp({ actions: {}, resources: { [boss.id]: boss } });
+    const first = createTestPlayer({ userId: 1 });
+    const second = createTestPlayer({ userId: 2 });
+    harness.join(first);
+    harness.join(second);
+    harness.client(first).resources!.subscribe("encounter.slowboss").disconnect();
+    health = 10;
+    harness.app.resources!.invalidate(boss);
+    const late = harness.client(second).resources!.subscribe("encounter.slowboss");
+    pending[0]!();
+    expect(late.get()).toEqual({ health: 100 });
+    expect(pending.size()).toBe(2);
+    pending[1]!();
+    expect(late.get()).toEqual({ health: 10 });
+    harness.dispose();
+  });
+
+  it("frees the key when onResourceError or a schema refinement throws", () => {
+    let loads = 0;
+    let throwInLoad = true;
+    const flaky = defineResource({
+      id: "quests.flaky",
+      schema: schema.object({
+        step: schema.number().refine((value) => {
+          if (value === 13) {
+            throw "refinement exploded";
+          }
+          return true;
+        }, "expected a lucky step"),
+      }),
+      load() {
+        loads += 1;
+        if (throwInLoad) {
+          throw "load exploded";
+        }
+        return { step: 13 };
+      },
+    });
+    const harness = createTestServerApp({
+      actions: {},
+      resources: { [flaky.id]: flaky },
+      onResourceError: () => {
+        throw "handler exploded";
+      },
+    });
+    const player = createTestPlayer();
+    harness.join(player);
+    const errors = new Array<string>();
+    const subscription = harness.client(player).resources!.subscribe("quests.flaky", undefined, {
+      onError: (name) => errors.push(name),
+    });
+    expect(errors).toEqual(["ResourceLoadError"]);
+
+    throwInLoad = false;
+    harness.app.resources!.invalidate(flaky, player);
+    expect(loads).toBe(2);
+    expect(errors).toEqual(["ResourceLoadError", "ResourceLoadError"]);
+    harness.app.resources!.invalidate(flaky, player);
+    expect(loads).toBe(3);
+    expect(subscription.status()).toBe("error");
+    harness.dispose();
+  });
+
+  it("ends a subscription whose resync is no longer authorized", () => {
+    const world = questWorld();
+    let allowed = true;
+    const guarded = defineResource({
+      id: "quests.guarded",
+      schema: progressSchema,
+      load(ctx) {
+        return world.progress.load(ctx);
+      },
+      authorize: () => allowed,
+    });
+    const harness = createTestServerApp({ actions: {}, resources: { [guarded.id]: guarded } });
+    const player = createTestPlayer({ userId: 4 });
+    harness.join(player);
+    const subscription = harness.client(player).resources!.subscribe("quests.guarded");
+    expect(subscription.status()).toBe("ready");
+    allowed = false;
+    subscription.refresh();
+    expect(subscription.error()).toBe("ResourceForbiddenError");
+    expect(harness.app.resources!.isSubscribed("quests.guarded", player)).toBe(false);
+    harness.app.resources!.invalidate(guarded, player);
+    expect(world.loadsOf(player)).toBe(1);
+    harness.dispose();
+  });
+
+  it("unsubscribes everything when the client is disposed", () => {
+    const world = questWorld();
+    const harness = createTestServerApp({ actions: {}, resources: { [world.progress.id]: world.progress } });
+    const player = createTestPlayer({ userId: 5 });
+    harness.join(player);
+    const client = harness.client(player).resources!;
+    client.subscribe("quests.progress");
+    expect(harness.app.resources!.isSubscribed("quests.progress", player)).toBe(true);
+    client.dispose();
+    expect(harness.app.resources!.isSubscribed("quests.progress", player)).toBe(false);
+    harness.dispose();
+  });
+});
