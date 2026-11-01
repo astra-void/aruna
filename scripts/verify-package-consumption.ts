@@ -1,8 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import {
+  spawnSync,
+  type SpawnSyncOptionsWithStringEncoding,
+  type SpawnSyncReturns,
+} from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
+import { commandPlan } from "../packages/create-aruna-app/src/spawn.ts";
 
 type PackageJson = {
   name?: string;
@@ -287,7 +292,8 @@ function formatGeneratedActionImportFailure(logPath: string): string {
 export function buildConsumerTsconfigJson(tsconfigBasePath: string): string {
   return [
     "{",
-    `  "extends": "${tsconfigBasePath}",`,
+    // Escaped: a Windows path's backslashes are not valid JSON as written.
+    `  "extends": ${JSON.stringify(tsconfigBasePath)},`,
     '  "compilerOptions": {',
     '    "module": "CommonJS",',
     '    "moduleDetection": "force",',
@@ -640,9 +646,26 @@ async function stagePackage(options: {
   return stagedPackageJson;
 }
 
+// spawnSync for the pnpm calls below. On Windows, PATH holds only pnpm's `.cmd`
+// shim, which Node neither finds for a bare name (ENOENT) nor runs without a
+// shell (EINVAL since the CVE-2024-27980 fix). commandPlan routes a bare command
+// through cmd.exe there, quoting each argument (`shell: true` quotes none), and
+// leaves it untouched on other platforms.
+function spawnSyncCommand(
+  command: string,
+  args: readonly string[],
+  options: Omit<SpawnSyncOptionsWithStringEncoding, "windowsVerbatimArguments">,
+): SpawnSyncReturns<string> {
+  const plan = commandPlan(command, args);
+  return spawnSync(plan.command, [...plan.args], {
+    ...options,
+    windowsVerbatimArguments: plan.windowsVerbatimArguments,
+  });
+}
+
 async function packDirectory(packageDirectory: string, packDestination: string): Promise<string> {
   const before = new Set(await fs.readdir(packDestination));
-  const result = spawnSync("pnpm", ["pack", "--pack-destination", packDestination], {
+  const result = spawnSyncCommand("pnpm", ["pack", "--pack-destination", packDestination], {
     cwd: packageDirectory,
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024,
@@ -679,14 +702,16 @@ async function extractTarballToWorkspacePackage(
   await fs.rm(destinationDirectory, { recursive: true, force: true });
   await fs.mkdir(destinationDirectory, { recursive: true });
 
-  const result = spawnSync(
-    "tar",
-    ["-xzf", tarballPath, "-C", destinationDirectory, "--strip-components=1"],
-    {
-      encoding: "utf8",
-      maxBuffer: 20 * 1024 * 1024,
-    },
-  );
+  // Extract from inside the destination, with the archive named relative to it
+  // in forward slashes: the GNU tar that Git Bash puts first on PATH on Windows
+  // reads `C:\…` as a remote `host:path` archive, and cannot open a native `-C`
+  // directory either.
+  const archive = path.relative(destinationDirectory, tarballPath).split(path.sep).join("/");
+  const result = spawnSync("tar", ["-xzf", archive, "--strip-components=1"], {
+    cwd: destinationDirectory,
+    encoding: "utf8",
+    maxBuffer: 20 * 1024 * 1024,
+  });
 
   if (result.error) {
     throw new Error(`Failed to extract ${packageName}: ${result.error.message}`);
@@ -708,7 +733,7 @@ async function runCommand(
   logFile: string,
 ): Promise<void> {
   process.stdout.write(`$ ${command} ${args.join(" ")}\n`);
-  const result = spawnSync(command, args, {
+  const result = spawnSyncCommand(command, args, {
     cwd,
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024,

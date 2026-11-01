@@ -157,6 +157,13 @@ describe("verify-package-consumption args", () => {
     expect(JSON.stringify(tsconfig)).not.toContain("$aruna/actions/server");
   });
 
+  it("writes a Windows base config path as valid JSON", () => {
+    const basePath = "C:\\Workspace\\aruna\\tsconfig.base.json";
+    const tsconfig = JSON.parse(buildConsumerTsconfigJson(basePath)) as { extends?: string };
+
+    expect(tsconfig.extends).toBe(basePath);
+  });
+
   it("lets the generated typecheck config include aruna.config.ts", () => {
     const tsconfig = JSON.parse(buildConsumerTypecheckTsconfigJson()) as {
       extends?: string;
