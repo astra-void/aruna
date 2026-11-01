@@ -41,6 +41,7 @@ export const fixtureCases = [
   { name: "action-generated-export-collision", mode: "build" },
   { name: "action-declared-errors", mode: "build" },
   { name: "generated-entries", mode: "build" },
+  { name: "resource-basic", mode: "build" },
 ] as const;
 
 export type FixtureCase = (typeof fixtureCases)[number];

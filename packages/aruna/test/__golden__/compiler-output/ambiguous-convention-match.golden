@@ -70,6 +70,30 @@
   }
 }
 
+=== inspect resources (exit 0)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::203",
+      "details": "matched multiple conventions: client, shared",
+      "file": "src/shared/mixed.ts",
+      "message": "src/shared/mixed.ts matches more than one module convention.",
+      "name": "ambiguous-convention-match",
+      "severity": "warning",
+      "suggestion": "Narrow the matching conventions so each file maps to exactly one module kind."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 1,
+    "resolvedImports": 0,
+    "warnings": 1
+  }
+}
+
 === inspect contract (exit 0)
 {
   "version": 2,
@@ -458,7 +482,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -580,6 +604,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

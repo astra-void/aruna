@@ -12,6 +12,12 @@ import type { ActionRateLimitOptions } from "./server";
 import type { RequestAbuseHandler, RequestBudgetOptions } from "./request-guard";
 import type { AnyPlayerStore, StoreDocument } from "./player-store";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
+import {
+	createResourceHost,
+	type ResourceErrorHandler,
+	type ResourceHost,
+	type ResourceMap,
+} from "./resource";
 
 export interface ServerAppBinding {
 	readonly disconnect: () => void;
@@ -19,8 +25,13 @@ export interface ServerAppBinding {
 
 // A server transport binds the dispatch-ready registry to a concrete remote and
 // returns a disposable binding. Pass one to `createServerApp({ transport })` so
-// the app owns the wiring.
-export type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>) => ServerAppBinding;
+// the app owns the wiring. `resources` is the app's resource host when it has
+// one: the transport attaches it to its server channel and hands it the
+// subscription items that arrive on the remote.
+export type ServerTransport<TPlayer> = (
+	registry: ActionRegistry<TPlayer>,
+	resources?: ResourceHost<TPlayer>,
+) => ServerAppBinding;
 
 // Builds a server-side signal publisher from a signal registry, ensuring the
 // remote exists at call time. `createSignalPublisher` from `aruna/roblox`
@@ -55,6 +66,8 @@ export interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
 	// Present when both `signals` and `createPublisher` were supplied. Built
 	// eagerly so the remote exists at boot.
 	readonly publisher?: SignalPublisher<TSignals, TPlayer>;
+	// Present when `resources` was supplied: invalidation, and subscriber counts.
+	readonly resources?: ResourceHost<TPlayer>;
 	// Present when a `playerStore` was supplied. The app drives its lifecycle
 	// (load on join, flush and release on leave and at shutdown); this handle is
 	// for everything else — reading a document outside an action, or an extra
@@ -99,6 +112,14 @@ export interface CreateServerAppOptions<
 	// Builds the publisher from `signals`. Pass `createSignalPublisher` from
 	// `aruna/roblox`. Owned by the app: runs once at creation.
 	readonly createPublisher?: ServerSignalPublisherFactory<TPlayer, TSignals>;
+	// The generated resource registry (`$aruna/resources/server`). The app owns
+	// the host (`app.resources`), injects invalidation into every action ctx as
+	// `ctx.resources`, hands the host to the transport, and drops a player's
+	// subscriptions when they leave.
+	readonly resources?: ResourceMap;
+	// Told about a resource load that failed (or returned a value the server
+	// would not send), with the id the client's error item carries.
+	readonly onResourceError?: ResourceErrorHandler<TPlayer>;
 	// Fallback rate limit for actions that do not declare their own `rateLimit`.
 	// Aruna emits the configured `actions.defaultRateLimit` into the generated
 	// server module; pass it here to enforce it at runtime.
@@ -183,6 +204,20 @@ export function createServerApp<
 	const createSession = options.createSession;
 	const playerStore = options.playerStore;
 
+	const resources =
+		options.resources !== undefined
+			? createResourceHost<TPlayer>(options.resources, {
+					...(createSession !== undefined ? { getSession: (player: TPlayer) => sessions.get(player) } : {}),
+					...(playerStore !== undefined
+						? {
+								getStore: (player: TPlayer): StoreDocument<unknown> | undefined =>
+									playerStore.get(player) as StoreDocument<unknown> | undefined,
+							}
+						: {}),
+					...(options.onResourceError !== undefined ? { onResourceError: options.onResourceError } : {}),
+				})
+			: undefined;
+
 	const registryOptions: ActionRegistryOptions<TPlayer> = {
 		...(options.defaultRateLimit !== undefined
 			? { defaultRateLimit: options.defaultRateLimit }
@@ -204,6 +239,7 @@ export function createServerApp<
 						playerStore.get(player) as StoreDocument<unknown> | undefined,
 				}
 			: {}),
+		...(resources !== undefined ? { resources } : {}),
 		...(options.middleware !== undefined ? { middleware: options.middleware } : {}),
 		...(options.onError !== undefined ? { onError: options.onError } : {}),
 		...(options.exposeInternalErrors !== undefined
@@ -215,7 +251,7 @@ export function createServerApp<
 	};
 	const registry = createActionRegistry<TPlayer>(options.actions, registryOptions);
 
-	const binding = options.transport !== undefined ? options.transport(registry) : undefined;
+	const binding = options.transport !== undefined ? options.transport(registry, resources) : undefined;
 
 	const onPlayerAdded = options.onPlayerAdded;
 	const onPlayerRemoving = options.onPlayerRemoving;
@@ -258,6 +294,9 @@ export function createServerApp<
 		}
 		sessions.delete(player);
 		registry.forgetPlayer(player);
+		if (resources !== undefined) {
+			resources.forgetPlayer(player);
+		}
 	};
 
 	// Lifecycle teardown is collected as closures rather than as a shared
@@ -358,10 +397,14 @@ export function createServerApp<
 				}),
 		...(binding !== undefined ? { binding } : {}),
 		...(publisher !== undefined ? { publisher } : {}),
+		...(resources !== undefined ? { resources } : {}),
 		...(playerStore !== undefined ? { playerStore } : {}),
 		dispose: () => {
 			if (binding !== undefined) {
 				binding.disconnect();
+			}
+			if (resources !== undefined) {
+				resources.dispose();
 			}
 			for (const cleanup of lifecycleCleanups) {
 				cleanup();

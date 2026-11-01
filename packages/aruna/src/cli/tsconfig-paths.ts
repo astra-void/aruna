@@ -13,6 +13,8 @@ export const ARUNA_ACTION_PATHS = {
 const GENERATED_CLIENT_ACTIONS_FILE = "shared/actions.client.generated.ts";
 const GENERATED_SERVER_ACTIONS_FILE = "server/actions.server.generated.ts";
 const GENERATED_SIGNALS_FILE = "shared/signals.generated.ts";
+const GENERATED_CLIENT_RESOURCES_FILE = "shared/resources.client.generated.ts";
+const GENERATED_SERVER_RESOURCES_FILE = "server/resources.server.generated.ts";
 // The vendored runtime is replication-safe, so it lands under the shared subtree.
 export const GENERATED_RUNTIME_DIR = "shared/runtime";
 
@@ -22,6 +24,14 @@ export const GENERATED_RUNTIME_DIR = "shared/runtime";
 // generated file, which only exists once a project declares signals — an unused
 // mapping to a missing file is harmless (tsc path mappings resolve lazily).
 export const ARUNA_SIGNALS_ALIAS = "$aruna/signals";
+
+// The generated resource modules (docs/rfcs/resources.md): the client bindings
+// and the server registry. Like the signal alias, mapped whether or not the
+// project declares resources yet.
+export const ARUNA_RESOURCE_PATHS = {
+  client: "$aruna/resources/client",
+  server: "$aruna/resources/server",
+} as const;
 
 // Roblox-facing runtime modules vendored into `<generatedDir>/shared/runtime/`
 // by `aruna build --emit-runtime`. The bare `aruna/<name>` subpaths are aliased to
@@ -42,6 +52,8 @@ export function arunaAliasTargets(
     [ARUNA_ACTION_PATHS.client]: path.join(generatedDirAbs, GENERATED_CLIENT_ACTIONS_FILE),
     [ARUNA_ACTION_PATHS.server]: path.join(generatedDirAbs, GENERATED_SERVER_ACTIONS_FILE),
     [ARUNA_SIGNALS_ALIAS]: path.join(generatedDirAbs, GENERATED_SIGNALS_FILE),
+    [ARUNA_RESOURCE_PATHS.client]: path.join(generatedDirAbs, GENERATED_CLIENT_RESOURCES_FILE),
+    [ARUNA_RESOURCE_PATHS.server]: path.join(generatedDirAbs, GENERATED_SERVER_RESOURCES_FILE),
   };
   for (const moduleName of ARUNA_RUNTIME_MODULES) {
     targets[`aruna/${moduleName}`] = path.join(

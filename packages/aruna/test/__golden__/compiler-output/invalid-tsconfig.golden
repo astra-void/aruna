@@ -70,6 +70,30 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::103",
+      "details": "tsconfig.json could not be parsed as valid JSON.",
+      "file": "tsconfig.json",
+      "message": "Malformed TypeScript config at tsconfig.json.",
+      "name": "invalid-tsconfig",
+      "severity": "error",
+      "suggestion": "Fix the tsconfig JSON syntax or use a supported top-level object shape."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,

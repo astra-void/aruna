@@ -49,6 +49,8 @@ const ALL_ALIASES = [
   "$aruna/actions/client",
   "$aruna/actions/server",
   "$aruna/signals",
+  "$aruna/resources/client",
+  "$aruna/resources/server",
   "aruna/client",
   "aruna/server",
   "aruna/roblox",
@@ -120,6 +122,8 @@ describe("planTsconfigSetup", () => {
         '\t\t\t"$aruna/actions/client": ["aruna/shared/actions.client.generated.ts"],',
         '\t\t\t"$aruna/actions/server": ["./aruna/server/actions.server.generated.ts"],',
         '\t\t\t"$aruna/signals": ["./aruna/shared/signals.generated.ts"],',
+        '\t\t\t"$aruna/resources/client": ["./aruna/shared/resources.client.generated.ts"],',
+        '\t\t\t"$aruna/resources/server": ["./aruna/server/resources.server.generated.ts"],',
         '\t\t\t"aruna/client": ["./aruna/shared/runtime/client.ts"],',
         '\t\t\t"aruna/server": ["./aruna/shared/runtime/server.ts"],',
         '\t\t\t"aruna/roblox": ["./aruna/shared/runtime/roblox.ts"],',
@@ -141,7 +145,7 @@ describe("planTsconfigSetup", () => {
       ].join("\n"),
     );
     expect(setup.mandatory.map((change) => change.change)).toEqual([
-      "updated to add $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+      "updated to add $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
       "updated to drop aruna/server-app",
     ]);
     // A classic `node_modules/@rbxts` type root loads its packages by itself, so

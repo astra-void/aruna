@@ -70,6 +70,30 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::106",
+      "details": "Oxc parser error: Expected `}` but found `EOF`",
+      "file": "src/client/main.ts",
+      "message": "Aruna could not parse src/client/main.ts.",
+      "name": "parse-failed",
+      "severity": "error",
+      "suggestion": "Check the TypeScript/TSX syntax in this file."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 1,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,
@@ -439,7 +463,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -540,6 +564,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

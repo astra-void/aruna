@@ -19,7 +19,9 @@ virtual modules:
 - `aruna/testing` — the spec surface: `createTestServerApp`, `createTestPlayer`, `describe`/`it`/`expect` (compiled and run by `aruna test`, never part of a game build)
 - `$aruna/actions/server` — generated server action registry (`actions`, `defaultRateLimit`)
 - `$aruna/actions/client` — generated per-action client call functions
-- `$aruna/signals` — generated signal registry (`signals`)
+- `$aruna/signals` — generated signal registry (`signals`, `Signals`)
+- `$aruna/resources/server` — generated resource registry (`resources`) for `createServerApp({ resources })`
+- `$aruna/resources/client` — typed resource bindings (`questProgress.subscribe(...)`), `Resources`
 
 The `aruna/*` and `$aruna/*` specifiers are tsconfig path aliases that `aruna build`
 (and `init`, `dev`, `test`, `doctor --fix`) write into the project's `tsconfig.json`,

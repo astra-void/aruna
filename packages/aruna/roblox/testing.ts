@@ -22,6 +22,7 @@ import {
 } from "./server-app";
 import { createClientApp, type ClientApp, type ClientTransport } from "./client";
 import { bindRemoteActions, createRemoteActionInvoker } from "./roblox";
+import { admitResourceItem, createResourceClient, type ResourceClient, type ResourceHost } from "./resource";
 import type { ActionMap, ActionRegistry } from "./server-runtime";
 import {
 	createRemoteSignalPublisher,
@@ -245,6 +246,11 @@ export function createTestServerApp<
 	const callHandlers = new Array<(player: TPlayer, frame: unknown) => void>();
 
 	const signals = options.signals;
+	// The registry and resource host the app built, captured by the transport:
+	// an unbatched client's subscription items go straight through the same
+	// admission the wire binding runs.
+	let boundRegistry: ActionRegistry<TPlayer> | undefined;
+	let boundResources: ResourceHost<TPlayer> | undefined;
 	// `batching` rides along in the spread; createServerApp has no such option.
 	const app = createServerApp<TPlayer, TSignals, TSession>({
 		...options,
@@ -259,7 +265,7 @@ export function createTestServerApp<
 			: {}),
 		...(batching
 			? {
-					transport: (registry: ActionRegistry<TPlayer>) =>
+					transport: (registry: ActionRegistry<TPlayer>, resources?: ResourceHost<TPlayer>) =>
 						bindRemoteActions<TPlayer>(
 							registry,
 							{
@@ -278,9 +284,21 @@ export function createTestServerApp<
 								},
 							},
 							channel,
+							resources,
 						),
 				}
-			: {}),
+			: options.resources !== undefined
+				? {
+						transport: (registry: ActionRegistry<TPlayer>, resources?: ResourceHost<TPlayer>) => {
+							boundRegistry = registry;
+							boundResources = resources;
+							if (resources !== undefined) {
+								resources.attach(channel);
+							}
+							return { disconnect: () => {} };
+						},
+					}
+				: {}),
 		players: {
 			PlayerAdded: {
 				Connect: (callback: (player: TPlayer) => void) => {
@@ -395,8 +413,38 @@ export function createTestServerApp<
 								? { idempotencyKey: invokeOptions.idempotencyKey }
 								: undefined,
 						);
+			// The player's resource client: subscriptions travel the action binding
+			// when batched, or straight into the same admission when not; state
+			// items come back on the player's channel with everything else.
+			let resourceClient: ResourceClient | undefined;
+			if (options.resources !== undefined) {
+				resourceClient = createResourceClient(
+					clientChannel,
+					{
+						FireServer: (frame) => {
+							if (batching) {
+								for (const handler of [...callHandlers]) {
+									handler(player, frame);
+								}
+								return;
+							}
+							const read = readWireFrame(frame);
+							const registry = boundRegistry;
+							const resources = boundResources;
+							if (!read.ok || registry === undefined || resources === undefined) {
+								return;
+							}
+							for (const item of read.items) {
+								admitResourceItem(registry, resources, player, item as object);
+							}
+						},
+					},
+					batching ? { frameScheduler: clientFrames } : { batching: false },
+				);
+			}
 			const clientApp = createClientApp<TSignals>({
 				transport,
+				...(resourceClient !== undefined ? { resources: resourceClient } : {}),
 				...(signals !== undefined
 					? {
 							signals,

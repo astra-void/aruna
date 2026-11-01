@@ -13,7 +13,8 @@ import {
 	withClientMiddleware,
 	withRetry,
 } from "./client-runtime";
-import { createActionInvoker, type CreateActionInvokerOptions } from "./roblox";
+import { createActionInvoker, createResourceClient, type CreateActionInvokerOptions } from "./roblox";
+import { clearResourceClient, setResourceClient, type ResourceClient } from "./resource";
 import type { SignalMap, SignalSubscriber } from "./signal-runtime";
 
 // The subscriber surface, so a client module can type one it is handed without
@@ -48,6 +49,9 @@ export interface ClientApp<TSignals extends SignalMap = SignalMap> {
 	// Present when both `signals` and `createSubscriber` were supplied. Built
 	// eagerly so handlers can be registered at boot.
 	readonly subscriber?: SignalSubscriber<TSignals>;
+	// Present when `resources` was supplied. Also installed process-wide, so the
+	// generated `$aruna/resources/client` bindings subscribe through it.
+	readonly resources?: ResourceClient;
 	readonly dispose: () => void;
 }
 
@@ -78,6 +82,10 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap>
 	// middleware on each attempt). Disabled by default; a policy with maxRetries 0
 	// is a no-op. See ClientRetryPolicy.
 	readonly retry?: ClientRetryPolicy;
+	// The client end of the server's resources: `true` builds the default one over
+	// the Aruna RemoteEvent (`createResourceClient()`), or pass one you built. The
+	// app installs it for the generated bindings and disposes it with the app.
+	readonly resources?: boolean | ResourceClient;
 }
 
 export function createClientApp<TSignals extends SignalMap = SignalMap>(
@@ -130,6 +138,12 @@ export function createClientApp<TSignals extends SignalMap = SignalMap>(
 		subscriber = options.createSubscriber(options.signals);
 	}
 
+	let resources: ResourceClient | undefined;
+	if (options !== undefined && options.resources !== undefined && options.resources !== false) {
+		resources = options.resources === true ? createResourceClient() : options.resources;
+		setResourceClient(resources);
+	}
+
 	let disposed = false;
 
 	return {
@@ -141,6 +155,7 @@ export function createClientApp<TSignals extends SignalMap = SignalMap>(
 			return transport(actionId, input, invokeOptions);
 		},
 		...(subscriber !== undefined ? { subscriber } : {}),
+		...(resources !== undefined ? { resources } : {}),
 		dispose: () => {
 			if (disposed) {
 				return;
@@ -150,9 +165,26 @@ export function createClientApp<TSignals extends SignalMap = SignalMap>(
 			if (subscriber !== undefined) {
 				subscriber.dispose();
 			}
+			if (resources !== undefined) {
+				clearResourceClient(resources);
+				resources.dispose();
+			}
 		},
 	};
 }
+
+// The resource client surface, and the binding the generated
+// `$aruna/resources/client` module is made of.
+export { resourceBinding } from "./resource";
+export type {
+	ResourceBinding,
+	ResourceClient,
+	ResourceListener,
+	ResourceStatus,
+	ResourceSubscribeOptions,
+	ResourceSubscription,
+	ResourceUpdateInfo,
+} from "./resource";
 
 // Re-exported so `aruna/client` is the single client entry.
 export * from "./client-runtime";

@@ -37,6 +37,48 @@ export interface RemoteActionInvokerOptions extends WireBatchOptions {
     readonly onProtocolError?: WireProtocolErrorHandler;
 }
 
+export interface ResourceBinding<TValue> {
+    readonly id: string;
+    readonly subscribe: (listener?: ResourceListener<TValue>, options?: ResourceSubscribeOptions) => ResourceSubscription<TValue>;
+    readonly get: () => TValue | undefined;
+}
+
+export interface ResourceClient<TResources = {
+    readonly [resourceId: string]: unknown;
+}> {
+    readonly subscribe: <TId extends keyof TResources & string>(resourceId: TId, listener?: ResourceListener<TResources[TId]>, options?: ResourceSubscribeOptions) => ResourceSubscription<TResources[TId]>;
+    readonly get: <TId extends keyof TResources & string>(resourceId: TId) => TResources[TId] | undefined;
+    readonly resync: () => void;
+    readonly dispose: () => void;
+}
+
+export interface ResourceClientOptions extends WireBatchOptions {
+    readonly observer?: ResourceClientObserver;
+}
+
+export type ResourceListener<TValue> = (value: TValue, info: ResourceUpdateInfo) => void;
+
+export type ResourceStatus = "loading" | "ready" | "error";
+
+export interface ResourceSubscribeOptions {
+    readonly onError?: (errorName: string, info: ResourceUpdateInfo & {
+        readonly errorId?: string;
+    }) => void;
+}
+
+export interface ResourceSubscription<TValue> {
+    readonly get: () => TValue | undefined;
+    readonly status: () => ResourceStatus;
+    readonly revision: () => number;
+    readonly error: () => string | undefined;
+    readonly refresh: () => void;
+    readonly disconnect: () => void;
+}
+
+export interface ResourceUpdateInfo {
+    readonly revision: number;
+}
+
 export interface RobloxDataStoreBackendOptions {
     readonly studioFallback?: boolean;
     readonly onFallback?: (reason: string) => void;
@@ -77,7 +119,11 @@ export interface SignalSubscriberOptions {
 
 export declare const WIRE_ITEM_CALL = 1;
 
+export declare const WIRE_ITEM_RESOURCE = 4;
+
 export declare const WIRE_ITEM_RESOURCE_PATCH = 4;
+
+export declare const WIRE_ITEM_RESOURCE_SUBSCRIPTION = 5;
 
 export declare const WIRE_ITEM_RESPONSE = 2;
 
@@ -140,12 +186,28 @@ export interface WireFrameScheduler {
 
 export interface WireOutbox<TTarget> {
     readonly push: (target: TTarget, item: defined) => void;
+    readonly replace: (target: TTarget, key: string, item: defined) => void;
     readonly pushAll: (item: defined) => void;
     readonly flush: () => void;
     readonly dispose: () => void;
 }
 
 export type WireProtocolErrorHandler = (channel: string, reason: WireFrameRejection) => void;
+
+export interface WireResourceState {
+    readonly t: typeof WIRE_ITEM_RESOURCE;
+    readonly r: string;
+    readonly v: number;
+    readonly d?: unknown;
+    readonly e?: string;
+    readonly i?: string;
+}
+
+export interface WireResourceSubscription {
+    readonly t: typeof WIRE_ITEM_RESOURCE_SUBSCRIPTION;
+    readonly r: string;
+    readonly o: 0 | 1;
+}
 
 export interface WireResponse {
     readonly t: typeof WIRE_ITEM_RESPONSE;
@@ -166,9 +228,9 @@ export interface WireSignal {
 
 export declare function actionError(name: string, message: string): PublicActionError;
 
-export declare function bindActions<TPlayer>(registry: ActionRegistry<TPlayer>, options?: RobloxRemoteEventOptions): ServerAppBinding;
+export declare function bindActions<TPlayer>(registry: ActionRegistry<TPlayer>, options?: RobloxRemoteEventOptions, resources?: ResourceHost<TPlayer>): ServerAppBinding;
 
-export declare function bindRemoteActions<TPlayer>(registry: ActionRegistry<TPlayer>, remote: WireCallReceiver<TPlayer>, channel: ServerChannel<TPlayer>): ServerAppBinding;
+export declare function bindRemoteActions<TPlayer>(registry: ActionRegistry<TPlayer>, remote: WireCallReceiver<TPlayer>, channel: ServerChannel<TPlayer>, resources?: ResourceHost<TPlayer>): ServerAppBinding;
 
 export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
@@ -180,9 +242,18 @@ export declare function createRemoteActionInvoker(remote: WireCallSender, channe
 
 export declare function createRemoteEventChannel(options?: WireBatchOptions): ServerChannel<Player>;
 
+export declare function createResourceClient<TResources = {
+    readonly [resourceId: string]: unknown;
+}>(channel: ClientChannel, sender: WireCallSender, options?: ResourceClientOptions): ResourceClient<TResources>;
+export { createResourceClient as createRemoteResourceClient };
+
 export declare function createRemoteSignalPublisher<TSignals extends SignalMap, TPlayer>(channel: ServerChannel<TPlayer>, signals: TSignals, unreliableRemote?: SignalServerLike<TPlayer>): SignalPublisher<TSignals, TPlayer>;
 
 export declare function createRemoteSignalSubscriber<TSignals extends SignalMap>(channel: ClientChannel, signals: TSignals, unreliableRemote?: SignalClientLike, options?: SignalSubscriberOptions): SignalSubscriber<TSignals>;
+
+export declare function createResourceClient<TResources = {
+    readonly [resourceId: string]: unknown;
+}>(options?: ResourceClientOptions): ResourceClient<TResources>;
 
 export declare function createServerChannel<TPlayer>(remote: WireServerRemote<TPlayer>, options?: WireBatchOptions): ServerChannel<TPlayer>;
 
@@ -199,6 +270,8 @@ export declare function defaultWireProtocolErrorHandler(channel: string, reason:
 export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = Player, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function definePlayerStore<TSchema extends Schema, TPlayer = Player>(definition: PlayerStoreDefinition<TSchema, TPlayer>): PlayerStoreDefinition<TSchema, TPlayer>;
+
+export declare function defineResource<TId extends string, TSchema extends Schema, TScope extends ResourceScope = "player", TPlayer = Player>(definition: ResourceDefinition<TSchema, TId, TScope, TPlayer>): ResourceDefinition<TSchema, TId, TScope, TPlayer>;
 
 export declare function defineSignal<TId extends string, TPayload extends Schema | undefined = undefined>(definition: SignalDefinition<TPayload, TId>): SignalDefinition<TPayload, TId>;
 
@@ -221,6 +294,7 @@ interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMa
     readonly publisher?: SignalPublisher<TSignals, unknown>;
     readonly session?: TSession;
     readonly store?: StoreDocument<unknown>;
+    readonly resources?: ResourceContext<unknown>;
 }
 
 interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}> {
@@ -298,6 +372,11 @@ interface ActionRegistry<TPlayer = unknown> {
     readonly refuseFrame: (player: TPlayer, reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch") => void;
     readonly forgetPlayer: (player: TPlayer) => void;
     readonly readmitPlayer: (player: TPlayer) => void;
+    readonly admitItem: (player: TPlayer, id: unknown, maxLength: number) => boolean;
+    readonly reportAbuse: (player: TPlayer, info: {
+        readonly reason: RequestAbuseReason;
+        readonly actionId?: string;
+    }) => void;
     readonly isFireAndForget: (actionId: string) => boolean;
 }
 
@@ -348,6 +427,62 @@ interface RemoteSignalConnection {
     readonly disconnect: () => void;
 }
 
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
+
+interface ResourceClientObserver {
+    readonly onApplied?: (resourceId: string) => void;
+    readonly onStale?: (resourceId: string) => void;
+}
+
+interface ResourceContext<TPlayer = unknown> {
+    readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+    readonly invalidateAll: (resource: ResourceRef) => void;
+}
+
+interface ResourceDefinition<TSchema extends Schema = Schema, TId extends string = string, TScope extends ResourceScope = ResourceScope, TPlayer = unknown> {
+    readonly id: TId;
+    readonly scope?: TScope;
+    readonly schema: TSchema;
+    load(context: ResourceLoadContext<TScope, TPlayer>): Infer<TSchema> | Promise<Infer<TSchema>>;
+    readonly authorize?: (context: ResourcePlayerContext<TPlayer>) => boolean;
+}
+
+interface ResourceGlobalContext {
+    readonly player?: undefined;
+}
+
+interface ResourceHost<TPlayer = unknown> {
+    readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+    readonly has: (resourceId: string) => boolean;
+    readonly isSubscribed: (resource: ResourceRef, player: TPlayer) => boolean;
+    readonly subscriberCount: (resource: ResourceRef) => number;
+    readonly attach: (sink: ResourceSink<TPlayer>) => void;
+    readonly receive: (player: TPlayer, item: object) => void;
+    readonly forgetPlayer: (player: TPlayer) => void;
+    readonly dispose: () => void;
+}
+
+type ResourceLoadContext<TScope extends ResourceScope, TPlayer> = TScope extends "global" ? ResourceGlobalContext : ResourcePlayerContext<TPlayer>;
+
+interface ResourcePlayerContext<TPlayer = unknown> {
+    readonly player: TPlayer;
+    readonly session?: unknown;
+    readonly store?: StoreDocument<unknown>;
+    readonly stores?: {
+        readonly [name: string]: StoreDocument<unknown> | undefined;
+    };
+}
+
+type ResourceRef = string | {
+    readonly id: string;
+};
+
+type ResourceScope = "player" | "global";
+
+interface ResourceSink<TPlayer> {
+    readonly replace: (target: TPlayer, key: string, item: defined) => void;
+}
+
 interface Schema<T = unknown> {
     readonly typeName: SchemaTypeName;
     readonly validate: (value: unknown) => boolean;
@@ -375,7 +510,7 @@ interface ServerAppBinding {
     readonly disconnect: () => void;
 }
 
-type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>) => ServerAppBinding;
+type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>, resources?: ResourceHost<TPlayer>) => ServerAppBinding;
 
 interface SignalBatchOptions {
     readonly chunkSize?: number;

@@ -125,6 +125,7 @@ export type Manifest = {
     actions: ActionRecord[];
     signals?: SignalRecord[] | undefined;
     stores?: StoreRecord[] | undefined;
+    resources?: ResourceRecord[] | undefined;
     diagnostics: Diagnostic[];
 };
 
@@ -272,6 +273,18 @@ type NormalizedConfig = {
     readonly contract: {
         readonly snapshot: string;
     };
+};
+
+type ResourceRecord = {
+    id: string;
+    file: string;
+    exportName: string;
+    scope: "player" | "global";
+    hasAuthorize?: boolean | undefined;
+    serialization: {
+        policy: "plain-data-v1";
+    };
+    schema?: SchemaMetadata | undefined;
 };
 
 type SignalRecord = {

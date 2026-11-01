@@ -24,7 +24,7 @@ const fixturesRoot = path.resolve(here, "../../../fixtures");
 const goldenRoot = path.join(here, "__golden__", "compiler-output");
 const update = process.env.ARUNA_UPDATE_GOLDEN === "1";
 
-const INSPECT_COMMANDS = ["actions", "signals", "stores", "contract", "modules", "graph"] as const;
+const INSPECT_COMMANDS = ["actions", "signals", "stores", "resources", "contract", "modules", "graph"] as const;
 
 type CommandRun = { readonly stdout: string; readonly stderr: string; readonly exitCode: number };
 

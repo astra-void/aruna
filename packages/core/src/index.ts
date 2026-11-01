@@ -150,6 +150,21 @@ export type SignalRecord = {
   payloadSchema?: SchemaMetadata | undefined;
 };
 
+// A server-owned resource clients observe (docs/rfcs/resources.md).
+export type ResourceRecord = {
+  id: string;
+  file: string;
+  exportName: string;
+  // One value per player, or one for everyone.
+  scope: "player" | "global";
+  // Whether subscriptions go through `authorize`. Omitted when false.
+  hasAuthorize?: boolean | undefined;
+  serialization: {
+    policy: "plain-data-v1";
+  };
+  schema?: SchemaMetadata | undefined;
+};
+
 // A plain keyed store, or a session-locked per-player document.
 export type StoreKind = "store" | "playerStore";
 
@@ -242,6 +257,8 @@ export type Manifest = {
   // Omitted from manifest JSON when empty; treat as [] when absent.
   signals?: SignalRecord[] | undefined;
   stores?: StoreRecord[] | undefined;
+  // Omitted when the project declares none.
+  resources?: ResourceRecord[] | undefined;
   diagnostics: Diagnostic[];
 };
 

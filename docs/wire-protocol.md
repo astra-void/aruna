@@ -94,13 +94,15 @@ kind.
 | `1` | `WIRE_ITEM_CALL` | call | client → server | `ArunaRemoteEvent` |
 | `2` | `WIRE_ITEM_RESPONSE` | response | server → client | `ArunaRemoteEvent` |
 | `3` | `WIRE_ITEM_SIGNAL` | signal | server → client | `ArunaRemoteEvent` (reliable), `ArunaSignalUnreliableRemoteEvent` (unreliable) |
-| `4` | `WIRE_ITEM_RESOURCE_PATCH` | resource patch, **reserved** | server → client | `ArunaRemoteEvent` |
+| `4` | `WIRE_ITEM_RESOURCE` | resource state | server → client | `ArunaRemoteEvent` |
+| `5` | `WIRE_ITEM_RESOURCE_SUBSCRIPTION` | resource subscription | client → server | `ArunaRemoteEvent` |
 
 A number rather than a name: 8 bytes against 8 plus the name's length, on every item.
-Kind 4 is reserved so resource patches join the reliable channel without renumbering:
-nothing sends it yet. A client skips an item whose kind it has no handler for (and an
-item with no numeric `t`); the server treats any item that is not a call as a malformed
-call (below).
+Kind 4 was reserved for resources before they shipped, so they joined the reliable
+channel without renumbering (`WIRE_ITEM_RESOURCE_PATCH` is kept as an alias of
+`WIRE_ITEM_RESOURCE`). A client skips an item whose kind it has no handler for (and an
+item with no numeric `t`); the server treats any item that is not a call — or, when the
+app has resources, a resource subscription — as a malformed call (below).
 
 ### Call (`t = 1`, client → server)
 
@@ -140,6 +142,34 @@ declaration that it sends no response.
 | `t` | `3` | Item kind. |
 | `s` | string | Signal id. |
 | `d` | any, optional | The payload: the value itself, or an `encodeBinary` buffer for a `wire: "binary"` signal. |
+
+### Resource state (`t = 4`, server → client)
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `t` | `4` | Item kind. |
+| `r` | string | Resource id. |
+| `v` | positive integer | Revision: one counter per server, taken when the load started. A client drops an item whose `v` is not above the highest it has applied for `r`. |
+| `d` | any wire-safe value, optional | The whole value (checked against the resource's schema before it is sent). Absent on an error item. |
+| `e` | string, optional | An error name instead of a value: `ResourceLoadError` or `ResourceForbiddenError`. |
+| `i` | string, optional | On `ResourceLoadError`: the id the server's `onResourceError` got. |
+
+A batched server channel keeps at most one state item per resource per player per
+frame: a newer one replaces the queued one in its place.
+
+### Resource subscription (`t = 5`, client → server)
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `t` | `5` | Item kind. |
+| `r` | string, ≤ 128 bytes | Resource id. |
+| `o` | `1` or `0` | Subscribe (or resync), or unsubscribe. |
+
+Admitted like a call: charged one request from the player's budget before its id is read,
+dropped and reported as `malformed-envelope` when `r` is not a bounded string or `o` is
+not 0 or 1, as `budget-exhausted` past the budget, and as `unknown-resource` when `r`
+names no resource. Nothing else in the item is read: a player-scoped resource is always
+the sender's own. See [rfcs/resources.md](rfcs/resources.md).
 
 ## Batching
 

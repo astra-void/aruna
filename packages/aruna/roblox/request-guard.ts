@@ -116,7 +116,10 @@ export type RequestAbuseReason =
 	// A call its action's rate limit refused. Answered as usual
 	// (ActionRateLimitError). A well-behaved client can get here too, by
 	// calling faster than the limit; whether that is abuse is the game's call.
-	| "rate-limited";
+	| "rate-limited"
+	// A resource subscription naming a resource this server does not define.
+	// Dropped with no answer, like an unknown action.
+	| "unknown-resource";
 
 export interface RequestAbuseInfo {
 	readonly reason: RequestAbuseReason;

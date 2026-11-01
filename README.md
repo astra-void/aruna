@@ -500,6 +500,45 @@ connection.disconnect();
 - Signals are compiler-discovered: `defineSignal` exports are recorded in the manifest (`manifest.signals`), listed by `aruna inspect signals`, and included in the contract snapshot from `aruna inspect contract`. Contract `diff` gates signal changes too: a removed signal or a removed/retyped payload field is breaking, an added signal or payload field is non-breaking (output compatibility rules — payloads travel server → client).
 - `wire: "binary"` sends a signal's payload as an `encodeBinary` frame (see [Binary serialization](#binary-serialization)). The compiler records the largest encoding a payload allows (`maxEncodedBytes`) and checks unreliable signals against Roblox's 900-byte limit: an unbounded payload warns (`aruna::510`), one that can exceed it fails the build (`aruna::511`).
 
+## Resources (server-owned state clients observe)
+
+A **resource** replaces the snapshot action + update signal + merge handler every
+server-authoritative game writes per piece of displayed state. The server declares how it
+reads the state and says when it changed; every subscribed client converges on the newest
+value, and never ends up on an older one than it already had.
+
+```ts
+// src/domains/quests/resources.ts (server code)
+export const questProgress = defineResource({
+  id: "quests.progress",
+  schema: questProgressSchema,
+  load: (ctx) => quests.snapshot(ctx.player.UserId),
+});
+
+// server: createServerApp({ actions, resources, transport: robloxRemoteEvent() })
+// in an action, after changing the state:
+ctx.resources?.invalidate(questProgress);
+
+// client: createClientApp({ resources: true })
+import { questProgress } from "$aruna/resources/client";
+questProgress.subscribe((value) => updateQuestUI(value));
+```
+
+- Snapshots carry a per-server revision taken when their load starts; neither end goes
+  backwards, so a slow snapshot can never overwrite a newer push. The subscription is
+  registered before the first snapshot is loaded, so no change in between is missed.
+- `scope: "player"` (default) loads per player and only ever sends a player their own
+  value — the client sends a resource id and nothing else. `scope: "global"` loads once
+  per change for everyone. `authorize: (ctx) => boolean` refuses a subscription.
+- An invalidation inside an action with a synchronous `load` arrives before the action's
+  response. Bursts are coalesced to one load in flight and one snapshot per frame.
+- Compiler-discovered (`aruna::586`–`590`), listed by `aruna inspect resources`, in the
+  contract snapshot, hash, and `contract diff`. Generated: `$aruna/resources/server` and
+  `$aruna/resources/client`.
+
+See [docs/resources.md](packages/aruna/docs/resources.md) and the protocol in
+[docs/rfcs/resources.md](docs/rfcs/resources.md).
+
 ## Stores (DataStore persistence)
 
 A **store** is Aruna's safe front end to `DataStoreService`: declare the record shape once,
@@ -677,8 +716,7 @@ Serialization boundary, fixed-window rate limits, the pre-dispatch request budge
 2. Done: runtime execution tests for the roblox-ts-native runtime. CI compiles it and runs it under Lune (`apps/roblox-runtime-test`): hand-written Luau specs, the dispatch conformance table (`apps/roblox-runtime-test/conformance/`), and TypeScript specs run through the same runner `aruna test` ships.
 3. Refine thin authority inspection without adding a full policy/capability system.
 4. Done: the starter contract. `create-aruna-app` scaffolds the starter (since 0.2.0); [docs/create-app-plan.md](docs/create-app-plan.md) is its plan.
-5. Design resources and invalidation after the starter contract is stable.
-6. Implement resources later.
+5. Done: resources and invalidation ([docs/rfcs/resources.md](docs/rfcs/resources.md)).
 
 ## Package consumption validation
 
@@ -785,14 +823,15 @@ It is not `create-aruna-app` output, generated Roblox Instance creation, or full
 
 These stay out of the next cutline:
 
-- resources and resource invalidation
+- resource patches (resources send whole snapshots)
 - policies and capabilities
 - Studio overlay and Studio runner flow (`aruna test` runs specs under Lune, not Studio)
 - generated Roblox Instance creation
 - full production Studio validation
 - LSP and editor extensions
 
-Already shipped, and so no longer on this list: player sessions
+Already shipped, and so no longer on this list: resources and resource invalidation
+(docs/rfcs/resources.md), player sessions
 (`createServerApp({ createSession })`, `ctx.session`), `create-aruna-app` scaffolding
 (0.2.0), and Rojo integration as far as Aruna needs it: project verification in
 `aruna init` and `aruna doctor`, plus `aruna init --force` (0.3.0), generated

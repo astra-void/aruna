@@ -5,6 +5,7 @@ import type {
   Diagnostic,
   ModuleRecord,
   SchemaMetadata,
+  ResourceRecord,
   SignalRecord,
   StoreRecord,
 } from "@arunajs/core";
@@ -79,6 +80,23 @@ export type SignalContractRecord = {
   readonly warnings: readonly string[];
 };
 
+// A resource: server-owned state a client subscribes to. Its value travels
+// server to client, so its schema follows the output rules in a diff.
+export type ResourceContractRecord = {
+  readonly id: string;
+  readonly source: string;
+  readonly moduleKind: ModuleRecord["kind"];
+  readonly direction: "server-to-client";
+  readonly scope: "player" | "global";
+  // Present (and true) only when subscriptions are authorized.
+  readonly authorized?: true;
+  readonly value: ActionContractSchema;
+  readonly serialization: {
+    readonly policy: "plain-data-v1";
+  };
+  readonly warnings: readonly string[];
+};
+
 // A persisted store. The contract that matters here is not client/server (a
 // store never crosses the wire) but old code/new code: records a previous build
 // wrote stay in the DataStore and the next build has to read them.
@@ -107,6 +125,8 @@ export type ActionContractSnapshot = {
   readonly signals?: readonly SignalContractRecord[];
   // Omitted when the project declares no stores, for the same reason.
   readonly stores?: readonly StoreContractRecord[];
+  // Omitted when the project declares no resources, for the same reason.
+  readonly resources?: readonly ResourceContractRecord[];
   readonly diagnostics: readonly Diagnostic[];
   readonly generatedAt: null;
 };
@@ -231,6 +251,26 @@ function summarizeSignal(
   };
 }
 
+function summarizeResource(output: CompilerOutput, resource: ResourceRecord): ResourceContractRecord {
+  const value = formatActionSchemaSummary(resource.schema);
+  return {
+    id: resource.id,
+    source: normalizePath(resource.file),
+    moduleKind: lookupModuleKind(output, resource.file),
+    direction: "server-to-client",
+    scope: resource.scope,
+    ...(resource.hasAuthorize === true ? { authorized: true as const } : {}),
+    value: {
+      summary: value.summary,
+      schema: resource.schema ?? null,
+    },
+    serialization: {
+      policy: resource.serialization.policy,
+    },
+    warnings: sortWarnings(value.warnings),
+  };
+}
+
 function summarizeStore(store: StoreRecord): StoreContractRecord {
   const schema = formatActionSchemaSummary(store.schema);
 
@@ -282,6 +322,17 @@ export function summarizeStores(output: CompilerOutput): StoreContractRecord[] {
         compareStrings(left.file, right.file),
     )
     .map((store) => summarizeStore(store));
+}
+
+export function summarizeResources(output: CompilerOutput): ResourceContractRecord[] {
+  return [...(output.manifest.resources ?? [])]
+    .sort(
+      (left, right) =>
+        compareStrings(left.id, right.id) ||
+        compareStrings(left.file, right.file) ||
+        compareStrings(left.exportName, right.exportName),
+    )
+    .map((resource) => summarizeResource(output, resource));
 }
 
 export function buildActionContractSnapshot(output: CompilerOutput): ActionContractSnapshot {

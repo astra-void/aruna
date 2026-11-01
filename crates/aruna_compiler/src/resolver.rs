@@ -34,6 +34,10 @@ pub enum VirtualGeneratedActionModule {
 pub const GENERATED_CLIENT_ACTIONS_FILE: &str = "shared/actions.client.generated.ts";
 pub const GENERATED_SERVER_ACTIONS_FILE: &str = "server/actions.server.generated.ts";
 pub const GENERATED_SIGNALS_FILE: &str = "shared/signals.generated.ts";
+// Resources follow the action split: the server registry imports the
+// definitions (server code), the client bindings carry ids and types only.
+pub const GENERATED_CLIENT_RESOURCES_FILE: &str = "shared/resources.client.generated.ts";
+pub const GENERATED_SERVER_RESOURCES_FILE: &str = "server/resources.server.generated.ts";
 
 // Generated runtime entries (entries: "generated"). The `.server`/`.client`
 // suffixes make roblox-ts emit a real Script / LocalScript; the `server/` and
@@ -91,6 +95,38 @@ pub fn resolve_virtual_generated_signal_module(
         Some(VirtualGeneratedSignalModule)
     } else {
         None
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VirtualGeneratedResourceModule {
+    Client,
+    Server,
+}
+
+impl VirtualGeneratedResourceModule {
+    pub fn specifier(self) -> &'static str {
+        match self {
+            VirtualGeneratedResourceModule::Client => "$aruna/resources/client",
+            VirtualGeneratedResourceModule::Server => "$aruna/resources/server",
+        }
+    }
+
+    pub fn filename(self) -> &'static str {
+        match self {
+            VirtualGeneratedResourceModule::Client => GENERATED_CLIENT_RESOURCES_FILE,
+            VirtualGeneratedResourceModule::Server => GENERATED_SERVER_RESOURCES_FILE,
+        }
+    }
+}
+
+pub fn resolve_virtual_generated_resource_module(
+    specifier: &str,
+) -> Option<VirtualGeneratedResourceModule> {
+    match specifier {
+        "$aruna/resources/client" => Some(VirtualGeneratedResourceModule::Client),
+        "$aruna/resources/server" => Some(VirtualGeneratedResourceModule::Server),
+        _ => None,
     }
 }
 
@@ -281,6 +317,15 @@ pub fn resolve_import_specifier(
     }
 
     if let Some(virtual_module) = resolve_virtual_generated_signal_module(specifier) {
+        let generated_path =
+            project_absolute(project_root, generated_dir).join(virtual_module.filename());
+        return ResolvedImport {
+            resolved: true,
+            absolute_path: Some(normalize_path_buf(&generated_path)),
+        };
+    }
+
+    if let Some(virtual_module) = resolve_virtual_generated_resource_module(specifier) {
         let generated_path =
             project_absolute(project_root, generated_dir).join(virtual_module.filename());
         return ResolvedImport {

@@ -1211,3 +1211,79 @@ export const wave = defineAction({
     assert_eq!(diagnostics[0].code, "aruna::584");
     assert!(action.errors.is_empty());
 }
+
+fn collect_resources(source: &str) -> ResourceDiscoveryResult {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    let path = write_file(root, "src/domains/quests/resources.ts", source);
+    collect_resource_definitions(root, &path, &std::fs::read_to_string(&path).unwrap()).unwrap()
+}
+
+#[test]
+fn collects_resource_definitions() {
+    let result = collect_resources(
+        r#"
+import { defineResource } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const progress = schema.object({ step: schema.u16() });
+
+export const questProgress = defineResource({
+  id: "quests.progress",
+  schema: progress,
+  load(ctx) {
+    return { step: 0 };
+  },
+});
+
+export const boss = defineResource({
+  id: "encounter.boss",
+  scope: "global",
+  schema: schema.object({ health: schema.u16() }),
+  load: async () => ({ health: 1 }),
+  authorize: (ctx) => true,
+});
+"#,
+    );
+
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+    assert_eq!(result.resources.len(), 2);
+    let boss = &result.resources[0];
+    assert_eq!(boss.id, "encounter.boss");
+    assert_eq!(boss.scope, "global");
+    assert!(boss.has_authorize);
+    let progress = &result.resources[1];
+    assert_eq!(progress.id, "quests.progress");
+    assert_eq!(progress.scope, "player");
+    assert!(!progress.has_authorize);
+    assert_eq!(progress.schema.as_ref().unwrap().kind, "object");
+    assert_eq!(result.resource_files.len(), 1);
+}
+
+#[test]
+fn reports_invalid_resource_definitions() {
+    let result = collect_resources(
+        r#"
+import { defineResource } from "aruna/server";
+import { schema } from "aruna/schema";
+
+const dynamicId = "quests.dynamic";
+export const a = defineResource({ id: dynamicId, schema: schema.string(), load: () => "" });
+export const b = defineResource({ id: "b", scope: "team", schema: schema.string(), load: () => "" });
+export const c = defineResource({ id: "c", load: () => "" });
+export const d = defineResource({ id: "d", schema: schema.string() });
+export const e = defineResource({ id: "e", schema: schema.string(), load: () => "", authorize: true });
+export const f = defineResource({ id: "f", schema: 5, load: () => "" });
+"#,
+    );
+
+    let codes: Vec<&str> = result.diagnostics.iter().map(|diagnostic| diagnostic.code.as_str()).collect();
+    assert_eq!(
+        codes,
+        vec!["aruna::586", "aruna::586", "aruna::589", "aruna::586", "aruna::586", "aruna::588"]
+    );
+    // An invalid schema degrades the record; everything else drops it.
+    assert_eq!(result.resources.len(), 1);
+    assert_eq!(result.resources[0].id, "f");
+    assert!(result.resource_files.contains("src/domains/quests/resources.ts"));
+}

@@ -121,6 +121,47 @@
   }
 }
 
+=== inspect resources (exit 0)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::304",
+      "details": "importer domain: shop\nimported domain: inventory\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "src/domains/shop/server/actions.ts imports src/domains/inventory/model.ts, which is private to the inventory domain.",
+      "name": "cross-domain-private-import",
+      "severity": "warning",
+      "span": {
+        "end": 49,
+        "start": 26
+      },
+      "suggestion": "Import from src/domains/inventory/index.ts, or re-export what shop needs from it."
+    },
+    {
+      "code": "aruna::304",
+      "details": "importer domain: shop\nimported domain: inventory\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)",
+      "file": "src/domains/shop/server/actions.ts",
+      "message": "src/domains/shop/server/actions.ts imports src/domains/inventory/server/ledger.ts, which is private to the inventory domain.",
+      "name": "cross-domain-private-import",
+      "severity": "warning",
+      "span": {
+        "end": 105,
+        "start": 74
+      },
+      "suggestion": "Import from src/domains/inventory/index.ts, or re-export what shop needs from it."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 5,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 5,
+    "warnings": 2
+  }
+}
+
 === inspect contract (exit 0)
 {
   "version": 2,
@@ -852,7 +893,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -974,6 +1015,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

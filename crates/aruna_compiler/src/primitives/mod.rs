@@ -3,12 +3,14 @@
 
 pub mod action;
 mod registry;
+pub mod resource;
 pub mod runtime;
 pub mod signal;
 pub mod store;
 
 pub use action::*;
 pub use registry::*;
+pub use resource::*;
 pub use runtime::*;
 pub use signal::*;
 pub use store::*;
@@ -20,6 +22,7 @@ registry::register_primitives! {
     signal: SignalPrimitive,
     store: StorePrimitive,
     runtime: RuntimePrimitive,
+    resource: ResourcePrimitive,
 }
 
 use serde::{Deserialize, Serialize};

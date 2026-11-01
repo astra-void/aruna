@@ -187,6 +187,39 @@
   }
 }
 
+=== inspect resources (exit 0)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::514",
+      "details": "export name: restockItem\ninput.itemIds: an array with no .maxItems(n)\ninput.itemIds[]: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/inventory/actions.ts",
+      "message": "Server action inventory.restockItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 8,
+    "infos": 0,
+    "modules": 8,
+    "resolvedImports": 4,
+    "warnings": 2
+  }
+}
+
 === inspect contract (exit 0)
 {
   "version": 2,
@@ -1186,7 +1219,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -1329,6 +1362,8 @@ export const contractHash = "b7a71cb48737daea";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

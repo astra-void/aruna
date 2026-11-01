@@ -1,6 +1,7 @@
 use crate::config::{ArunaConfig, EntriesMode, StrictSeverity};
 use crate::codegen::{
-    generate_action_files, generate_entry_files, generate_signal_files, GeneratedFile,
+    generate_action_files, generate_entry_files, generate_resource_files, generate_signal_files,
+    GeneratedFile,
 };
 use crate::diagnostics::{
     create_diagnostic, strip_ignored_diagnostics, summarize_diagnostics, ArunaDiagnostic,
@@ -15,7 +16,8 @@ use crate::module_kind::ModuleKind;
 use crate::primitives::ArunaActionRecord;
 use crate::resolver::{
     is_bare_specifier, resolve_virtual_generated_action_module,
-    resolve_virtual_generated_signal_module, TsconfigResolverOptions,
+    resolve_virtual_generated_resource_module, resolve_virtual_generated_signal_module,
+    TsconfigResolverOptions,
 };
 use crate::rules::boundary_code;
 use crate::shared_safety::create_transitive_diagnostics;
@@ -96,6 +98,7 @@ fn internal_error_output(input: &CompilerInput, message: String) -> CompilerOutp
             signals: Vec::new(),
             stores: Vec::new(),
             runtimes: Vec::new(),
+            resources: Vec::new(),
             diagnostics: vec![diagnostic],
         },
         generated_files: None,
@@ -220,7 +223,8 @@ fn create_unresolved_import_diagnostic(
     let (message, suggestion) = if edge.edge.specifier.starts_with("$aruna/") {
         let is_known_virtual = resolve_virtual_generated_action_module(&edge.edge.specifier)
             .is_some()
-            || resolve_virtual_generated_signal_module(&edge.edge.specifier).is_some();
+            || resolve_virtual_generated_signal_module(&edge.edge.specifier).is_some()
+            || resolve_virtual_generated_resource_module(&edge.edge.specifier).is_some();
         if is_known_virtual {
             (
                 format!(
@@ -235,7 +239,7 @@ fn create_unresolved_import_diagnostic(
                     "{} imports {}, but {} is not a known Aruna virtual module.",
                     edge.importer_path, edge.edge.specifier, edge.edge.specifier
                 ),
-                "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+                "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
                     .to_string(),
             )
         }
@@ -509,6 +513,7 @@ pub(crate) fn run_project_with_files(
             &input.config.generated_dir,
             &graph.actions,
             &graph.signals,
+            &graph.resources,
             &input.config.actions.default_rate_limit,
             input.config.compiler.preserve_generated_comments,
         );
@@ -531,12 +536,26 @@ pub(crate) fn run_project_with_files(
             files.extend(generated_signals.files);
         }
 
+        if !graph.resources.is_empty() {
+            let generated_resources = generate_resource_files(
+                &input.config.generated_dir,
+                &graph.resources,
+                input.config.compiler.preserve_generated_comments,
+            );
+            mutable_diagnostics.extend(strip_ignored_diagnostics(
+                &generated_resources.diagnostics,
+                ignore,
+            ));
+            files.extend(generated_resources.files);
+        }
+
         // Generated entries (entries: "generated"): the manifest-derived
         // main.server/main.client scripts that replace hand-written bootstrap.
         if input.config.entries == EntriesMode::Generated {
             let generated_entries = generate_entry_files(
                 &input.config.generated_dir,
                 !graph.signals.is_empty(),
+                !graph.resources.is_empty(),
                 &graph.runtimes,
                 &graph.hooks,
                 input.config.compiler.preserve_generated_comments,
@@ -579,6 +598,7 @@ pub(crate) fn run_project_with_files(
         &graph.signals,
         &graph.stores,
         &graph.runtimes,
+        &graph.resources,
         &mutable_diagnostics,
     );
     let diagnostics_before_write = mutable_diagnostics.len();
@@ -647,6 +667,7 @@ pub(crate) fn run_project_with_files(
             &graph.signals,
             &graph.stores,
             &graph.runtimes,
+            &graph.resources,
             &mutable_diagnostics,
         );
     }

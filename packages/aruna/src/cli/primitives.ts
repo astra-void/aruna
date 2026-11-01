@@ -9,15 +9,18 @@
 import type { CompilerOutput } from "@arunajs/core";
 import {
   summarizeActions,
+  summarizeResources,
   summarizeSignals,
   summarizeStores,
   type ActionContractSnapshot,
 } from "./action-contracts.js";
 import {
   diffActions,
+  diffResources,
   diffSignals,
   diffStores,
   parseActionRecord,
+  parseResourceRecord,
   parseSignalRecord,
   parseStoreRecord,
   storeIdentity,
@@ -27,6 +30,7 @@ import type { CliColorMode } from "./format.js";
 import { buildActionInspectionReport, formatActionInspection } from "./inspect-actions.js";
 import { buildSignalInspectionReport, formatSignalInspection } from "./inspect-signals.js";
 import { buildStoreInspectionReport, formatStoreInspection } from "./inspect-stores.js";
+import { buildResourceInspectionReport, formatResourceInspection } from "./inspect-resources.js";
 
 // How a primitive takes part in the contract snapshot. `TRecord` is its
 // snapshot record type.
@@ -136,6 +140,25 @@ export const PRIMITIVES: readonly PrimitiveRegistration[] = [
   // Runtimes are in the manifest but not the contract: nothing a client or a
   // saved record depends on changes with them.
   { name: "runtime" },
+  {
+    name: "resource",
+    contract: contract({
+      key: "resources",
+      required: false,
+      summarize: summarizeResources,
+      parseRecord: parseResourceRecord,
+      identity: (resource) => resource.id,
+      duplicateMessage: (location, resource) =>
+        `${location} contains a duplicate resource id: ${resource.id}.`,
+      diff: diffResources,
+    }),
+    inspect: {
+      command: "resources",
+      description: "show discovered resources: scope, value shape, and authorization",
+      report: buildResourceInspectionReport,
+      format: formatResourceInspection,
+    },
+  },
 ];
 
 // The registrations that take part in the contract snapshot, in order.

@@ -74,15 +74,19 @@ The serialization boundary, fixed-window rate limits, the contract snapshot, con
 2. **Done**: runtime execution tests for the roblox-ts-native runtime now run through a Lune/Luau harness (`apps/roblox-runtime-test`), compiling the runtime to Luau and executing it under Lune.
 3. Refine thin authority inspection without adding a full policy/capability system.
 4. Write the create-app RFC / starter contract.
-5. Design resources and invalidation after the starter contract is stable.
-6. Implement resources later.
+5. **Done**: resources and invalidation were designed (docs/rfcs/resources.md) and
+   implemented. The deferral held until the one ordered reliable channel and the
+   primitive registry existed; with both, a resource is one compiler primitive and one
+   runtime module.
+6. **Done**: implemented.
 
 Create-app implementation, generated Rojo, and generated Roblox Instances remain out of scope until the starter contract is written.
 
 ## Do not implement yet
 
-- `defineResource`
-- resource invalidation
+- ~~`defineResource`~~ — implemented 2026-11 (docs/rfcs/resources.md): server-owned,
+  revisioned snapshots on the reliable channel, player and global scope.
+- ~~resource invalidation~~ — implemented with it.
 - policies and capabilities
 - player sessions
 - Studio overlay

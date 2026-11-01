@@ -341,6 +341,73 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::510",
+      "details": "A payload is bounded when every string has .maxLength(n) or .maxChars(n), every array .maxItems(n), and it holds no record (export name: chat).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal chat.bubble has no bound on its payload size; Roblox drops an unreliable payload over 900 bytes without an error.",
+      "name": "unreliable-signal-payload-unbounded",
+      "severity": "warning",
+      "span": {
+        "end": 626,
+        "start": 577
+      },
+      "suggestion": "Bound the payload schema, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (2312 bytes, 4-byte header included) plus its wire frame (83 bytes) (export name: trail).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.trail can carry up to 2395 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 946,
+        "start": 881
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::511",
+      "details": "Largest binary frame (868 bytes, 4-byte header included) plus its wire frame (83 bytes) (export name: burst).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.burst can carry up to 951 bytes, over Roblox's 900-byte unreliable limit; larger payloads are dropped without an error.",
+      "name": "unreliable-signal-payload-too-large",
+      "severity": "error",
+      "span": {
+        "end": 1226,
+        "start": 1178
+      },
+      "suggestion": "Lower the payload's maxLength / maxItems bounds, split it, or make the signal reliable."
+    },
+    {
+      "code": "aruna::513",
+      "details": "Largest payload by the binary layout (620 bytes) plus its wire frame (82 bytes). The table encoding adds a type tag and key per value on top, which the compiler cannot size (export name: near).",
+      "file": "src/shared/signals.ts",
+      "message": "Unreliable signal fx.near is at least 702 bytes with the table encoding, over 75% of Roblox's 900-byte unreliable limit; its real size is larger and may be over it.",
+      "name": "unreliable-signal-payload-near-limit",
+      "severity": "warning",
+      "span": {
+        "end": 1554,
+        "start": 1506
+      },
+      "suggestion": "Set wire: \"binary\": its size is exact, and the publisher checks each frame against the limit before firing."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 2,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 0,
+    "warnings": 2
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,
@@ -1466,7 +1533,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -1596,6 +1663,8 @@ export type LogPayload = { text: string; };
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

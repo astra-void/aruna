@@ -156,6 +156,8 @@ pub(crate) enum SchemaRole {
     Store,
     // The `data` schema of an error an action declares.
     ErrorData,
+    // A resource's value.
+    Resource,
 }
 
 impl SchemaRole {
@@ -166,6 +168,7 @@ impl SchemaRole {
             SchemaRole::Payload => "aruna::564",
             SchemaRole::Store => "aruna::572",
             SchemaRole::ErrorData => "aruna::585",
+            SchemaRole::Resource => "aruna::588",
         }
     }
 
@@ -176,6 +179,7 @@ impl SchemaRole {
             SchemaRole::Payload => "payload",
             SchemaRole::Store => "schema",
             SchemaRole::ErrorData => "error data",
+            SchemaRole::Resource => "schema",
         }
     }
 }

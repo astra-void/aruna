@@ -2,6 +2,7 @@
 
 import type { ActionContext, ActionDefinition, ActionErrorMap, ActionRateLimitOptions } from "./server";
 import type { StoreDocument } from "./player-store";
+import type { ResourceContext, ResourceHost } from "./resource";
 import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
@@ -10,6 +11,7 @@ import { createIdempotencyCache, isIdempotencyKey } from "./idempotency";
 import {
 	admitEnvelope,
 	createDepartedPlayers,
+	type RequestAbuseReason,
 	createRequestGuard,
 	IN_FLIGHT_RETRY_AFTER_MS,
 	refuseFrame,
@@ -92,6 +94,17 @@ export interface ActionRegistry<TPlayer = unknown> {
 	// Clears the departed mark for a player who joined again. `createServerApp`
 	// calls it on join.
 	readonly readmitPlayer: (player: TPlayer) => void;
+	// The transport's gate for an item that is not a call (a resource
+	// subscription): its id must be a string of at most `maxLength`, and the
+	// player's request budget must have a token. Charged and reported like a
+	// call's envelope; false means drop it.
+	readonly admitItem: (player: TPlayer, id: unknown, maxLength: number) => boolean;
+	// Counts a report for the player and passes it to `onAbuse`, for a refusal
+	// the transport decides on its own (an unknown resource).
+	readonly reportAbuse: (
+		player: TPlayer,
+		info: { readonly reason: RequestAbuseReason; readonly actionId?: string },
+	) => void;
 	// True when the action is declared `fireAndForget` (one-way). The transport
 	// binder uses this to decide whether to send a response back to the client.
 	// Unknown action ids return false.
@@ -153,6 +166,9 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Supplied by `createServerApp` from its `playerStore`. Returns undefined
 	// while the locked read is in flight or after the document was released.
 	readonly getStore?: (player: TPlayer) => StoreDocument<unknown> | undefined;
+	// The app's resources, injected as `ctx.resources` with invalidation bound
+	// to the calling player.
+	readonly resources?: ResourceHost<TPlayer>;
 	// Around-run middleware, applied outermost-first to every action.
 	readonly middleware?: readonly ActionMiddleware<TPlayer>[];
 	readonly onError?: ActionErrorHandler<TPlayer>;
@@ -281,6 +297,7 @@ export function createActionRegistry<TPlayer>(
 	const publisher = options?.publisher;
 	const getSession = options?.getSession;
 	const getStore = options?.getStore;
+	const resources = options?.resources;
 	const middleware = options?.middleware;
 	const onError = options?.onError;
 	const exposeInternalErrors = options?.exposeInternalErrors === true;
@@ -395,6 +412,17 @@ export function createActionRegistry<TPlayer>(
 				if (document !== undefined) {
 					(context as { store?: StoreDocument<unknown> }).store = document;
 				}
+			}
+			if (resources !== undefined) {
+				const bound: ResourceContext<TPlayer> = {
+					invalidate: (resource, target) => {
+						resources.invalidate(resource, target !== undefined ? target : player);
+					},
+					invalidateAll: (resource) => {
+						resources.invalidate(resource);
+					},
+				};
+				(context as { resources?: ResourceContext<TPlayer> }).resources = bound;
 			}
 			// `ctx.fail(name, data)` for an action that declares `errors`.
 			if (definition.errors !== undefined) {
@@ -594,6 +622,24 @@ export function createActionRegistry<TPlayer>(
 		},
 		readmitPlayer: (player) => {
 			departed.remove(player);
+		},
+		admitItem: (player, id, maxLength) => {
+			if (guard.hasDeparted(player)) {
+				return false;
+			}
+			if (!typeIs(id, "string") || id.size() > maxLength) {
+				guard.admit(player);
+				guard.report(player, { reason: "malformed-envelope" });
+				return false;
+			}
+			if (!guard.admit(player)) {
+				guard.report(player, { reason: "budget-exhausted", actionId: id });
+				return false;
+			}
+			return true;
+		},
+		reportAbuse: (player, info) => {
+			guard.report(player, info);
 		},
 	};
 }

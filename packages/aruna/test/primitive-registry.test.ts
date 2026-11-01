@@ -55,6 +55,7 @@ describe("primitive registry", () => {
         inContract: true,
       },
       { name: "runtime", callees: ["defineRuntime"], definingModuleKind: null, inContract: false },
+      { name: "resource", callees: ["defineResource"], definingModuleKind: "server", inContract: true },
     ]);
   });
 });

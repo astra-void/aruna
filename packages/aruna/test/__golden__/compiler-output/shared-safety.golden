@@ -199,6 +199,73 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,
@@ -1073,7 +1140,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -1174,6 +1241,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

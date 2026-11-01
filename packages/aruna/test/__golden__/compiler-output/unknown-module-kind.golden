@@ -70,6 +70,30 @@
   }
 }
 
+=== inspect resources (exit 0)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::200",
+      "details": "The module participates in a resolved import edge, so its boundary role matters.",
+      "file": "src/utils/debug.ts",
+      "message": "src/utils/debug.ts could not be classified as client, server, or shared.",
+      "name": "unknown-module-kind",
+      "severity": "warning",
+      "suggestion": "Place the file under client/, server/, or shared/, or adjust the convention patterns."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 1,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 1
+  }
+}
+
 === inspect contract (exit 0)
 {
   "version": 2,
@@ -481,7 +505,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -603,6 +627,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

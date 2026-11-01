@@ -11,6 +11,7 @@ import {
   type ActionContractError,
   type ActionContractRecord,
   type ActionContractSnapshot,
+  type ResourceContractRecord,
   type SignalContractRecord,
   type StoreContractRecord,
 } from "./action-contracts.js";
@@ -62,6 +63,15 @@ export type ContractDiffKind =
   | "signal-payload-field-removed"
   | "signal-payload-field-type-changed"
   | "signal-wire-changed"
+  | "resource-added"
+  | "resource-removed"
+  | "resource-source-changed"
+  | "resource-scope-changed"
+  | "resource-authorize-changed"
+  | "resource-value-changed"
+  | "resource-value-field-added"
+  | "resource-value-field-removed"
+  | "resource-value-field-type-changed"
   | "store-added"
   | "store-removed"
   | "store-source-changed"
@@ -155,13 +165,21 @@ type ParsedSignalContractRecord = SignalContractRecord & {
   };
 };
 
+type ParsedResourceContractRecord = ResourceContractRecord & {
+  readonly value: {
+    readonly summary: string;
+    readonly schema: SchemaMetadata | null;
+  };
+};
+
 type ParsedActionContractSnapshot = Omit<
   ActionContractSnapshot,
-  "actions" | "signals" | "stores"
+  "actions" | "signals" | "stores" | "resources"
 > & {
   readonly actions: readonly ParsedActionContractRecord[];
   readonly signals?: readonly ParsedSignalContractRecord[];
   readonly stores?: readonly StoreContractRecord[];
+  readonly resources?: readonly ParsedResourceContractRecord[];
 };
 
 function compareStrings(left: string, right: string): number {
@@ -628,6 +646,52 @@ export function parseStoreRecord(value: unknown, location: string): StoreContrac
 // different set of records.
 export function storeIdentity(store: StoreContractRecord): string {
   return store.scope === null ? store.id : `${store.id}@${store.scope}`;
+}
+
+export function parseResourceRecord(value: unknown, location: string): ParsedResourceContractRecord {
+  if (!isRecordLike(value)) {
+    throw new Error(`${location} must be an object.`);
+  }
+  if (typeof value["id"] !== "string") {
+    throw new Error(`${location}.id must be a string.`);
+  }
+  if (typeof value["source"] !== "string") {
+    throw new Error(`${location}.source must be a string.`);
+  }
+  if (value["scope"] !== "player" && value["scope"] !== "global") {
+    throw new Error(`${location}.scope must be "player" or "global".`);
+  }
+  if (!isRecordLike(value["value"]) || typeof value["value"]["summary"] !== "string") {
+    throw new Error(`${location}.value must be an object with a summary.`);
+  }
+  if (!isRecordLike(value["serialization"]) || typeof value["serialization"]["policy"] !== "string") {
+    throw new Error(`${location}.serialization.policy must be a string.`);
+  }
+  if (!Array.isArray(value["warnings"]) || value["warnings"].some((warning) => typeof warning !== "string")) {
+    throw new Error(`${location}.warnings must be an array of strings.`);
+  }
+  return {
+    id: value["id"],
+    source: normalizePath(value["source"]),
+    moduleKind:
+      typeof value["moduleKind"] === "string"
+        ? (value["moduleKind"] as ResourceContractRecord["moduleKind"])
+        : "unknown",
+    direction: "server-to-client",
+    scope: value["scope"],
+    ...(value["authorized"] === true ? { authorized: true as const } : {}),
+    value: {
+      summary: value["value"]["summary"],
+      schema:
+        value["value"]["schema"] === null || value["value"]["schema"] === undefined
+          ? null
+          : parseSchemaMetadata(value["value"]["schema"], `${location}.value.schema`),
+    },
+    serialization: {
+      policy: value["serialization"]["policy"] as "plain-data-v1",
+    },
+    warnings: value["warnings"] as string[],
+  };
 }
 
 export function parseSignalRecord(value: unknown, location: string): ParsedSignalContractRecord {
@@ -1349,7 +1413,9 @@ function diffRateLimit(
 // Whose schema is compared: an action's input or output, a signal's payload, or
 // the data of an error an action declares. Everything but input travels server
 // → client and follows the output rules.
-type SchemaDiffRole = "input" | "output" | "payload" | "error";
+// `value` is a resource's value: like a signal payload, it travels server →
+// client, so it follows the output rules.
+type SchemaDiffRole = "input" | "output" | "payload" | "error" | "value";
 
 // Where a role's schema starts: `input`, or `errors.<Name>.data` for an error.
 function isSchemaRoot(role: SchemaDiffRole, path: string): boolean {
@@ -1372,14 +1438,18 @@ function diffSchema(
         ? "output-schema-changed"
         : role === "error"
           ? "error-data-changed"
-          : "signal-payload-changed"
+          : role === "value"
+            ? "resource-value-changed"
+            : "signal-payload-changed"
     : role === "input"
       ? "input-field-type-changed"
       : role === "output"
         ? "output-field-type-changed"
         : role === "error"
           ? "error-data-field-type-changed"
-          : "signal-payload-field-type-changed";
+          : role === "value"
+            ? "resource-value-field-type-changed"
+            : "signal-payload-field-type-changed";
   const subject = role === "error" ? "error data" : role;
 
   if (schemaNodesEqual(before, after)) {
@@ -1631,7 +1701,9 @@ function diffObjectSchema(
                 ? "output-field-added"
                 : role === "error"
                   ? "error-data-field-added"
-                  : "signal-payload-field-added",
+                  : role === "value"
+                    ? "resource-value-field-added"
+                    : "signal-payload-field-added",
           actionId,
           path: fieldPath,
           message:
@@ -1658,7 +1730,9 @@ function diffObjectSchema(
                 ? "output-field-removed"
                 : role === "error"
                   ? "error-data-field-removed"
-                  : "signal-payload-field-removed",
+                  : role === "value"
+                    ? "resource-value-field-removed"
+                    : "signal-payload-field-removed",
           actionId,
           path: fieldPath,
           message:
@@ -1826,6 +1900,103 @@ export function diffSignals(
       current.payload.schema ?? null,
       entries,
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Resources
+// ---------------------------------------------------------------------------
+//
+// A resource's value reaches subscribed clients, so it is diffed like a signal
+// payload. Its id and its scope are what a client subscribes by and what the
+// value means; changing either breaks a client built against the other.
+export function diffResources(
+  before: ActionContractSnapshot,
+  after: ActionContractSnapshot,
+  entries: ContractDiffEntry[],
+): void {
+  const beforeById = new Map((before.resources ?? []).map((resource) => [resource.id, resource] as const));
+  const afterById = new Map((after.resources ?? []).map((resource) => [resource.id, resource] as const));
+  const ids = [...new Set([...beforeById.keys(), ...afterById.keys()])].sort(compareStrings);
+
+  for (const resourceId of ids) {
+    const previous = beforeById.get(resourceId);
+    const current = afterById.get(resourceId);
+    if (!previous && current) {
+      makeEntry(
+        { severity: "non-breaking", kind: "resource-added", actionId: resourceId, message: `${resourceId} resource added.` },
+        entries,
+      );
+      continue;
+    }
+    if (previous && !current) {
+      // A subscribed client waits on a snapshot that never comes.
+      makeEntry(
+        { severity: "breaking", kind: "resource-removed", actionId: resourceId, message: `${resourceId} resource removed.` },
+        entries,
+      );
+      continue;
+    }
+    if (!previous || !current) {
+      continue;
+    }
+    if (previous.source !== current.source) {
+      makeEntry(
+        {
+          severity: "non-breaking",
+          kind: "resource-source-changed",
+          actionId: resourceId,
+          path: "source",
+          message: `${resourceId} source path changed from ${previous.source} to ${current.source}.`,
+          before: previous.source,
+          after: current.source,
+        },
+        entries,
+      );
+    }
+    if (previous.scope !== current.scope) {
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "resource-scope-changed",
+          actionId: resourceId,
+          path: "scope",
+          message: `${resourceId} scope changed from ${previous.scope} to ${current.scope}.`,
+          before: previous.scope,
+          after: current.scope,
+        },
+        entries,
+      );
+    }
+    if ((previous.authorized === true) !== (current.authorized === true)) {
+      makeEntry(
+        {
+          severity: "info",
+          kind: "resource-authorize-changed",
+          actionId: resourceId,
+          path: "authorized",
+          message: current.authorized === true
+            ? `${resourceId} now authorizes subscriptions.`
+            : `${resourceId} no longer authorizes subscriptions.`,
+        },
+        entries,
+      );
+    }
+    if (previous.serialization.policy !== current.serialization.policy) {
+      makeEntry(
+        {
+          severity: "breaking",
+          kind: "serialization-policy-changed",
+          actionId: resourceId,
+          path: "serialization.policy",
+          message: `${resourceId} serialization policy changed from ${previous.serialization.policy} to ${current.serialization.policy}.`,
+          before: previous.serialization.policy,
+          after: current.serialization.policy,
+        },
+        entries,
+      );
+    }
+    diffSchema("value", resourceId, previous.value.schema ?? null, current.value.schema ?? null, entries);
   }
 }
 
@@ -2326,6 +2497,9 @@ function withoutSnapshotConstraints(snapshot: ActionContractSnapshot): ActionCon
       : {}),
     ...(snapshot.stores !== undefined
       ? { stores: snapshot.stores.map((store) => ({ ...store, schema: strip(store.schema) })) }
+      : {}),
+    ...(snapshot.resources !== undefined
+      ? { resources: snapshot.resources.map((resource) => ({ ...resource, value: strip(resource.value) })) }
       : {}),
   };
 }

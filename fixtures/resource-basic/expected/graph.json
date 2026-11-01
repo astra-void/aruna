@@ -1,0 +1,21 @@
+[
+  {
+    "from": "src/client/hud.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "$aruna/resources/client",
+    "to": "src/.aruna/shared/resources.client.generated.ts"
+  },
+  {
+    "from": "src/domains/quests/resources.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/schema"
+  },
+  {
+    "from": "src/domains/quests/resources.ts",
+    "kind": "static",
+    "resolved": false,
+    "specifier": "aruna/server"
+  }
+]

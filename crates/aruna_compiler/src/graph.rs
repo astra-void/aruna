@@ -1,8 +1,8 @@
 use crate::cache::GraphCache;
 use crate::config::{ArunaConfig, EntriesMode, StrictSeverity};
 use crate::primitives::{
-    ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord, FinalizeStage,
-    PrimitiveFiles, PrimitiveRecords,
+    ArunaActionRecord, ArunaResourceRecord, ArunaRuntimeRecord, ArunaSignalRecord,
+    ArunaStoreRecord, FinalizeStage, PrimitiveFiles, PrimitiveRecords,
 };
 use crate::codegen::{
     EntryHooks, HookModuleRecord, RECOGNIZED_CLIENT_HOOKS, RECOGNIZED_SERVER_HOOKS,
@@ -14,7 +14,7 @@ use crate::module_kind::{entry_side_for_path, EntrySide, ModuleKind, ModuleReaso
 use crate::raw_remote::create_raw_remote_usage_diagnostic;
 use crate::shared_safety::create_server_service_diagnostic;
 use crate::resolver::{
-    TsconfigResolverOptions, VirtualGeneratedActionModule,
+    TsconfigResolverOptions, VirtualGeneratedActionModule, VirtualGeneratedResourceModule,
     VirtualGeneratedSignalModule, GENERATED_CLIENT_ENTRY_FILE, GENERATED_SERVER_ENTRY_FILE,
 };
 use serde::{Deserialize, Serialize};
@@ -80,6 +80,8 @@ pub struct BuildGraphResult {
     // `stores`.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub runtimes: Vec<ArunaRuntimeRecord>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub resources: Vec<ArunaResourceRecord>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub module_map: BTreeMap<String, ArunaModuleRecord>,
     // Hook modules discovered at the recommended entry paths under
@@ -207,6 +209,27 @@ fn virtual_generated_signal_module_record(
         kind: ModuleKind::Shared,
         reason: ModuleReason::Directive,
         reason_detail: Some("virtual $aruna/signals module".to_string()),
+    }
+}
+
+fn virtual_generated_resource_module_record(
+    project_root: &Path,
+    generated_dir: &str,
+    module: VirtualGeneratedResourceModule,
+) -> ArunaModuleRecord {
+    let absolute_path = project_absolute(project_root, generated_dir).join(module.filename());
+    let relative_path = project_relative(project_root, &absolute_path);
+    ArunaModuleRecord {
+        id: relative_path.clone(),
+        path: relative_path,
+        // The client bindings carry ids and types only; the server registry
+        // imports the definitions.
+        kind: match module {
+            VirtualGeneratedResourceModule::Client => ModuleKind::Shared,
+            VirtualGeneratedResourceModule::Server => ModuleKind::Server,
+        },
+        reason: ModuleReason::Directive,
+        reason_detail: Some("virtual $aruna/resources module".to_string()),
     }
 }
 
@@ -451,6 +474,21 @@ pub fn build_project_graph_cached(
         module_records.push(record);
     }
 
+    if !primitives.resource.is_empty() {
+        for virtual_module in [
+            VirtualGeneratedResourceModule::Client,
+            VirtualGeneratedResourceModule::Server,
+        ] {
+            let record = virtual_generated_resource_module_record(
+                project_root,
+                &config.generated_dir,
+                virtual_module,
+            );
+            module_map.insert(record.path.clone(), record.clone());
+            module_records.push(record);
+        }
+    }
+
     let mut imports = Vec::new();
 
     for absolute_path in files {
@@ -572,6 +610,7 @@ pub fn build_project_graph_cached(
         signals: primitives.signal,
         stores: primitives.store,
         runtimes: primitives.runtime,
+        resources: primitives.resource,
         module_map,
         hooks: entry_hooks,
         diagnostics,

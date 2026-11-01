@@ -1,0 +1,29 @@
+[
+  {
+    "id": "src/.aruna/server/resources.server.generated.ts",
+    "kind": "server",
+    "path": "src/.aruna/server/resources.server.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/resources module"
+  },
+  {
+    "id": "src/.aruna/shared/resources.client.generated.ts",
+    "kind": "shared",
+    "path": "src/.aruna/shared/resources.client.generated.ts",
+    "reason": "directive",
+    "reasonDetail": "virtual $aruna/resources module"
+  },
+  {
+    "id": "src/client/hud.ts",
+    "kind": "client",
+    "path": "src/client/hud.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/quests/resources.ts",
+    "kind": "server",
+    "path": "src/domains/quests/resources.ts",
+    "reason": "directive",
+    "reasonDetail": "defineResource(...) export detected"
+  }
+]

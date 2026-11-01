@@ -199,6 +199,73 @@
   }
 }
 
+=== inspect resources (exit 0)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/client/net.ts",
+      "message": "src/client/net.ts uses a raw remote (.FireServer) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 75
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    },
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/server/net.ts",
+      "message": "src/server/net.ts uses a raw remote (new Instance(\"RemoteEvent\")) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 131,
+        "start": 104
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    },
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/server/net.ts",
+      "message": "src/server/net.ts uses a raw remote (.OnServerEvent) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 154,
+        "start": 141
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    },
+    {
+      "code": "aruna::507",
+      "details": "Traffic over a hand-made remote skips the schema validation, rate limiting, and middleware that actions and signals apply.",
+      "file": "src/server/net.ts",
+      "message": "src/server/net.ts uses a raw remote (.FireAllClients) instead of an Aruna action or signal.",
+      "name": "raw-remote-usage",
+      "severity": "warning",
+      "span": {
+        "end": 208,
+        "start": 194
+      },
+      "suggestion": "Define a defineAction or defineSignal for this traffic, or add \"raw-remote-usage\" to diagnostics.ignore if the remote is intentional."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 0,
+    "infos": 0,
+    "modules": 3,
+    "resolvedImports": 0,
+    "warnings": 4
+  }
+}
+
 === inspect contract (exit 0)
 {
   "version": 2,
@@ -905,7 +972,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -1027,6 +1094,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

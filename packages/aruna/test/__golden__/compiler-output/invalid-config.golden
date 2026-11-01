@@ -67,6 +67,29 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::100",
+      "details": "Unsupported top-level config field: generatedDir; Unsupported top-level config field: manifest",
+      "file": "aruna.config.ts",
+      "message": "Invalid Aruna configuration in aruna.config.ts.",
+      "name": "invalid-config",
+      "severity": "error"
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 0,
+    "infos": 0,
+    "modules": 0,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,

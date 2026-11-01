@@ -67,7 +67,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -130,7 +130,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -193,7 +193,70 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
+    },
+    {
+      "code": "aruna::301",
+      "details": "importer: src/app/server.ts\nimporter kind: server\nimported: $aruna/actions/client\nimported kind: client",
+      "file": "src/app/server.ts",
+      "message": "src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.",
+      "name": "server-imports-client",
+      "severity": "error",
+      "span": {
+        "end": 52,
+        "start": 29
+      },
+      "suggestion": "Move shared logic into shared/, or pass data from the client into a server entrypoint later."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
+  "summary": {
+    "errors": 2,
+    "imports": 7,
+    "infos": 0,
+    "modules": 7,
+    "resolvedImports": 4,
+    "warnings": 2
+  }
+}
+
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::556",
+      "details": "importer: src/app/client.ts\nimporter kind: client\nimported: $aruna/actions/server\nimported kind: server action",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.",
+      "name": "action-imported-from-invalid-environment",
+      "severity": "error",
+      "span": {
+        "end": 47,
+        "start": 24
+      },
+      "suggestion": "Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client."
+    },
+    {
+      "code": "aruna::105",
+      "details": "importer kind: client",
+      "file": "src/app/client.ts",
+      "message": "src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.",
+      "name": "unresolved-import",
+      "severity": "warning",
+      "span": {
+        "end": 87,
+        "start": 70
+      },
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -290,7 +353,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -407,7 +470,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -517,7 +580,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -668,7 +731,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -748,7 +811,7 @@
           "end": 87,
           "start": 70
         },
-        "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+        "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
       },
       {
         "code": "aruna::301",
@@ -1002,7 +1065,7 @@
         "end": 87,
         "start": 70
       },
-      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+      "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
     },
     {
       "code": "aruna::301",
@@ -1037,7 +1100,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/app/client.ts\",\n      \"path\": \"src/app/client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/app/server.ts\",\n      \"path\": \"src/app/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/client.ts\",\n      \"path\": \"src/client.ts\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/app/client.ts\",\n      \"to\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"specifier\": \"$aruna/actions/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/client.ts\",\n      \"specifier\": \"$aruna/not-real\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/server.ts\",\n      \"to\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"specifier\": \"$aruna/actions/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/client.ts\",\n      \"to\": \"src/app/client.ts\",\n      \"specifier\": \"./app/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/app/server.ts\",\n      \"specifier\": \"./app/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::556\",\n      \"name\": \"action-imported-from-invalid-environment\",\n      \"severity\": \"error\",\n      \"message\": \"src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.\",\n      \"file\": \"src/app/client.ts\",\n      \"span\": {\n        \"start\": 24,\n        \"end\": 47\n      },\n      \"details\": \"importer: src/app/client.ts\\nimporter kind: client\\nimported: $aruna/actions/server\\nimported kind: server action\",\n      \"suggestion\": \"Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.\"\n    },\n    {\n      \"code\": \"aruna::105\",\n      \"name\": \"unresolved-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.\",\n      \"file\": \"src/app/client.ts\",\n      \"span\": {\n        \"start\": 70,\n        \"end\": 87\n      },\n      \"details\": \"importer kind: client\",\n      \"suggestion\": \"Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file.\"\n    },\n    {\n      \"code\": \"aruna::301\",\n      \"name\": \"server-imports-client\",\n      \"severity\": \"error\",\n      \"message\": \"src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.\",\n      \"file\": \"src/app/server.ts\",\n      \"span\": {\n        \"start\": 29,\n        \"end\": 52\n      },\n      \"details\": \"importer: src/app/server.ts\\nimporter kind: server\\nimported: $aruna/actions/client\\nimported kind: client\",\n      \"suggestion\": \"Move shared logic into shared/, or pass data from the client into a server entrypoint later.\"\n    },\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action shop.purchaseItem accepts input with no size limit.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"details\": \"export name: purchaseItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    }\n  ]\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"path\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"path\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"virtual $aruna/actions module\"\n    },\n    {\n      \"id\": \"src/app/client.ts\",\n      \"path\": \"src/app/client.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/app/server.ts\",\n      \"path\": \"src/app/server.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/client.ts\",\n      \"path\": \"src/client.ts\",\n      \"kind\": \"clientEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    },\n    {\n      \"id\": \"src/domains/shop/actions.ts\",\n      \"path\": \"src/domains/shop/actions.ts\",\n      \"kind\": \"serverAction\",\n      \"reason\": \"directive\",\n      \"reasonDetail\": \"defineAction(...) export detected\"\n    },\n    {\n      \"id\": \"src/server.ts\",\n      \"path\": \"src/server.ts\",\n      \"kind\": \"serverEntry\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"matched recommended entry file\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/app/client.ts\",\n      \"to\": \"src/.aruna/server/actions.server.generated.ts\",\n      \"specifier\": \"$aruna/actions/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/client.ts\",\n      \"specifier\": \"$aruna/not-real\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/app/server.ts\",\n      \"to\": \"src/.aruna/shared/actions.client.generated.ts\",\n      \"specifier\": \"$aruna/actions/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/client.ts\",\n      \"to\": \"src/app/client.ts\",\n      \"specifier\": \"./app/client\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/schema\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/actions.ts\",\n      \"specifier\": \"aruna/server\",\n      \"resolved\": false,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/server.ts\",\n      \"to\": \"src/app/server.ts\",\n      \"specifier\": \"./app/server\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"shop.purchaseItem\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"exportName\": \"purchaseItem\",\n      \"hasInputSchema\": true,\n      \"hasOutputSchema\": true,\n      \"hasRun\": true,\n      \"serialization\": {\n        \"policy\": \"plain-data-v1\"\n      },\n      \"inputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"itemId\": {\n            \"kind\": \"string\"\n          }\n        }\n      },\n      \"outputSchema\": {\n        \"kind\": \"object\",\n        \"properties\": {\n          \"ok\": {\n            \"kind\": \"boolean\"\n          }\n        }\n      }\n    }\n  ],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::556\",\n      \"name\": \"action-imported-from-invalid-environment\",\n      \"severity\": \"error\",\n      \"message\": \"src/app/client.ts is classified as client. It imports $aruna/actions/server, which is classified as server action.\",\n      \"file\": \"src/app/client.ts\",\n      \"span\": {\n        \"start\": 24,\n        \"end\": 47\n      },\n      \"details\": \"importer: src/app/client.ts\\nimporter kind: client\\nimported: $aruna/actions/server\\nimported kind: server action\",\n      \"suggestion\": \"Keep server actions on the server side, and import client-safe stubs from $aruna/actions/client.\"\n    },\n    {\n      \"code\": \"aruna::105\",\n      \"name\": \"unresolved-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/app/client.ts imports $aruna/not-real, but $aruna/not-real is not a known Aruna virtual module.\",\n      \"file\": \"src/app/client.ts\",\n      \"span\": {\n        \"start\": 70,\n        \"end\": 87\n      },\n      \"details\": \"importer kind: client\",\n      \"suggestion\": \"Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file.\"\n    },\n    {\n      \"code\": \"aruna::301\",\n      \"name\": \"server-imports-client\",\n      \"severity\": \"error\",\n      \"message\": \"src/app/server.ts is classified as server. It imports $aruna/actions/client, which is classified as client.\",\n      \"file\": \"src/app/server.ts\",\n      \"span\": {\n        \"start\": 29,\n        \"end\": 52\n      },\n      \"details\": \"importer: src/app/server.ts\\nimporter kind: server\\nimported: $aruna/actions/client\\nimported kind: client\",\n      \"suggestion\": \"Move shared logic into shared/, or pass data from the client into a server entrypoint later.\"\n    },\n    {\n      \"code\": \"aruna::514\",\n      \"name\": \"unbounded-action-input\",\n      \"severity\": \"warning\",\n      \"message\": \"Server action shop.purchaseItem accepts input with no size limit.\",\n      \"file\": \"src/domains/shop/actions.ts\",\n      \"details\": \"export name: purchaseItem\\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)\",\n      \"suggestion\": \"Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -1096,7 +1159,7 @@
           "end": 87,
           "start": 70
         },
-        "suggestion": "Use $aruna/actions/client, $aruna/actions/server, or $aruna/signals, or import a real source file."
+        "suggestion": "Use $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, or $aruna/resources/server, or import a real source file."
       },
       {
         "code": "aruna::301",
@@ -1277,7 +1340,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -1389,6 +1452,8 @@ export const contractHash = "fab86d7fd15fcd24";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

@@ -39,9 +39,15 @@ export const WIRE_MAX_FRAME_ITEMS = 64;
 export const WIRE_ITEM_CALL = 1;
 export const WIRE_ITEM_RESPONSE = 2;
 export const WIRE_ITEM_SIGNAL = 3;
-// Reserved for resource patches (server → client). Nothing sends it yet; a
-// client with no handler for a kind skips its items.
-export const WIRE_ITEM_RESOURCE_PATCH = 4;
+// A resource's state (server → client): its whole value, or an error, at a
+// revision (docs/rfcs/resources.md). Reserved as "resource patches" before
+// resources shipped; the number is unchanged.
+export const WIRE_ITEM_RESOURCE = 4;
+// The name kind 4 was reserved under. Kept so code that imported it still builds.
+export const WIRE_ITEM_RESOURCE_PATCH = WIRE_ITEM_RESOURCE;
+// A resource subscription (client → server): subscribe or unsubscribe one
+// resource, by id. Travels the call remote and is admitted like a call.
+export const WIRE_ITEM_RESOURCE_SUBSCRIPTION = 5;
 
 // An action call: request id, action id, input, idempotency key.
 export interface WireCall {
@@ -64,6 +70,24 @@ export interface WireSignal {
 	readonly t: typeof WIRE_ITEM_SIGNAL;
 	readonly s: string;
 	readonly d?: unknown;
+}
+
+// A resource's state at a revision: the value in `d`, or an error name in `e`
+// (with the failure's id in `i`, for a load error).
+export interface WireResourceState {
+	readonly t: typeof WIRE_ITEM_RESOURCE;
+	readonly r: string;
+	readonly v: number;
+	readonly d?: unknown;
+	readonly e?: string;
+	readonly i?: string;
+}
+
+// `o` is 1 to subscribe (or resync) and 0 to unsubscribe.
+export interface WireResourceSubscription {
+	readonly t: typeof WIRE_ITEM_RESOURCE_SUBSCRIPTION;
+	readonly r: string;
+	readonly o: 0 | 1;
 }
 
 // `[WIRE_PROTOCOL_VERSION, ...items]`. Every item is a table, so a frame never
@@ -151,12 +175,20 @@ const ALL = {};
 
 interface QueuedItem<TTarget> {
 	readonly target: TTarget | typeof ALL;
-	readonly item: defined;
+	item: defined;
+	// Set by `replace`: a later item with the same key for the same target takes
+	// this one's place instead of queueing behind it.
+	readonly key?: string;
 }
 
 // A side's outgoing items, queued per recipient and flushed once per frame.
 export interface WireOutbox<TTarget> {
 	readonly push: (target: TTarget, item: defined) => void;
+	// `push`, except that an item already queued this frame for the same target
+	// under the same key is replaced in place: the newer item goes out where the
+	// older one would have, and only once. For state where only the latest value
+	// matters (a resource's snapshot). Unbatched, the same as `push`.
+	readonly replace: (target: TTarget, key: string, item: defined) => void;
 	// To every recipient at once (FireAllClients).
 	readonly pushAll: (item: defined) => void;
 	readonly flush: () => void;
@@ -267,6 +299,19 @@ export function createWireOutbox<TTarget>(
 			} else {
 				fire(target, [item], false);
 			}
+		},
+		replace: (target, key, item) => {
+			if (!batching) {
+				fire(target, [item], false);
+				return;
+			}
+			for (const queued of queue) {
+				if (queued.key === key && queued.target === target) {
+					queued.item = item;
+					return;
+				}
+			}
+			queue.push({ target, item, key });
 		},
 		pushAll: (item) => {
 			if (batching) {

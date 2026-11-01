@@ -161,6 +161,39 @@
   }
 }
 
+=== inspect resources (exit 0)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::568",
+      "details": "Recognized server hooks: configure, middleware, onError.",
+      "file": "src/server.ts",
+      "message": "src/server.ts exports bootFlag, which is not a recognized server hook.",
+      "name": "unknown-hook-export",
+      "severity": "warning",
+      "suggestion": "The generated entry only wires recognized hook exports; rename the export to a recognized hook or move it out of the entry module."
+    },
+    {
+      "code": "aruna::514",
+      "details": "export name: purchaseItem\ninput.itemId: a string with no .maxLength(n) or .maxChars(n)",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.purchaseItem accepts input with no size limit.",
+      "name": "unbounded-action-input",
+      "severity": "warning",
+      "suggestion": "Bound every string with .maxLength(n) or .maxChars(n), every array with .maxItems(n), and every record with .maxEntries(n), so validation refuses an oversized payload. strict.unboundedInput sets this diagnostic's severity."
+    }
+  ],
+  "summary": {
+    "errors": 0,
+    "imports": 4,
+    "infos": 0,
+    "modules": 9,
+    "resolvedImports": 0,
+    "warnings": 2
+  }
+}
+
 === inspect contract (exit 0)
 {
   "version": 2,
@@ -1004,7 +1037,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       },
       {
@@ -1190,6 +1223,8 @@ export type DamagedPayload = { amount: number; };
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

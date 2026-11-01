@@ -12,6 +12,15 @@ import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding, ServerTransport } from "./server-app";
 import type { Schema } from "./schema";
 import {
+	admitResourceItem,
+	createResourceClient as createChannelResourceClient,
+	type ResourceClient,
+	type ResourceClientOptions,
+	type ResourceDefinition,
+	type ResourceHost,
+	type ResourceScope,
+} from "./resource";
+import {
 	createRemoteSignalPublisher,
 	createRemoteSignalSubscriber,
 	type SignalClientLike,
@@ -26,6 +35,7 @@ import {
 	createWireOutbox,
 	readWireFrame,
 	WIRE_ITEM_CALL,
+	WIRE_ITEM_RESOURCE_SUBSCRIPTION,
 	WIRE_ITEM_RESPONSE,
 	type ClientChannel,
 	type ServerChannel,
@@ -59,6 +69,19 @@ export type { PublicActionError } from "./action-error";
 // with FireClient/FireAllClients, or OnClientEvent). `createSignalPublisher` /
 // `createSignalSubscriber` below wrap them around the default Aruna remotes.
 export { createRemoteSignalPublisher, createRemoteSignalSubscriber };
+// The resource client over a channel and sender you supply, for a remote you
+// wire yourself (the test harness does).
+export { createChannelResourceClient as createRemoteResourceClient };
+export type {
+	ResourceBinding,
+	ResourceClient,
+	ResourceClientOptions,
+	ResourceListener,
+	ResourceStatus,
+	ResourceSubscribeOptions,
+	ResourceSubscription,
+	ResourceUpdateInfo,
+} from "./resource";
 export type {
 	SignalClientLike,
 	SignalMap,
@@ -73,6 +96,18 @@ export * from "./datastore";
 // The wire protocol the transports speak (docs/wire-protocol.md): the frame
 // codec and the per-frame outbox, for a remote you wire yourself.
 export * from "./wire";
+
+// `defineResource` with the player typed as `Player`, as `defineAction` here is.
+export function defineResource<
+	TId extends string,
+	TSchema extends Schema,
+	TScope extends ResourceScope = "player",
+	TPlayer = Player,
+>(
+	definition: ResourceDefinition<TSchema, TId, TScope, TPlayer>,
+): ResourceDefinition<TSchema, TId, TScope, TPlayer> {
+	return definition;
+}
 
 export function defineAction<
 	TInput extends Schema | undefined = undefined,
@@ -489,12 +524,13 @@ export interface RobloxRemoteEventOptions {
 export function robloxRemoteEvent<TPlayer = Player>(
 	options?: RobloxRemoteEventOptions,
 ): ServerTransport<TPlayer> {
-	return (registry) => bindActions(registry, options);
+	return (registry, resources) => bindActions(registry, options, resources);
 }
 
 export function bindActions<TPlayer>(
 	registry: ActionRegistry<TPlayer>,
 	options?: RobloxRemoteEventOptions,
+	resources?: ResourceHost<TPlayer>,
 ): ServerAppBinding {
 	const remote = ensureServerRemote();
 	// Advertise the contract hash so a client with a mismatched compiled-in hash
@@ -511,6 +547,7 @@ export function bindActions<TPlayer>(
 		registry,
 		callReceiverOf(remote) as unknown as WireCallReceiver<TPlayer>,
 		channel as unknown as ServerChannel<TPlayer>,
+		resources,
 	);
 }
 
@@ -522,7 +559,14 @@ export function bindRemoteActions<TPlayer>(
 	registry: ActionRegistry<TPlayer>,
 	remote: WireCallReceiver<TPlayer>,
 	channel: ServerChannel<TPlayer>,
+	// The app's resource host: its state items go out through `channel`, in
+	// order with responses and signals, and subscription items arriving on
+	// `remote` are admitted and handed to it.
+	resources?: ResourceHost<TPlayer>,
 ): ServerAppBinding {
+	if (resources !== undefined) {
+		resources.attach(channel);
+	}
 	const connection = remote.OnServerEvent.Connect((sender, frame) => {
 		// The frame as a whole first: its shape, its protocol version, and its
 		// length, before any call in it is read. A frame that fails is dropped
@@ -534,8 +578,19 @@ export function bindRemoteActions<TPlayer>(
 		}
 
 		for (const item of read.items) {
-			// Only calls travel client to server; an item of any other kind is
-			// malformed, and charged and reported like a call with bad ids.
+			// A resource subscription, when the app has resources: admitted like a
+			// call (charged, bounded, an unknown id reported) and handed over.
+			if (
+				resources !== undefined &&
+				typeIs(item, "table") &&
+				(item as { readonly t?: unknown }).t === WIRE_ITEM_RESOURCE_SUBSCRIPTION
+			) {
+				admitResourceItem(registry, resources, sender, item as object);
+				continue;
+			}
+			// Only calls (and resource subscriptions) travel client to server; an
+			// item of any other kind is malformed, and charged and reported like a
+			// call with bad ids.
 			const call =
 				typeIs(item, "table") && (item as { readonly t?: unknown }).t === WIRE_ITEM_CALL
 					? (item as Partial<WireCall>)
@@ -632,6 +687,17 @@ export function createSignalPublisher<TSignals extends SignalMap>(
 		signals,
 		unreliableRemote !== undefined ? unreliableServerRemoteOf(unreliableRemote) : undefined,
 	);
+}
+
+// The client end of the app's resources over the default Aruna RemoteEvent:
+// subscriptions go out on the call remote, state items arrive through its shared
+// client channel, in order with action responses and signals.
+// `createClientApp({ resources: true })` builds and installs this one.
+export function createResourceClient<TResources = { readonly [resourceId: string]: unknown }>(
+	options?: ResourceClientOptions,
+): ResourceClient<TResources> {
+	const remote = waitForClientRemote();
+	return createChannelResourceClient<TResources>(defaultClientChannel(remote), callSenderOf(remote), options);
 }
 
 // Client-side signal subscriber over the default Aruna RemoteEvent, through its

@@ -609,6 +609,8 @@ export function stagePartition(options: PartitionOptions, reuseRoot?: string): S
       "$aruna/actions/client": aliasPath("shared", "shared/actions.client.generated.ts"),
       "$aruna/actions/server": aliasPath("server", "server/actions.server.generated.ts"),
       "$aruna/signals": aliasPath("shared", "shared/signals.generated.ts"),
+      "$aruna/resources/client": aliasPath("shared", "shared/resources.client.generated.ts"),
+      "$aruna/resources/server": aliasPath("server", "server/resources.server.generated.ts"),
       ...runtimeAlias,
     };
 

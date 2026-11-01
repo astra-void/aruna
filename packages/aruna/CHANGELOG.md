@@ -17,6 +17,32 @@ the game build like any other module.
 
 ### Added
 
+- **Resources: server-owned state clients observe** (`defineResource`, see
+  [resources.md](docs/resources.md) and the protocol in `docs/rfcs/resources.md`).
+  A resource declares an `id`, a `scope` (`"player"`, the default, or
+  `"global"`), a `schema`, `load(ctx)`, and optionally `authorize`. The server
+  app owns the host (`createServerApp({ resources })`, `app.resources`), actions
+  invalidate through `ctx.resources.invalidate(...)`, and clients subscribe
+  through the generated `$aruna/resources/client` bindings
+  (`createClientApp({ resources: true })`). Every state item carries a revision
+  taken when its load starts, and neither end goes backwards, so a stale
+  snapshot cannot overwrite a newer push; a subscription is registered before
+  its first load, so no change is missed. Loads are coalesced (one in flight,
+  one queued) and a batched channel sends one snapshot per resource per player
+  per frame. A loaded value is checked against the schema and the serialization
+  boundary before it is sent; a failure reaches the client as
+  `ResourceLoadError` (with an `errorId` matching `onResourceError`), a refused
+  subscription as `ResourceForbiddenError`. On the wire: item kind 4 (reserved
+  for this) and a new client → server kind 5, admitted like a call (budget,
+  `malformed-envelope`, new `unknown-resource` abuse reason). Compiler:
+  `aruna::586 invalid-resource-definition`, `587 duplicate-resource-id`, `588
+  resource-schema-invalid`, `589 resource-missing-schema`, `590
+  generated-resource-name-collision`; `manifest.resources`; `aruna inspect
+  resources`; resources in the contract snapshot, the contract hash (only when
+  declared), and `contract diff`. The tsconfig upkeep maps two new aliases,
+  `$aruna/resources/client` and `$aruna/resources/server`, in every project.
+  The test harness runs the real host and client (`client(player).resources`).
+
 - **Inputless actions take no argument.** The generated stub of an action with
   no input schema, or an optional one, is `(input?: T) => Promise<O>`, so
   `ready()` type-checks; `ready(undefined)` still does, and both send a call

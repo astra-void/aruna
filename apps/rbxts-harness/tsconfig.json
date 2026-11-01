@@ -29,7 +29,9 @@
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],
       "aruna/schema": ["./src/.aruna/shared/runtime/schema.ts"],
-      "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"]
+      "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"]
     }
   },
   "include": [

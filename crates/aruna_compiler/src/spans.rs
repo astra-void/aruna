@@ -34,9 +34,13 @@ pub(crate) fn schema_invalid_diagnostic(
     span: DiagnosticSpan,
     details: String,
 ) -> ArunaDiagnostic {
+    let subject = match role {
+        SchemaRole::Resource => "Resource",
+        _ => "Server action",
+    };
     create_diagnostic(
         role.code(),
-        format!("Server action {action_id} has an invalid {} schema.", role.label()),
+        format!("{subject} {action_id} has an invalid {} schema.", role.label()),
         Some(file.to_string()),
         Some(span),
         Some(format!("export name: {export_name}\n{details}")),
@@ -59,10 +63,10 @@ pub(crate) fn schema_unresolved_diagnostic(
     span: DiagnosticSpan,
     details: String,
 ) -> ArunaDiagnostic {
-    let subject = if matches!(role, SchemaRole::Payload) {
-        "Signal"
-    } else {
-        "Server action"
+    let subject = match role {
+        SchemaRole::Payload => "Signal",
+        SchemaRole::Resource => "Resource",
+        _ => "Server action",
     };
     create_diagnostic(
         "aruna::565",

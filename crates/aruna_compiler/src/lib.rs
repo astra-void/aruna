@@ -26,13 +26,13 @@ pub use compiler::{
     check_project, inspect_project, CompilerInput, CompilerOutput, CompilerSummary,
 };
 pub use codegen::{
-    generate_action_files, generate_signal_files, GeneratedActionOutput, GeneratedFile,
-    GeneratedSignalOutput,
+    generate_action_files, generate_resource_files, generate_signal_files, GeneratedActionOutput,
+    GeneratedFile, GeneratedResourceOutput, GeneratedSignalOutput,
 };
 pub use primitives::{
     collect_action_definitions, collect_runtime_definitions, collect_signal_definitions,
-    collect_store_definitions, resolve_runtime_order, ActionDiscoveryResult, ArunaActionRateLimitMetadata, ArunaActionRecord,
-    ArunaSignalRecord, ArunaStoreKind,
+    collect_resource_definitions, collect_store_definitions, resolve_runtime_order, ActionDiscoveryResult, ArunaActionRateLimitMetadata, ArunaActionRecord,
+    ArunaResourceRecord, ArunaSignalRecord, ArunaStoreKind, ResourceDiscoveryResult,
     ArunaRuntimeRecord, ArunaStoreRecord, RuntimeDiscoveryResult, SignalDiscoveryResult,
     StoreDiscoveryResult,
 };

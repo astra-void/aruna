@@ -1,0 +1,120 @@
+{
+  "actions": [],
+  "diagnostics": [],
+  "imports": [
+    {
+      "from": "src/client/hud.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "$aruna/resources/client",
+      "to": "src/.aruna/shared/resources.client.generated.ts"
+    },
+    {
+      "from": "src/domains/quests/resources.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/schema"
+    },
+    {
+      "from": "src/domains/quests/resources.ts",
+      "kind": "static",
+      "resolved": false,
+      "specifier": "aruna/server"
+    }
+  ],
+  "modules": [
+    {
+      "id": "src/.aruna/server/resources.server.generated.ts",
+      "kind": "server",
+      "path": "src/.aruna/server/resources.server.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/resources module"
+    },
+    {
+      "id": "src/.aruna/shared/resources.client.generated.ts",
+      "kind": "shared",
+      "path": "src/.aruna/shared/resources.client.generated.ts",
+      "reason": "directive",
+      "reasonDetail": "virtual $aruna/resources module"
+    },
+    {
+      "id": "src/client/hud.ts",
+      "kind": "client",
+      "path": "src/client/hud.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/quests/resources.ts",
+      "kind": "server",
+      "path": "src/domains/quests/resources.ts",
+      "reason": "directive",
+      "reasonDetail": "defineResource(...) export detected"
+    }
+  ],
+  "projectRoot": ".",
+  "resources": [
+    {
+      "exportName": "bossHealth",
+      "file": "src/domains/quests/resources.ts",
+      "hasAuthorize": true,
+      "id": "encounter.boss",
+      "schema": {
+        "kind": "object",
+        "properties": {
+          "health": {
+            "kind": "number",
+            "numericFormat": "u16"
+          },
+          "phase": {
+            "kind": "enum",
+            "values": [
+              {
+                "kind": "string",
+                "value": "calm"
+              },
+              {
+                "kind": "string",
+                "value": "enraged"
+              }
+            ]
+          }
+        }
+      },
+      "scope": "global",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    },
+    {
+      "exportName": "questProgress",
+      "file": "src/domains/quests/resources.ts",
+      "id": "quests.progress",
+      "schema": {
+        "kind": "object",
+        "properties": {
+          "completed": {
+            "items": {
+              "kind": "string",
+              "maxLength": 32
+            },
+            "kind": "array",
+            "maxItems": 64
+          },
+          "quest": {
+            "kind": "string",
+            "maxLength": 32
+          },
+          "step": {
+            "kind": "number",
+            "numericFormat": "u16"
+          }
+        }
+      },
+      "scope": "player",
+      "serialization": {
+        "policy": "plain-data-v1"
+      }
+    }
+  ],
+  "version": 1
+}

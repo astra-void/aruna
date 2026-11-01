@@ -137,6 +137,17 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         // generated client types and the contract are built from it.
         "aruna::584" => Some(("invalid-action-errors", DiagnosticSeverity::Error)),
         "aruna::585" => Some(("action-error-data-schema-invalid", DiagnosticSeverity::Warning)),
+        // Resources (docs/rfcs/resources.md). Errors like the action ones: the
+        // id, scope, and schema are what the wire, the generated client types,
+        // and the contract are built from.
+        "aruna::586" => Some(("invalid-resource-definition", DiagnosticSeverity::Error)),
+        "aruna::587" => Some(("duplicate-resource-id", DiagnosticSeverity::Error)),
+        "aruna::588" => Some(("resource-schema-invalid", DiagnosticSeverity::Warning)),
+        "aruna::589" => Some(("resource-missing-schema", DiagnosticSeverity::Error)),
+        "aruna::590" => Some((
+            "generated-resource-name-collision",
+            DiagnosticSeverity::Error,
+        )),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

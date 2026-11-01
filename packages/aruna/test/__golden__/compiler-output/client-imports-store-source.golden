@@ -92,6 +92,34 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::574",
+      "details": "importer: src/client.tsx\nimporter kind: client entry\nimported: src/domains/economy/store.ts\nimported kind: server store",
+      "file": "src/client.tsx",
+      "message": "src/client.tsx is classified as client entry. It imports src/domains/economy/store.ts, which is classified as server store.",
+      "name": "store-imported-from-client",
+      "severity": "error",
+      "span": {
+        "end": 49,
+        "start": 24
+      },
+      "suggestion": "Stores are server-only and have no client binding. Read the data on the server and return it through an action."
+    }
+  ],
+  "summary": {
+    "errors": 1,
+    "imports": 3,
+    "infos": 0,
+    "modules": 2,
+    "resolvedImports": 1,
+    "warnings": 0
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,
@@ -632,7 +660,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -733,6 +761,8 @@ export const contractHash = "cbf29ce484222325";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

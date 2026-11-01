@@ -7,6 +7,7 @@ import {
   buildActionContractSnapshot,
   type ActionContractRecord,
   type ActionContractSnapshot,
+  type ResourceContractRecord,
   type SignalContractRecord,
   type StoreContractRecord,
 } from "../src/cli/action-contracts.js";
@@ -89,6 +90,23 @@ function signal(overrides: Record<string, unknown> = {}): SignalContractRecord {
     },
     warnings: [],
     ...(overrides as Partial<SignalContractRecord>),
+  };
+}
+
+function resource(overrides: Record<string, unknown> = {}): ResourceContractRecord {
+  return {
+    id: "quests.progress",
+    source: "src/domains/quests/resources.ts",
+    moduleKind: "server",
+    direction: "server-to-client",
+    scope: "player",
+    value: {
+      summary: "object { step: u16 }",
+      schema: objectSchema({ step: { kind: "number", numericFormat: "u16" } }),
+    },
+    serialization: { policy: "plain-data-v1" },
+    warnings: [],
+    ...(overrides as Partial<ResourceContractRecord>),
   };
 }
 
@@ -988,6 +1006,60 @@ describe("contract diff", () => {
       actionId: "combat.playerDamaged",
       path: "payload.amount",
     });
+  });
+
+  it("diffs resources: removal and a scope change break clients, the value follows the output rules", () => {
+    const base = { ...snapshot([]), resources: [resource()] };
+
+    const added = diffActionContractSnapshots(snapshot([]), base);
+    expect(added.entries[0]).toMatchObject({ severity: "non-breaking", kind: "resource-added" });
+    const removed = diffActionContractSnapshots(base, snapshot([]));
+    expect(removed.entries[0]).toMatchObject({ severity: "breaking", kind: "resource-removed" });
+
+    const global = diffActionContractSnapshots(base, {
+      ...snapshot([]),
+      resources: [resource({ scope: "global" })],
+    });
+    expect(global.entries[0]).toMatchObject({
+      severity: "breaking",
+      kind: "resource-scope-changed",
+      before: "player",
+      after: "global",
+    });
+
+    const wider = {
+      ...snapshot([]),
+      resources: [
+        resource({
+          value: {
+            summary: "object { quest: string; step: u16 }",
+            schema: objectSchema({ quest: { kind: "string" }, step: { kind: "number", numericFormat: "u16" } }),
+          },
+        }),
+      ],
+    };
+    const fieldAdded = diffActionContractSnapshots(base, wider);
+    expect(fieldAdded.summary).toEqual({ breaking: 0, warning: 0, nonBreaking: 1, info: 0 });
+    expect(fieldAdded.entries[0]).toMatchObject({ kind: "resource-value-field-added", path: "value.quest" });
+    const fieldRemoved = diffActionContractSnapshots(wider, base);
+    expect(fieldRemoved.entries[0]).toMatchObject({
+      severity: "breaking",
+      kind: "resource-value-field-removed",
+      path: "value.quest",
+    });
+
+    const authorized = diffActionContractSnapshots(base, {
+      ...snapshot([]),
+      resources: [resource({ authorized: true })],
+    });
+    expect(authorized.entries[0]).toMatchObject({ severity: "info", kind: "resource-authorize-changed" });
+  });
+
+  it("round-trips resources through snapshot JSON parsing", () => {
+    const withResources = { ...snapshot([action()]), resources: [resource({ authorized: true })] };
+    const parsed = parseActionContractSnapshotJson(JSON.parse(serializeJson(withResources)));
+    expect(parsed.resources).toEqual(withResources.resources);
+    expect(diffActionContractSnapshots(parsed, withResources).entries).toHaveLength(0);
   });
 
   it("treats a signals-free baseline against a signals-free current as unchanged", () => {

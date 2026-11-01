@@ -629,6 +629,138 @@
   }
 }
 
+=== inspect resources (exit 1)
+{
+  "resources": [],
+  "diagnostics": [
+    {
+      "code": "aruna::560",
+      "details": "export name: missingKey\nMissing rateLimit.key. Use \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 193,
+        "start": 156
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: invalidKey\nrateLimit.key must be \"player\", \"global\", or a key function.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.invalidKey has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 331,
+        "start": 322
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingMax\nMissing rateLimit.max.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 530,
+        "start": 486
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: maxZero\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.maxZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 693,
+        "start": 692
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonIntegerMax\nrateLimit.max must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonIntegerMax has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 875,
+        "start": 872
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: missingWindowMs\nMissing rateLimit.windowMs.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.missingWindowMs has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1044,
+        "start": 1008
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: windowZero\nrateLimit.windowMs must be a positive integer numeric literal.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.windowZero has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1198,
+        "start": 1197
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: nonLiteralValue\nrateLimit.windowMs must be a positive integer numeric literal. The current compiler discovery path only reads literal values.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.nonLiteralValue has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1393,
+        "start": 1378
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    },
+    {
+      "code": "aruna::560",
+      "details": "export name: legacyLimit\nrateLimit does not support the limit key.",
+      "file": "src/domains/shop/actions.ts",
+      "message": "Server action shop.legacyLimit has an invalid rateLimit declaration.",
+      "name": "invalid-action-rate-limit",
+      "severity": "error",
+      "span": {
+        "end": 1595,
+        "start": 1587
+      },
+      "suggestion": "Use rateLimit: { key: \"player\", windowMs: 1000, max: 5 } with positive integer literals."
+    }
+  ],
+  "summary": {
+    "errors": 9,
+    "imports": 1,
+    "infos": 0,
+    "modules": 5,
+    "resolvedImports": 0,
+    "warnings": 0
+  }
+}
+
 === inspect contract (exit 1)
 {
   "version": 2,
@@ -2297,7 +2429,7 @@
       },
       {
         "key": "paths",
-        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, $aruna/resources/client, $aruna/resources/server, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
         "reason": "Aruna's generated modules and vendored runtime resolve through them"
       }
     ],
@@ -2489,6 +2621,8 @@ export const contractHash = "d79e859a09119452";
       "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
       "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
       "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "$aruna/resources/client": ["./src/.aruna/shared/resources.client.generated.ts"],
+      "$aruna/resources/server": ["./src/.aruna/server/resources.server.generated.ts"],
       "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
       "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
       "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],

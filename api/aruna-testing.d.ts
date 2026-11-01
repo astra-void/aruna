@@ -111,6 +111,7 @@ interface ActionContext<TPlayer = unknown, TSignals extends SignalMap = SignalMa
     readonly publisher?: SignalPublisher<TSignals, unknown>;
     readonly session?: TSession;
     readonly store?: StoreDocument<unknown>;
+    readonly resources?: ResourceContext<unknown>;
 }
 
 interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}> {
@@ -202,6 +203,11 @@ interface ActionRegistry<TPlayer = unknown> {
     readonly refuseFrame: (player: TPlayer, reason: "malformed-frame" | "unknown-protocol-version" | "oversize-batch") => void;
     readonly forgetPlayer: (player: TPlayer) => void;
     readonly readmitPlayer: (player: TPlayer) => void;
+    readonly admitItem: (player: TPlayer, id: unknown, maxLength: number) => boolean;
+    readonly reportAbuse: (player: TPlayer, info: {
+        readonly reason: RequestAbuseReason;
+        readonly actionId?: string;
+    }) => void;
     readonly isFireAndForget: (actionId: string) => boolean;
 }
 
@@ -219,6 +225,14 @@ interface AnyPlayerStore<TPlayer = Player> {
     readonly releaseAll: () => Promise<Array<StoreResult<undefined>>>;
     readonly dispose: () => void;
 }
+
+type AnyResourceDefinition = {
+    readonly id: string;
+    readonly scope?: ResourceScope;
+    readonly schema: Schema;
+    load(context: never): unknown;
+    readonly authorize?: (context: never) => boolean;
+};
 
 interface AnyStoreDocument {
     readonly key: string;
@@ -244,6 +258,7 @@ interface CancelToken {
 interface ClientApp<TSignals extends SignalMap = SignalMap> {
     readonly invoke: (actionId: string, input?: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
     readonly subscriber?: SignalSubscriber<TSignals>;
+    readonly resources?: ResourceClient;
     readonly dispose: () => void;
 }
 
@@ -252,6 +267,8 @@ interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap
     readonly transport?: ServerTransport<TPlayer>;
     readonly signals?: TSignals;
     readonly createPublisher?: ServerSignalPublisherFactory<TPlayer, TSignals>;
+    readonly resources?: ResourceMap;
+    readonly onResourceError?: ResourceErrorHandler<TPlayer>;
     readonly defaultRateLimit?: ActionRateLimitOptions;
     readonly middleware?: readonly ActionMiddleware<TPlayer>[];
     readonly onError?: ActionErrorHandler<TPlayer>;
@@ -310,12 +327,82 @@ interface RequestAbuseInfo {
     readonly count: number;
 }
 
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited";
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
 
 interface RequestBudgetOptions {
     readonly burst?: number;
     readonly perSecond?: number;
     readonly maxInFlight?: number;
+}
+
+interface ResourceClient<TResources = {
+    readonly [resourceId: string]: unknown;
+}> {
+    readonly subscribe: <TId extends keyof TResources & string>(resourceId: TId, listener?: ResourceListener<TResources[TId]>, options?: ResourceSubscribeOptions) => ResourceSubscription<TResources[TId]>;
+    readonly get: <TId extends keyof TResources & string>(resourceId: TId) => TResources[TId] | undefined;
+    readonly resync: () => void;
+    readonly dispose: () => void;
+}
+
+interface ResourceContext<TPlayer = unknown> {
+    readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+    readonly invalidateAll: (resource: ResourceRef) => void;
+}
+
+type ResourceErrorHandler<TPlayer = unknown> = (failure: unknown, info: ResourceErrorInfo<TPlayer>) => void;
+
+interface ResourceErrorInfo<TPlayer = unknown> {
+    readonly resourceId: string;
+    readonly player?: TPlayer;
+    readonly errorId: string;
+}
+
+interface ResourceHost<TPlayer = unknown> {
+    readonly invalidate: (resource: ResourceRef, player?: TPlayer) => void;
+    readonly has: (resourceId: string) => boolean;
+    readonly isSubscribed: (resource: ResourceRef, player: TPlayer) => boolean;
+    readonly subscriberCount: (resource: ResourceRef) => number;
+    readonly attach: (sink: ResourceSink<TPlayer>) => void;
+    readonly receive: (player: TPlayer, item: object) => void;
+    readonly forgetPlayer: (player: TPlayer) => void;
+    readonly dispose: () => void;
+}
+
+type ResourceListener<TValue> = (value: TValue, info: ResourceUpdateInfo) => void;
+
+type ResourceMap = {
+    readonly [resourceId: string]: AnyResourceDefinition;
+};
+
+type ResourceRef = string | {
+    readonly id: string;
+};
+
+type ResourceScope = "player" | "global";
+
+interface ResourceSink<TPlayer> {
+    readonly replace: (target: TPlayer, key: string, item: defined) => void;
+}
+
+type ResourceStatus = "loading" | "ready" | "error";
+
+interface ResourceSubscribeOptions {
+    readonly onError?: (errorName: string, info: ResourceUpdateInfo & {
+        readonly errorId?: string;
+    }) => void;
+}
+
+interface ResourceSubscription<TValue> {
+    readonly get: () => TValue | undefined;
+    readonly status: () => ResourceStatus;
+    readonly revision: () => number;
+    readonly error: () => string | undefined;
+    readonly refresh: () => void;
+    readonly disconnect: () => void;
+}
+
+interface ResourceUpdateInfo {
+    readonly revision: number;
 }
 
 interface Schema<T = unknown> {
@@ -348,6 +435,7 @@ interface ServerApp<TPlayer, TSignals extends SignalMap = SignalMap> {
     }, input: unknown, options?: AppDispatchOptions) => Promise<unknown>;
     readonly binding?: ServerAppBinding;
     readonly publisher?: SignalPublisher<TSignals, TPlayer>;
+    readonly resources?: ResourceHost<TPlayer>;
     readonly playerStore?: AnyPlayerStore<TPlayer>;
     readonly dispose: () => void;
 }
@@ -358,7 +446,7 @@ interface ServerAppBinding {
 
 type ServerSignalPublisherFactory<TPlayer, TSignals extends SignalMap> = (signals: TSignals) => SignalPublisher<TSignals, TPlayer>;
 
-type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>) => ServerAppBinding;
+type ServerTransport<TPlayer> = (registry: ActionRegistry<TPlayer>, resources?: ResourceHost<TPlayer>) => ServerAppBinding;
 
 interface SignalBatchOptions {
     readonly chunkSize?: number;

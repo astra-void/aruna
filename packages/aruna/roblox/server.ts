@@ -3,6 +3,7 @@
 import type { Infer, Schema } from "./schema";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import type { StoreDocument } from "./player-store";
+import type { ResourceContext } from "./resource";
 
 // defineSignal lives alongside defineAction on the `aruna/server` surface so
 // signal definitions import from the same entry as actions.
@@ -48,6 +49,11 @@ export interface ActionContext<
 	// binding it here would stop an untyped action from being assignable into a
 	// typed app's registry. The precise type lives on `PublishingActionContext`.
 	readonly store?: StoreDocument<unknown>;
+	// Invalidation for the app's resources, injected when `createServerApp` was
+	// given `resources`: `ctx.resources?.invalidate(questProgress)` re-reads the
+	// calling player's value and sends it to them. Player-erased for the same
+	// reason `publisher` is.
+	readonly resources?: ResourceContext<unknown>;
 }
 
 // Like ActionContext but with `publisher` and `session` guaranteed present and
@@ -244,6 +250,23 @@ export type {
 	RequestAbuseReason,
 	RequestBudgetOptions,
 } from "./request-guard";
+// Server-owned resources (docs/resources.md). `defineResource` here leaves the
+// player type open, like `defineAction`; `aruna/roblox`'s defaults it to Player.
+export { defineResource } from "./resource";
+export type {
+	AnyResourceDefinition,
+	ResourceContext,
+	ResourceDefinition,
+	ResourceErrorHandler,
+	ResourceErrorInfo,
+	ResourceGlobalContext,
+	ResourceHost,
+	ResourceLoadContext,
+	ResourceMap,
+	ResourcePlayerContext,
+	ResourceRef,
+	ResourceScope,
+} from "./resource";
 // Domain runtimes: the boot sequence the compiler resolves from `after` edges.
 export * from "./define-runtime";
 export * from "./domain-runtime";

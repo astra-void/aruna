@@ -1,5 +1,7 @@
 use crate::diagnostics::{stable_sort_diagnostics, ArunaDiagnostic};
-use crate::primitives::{ArunaActionRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord};
+use crate::primitives::{
+    ArunaActionRecord, ArunaResourceRecord, ArunaRuntimeRecord, ArunaSignalRecord, ArunaStoreRecord,
+};
 use crate::files::normalize_path;
 use crate::graph::ArunaImportEdge;
 use crate::module_kind::{ModuleKind, ModuleReason};
@@ -36,6 +38,10 @@ pub struct ArunaManifest {
     // the order is the record. Omitted when empty, like signals and stores.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub runtimes: Vec<ArunaRuntimeRecord>,
+    // Omitted when empty, like signals and stores, so a project without
+    // resources keeps its manifest bytes.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub resources: Vec<ArunaResourceRecord>,
     pub diagnostics: Vec<ArunaDiagnostic>,
 }
 
@@ -106,6 +112,7 @@ pub fn create_manifest(
     signals: &[ArunaSignalRecord],
     stores: &[ArunaStoreRecord],
     runtimes: &[ArunaRuntimeRecord],
+    resources: &[ArunaResourceRecord],
     diagnostics: &[ArunaDiagnostic],
 ) -> ArunaManifest {
     ArunaManifest {
@@ -117,6 +124,8 @@ pub fn create_manifest(
         signals: sort_signals(signals),
         stores: sort_stores(stores),
         runtimes: runtimes.to_vec(),
+        // Already sorted and deduplicated by the primitive's finalize.
+        resources: resources.to_vec(),
         diagnostics: stable_sort_diagnostics(diagnostics),
     }
 }

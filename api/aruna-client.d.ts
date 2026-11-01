@@ -40,6 +40,7 @@ export type ClientActionInfo = {
 export interface ClientApp<TSignals extends SignalMap = SignalMap> {
     readonly invoke: (actionId: string, input?: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
     readonly subscriber?: SignalSubscriber<TSignals>;
+    readonly resources?: ResourceClient;
     readonly dispose: () => void;
 }
 
@@ -70,6 +71,7 @@ export interface CreateClientAppOptions<TSignals extends SignalMap = SignalMap> 
     readonly requestTimeoutMs?: number;
     readonly middleware?: readonly ClientMiddleware[];
     readonly retry?: ClientRetryPolicy;
+    readonly resources?: boolean | ResourceClient;
 }
 
 export interface DeclaredActionFailure<TName extends string, TData> {
@@ -80,6 +82,44 @@ export interface DeclaredActionFailure<TName extends string, TData> {
 
 export interface RemoteSignalConnection {
     readonly disconnect: () => void;
+}
+
+export interface ResourceBinding<TValue> {
+    readonly id: string;
+    readonly subscribe: (listener?: ResourceListener<TValue>, options?: ResourceSubscribeOptions) => ResourceSubscription<TValue>;
+    readonly get: () => TValue | undefined;
+}
+
+export interface ResourceClient<TResources = {
+    readonly [resourceId: string]: unknown;
+}> {
+    readonly subscribe: <TId extends keyof TResources & string>(resourceId: TId, listener?: ResourceListener<TResources[TId]>, options?: ResourceSubscribeOptions) => ResourceSubscription<TResources[TId]>;
+    readonly get: <TId extends keyof TResources & string>(resourceId: TId) => TResources[TId] | undefined;
+    readonly resync: () => void;
+    readonly dispose: () => void;
+}
+
+export type ResourceListener<TValue> = (value: TValue, info: ResourceUpdateInfo) => void;
+
+export type ResourceStatus = "loading" | "ready" | "error";
+
+export interface ResourceSubscribeOptions {
+    readonly onError?: (errorName: string, info: ResourceUpdateInfo & {
+        readonly errorId?: string;
+    }) => void;
+}
+
+export interface ResourceSubscription<TValue> {
+    readonly get: () => TValue | undefined;
+    readonly status: () => ResourceStatus;
+    readonly revision: () => number;
+    readonly error: () => string | undefined;
+    readonly refresh: () => void;
+    readonly disconnect: () => void;
+}
+
+export interface ResourceUpdateInfo {
+    readonly revision: number;
 }
 
 export type SignalHandler<TPayload = unknown> = (payload: TPayload) => void;
@@ -115,6 +155,8 @@ export declare function isActionCancelledError(value: unknown): boolean;
 export declare function isActionError<TErrors extends ActionErrorTypes, TName extends keyof TErrors & string>(value: unknown, _action: ActionStub<never, unknown, TErrors>, name: TName): value is DeclaredActionFailure<TName, TErrors[TName]>;
 
 export declare function isActionVersionMismatchError(value: unknown): boolean;
+
+export declare function resourceBinding<TValue>(resourceId: string): ResourceBinding<TValue>;
 
 export declare function setActionInvoker(invoker: ActionInvoker): void;
 
