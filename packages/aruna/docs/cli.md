@@ -264,7 +264,7 @@ export default defineConfig({
     roots: ["src/features/*"],                // added to the built-in src/domains/*
   },
   strict: {
-    sharedSafety: true,                       // not enforced yet; false reports aruna::109
+    sharedSafety: true,                       // aruna::306-309; see shared-safety.md
     rawRemoteUsage: "warning",                // aruna::507: "off" | "warning" | "error"
     unresolvedImports: "warning",             // aruna::105
     domainBoundary: "warning",                // aruna::304: imports past a domain's public surface

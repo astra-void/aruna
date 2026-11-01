@@ -63,6 +63,9 @@ impl ArunaDiagnostic {
 // Retired codes (never reuse):
 // - aruna::110 stale-generated-artifact (emitted by the CLI; flagged leftovers of
 //   the flat codegen layout, removed with that layout's migration path).
+// - aruna::109 strict-option-not-enforced (said `strict.sharedSafety: false`
+//   changed nothing, while no shared-safety check existed; the check exists now,
+//   aruna::306-309).
 // - aruna::112 tsconfig-paths-shadow-generated (emitted by the CLI; flagged inline
 //   `paths` shadowing the generated tsconfig fragment, removed with the fragment:
 //   Aruna writes its aliases into tsconfig.json itself now).
@@ -72,9 +75,6 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::102" => Some(("missing-tsconfig", DiagnosticSeverity::Warning)),
         "aruna::103" => Some(("invalid-tsconfig", DiagnosticSeverity::Error)),
         "aruna::106" => Some(("parse-failed", DiagnosticSeverity::Error)),
-        // A strict option that is parsed but has no check behind it yet, set to
-        // something other than its default.
-        "aruna::109" => Some(("strict-option-not-enforced", DiagnosticSeverity::Warning)),
         "aruna::105" => Some(("unresolved-import", DiagnosticSeverity::Warning)),
         "aruna::200" => Some(("unknown-module-kind", DiagnosticSeverity::Warning)),
         "aruna::203" => Some(("ambiguous-convention-match", DiagnosticSeverity::Warning)),
@@ -158,6 +158,17 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         // so this import does not merely bend a rule — it does not resolve in the
         // place that ships.
         "aruna::305" => Some(("test-module-imported", DiagnosticSeverity::Error)),
+        // strict.sharedSafety. A shared module that loads server (306) or client
+        // (307) code through other shared modules: the direct edge is 303/302 at
+        // the module that has it, and every shared module upstream fails to load
+        // on the other side too.
+        "aruna::306" => Some(("shared-transitive-server-dependency", DiagnosticSeverity::Error)),
+        "aruna::307" => Some(("shared-transitive-client-dependency", DiagnosticSeverity::Error)),
+        // A server-only service read from shared code: at module scope it runs on
+        // the client as the module loads (308); in a function body with no
+        // IsServer() guard it may (309).
+        "aruna::308" => Some(("shared-server-service-at-load", DiagnosticSeverity::Error)),
+        "aruna::309" => Some(("shared-server-service-access", DiagnosticSeverity::Warning)),
         "aruna::700" => Some(("manifest-write-failed", DiagnosticSeverity::Error)),
         "aruna::701" => Some(("generated-output-write-failed", DiagnosticSeverity::Error)),
         "aruna::900" => Some(("internal-compiler-error", DiagnosticSeverity::Error)),

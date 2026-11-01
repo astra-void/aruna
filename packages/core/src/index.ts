@@ -227,6 +227,10 @@ export type ImportEdge = {
   specifier: string;
   resolved: boolean;
   kind?: "static" | "dynamic" | undefined;
+  // Erased from the compiled Luau (`import type`, all-`type` specifiers, or
+  // bindings only named in types), so it never loads the module at runtime.
+  // Absent when false.
+  typeOnly?: boolean | undefined;
 };
 
 export type Manifest = {
@@ -287,8 +291,11 @@ export type DomainsConfig = {
 };
 
 export type StrictConfig = {
-  // Not enforced yet: no shared-module safety check exists. Setting it to
-  // `false` reports aruna::109 rather than silently doing nothing.
+  // What a shared module may reach at runtime (default true): shared modules
+  // that load server or client code through other shared modules
+  // (aruna::306/307), and server-only services read from shared code
+  // (aruna::308 at module load, aruna::309 in an unguarded function). The
+  // import boundary rules (aruna::302/303) run either way.
   readonly sharedSafety?: boolean | undefined;
   // Raw RemoteEvent / RemoteFunction use in project code (aruna::507).
   readonly rawRemoteUsage?: "off" | "warning" | "error" | undefined;

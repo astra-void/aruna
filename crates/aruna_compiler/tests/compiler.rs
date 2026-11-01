@@ -309,21 +309,283 @@ fn drops_diagnostics_listed_in_diagnostics_ignore_by_code_or_name() {
     assert!(check_project(by_code).diagnostics.is_empty());
 }
 
+fn diagnostic<'a>(
+    output: &'a aruna_compiler::CompilerOutput,
+    code: &str,
+) -> Vec<&'a aruna_compiler::ArunaDiagnostic> {
+    output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == code)
+        .collect()
+}
+
+// The project from the shared-safety walkthrough: a shared model that loads a
+// shared profile that loads a server store.
+fn write_transitive_project(root: &Path) {
+    write_file(
+        root,
+        "src/domains/combat/model.ts",
+        "import { profile } from \"../economy/model\";\nexport const model = profile;\n",
+    );
+    write_file(
+        root,
+        "src/domains/economy/model.ts",
+        "import { store } from \"./server/store\";\nexport const profile = store;\n",
+    );
+    write_file(
+        root,
+        "src/domains/economy/server/store.ts",
+        "export const store = 1;\n",
+    );
+}
+
 #[test]
-fn warns_that_strict_shared_safety_is_not_enforced_when_turned_off() {
+fn reports_a_shared_module_that_loads_server_code_through_another() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();
-    write_file(root, "src/shared/schema.ts", "export const schema = 1;\n");
+    write_transitive_project(root);
 
-    assert!(check_project(compiler_input(root)).diagnostics.is_empty());
+    let mut input = compiler_input(root);
+    input.config.strict.domain_boundary = StrictSeverity::Off;
+    let output = check_project(input);
+    assert!(!output.ok);
+    // The direct edge, where it is.
+    let direct = diagnostic(&output, "aruna::303");
+    assert_eq!(direct.len(), 1);
+    assert_eq!(direct[0].file.as_deref(), Some("src/domains/economy/model.ts"));
+    // The module upstream of it, with the chain and the import that starts it.
+    let transitive = diagnostic(&output, "aruna::306");
+    assert_eq!(transitive.len(), 1);
+    let report = transitive[0];
+    assert_eq!(report.name, "shared-transitive-server-dependency");
+    assert_eq!(report.severity, DiagnosticSeverity::Error);
+    assert_eq!(report.file.as_deref(), Some("src/domains/combat/model.ts"));
+    let span = report.span.as_ref().expect("points at the import");
+    let source = fs::read_to_string(root.join("src/domains/combat/model.ts")).unwrap();
+    assert_eq!(&source[span.start..span.end], "\"../economy/model\"");
+    assert_eq!(
+        report.details.as_deref(),
+        Some(
+            "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)"
+        )
+    );
+    assert!(report
+        .suggestion
+        .as_deref()
+        .unwrap()
+        .starts_with("The import to fix is in src/domains/economy/model.ts."));
+}
+
+#[test]
+fn shared_safety_off_keeps_only_the_import_boundary_rules() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_transitive_project(root);
+    write_file(
+        root,
+        "src/shared/save.ts",
+        "export const store = game.GetService(\"DataStoreService\");\n",
+    );
+
+    let mut on = compiler_input(root);
+    on.config.strict.domain_boundary = StrictSeverity::Off;
+    let codes = diagnostic_codes(&check_project(on));
+    assert!(codes.contains(&"aruna::306".to_string()), "{codes:?}");
+    assert!(codes.contains(&"aruna::308".to_string()), "{codes:?}");
 
     let mut off = compiler_input(root);
+    off.config.strict.domain_boundary = StrictSeverity::Off;
     off.config.strict.shared_safety = false;
-    let output = check_project(off);
-    assert!(output.ok);
-    assert_eq!(diagnostic_codes(&output), vec!["aruna::109".to_string()]);
-    assert_eq!(output.diagnostics[0].name, "strict-option-not-enforced");
-    assert_eq!(output.diagnostics[0].severity, DiagnosticSeverity::Warning);
+    assert_eq!(diagnostic_codes(&check_project(off)), vec!["aruna::303".to_string()]);
+}
+
+#[test]
+fn reports_a_server_only_service_read_from_shared_code() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    let source = r#"const RunService = game.GetService("RunService");
+const DataStoreService = game.GetService("DataStoreService");
+export function load() {
+    return game.GetService("MemoryStoreService");
+}
+export function guarded() {
+    if (RunService.IsServer()) {
+        return game.GetService("ServerStorage");
+    }
+}
+"#;
+    write_file(root, "src/shared/save.ts", source);
+    // The same reads are what server code is for.
+    write_file(root, "src/server/save.ts", source);
+
+    let output = check_project(compiler_input(root));
+    let at_load = diagnostic(&output, "aruna::308");
+    assert_eq!(at_load.len(), 1);
+    assert_eq!(at_load[0].file.as_deref(), Some("src/shared/save.ts"));
+    assert_eq!(at_load[0].severity, DiagnosticSeverity::Error);
+    let span = at_load[0].span.as_ref().unwrap();
+    assert_eq!(&source[span.start..span.end], "game.GetService(\"DataStoreService\")");
+    let in_function = diagnostic(&output, "aruna::309");
+    assert_eq!(in_function.len(), 1);
+    assert_eq!(in_function[0].severity, DiagnosticSeverity::Warning);
+    assert!(in_function[0].message.contains("MemoryStoreService"));
+    assert_eq!(output.diagnostics.len(), 2, "{:?}", diagnostic_codes(&output));
+}
+
+#[test]
+fn type_only_imports_cross_boundaries_without_a_report() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(
+        root,
+        "src/server/session.ts",
+        "export interface ServerSession { id: number }\nexport const serverSession = { id: 1 };\nexport class Base {}\n",
+    );
+    write_file(
+        root,
+        "src/shared/view.ts",
+        r#"import type { ServerSession } from "../server/session";
+import { type ServerSession as Aliased } from "../server/session";
+import { Base, serverSession } from "../server/session";
+export type { ServerSession as Reexported } from "../server/session";
+export type View = { session: ServerSession; aliased: Aliased; instance: typeof serverSession };
+export interface Extended extends Base {}
+export class Impl implements Base {}
+"#,
+    );
+    write_file(
+        root,
+        "src/client/main.ts",
+        "import type { ServerSession } from \"../server/session\";\nexport const id = (session: ServerSession) => session.id;\n",
+    );
+
+    let output = check_project(compiler_input(root));
+    assert!(output.ok, "{:?}", output.diagnostics);
+    assert!(output.diagnostics.is_empty(), "{:?}", diagnostic_codes(&output));
+}
+
+#[test]
+fn a_value_import_or_reexport_is_still_a_runtime_dependency() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(
+        root,
+        "src/server/session.ts",
+        "export interface ServerSession { id: number }\nexport const serverSession = { id: 1 };\n",
+    );
+    write_file(
+        root,
+        "src/shared/read.ts",
+        "import { serverSession } from \"../server/session\";\nexport const id = serverSession.id;\n",
+    );
+    write_file(
+        root,
+        "src/shared/reexport.ts",
+        "export { serverSession } from \"../server/session\";\n",
+    );
+    write_file(
+        root,
+        "src/shared/star.ts",
+        "export * from \"../server/session\";\n",
+    );
+    write_file(
+        root,
+        "src/shared/side-effect.ts",
+        "import \"../server/session\";\n",
+    );
+    write_file(
+        root,
+        "src/shared/local-reexport.ts",
+        "import { serverSession } from \"../server/session\";\nexport { serverSession };\n",
+    );
+
+    let output = check_project(compiler_input(root));
+    let mut files: Vec<_> = diagnostic(&output, "aruna::303")
+        .iter()
+        .map(|diagnostic| diagnostic.file.clone().unwrap())
+        .collect();
+    files.sort();
+    assert_eq!(
+        files,
+        vec![
+            "src/shared/local-reexport.ts",
+            "src/shared/read.ts",
+            "src/shared/reexport.ts",
+            "src/shared/side-effect.ts",
+            "src/shared/star.ts",
+        ]
+    );
+}
+
+#[test]
+fn legal_shared_modules_and_unresolved_or_dynamic_imports_are_not_reported() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(root, "src/shared/math.ts", "export const add = (a: number, b: number) => a + b;\n");
+    write_file(
+        root,
+        "src/shared/model.ts",
+        r#"import { add } from "./math";
+const Players = game.GetService("Players");
+const HttpService = game.GetService("HttpService");
+export const total = add(1, 2);
+export async function later() {
+    return import("../server/secret");
+}
+"#,
+    );
+    write_file(root, "src/server/secret.ts", "export const secret = 1;\n");
+    write_file(
+        root,
+        "src/client/main.ts",
+        "import { total } from \"../shared/model\";\nexport const shown = total;\n",
+    );
+    write_file(
+        root,
+        "src/server/main.ts",
+        "import { total } from \"../shared/model\";\nimport { secret } from \"./secret\";\nexport const both = total + secret;\n",
+    );
+
+    let output = check_project(compiler_input(root));
+    assert!(output.diagnostics.is_empty(), "{:?}", diagnostic_codes(&output));
+}
+
+#[test]
+fn reports_a_shared_module_that_loads_client_code_through_another() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_file(
+        root,
+        "src/shared/a.ts",
+        "import { b } from \"./b\";\nexport const a = b;\n",
+    );
+    write_file(
+        root,
+        "src/shared/b.ts",
+        "import { ui } from \"../client/ui\";\nexport const b = ui;\n",
+    );
+    write_file(root, "src/client/ui.ts", "export const ui = 1;\n");
+
+    let output = check_project(compiler_input(root));
+    assert_eq!(diagnostic(&output, "aruna::302").len(), 1);
+    let transitive = diagnostic(&output, "aruna::307");
+    assert_eq!(transitive.len(), 1);
+    assert_eq!(transitive[0].file.as_deref(), Some("src/shared/a.ts"));
+}
+
+#[test]
+fn shared_safety_reports_are_ignorable_by_code_and_name() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+    write_transitive_project(root);
+    let mut input = compiler_input(root);
+    input.config.strict.domain_boundary = StrictSeverity::Off;
+    input.config.diagnostics.ignore = vec![
+        "aruna::303".to_string(),
+        "shared-transitive-server-dependency".to_string(),
+    ];
+    assert!(check_project(input).diagnostics.is_empty());
 }
 
 #[test]

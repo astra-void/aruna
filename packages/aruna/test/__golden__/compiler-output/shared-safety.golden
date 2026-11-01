@@ -1,0 +1,1187 @@
+=== inspect actions (exit 1)
+{
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
+=== inspect signals (exit 1)
+{
+  "signals": [],
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
+=== inspect stores (exit 1)
+{
+  "stores": [],
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
+=== inspect contract (exit 1)
+{
+  "version": 2,
+  "project": {
+    "root": "<root>",
+    "generatedDir": "src/.aruna",
+    "manifest": "src/.aruna/manifest.json"
+  },
+  "actions": [],
+  "diagnostics": [
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    },
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    }
+  ],
+  "generatedAt": null
+}
+
+=== inspect modules (exit 1)
+{
+  "modules": [
+    {
+      "id": "src/client/main.ts",
+      "kind": "client",
+      "path": "src/client/main.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/combat/model.ts",
+      "kind": "shared",
+      "path": "src/domains/combat/model.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/economy/model.ts",
+      "kind": "shared",
+      "path": "src/domains/economy/model.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/domains/economy/server/store.ts",
+      "kind": "server",
+      "path": "src/domains/economy/server/store.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/server/session.ts",
+      "kind": "server",
+      "path": "src/server/session.ts",
+      "reason": "path"
+    },
+    {
+      "id": "src/shared/save.ts",
+      "kind": "shared",
+      "path": "src/shared/save.ts",
+      "reason": "path"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
+=== inspect graph (exit 1)
+{
+  "imports": [
+    {
+      "from": "src/client/main.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../domains/combat/model",
+      "to": "src/domains/combat/model.ts"
+    },
+    {
+      "from": "src/client/main.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../server/session",
+      "to": "src/server/session.ts",
+      "typeOnly": true
+    },
+    {
+      "from": "src/domains/combat/model.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../../server/session",
+      "to": "src/server/session.ts",
+      "typeOnly": true
+    },
+    {
+      "from": "src/domains/combat/model.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "../economy/model",
+      "to": "src/domains/economy/model.ts"
+    },
+    {
+      "from": "src/domains/economy/model.ts",
+      "kind": "static",
+      "resolved": true,
+      "specifier": "./server/store",
+      "to": "src/domains/economy/server/store.ts"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
+=== check (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unboundedInput": "warning",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::306",
+        "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+        "file": "src/domains/combat/model.ts",
+        "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+        "name": "shared-transitive-server-dependency",
+        "severity": "error",
+        "span": {
+          "end": 42,
+          "start": 24
+        },
+        "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+      },
+      {
+        "code": "aruna::303",
+        "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+        "file": "src/domains/economy/model.ts",
+        "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+        "name": "shared-imports-server",
+        "severity": "error",
+        "span": {
+          "end": 38,
+          "start": 22
+        },
+        "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+      },
+      {
+        "code": "aruna::308",
+        "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+        "file": "src/shared/save.ts",
+        "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+        "name": "shared-server-service-at-load",
+        "severity": "error",
+        "span": {
+          "end": 110,
+          "start": 75
+        },
+        "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+      },
+      {
+        "code": "aruna::309",
+        "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+        "file": "src/shared/save.ts",
+        "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+        "name": "shared-server-service-access",
+        "severity": "warning",
+        "span": {
+          "end": 189,
+          "start": 152
+        },
+        "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/client/main.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../domains/combat/model",
+        "to": "src/domains/combat/model.ts"
+      },
+      {
+        "from": "src/client/main.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../server/session",
+        "to": "src/server/session.ts",
+        "typeOnly": true
+      },
+      {
+        "from": "src/domains/combat/model.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../../server/session",
+        "to": "src/server/session.ts",
+        "typeOnly": true
+      },
+      {
+        "from": "src/domains/combat/model.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../economy/model",
+        "to": "src/domains/economy/model.ts"
+      },
+      {
+        "from": "src/domains/economy/model.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./server/store",
+        "to": "src/domains/economy/server/store.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/client/main.ts",
+        "kind": "client",
+        "path": "src/client/main.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/domains/combat/model.ts",
+        "kind": "shared",
+        "path": "src/domains/combat/model.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/domains/economy/model.ts",
+        "kind": "shared",
+        "path": "src/domains/economy/model.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/domains/economy/server/store.ts",
+        "kind": "server",
+        "path": "src/domains/economy/server/store.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/server/session.ts",
+        "kind": "server",
+        "path": "src/server/session.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/shared/save.ts",
+        "kind": "shared",
+        "path": "src/shared/save.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  }
+}
+
+=== build (exit 1)
+{
+  "config": {
+    "actions": {
+      "defaultRateLimit": {
+        "key": "player",
+        "max": 20,
+        "windowMs": 1000
+      }
+    },
+    "compiler": {
+      "preserveGeneratedComments": true
+    },
+    "contract": {
+      "snapshot": "aruna.contract.json"
+    },
+    "conventionOverrides": {
+      "client": [],
+      "server": [],
+      "shared": [],
+      "test": []
+    },
+    "conventions": {
+      "client": [
+        "**/client/**",
+        "**/ui.tsx"
+      ],
+      "server": [
+        "**/server/**",
+        "**/actions.ts",
+        "**/runtime.ts"
+      ],
+      "shared": [
+        "**/shared/**",
+        "src/app/**",
+        "**/schema.ts",
+        "**/model.ts",
+        "**/signals.ts",
+        "**/index.ts"
+      ],
+      "test": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ]
+    },
+    "diagnostics": {
+      "ignore": []
+    },
+    "domains": {
+      "roots": [
+        "src/domains/*"
+      ]
+    },
+    "entries": "user",
+    "generatedDir": "src/.aruna",
+    "manifestOutput": "src/.aruna/manifest.json",
+    "root": "src",
+    "strict": {
+      "domainBoundary": "warning",
+      "rawRemoteUsage": "warning",
+      "sharedSafety": true,
+      "storeCompatibility": "error",
+      "unboundedInput": "warning",
+      "unresolvedImports": "warning"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "aruna::308",
+      "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+      "name": "shared-server-service-at-load",
+      "severity": "error",
+      "span": {
+        "end": 110,
+        "start": 75
+      },
+      "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+    },
+    {
+      "code": "aruna::309",
+      "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+      "file": "src/shared/save.ts",
+      "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+      "name": "shared-server-service-access",
+      "severity": "warning",
+      "span": {
+        "end": 189,
+        "start": 152
+      },
+      "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+    },
+    {
+      "code": "aruna::303",
+      "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+      "file": "src/domains/economy/model.ts",
+      "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+      "name": "shared-imports-server",
+      "severity": "error",
+      "span": {
+        "end": 38,
+        "start": 22
+      },
+      "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+    },
+    {
+      "code": "aruna::306",
+      "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+      "file": "src/domains/combat/model.ts",
+      "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+      "name": "shared-transitive-server-dependency",
+      "severity": "error",
+      "span": {
+        "end": 42,
+        "start": 24
+      },
+      "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+    }
+  ],
+  "generatedFiles": [
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nimport { invokeAction } from \"aruna/client\";\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/shared/actions.client.generated.ts"
+    },
+    {
+      "contents": "// Generated by Aruna. Do not edit by hand.\n// Source: Aruna action manifest v1\n\nexport const actions = {\n} as const;\n\nexport const defaultRateLimit = { key: \"player\", windowMs: 1000, max: 20 } as const;\n\nexport const contractHash = \"cbf29ce484222325\";\n",
+      "path": "src/.aruna/server/actions.server.generated.ts"
+    },
+    {
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/client/main.ts\",\n      \"path\": \"src/client/main.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/combat/model.ts\",\n      \"path\": \"src/domains/combat/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/economy/model.ts\",\n      \"path\": \"src/domains/economy/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/economy/server/store.ts\",\n      \"path\": \"src/domains/economy/server/store.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/server/session.ts\",\n      \"path\": \"src/server/session.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/shared/save.ts\",\n      \"path\": \"src/shared/save.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/client/main.ts\",\n      \"to\": \"src/domains/combat/model.ts\",\n      \"specifier\": \"../domains/combat/model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/client/main.ts\",\n      \"to\": \"src/server/session.ts\",\n      \"specifier\": \"../server/session\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    },\n    {\n      \"from\": \"src/domains/combat/model.ts\",\n      \"to\": \"src/server/session.ts\",\n      \"specifier\": \"../../server/session\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    },\n    {\n      \"from\": \"src/domains/combat/model.ts\",\n      \"to\": \"src/domains/economy/model.ts\",\n      \"specifier\": \"../economy/model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/economy/model.ts\",\n      \"to\": \"src/domains/economy/server/store.ts\",\n      \"specifier\": \"./server/store\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::306\",\n      \"name\": \"shared-transitive-server-dependency\",\n      \"severity\": \"error\",\n      \"message\": \"src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.\",\n      \"file\": \"src/domains/combat/model.ts\",\n      \"span\": {\n        \"start\": 24,\n        \"end\": 42\n      },\n      \"details\": \"dependency chain:\\n  src/domains/combat/model.ts (shared)\\n  → src/domains/economy/model.ts (shared)\\n  → src/domains/economy/server/store.ts (server)\",\n      \"suggestion\": \"The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry.\"\n    },\n    {\n      \"code\": \"aruna::303\",\n      \"name\": \"shared-imports-server\",\n      \"severity\": \"error\",\n      \"message\": \"src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.\",\n      \"file\": \"src/domains/economy/model.ts\",\n      \"span\": {\n        \"start\": 22,\n        \"end\": 38\n      },\n      \"details\": \"importer: src/domains/economy/model.ts\\nimporter kind: shared\\nimported: src/domains/economy/server/store.ts\\nimported kind: server\",\n      \"suggestion\": \"Keep shared modules free of server-only imports, or split server code into server/.\"\n    },\n    {\n      \"code\": \"aruna::308\",\n      \"name\": \"shared-server-service-at-load\",\n      \"severity\": \"error\",\n      \"message\": \"src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.\",\n      \"file\": \"src/shared/save.ts\",\n      \"span\": {\n        \"start\": 75,\n        \"end\": 110\n      },\n      \"details\": \"service: DataStoreService\\nruns: at module load, on the server and on every client\",\n      \"suggestion\": \"Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer().\"\n    },\n    {\n      \"code\": \"aruna::309\",\n      \"name\": \"shared-server-service-access\",\n      \"severity\": \"warning\",\n      \"message\": \"src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.\",\n      \"file\": \"src/shared/save.ts\",\n      \"span\": {\n        \"start\": 152,\n        \"end\": 189\n      },\n      \"details\": \"service: MemoryStoreService\\nruns: whenever the enclosing function is called, on whichever side calls it\",\n      \"suggestion\": \"Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too).\"\n    }\n  ]\n}\n",
+      "path": "src/.aruna/manifest.json"
+    }
+  ],
+  "manifest": {
+    "actions": [],
+    "diagnostics": [
+      {
+        "code": "aruna::306",
+        "details": "dependency chain:\n  src/domains/combat/model.ts (shared)\n  → src/domains/economy/model.ts (shared)\n  → src/domains/economy/server/store.ts (server)",
+        "file": "src/domains/combat/model.ts",
+        "message": "src/domains/combat/model.ts is shared, but loading it loads the server module src/domains/economy/server/store.ts through src/domains/economy/model.ts, so it cannot load on the client.",
+        "name": "shared-transitive-server-dependency",
+        "severity": "error",
+        "span": {
+          "end": 42,
+          "start": 24
+        },
+        "suggestion": "The import to fix is in src/domains/economy/model.ts. Move the runtime dependency into a server module, import only the type it needs (`import type`), or pass the value in from a server entry."
+      },
+      {
+        "code": "aruna::303",
+        "details": "importer: src/domains/economy/model.ts\nimporter kind: shared\nimported: src/domains/economy/server/store.ts\nimported kind: server",
+        "file": "src/domains/economy/model.ts",
+        "message": "src/domains/economy/model.ts is classified as shared. It imports src/domains/economy/server/store.ts, which is classified as server.",
+        "name": "shared-imports-server",
+        "severity": "error",
+        "span": {
+          "end": 38,
+          "start": 22
+        },
+        "suggestion": "Keep shared modules free of server-only imports, or split server code into server/."
+      },
+      {
+        "code": "aruna::308",
+        "details": "service: DataStoreService\nruns: at module load, on the server and on every client",
+        "file": "src/shared/save.ts",
+        "message": "src/shared/save.ts reads the server-only service DataStoreService when it loads, and shared modules load on the client too.",
+        "name": "shared-server-service-at-load",
+        "severity": "error",
+        "span": {
+          "end": 110,
+          "start": 75
+        },
+        "suggestion": "Move the DataStoreService access into a server module (server/, actions.ts, runtime.ts) and pass shared code the data it needs, or read it inside a function behind RunService.IsServer()."
+      },
+      {
+        "code": "aruna::309",
+        "details": "service: MemoryStoreService\nruns: whenever the enclosing function is called, on whichever side calls it",
+        "file": "src/shared/save.ts",
+        "message": "src/shared/save.ts reads the server-only service MemoryStoreService from shared code with no RunService.IsServer() guard.",
+        "name": "shared-server-service-access",
+        "severity": "warning",
+        "span": {
+          "end": 189,
+          "start": 152
+        },
+        "suggestion": "Move the function into a server module, or guard the MemoryStoreService access with `if (RunService.IsServer())` (an early `if (RunService.IsClient()) return;` counts too)."
+      }
+    ],
+    "imports": [
+      {
+        "from": "src/client/main.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../domains/combat/model",
+        "to": "src/domains/combat/model.ts"
+      },
+      {
+        "from": "src/client/main.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../server/session",
+        "to": "src/server/session.ts",
+        "typeOnly": true
+      },
+      {
+        "from": "src/domains/combat/model.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../../server/session",
+        "to": "src/server/session.ts",
+        "typeOnly": true
+      },
+      {
+        "from": "src/domains/combat/model.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "../economy/model",
+        "to": "src/domains/economy/model.ts"
+      },
+      {
+        "from": "src/domains/economy/model.ts",
+        "kind": "static",
+        "resolved": true,
+        "specifier": "./server/store",
+        "to": "src/domains/economy/server/store.ts"
+      }
+    ],
+    "modules": [
+      {
+        "id": "src/client/main.ts",
+        "kind": "client",
+        "path": "src/client/main.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/domains/combat/model.ts",
+        "kind": "shared",
+        "path": "src/domains/combat/model.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/domains/economy/model.ts",
+        "kind": "shared",
+        "path": "src/domains/economy/model.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/domains/economy/server/store.ts",
+        "kind": "server",
+        "path": "src/domains/economy/server/store.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/server/session.ts",
+        "kind": "server",
+        "path": "src/server/session.ts",
+        "reason": "path"
+      },
+      {
+        "id": "src/shared/save.ts",
+        "kind": "shared",
+        "path": "src/shared/save.ts",
+        "reason": "path"
+      }
+    ],
+    "projectRoot": ".",
+    "version": 1
+  },
+  "manifestPath": "<root>/src/.aruna/manifest.json",
+  "ok": false,
+  "projectRoot": "<root>",
+  "summary": {
+    "errors": 3,
+    "imports": 5,
+    "infos": 0,
+    "modules": 6,
+    "resolvedImports": 5,
+    "warnings": 1
+  },
+  "tsconfig": {
+    "status": "update",
+    "mandatory": [
+      {
+        "key": "target",
+        "change": "set to \"ESNext\"",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "module",
+        "change": "set to \"CommonJS\"",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "moduleResolution",
+        "change": "set to \"Node\"",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "moduleDetection",
+        "change": "set to \"force\"",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "noLib",
+        "change": "set to true",
+        "reason": "Roblox has no JavaScript standard library"
+      },
+      {
+        "key": "strict",
+        "change": "set to true",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "allowSyntheticDefaultImports",
+        "change": "set to true",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "typeRoots",
+        "change": "set to [\"./node_modules\", \"./node_modules/@rbxts\"]",
+        "reason": "required by roblox-ts"
+      },
+      {
+        "key": "paths",
+        "change": "set to map $aruna/actions/client, $aruna/actions/server, $aruna/signals, aruna/client, aruna/server, aruna/roblox, aruna/schema, aruna/testing",
+        "reason": "Aruna's generated modules and vendored runtime resolve through them"
+      }
+    ],
+    "suggested": [
+      {
+        "key": "types",
+        "change": "set to [\"@rbxts/types\", \"@rbxts/compiler-types\"]"
+      },
+      {
+        "key": "skipLibCheck",
+        "change": "set to true"
+      },
+      {
+        "key": "rootDir",
+        "change": "set to \"src\""
+      },
+      {
+        "key": "outDir",
+        "change": "set to \"out\""
+      },
+      {
+        "key": "jsx",
+        "change": "set to \"preserve\""
+      },
+      {
+        "key": "downlevelIteration",
+        "change": "set to true"
+      },
+      {
+        "key": "esModuleInterop",
+        "change": "set to true"
+      },
+      {
+        "key": "forceConsistentCasingInFileNames",
+        "change": "set to true"
+      },
+      {
+        "key": "resolveJsonModule",
+        "change": "set to true"
+      },
+      {
+        "key": "noUncheckedIndexedAccess",
+        "change": "set to true"
+      },
+      {
+        "key": "include",
+        "change": "set to [\"src/**/*.ts\", \"src/**/*.tsx\", \"src/.aruna/**/*.ts\"]"
+      },
+      {
+        "key": "exclude",
+        "change": "set to [\"aruna.config.ts\", \"out\", \"node_modules\"]"
+      }
+    ]
+  }
+}
+
+=== file src/.aruna/server/actions.server.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+export const actions = {
+} as const;
+
+export const defaultRateLimit = { key: "player", windowMs: 1000, max: 20 } as const;
+
+export const contractHash = "cbf29ce484222325";
+
+=== file src/.aruna/shared/actions.client.generated.ts
+// Generated by Aruna. Do not edit by hand.
+// Source: Aruna action manifest v1
+
+import { invokeAction } from "aruna/client";
+
+export const contractHash = "cbf29ce484222325";
+
+=== file tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "moduleDetection": "force",
+    "noLib": true,
+    "strict": true,
+    "allowSyntheticDefaultImports": true,
+    "typeRoots": ["./node_modules", "./node_modules/@rbxts"],
+    "types": ["@rbxts/types", "@rbxts/compiler-types"],
+    "skipLibCheck": true,
+    "rootDir": "src",
+    "outDir": "out",
+    "jsx": "preserve",
+    "downlevelIteration": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "$aruna/actions/client": ["./src/.aruna/shared/actions.client.generated.ts"],
+      "$aruna/actions/server": ["./src/.aruna/server/actions.server.generated.ts"],
+      "$aruna/signals": ["./src/.aruna/shared/signals.generated.ts"],
+      "aruna/client": ["./src/.aruna/shared/runtime/client.ts"],
+      "aruna/server": ["./src/.aruna/shared/runtime/server.ts"],
+      "aruna/roblox": ["./src/.aruna/shared/runtime/roblox.ts"],
+      "aruna/schema": ["./src/.aruna/shared/runtime/schema.ts"],
+      "aruna/testing": ["./src/.aruna/shared/runtime/testing.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/.aruna/**/*.ts"],
+  "exclude": ["aruna.config.ts", "out", "node_modules"]
+}
+

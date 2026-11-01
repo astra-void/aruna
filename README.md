@@ -170,7 +170,7 @@ export default defineConfig({
 - `compiler.generatedDir` controls where generated files are written.
 - `compiler.manifest` accepts a manifest path string or `{ output }`.
 - `actions.defaultRateLimit` uses `key`, `windowMs`, `max`, and an optional `strategy` (`"fixedWindow"`, the default, or `"tokenBucket"`).
-- `conventions.client`, `conventions.server`, and `conventions.shared` are arrays of glob strings.
+- `conventions.client`, `conventions.server`, `conventions.shared`, and `conventions.test` are arrays of glob strings.
 - `domains.roots` are globs matching a domain *directory* (`src/domains/*` matches
   `src/domains/shop`), and `strict.domainBoundary` sets the severity of a
   cross-domain private import.
@@ -190,11 +190,16 @@ export default defineConfig({
   - `strict.unboundedInput` (default `"warning"`): the severity of `aruna::514
     unbounded-action-input`, an action input with a string, array, or record that has no
     upper bound. See [Bounding input](packages/aruna/docs/actions.md#bounding-input).
-  - `strict.sharedSafety` (default `true`): **not enforced yet.** No shared-module
-    safety check exists. Shared modules are checked only by the import boundary rules
-    (`aruna::302`, `aruna::303`), which always run. Setting it to `false` reports
-    `aruna::109 strict-option-not-enforced` so the setting is not mistaken for a
-    working one.
+  - `strict.sharedSafety` (default `true`): what a shared module may reach at runtime,
+    beyond its own imports (which `aruna::302`/`aruna::303` check either way). A shared
+    module that loads server or client code through other shared modules is
+    `aruna::306`/`aruna::307`, with the dependency chain; a server-only service
+    (`DataStoreService`, `ServerStorage`, ...) read from shared code is `aruna::308` at
+    module load and `aruna::309` (a warning) inside a function with no
+    `RunService.IsServer()` guard. Type-only imports are erased from the Luau and never
+    count. `false` turns these four off. See
+    [shared safety](packages/aruna/docs/shared-safety.md), including what a static check
+    cannot see.
 - `diagnostics.ignore` lists diagnostic codes (`"aruna::507"`) or names
   (`"raw-remote-usage"`) to drop from every report, project-wide.
 - The legacy flat `generatedDir` / `manifest.output` config shape is no longer supported.

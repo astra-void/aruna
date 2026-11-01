@@ -18,6 +18,7 @@ use crate::resolver::{
     resolve_virtual_generated_signal_module, TsconfigResolverOptions,
 };
 use crate::rules::boundary_code;
+use crate::shared_safety::create_transitive_diagnostics;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::BTreeSet;
@@ -158,7 +159,10 @@ fn write_text_file(absolute_path: &Path, contents: &str) -> Result<(), String> {
 }
 
 fn create_boundary_diagnostic(edge: &GraphImportRecord) -> Option<ArunaDiagnostic> {
-    if !edge.edge.resolved {
+    // A type-only import is erased from the compiled Luau, so it never loads the
+    // module across the boundary. (The domain boundary, aruna::304, still applies:
+    // it is about coupling, not about what loads.)
+    if !edge.edge.resolved || edge.edge.type_only {
         return None;
     }
     let imported_kind = edge.imported_kind?;
@@ -262,28 +266,6 @@ fn create_unresolved_import_diagnostic(
         _ => DiagnosticSeverity::Warning,
     };
     Some(diagnostic)
-}
-
-// `strict.sharedSafety` is parsed but nothing checks it yet: the shared-module
-// rules in the spec (no GUI or DataStore access, no hidden environment side
-// effects) are not defined precisely enough to detect. Turning it off would look
-// like it changed something, so say plainly that it did not.
-fn create_shared_safety_diagnostic(config: &ArunaConfig) -> Option<ArunaDiagnostic> {
-    if config.strict.shared_safety {
-        return None;
-    }
-
-    Some(create_diagnostic(
-        "aruna::109",
-        "strict.sharedSafety is not enforced yet, so setting it to false has no effect.",
-        None,
-        None,
-        Some(
-            "No shared-module safety check exists yet: shared modules are checked only by the import boundary rules (aruna::302, aruna::303), whatever this option says."
-                .to_string(),
-        ),
-        Some("Remove strict.sharedSafety from the config.".to_string()),
-    ))
 }
 
 // Domain-to-domain public API boundary. A domain owns its `client/` and
@@ -397,7 +379,6 @@ fn build_diagnostics(
 ) -> Vec<ArunaDiagnostic> {
     let mut diagnostics = Vec::new();
     diagnostics.extend(config_diagnostics.iter().cloned());
-    diagnostics.extend(create_shared_safety_diagnostic(config));
     diagnostics.extend(graph_diagnostics.iter().cloned());
 
     let domains = DomainIndex::new(config, modules.iter().map(|module| module.path.as_str()));
@@ -437,6 +418,9 @@ fn build_diagnostics(
         modules,
         &touched_unknown_kinds,
     ));
+    if config.strict.shared_safety {
+        diagnostics.extend(create_transitive_diagnostics(modules, imports));
+    }
     diagnostics.extend(
         actions
             .iter()

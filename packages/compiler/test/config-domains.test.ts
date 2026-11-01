@@ -163,13 +163,27 @@ describe("strict options and diagnostics.ignore", () => {
     expect(off.diagnostics).toEqual([]);
   });
 
-  it("warns that strict.sharedSafety: false does nothing yet", async () => {
-    const output = await inspectProject({
-      root: unresolvedRoot,
-      config: { strict: { sharedSafety: false, unresolvedImports: "off" } },
-    });
-    expect(output.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["aruna::109"]);
-    expect(output.ok).toBe(true);
+  it("passes strict.sharedSafety through to the shared-safety checks", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aruna-config-shared-safety-"));
+    try {
+      fs.writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions: {} }));
+      fs.mkdirSync(path.join(dir, "src/shared"), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, "src/shared/save.ts"),
+        'export const store = game.GetService("DataStoreService");\n',
+      );
+
+      const on = await inspectProject({ root: dir });
+      expect(on.config.strict.sharedSafety).toBe(true);
+      expect(on.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["aruna::308"]);
+      expect(on.ok).toBe(false);
+
+      const off = await inspectProject({ root: dir, config: { strict: { sharedSafety: false } } });
+      expect(off.diagnostics).toEqual([]);
+      expect(off.ok).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("drops diagnostics listed in diagnostics.ignore, by code or by name", async () => {

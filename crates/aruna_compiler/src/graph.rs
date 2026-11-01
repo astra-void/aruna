@@ -12,6 +12,7 @@ use crate::files::{normalize_path, project_absolute, project_relative};
 use crate::manifest::ArunaModuleRecord;
 use crate::module_kind::{entry_side_for_path, EntrySide, ModuleKind, ModuleReason};
 use crate::raw_remote::create_raw_remote_usage_diagnostic;
+use crate::shared_safety::create_server_service_diagnostic;
 use crate::resolver::{
     TsconfigResolverOptions, VirtualGeneratedActionModule,
     VirtualGeneratedSignalModule, GENERATED_CLIENT_ENTRY_FILE, GENERATED_SERVER_ENTRY_FILE,
@@ -37,6 +38,15 @@ pub struct ArunaImportEdge {
     pub resolved: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<ImportKind>,
+    // Erased from the compiled Luau (see parser::StaticImportRecord), so it never
+    // loads the imported module at runtime. Omitted when false, so a graph with
+    // no type-only imports is byte-identical to one from before the field.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub type_only: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -384,6 +394,29 @@ pub fn build_project_graph_cached(
         }
     }
 
+    // Server-only services read from shared code (strict.sharedSafety). After
+    // the reclassification above: a file that defines an action is server code,
+    // whatever its path says.
+    if config.strict.shared_safety {
+        for absolute_path in files {
+            let relative_path = project_relative(project_root, absolute_path);
+            let is_shared = module_map
+                .get(&relative_path)
+                .is_some_and(|module| module.kind == ModuleKind::Shared);
+            if !is_shared {
+                continue;
+            }
+            let source = cache.source(absolute_path)?;
+            if let Ok(accesses) = cache.server_service_accesses(absolute_path, &source) {
+                diagnostics.extend(
+                    accesses
+                        .iter()
+                        .map(|access| create_server_service_diagnostic(&relative_path, access)),
+                );
+            }
+        }
+    }
+
     // Generated mode always emits (and imports) the action registry, even when
     // the project declares no actions yet — the generated server entry wires it.
     if !primitives.action.is_empty() || config.entries == EntriesMode::Generated {
@@ -456,6 +489,7 @@ pub fn build_project_graph_cached(
                         specifier: entry.specifier.clone(),
                         resolved: false,
                         kind: Some(ImportKind::Static),
+                        type_only: entry.type_only,
                     },
                     importer_kind: importer_record
                         .map(|record| record.kind)
@@ -496,6 +530,7 @@ pub fn build_project_graph_cached(
                     specifier: entry.specifier.clone(),
                     resolved: true,
                     kind: Some(ImportKind::Static),
+                    type_only: entry.type_only,
                 },
                 importer_kind: importer_record
                     .map(|record| record.kind)

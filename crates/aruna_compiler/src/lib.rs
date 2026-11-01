@@ -17,6 +17,7 @@ pub mod resolver;
 pub mod rules;
 pub mod schema_metadata;
 pub mod session;
+pub mod shared_safety;
 pub mod spans;
 pub mod static_literals;
 

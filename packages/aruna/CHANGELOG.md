@@ -17,6 +17,20 @@ the game build like any other module.
 
 ### Added
 
+- **`strict.sharedSafety` is enforced.** It used to be parsed and ignored. Four
+  checks now run under it (default on), beyond the per-import boundary rules
+  that always run: `aruna::306 shared-transitive-server-dependency` and
+  `aruna::307 shared-transitive-client-dependency` report a shared module that
+  loads server (or client) code through other shared modules, with the
+  dependency chain in `details` and the span on the import that starts it;
+  `aruna::308 shared-server-service-at-load` (error) reports a server-only
+  service (`DataStoreService`, `MemoryStoreService`, `MessagingService`,
+  `ServerScriptService`, `ServerStorage`) read at a shared module's load, and
+  `aruna::309 shared-server-service-access` (warning) one read inside a shared
+  function with no `RunService.IsServer()` guard. See
+  [shared-safety.md](docs/shared-safety.md), which also lists what the check
+  cannot see.
+
 - **Declared action errors.** `defineAction({ errors: { OutOfStock: { data:
   schema.object({ ... }) }, NotEnoughCoins: {} } })` declares the failures a
   client can tell apart, and `run` throws them with `throw ctx.fail(name, data)`,
@@ -287,6 +301,15 @@ the game build like any other module.
   shape. It is now a nested section again, with `ignore` as its only field.
 
 ### Changed
+
+- **Type-only imports no longer cross a boundary.** An import TypeScript
+  erases — `import type`, every specifier `type`, `export type ... from`,
+  `export type * from`, or bindings only named in types — never loads its
+  module in Luau, so `aruna::300`–`303`, `aruna::556`, `aruna::574`, and
+  `aruna::305` no longer report it (a false positive before). `aruna::304`
+  still does: a domain boundary is about coupling. `aruna inspect graph` marks
+  such an edge `"typeOnly": true` (the key is absent otherwise, so graphs
+  without type-only imports are unchanged).
 
 - **Breaking: Aruna keeps `tsconfig.json` correct itself, the way Next.js
   does, and writes no `baseUrl`.** `aruna init`, `build`, `dev`, and `test`
@@ -594,6 +617,9 @@ the game build like any other module.
   text has to change.
 
 ### Removed
+
+- **`aruna::109 strict-option-not-enforced`** is retired: `strict.sharedSafety`
+  has checks behind it now.
 
 - **Compatibility-only code.** `aruna build --emit-runtime` (vendoring is the
   default; `--no-emit-runtime` remains); the dedicated messages for a flat

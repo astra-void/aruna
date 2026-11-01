@@ -36,6 +36,7 @@ export const fixtureCases = [
   { name: "raw-remote-usage", mode: "inspect" },
   { name: "raw-remote-usage-ignored", mode: "inspect" },
   { name: "raw-remote-usage-generated-dir", mode: "inspect" },
+  { name: "shared-safety", mode: "inspect" },
   { name: "action-generated-output", mode: "build" },
   { name: "action-generated-export-collision", mode: "build" },
   { name: "action-declared-errors", mode: "build" },

@@ -113,7 +113,8 @@
       "kind": "static",
       "resolved": true,
       "specifier": "../domains/shop/schema",
-      "to": "src/domains/shop/schema.ts"
+      "to": "src/domains/shop/schema.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/combat/runtime.ts",
@@ -134,7 +135,8 @@
       "kind": "static",
       "resolved": true,
       "specifier": "./schema",
-      "to": "src/domains/shop/schema.ts"
+      "to": "src/domains/shop/schema.ts",
+      "typeOnly": true
     }
   ],
   "diagnostics": [],
@@ -226,7 +228,8 @@
         "kind": "static",
         "resolved": true,
         "specifier": "../domains/shop/schema",
-        "to": "src/domains/shop/schema.ts"
+        "to": "src/domains/shop/schema.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/combat/runtime.ts",
@@ -247,7 +250,8 @@
         "kind": "static",
         "resolved": true,
         "specifier": "./schema",
-        "to": "src/domains/shop/schema.ts"
+        "to": "src/domains/shop/schema.ts",
+        "typeOnly": true
       }
     ],
     "modules": [
@@ -384,7 +388,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/app/providers.ts\",\n      \"path\": \"src/app/providers.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/combat/runtime.ts\",\n      \"path\": \"src/domains/combat/runtime.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/model.ts\",\n      \"path\": \"src/domains/shop/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/schema.ts\",\n      \"path\": \"src/domains/shop/schema.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/ui.tsx\",\n      \"path\": \"src/domains/shop/ui.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/server/model.ts\",\n      \"path\": \"src/server/model.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"directory convention overrode file-name convention: shared\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/app/providers.ts\",\n      \"to\": \"src/domains/shop/schema.ts\",\n      \"specifier\": \"../domains/shop/schema\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/combat/runtime.ts\",\n      \"to\": \"src/domains/shop/model.ts\",\n      \"specifier\": \"../shop/model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/ui.tsx\",\n      \"to\": \"src/domains/shop/model.ts\",\n      \"specifier\": \"./model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/ui.tsx\",\n      \"to\": \"src/domains/shop/schema.ts\",\n      \"specifier\": \"./schema\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": []\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/app/providers.ts\",\n      \"path\": \"src/app/providers.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/combat/runtime.ts\",\n      \"path\": \"src/domains/combat/runtime.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/model.ts\",\n      \"path\": \"src/domains/shop/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/schema.ts\",\n      \"path\": \"src/domains/shop/schema.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/ui.tsx\",\n      \"path\": \"src/domains/shop/ui.tsx\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/server/model.ts\",\n      \"path\": \"src/server/model.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\",\n      \"reasonDetail\": \"directory convention overrode file-name convention: shared\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/app/providers.ts\",\n      \"to\": \"src/domains/shop/schema.ts\",\n      \"specifier\": \"../domains/shop/schema\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    },\n    {\n      \"from\": \"src/domains/combat/runtime.ts\",\n      \"to\": \"src/domains/shop/model.ts\",\n      \"specifier\": \"../shop/model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/ui.tsx\",\n      \"to\": \"src/domains/shop/model.ts\",\n      \"specifier\": \"./model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/ui.tsx\",\n      \"to\": \"src/domains/shop/schema.ts\",\n      \"specifier\": \"./schema\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": []\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -397,7 +401,8 @@
         "kind": "static",
         "resolved": true,
         "specifier": "../domains/shop/schema",
-        "to": "src/domains/shop/schema.ts"
+        "to": "src/domains/shop/schema.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/combat/runtime.ts",
@@ -418,7 +423,8 @@
         "kind": "static",
         "resolved": true,
         "specifier": "./schema",
-        "to": "src/domains/shop/schema.ts"
+        "to": "src/domains/shop/schema.ts",
+        "typeOnly": true
       }
     ],
     "modules": [

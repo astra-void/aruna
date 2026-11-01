@@ -16,6 +16,7 @@ use crate::module_kind::{classify_module, ModuleClassification};
 use crate::parser::{collect_module_exports, collect_static_imports, StaticImportRecord};
 use crate::primitives::{parse_source, ParsedFile, PrimitiveFiles, PrimitiveRecords};
 use crate::raw_remote::{collect_raw_remote_usages, RawRemoteUsage};
+use crate::shared_safety::{collect_server_service_accesses, ServerServiceAccess};
 use crate::resolver::{resolve_import_specifier, ResolvedImport, TsconfigResolverOptions};
 use crate::config::ArunaConfig;
 use crate::schema_metadata::SourceReader;
@@ -159,6 +160,7 @@ pub struct GraphCache {
     module_exports: HashMap<PathBuf, Keyed<Result<Vec<String>, String>>>,
     discoveries: HashMap<PathBuf, DiscoveryEntry>,
     raw_remote_usages: HashMap<PathBuf, Keyed<Result<Vec<RawRemoteUsage>, String>>>,
+    server_service_accesses: HashMap<PathBuf, Keyed<Result<Vec<ServerServiceAccess>, String>>>,
     static_imports: HashMap<PathBuf, Keyed<Result<Arc<Vec<StaticImportRecord>>, String>>>,
     resolutions: HashMap<PathBuf, ResolutionEntry>,
     // A hash of the discovered file set: import resolution depends on which
@@ -204,6 +206,7 @@ impl GraphCache {
         self.module_exports.retain(|path, _| keep.contains(path));
         self.discoveries.retain(|path, _| keep.contains(path));
         self.raw_remote_usages.retain(|path, _| keep.contains(path));
+        self.server_service_accesses.retain(|path, _| keep.contains(path));
         self.static_imports.retain(|path, _| keep.contains(path));
         self.resolutions.retain(|path, _| keep.contains(path));
     }
@@ -306,6 +309,26 @@ impl GraphCache {
         }
         let value = collect_raw_remote_usages(path, &source.text);
         self.raw_remote_usages.insert(
+            path.to_path_buf(),
+            Keyed {
+                source_hash: source.hash,
+                value: value.clone(),
+            },
+        );
+        value
+    }
+
+    pub fn server_service_accesses(
+        &mut self,
+        path: &Path,
+        source: &Source,
+    ) -> Result<Vec<ServerServiceAccess>, String> {
+        let entry = self.server_service_accesses.get(path);
+        if let Some(entry) = entry.filter(|entry| entry.source_hash == source.hash) {
+            return entry.value.clone();
+        }
+        let value = collect_server_service_accesses(path, &source.text);
+        self.server_service_accesses.insert(
             path.to_path_buf(),
             Keyed {
                 source_hash: source.hash,

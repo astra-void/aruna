@@ -266,21 +266,24 @@
       "kind": "static",
       "resolved": true,
       "specifier": "../../quest/model",
-      "to": "src/domains/quest/model.ts"
+      "to": "src/domains/quest/model.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/shop/model.ts",
       "kind": "static",
       "resolved": true,
       "specifier": "../inventory",
-      "to": "src/domains/inventory/index.ts"
+      "to": "src/domains/inventory/index.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/shop/server/actions.ts",
       "kind": "static",
       "resolved": true,
       "specifier": "../../inventory/model",
-      "to": "src/domains/inventory/model.ts"
+      "to": "src/domains/inventory/model.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/shop/server/actions.ts",
@@ -467,21 +470,24 @@
         "kind": "static",
         "resolved": true,
         "specifier": "../../quest/model",
-        "to": "src/domains/quest/model.ts"
+        "to": "src/domains/quest/model.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/shop/model.ts",
         "kind": "static",
         "resolved": true,
         "specifier": "../inventory",
-        "to": "src/domains/inventory/index.ts"
+        "to": "src/domains/inventory/index.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/shop/server/actions.ts",
         "kind": "static",
         "resolved": true,
         "specifier": "../../inventory/model",
-        "to": "src/domains/inventory/model.ts"
+        "to": "src/domains/inventory/model.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/shop/server/actions.ts",
@@ -663,7 +669,7 @@
       "path": "src/.aruna/server/actions.server.generated.ts"
     },
     {
-      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/domains/inventory/index.ts\",\n      \"path\": \"src/domains/inventory/index.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/inventory/model.ts\",\n      \"path\": \"src/domains/inventory/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/inventory/server/ledger.ts\",\n      \"path\": \"src/domains/inventory/server/ledger.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/quest/model.ts\",\n      \"path\": \"src/domains/quest/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/quest/server/tracker.ts\",\n      \"path\": \"src/domains/quest/server/tracker.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/client/state.ts\",\n      \"path\": \"src/domains/shop/client/state.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/model.ts\",\n      \"path\": \"src/domains/shop/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/server/actions.ts\",\n      \"path\": \"src/domains/shop/server/actions.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/inventory/index.ts\",\n      \"to\": \"src/domains/inventory/model.ts\",\n      \"specifier\": \"./model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/client/state.ts\",\n      \"to\": \"src/domains/quest/model.ts\",\n      \"specifier\": \"../../quest/model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/model.ts\",\n      \"to\": \"src/domains/inventory/index.ts\",\n      \"specifier\": \"../inventory\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/inventory/model.ts\",\n      \"specifier\": \"../../inventory/model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/inventory/server/ledger.ts\",\n      \"specifier\": \"../../inventory/server/ledger\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::304\",\n      \"name\": \"cross-domain-private-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/domains/shop/server/actions.ts imports src/domains/inventory/model.ts, which is private to the inventory domain.\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"span\": {\n        \"start\": 26,\n        \"end\": 49\n      },\n      \"details\": \"importer domain: shop\\nimported domain: inventory\\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)\",\n      \"suggestion\": \"Import from src/domains/inventory/index.ts, or re-export what shop needs from it.\"\n    },\n    {\n      \"code\": \"aruna::304\",\n      \"name\": \"cross-domain-private-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/domains/shop/server/actions.ts imports src/domains/inventory/server/ledger.ts, which is private to the inventory domain.\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"span\": {\n        \"start\": 74,\n        \"end\": 105\n      },\n      \"details\": \"importer domain: shop\\nimported domain: inventory\\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)\",\n      \"suggestion\": \"Import from src/domains/inventory/index.ts, or re-export what shop needs from it.\"\n    }\n  ]\n}\n",
+      "contents": "{\n  \"version\": 1,\n  \"projectRoot\": \".\",\n  \"modules\": [\n    {\n      \"id\": \"src/domains/inventory/index.ts\",\n      \"path\": \"src/domains/inventory/index.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/inventory/model.ts\",\n      \"path\": \"src/domains/inventory/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/inventory/server/ledger.ts\",\n      \"path\": \"src/domains/inventory/server/ledger.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/quest/model.ts\",\n      \"path\": \"src/domains/quest/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/quest/server/tracker.ts\",\n      \"path\": \"src/domains/quest/server/tracker.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/client/state.ts\",\n      \"path\": \"src/domains/shop/client/state.ts\",\n      \"kind\": \"client\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/model.ts\",\n      \"path\": \"src/domains/shop/model.ts\",\n      \"kind\": \"shared\",\n      \"reason\": \"path\"\n    },\n    {\n      \"id\": \"src/domains/shop/server/actions.ts\",\n      \"path\": \"src/domains/shop/server/actions.ts\",\n      \"kind\": \"server\",\n      \"reason\": \"path\"\n    }\n  ],\n  \"imports\": [\n    {\n      \"from\": \"src/domains/inventory/index.ts\",\n      \"to\": \"src/domains/inventory/model.ts\",\n      \"specifier\": \"./model\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    },\n    {\n      \"from\": \"src/domains/shop/client/state.ts\",\n      \"to\": \"src/domains/quest/model.ts\",\n      \"specifier\": \"../../quest/model\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    },\n    {\n      \"from\": \"src/domains/shop/model.ts\",\n      \"to\": \"src/domains/inventory/index.ts\",\n      \"specifier\": \"../inventory\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/inventory/model.ts\",\n      \"specifier\": \"../../inventory/model\",\n      \"resolved\": true,\n      \"kind\": \"static\",\n      \"typeOnly\": true\n    },\n    {\n      \"from\": \"src/domains/shop/server/actions.ts\",\n      \"to\": \"src/domains/inventory/server/ledger.ts\",\n      \"specifier\": \"../../inventory/server/ledger\",\n      \"resolved\": true,\n      \"kind\": \"static\"\n    }\n  ],\n  \"actions\": [],\n  \"diagnostics\": [\n    {\n      \"code\": \"aruna::304\",\n      \"name\": \"cross-domain-private-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/domains/shop/server/actions.ts imports src/domains/inventory/model.ts, which is private to the inventory domain.\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"span\": {\n        \"start\": 26,\n        \"end\": 49\n      },\n      \"details\": \"importer domain: shop\\nimported domain: inventory\\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)\",\n      \"suggestion\": \"Import from src/domains/inventory/index.ts, or re-export what shop needs from it.\"\n    },\n    {\n      \"code\": \"aruna::304\",\n      \"name\": \"cross-domain-private-import\",\n      \"severity\": \"warning\",\n      \"message\": \"src/domains/shop/server/actions.ts imports src/domains/inventory/server/ledger.ts, which is private to the inventory domain.\",\n      \"file\": \"src/domains/shop/server/actions.ts\",\n      \"span\": {\n        \"start\": 74,\n        \"end\": 105\n      },\n      \"details\": \"importer domain: shop\\nimported domain: inventory\\ninventory public surface: src/domains/inventory/index.ts (the domain's index module)\",\n      \"suggestion\": \"Import from src/domains/inventory/index.ts, or re-export what shop needs from it.\"\n    }\n  ]\n}\n",
       "path": "src/.aruna/manifest.json"
     }
   ],
@@ -710,21 +716,24 @@
         "kind": "static",
         "resolved": true,
         "specifier": "../../quest/model",
-        "to": "src/domains/quest/model.ts"
+        "to": "src/domains/quest/model.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/shop/model.ts",
         "kind": "static",
         "resolved": true,
         "specifier": "../inventory",
-        "to": "src/domains/inventory/index.ts"
+        "to": "src/domains/inventory/index.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/shop/server/actions.ts",
         "kind": "static",
         "resolved": true,
         "specifier": "../../inventory/model",
-        "to": "src/domains/inventory/model.ts"
+        "to": "src/domains/inventory/model.ts",
+        "typeOnly": true
       },
       {
         "from": "src/domains/shop/server/actions.ts",

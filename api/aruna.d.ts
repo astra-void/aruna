@@ -114,6 +114,7 @@ export type ImportEdge = {
     specifier: string;
     resolved: boolean;
     kind?: "static" | "dynamic" | undefined;
+    typeOnly?: boolean | undefined;
 };
 
 export type Manifest = {

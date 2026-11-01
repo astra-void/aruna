@@ -41,21 +41,24 @@
       "kind": "static",
       "resolved": true,
       "specifier": "../../quest/model",
-      "to": "src/domains/quest/model.ts"
+      "to": "src/domains/quest/model.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/shop/model.ts",
       "kind": "static",
       "resolved": true,
       "specifier": "../inventory",
-      "to": "src/domains/inventory/index.ts"
+      "to": "src/domains/inventory/index.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/shop/server/actions.ts",
       "kind": "static",
       "resolved": true,
       "specifier": "../../inventory/model",
-      "to": "src/domains/inventory/model.ts"
+      "to": "src/domains/inventory/model.ts",
+      "typeOnly": true
     },
     {
       "from": "src/domains/shop/server/actions.ts",

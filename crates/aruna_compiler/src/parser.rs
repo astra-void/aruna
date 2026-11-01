@@ -1,10 +1,13 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    BindingPattern, Declaration, ExportAllDeclaration, ExportNamedDeclaration, ImportDeclaration,
-    Statement, StringLiteral,
+    BindingPattern, Declaration, ExportAllDeclaration, ExportNamedDeclaration, IdentifierReference,
+    ImportDeclaration, ImportDeclarationSpecifier, Statement, StringLiteral, TSClassImplements,
+    TSInterfaceHeritage, TSModuleDeclaration, TSType,
 };
+use oxc_ast_visit::{walk, Visit};
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 
@@ -13,46 +16,164 @@ pub struct StaticImportRecord {
     pub specifier: String,
     pub start: usize,
     pub end: usize,
+    // True when the import is erased from the compiled Luau, so it can never
+    // load the imported module at runtime: `import type`, `export type ... from`,
+    // `export type * from`, an import whose every specifier is `type`, or an
+    // import none of whose bindings is read as a value (TypeScript, and so
+    // roblox-ts, elides those). See `ValueReferences`.
+    pub type_only: bool,
 }
 
 fn source_type_for_path(path: &Path) -> Result<SourceType, String> {
     SourceType::from_path(path).map_err(|error| error.to_string())
 }
 
-fn span_to_record(src: &StringLiteral<'_>) -> StaticImportRecord {
+fn span_to_record(src: &StringLiteral<'_>, type_only: bool) -> StaticImportRecord {
     StaticImportRecord {
         specifier: src.value.to_string(),
         start: src.span.start as usize,
         end: src.span.end as usize,
+        type_only,
     }
 }
 
-fn collect_from_import_decl(decl: &ImportDeclaration<'_>) -> StaticImportRecord {
-    span_to_record(&decl.source)
+// The names a module reads as values: every identifier reference outside a
+// type position. TypeScript elides an import whose bindings are never read as a
+// value (only named in types, in `typeof` queries, in `implements`/interface
+// `extends` clauses, or not at all), and roblox-ts compiles what TypeScript
+// emits, so such an import never requires its module in Luau.
+//
+// Deliberately coarse, and always toward "runtime": it matches by name without
+// scope analysis, so a local that shadows an import makes the import count as
+// read. A shadowed name can only make an erased import look like a runtime one
+// (an extra boundary report), never the other way round.
+#[derive(Default)]
+struct ValueReferences {
+    names: HashSet<String>,
+    type_depth: usize,
 }
 
-fn collect_from_named_export(decl: &ExportNamedDeclaration<'_>) -> Option<StaticImportRecord> {
-    decl.source.as_ref().map(span_to_record)
+impl ValueReferences {
+    fn in_type<F: FnOnce(&mut Self)>(&mut self, body: F) {
+        self.type_depth += 1;
+        body(self);
+        self.type_depth -= 1;
+    }
 }
 
-fn collect_from_export_all(decl: &ExportAllDeclaration<'_>) -> StaticImportRecord {
-    span_to_record(&decl.source)
+impl<'a> Visit<'a> for ValueReferences {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if self.type_depth == 0 {
+            self.names.insert(it.name.to_string());
+        }
+    }
+
+    fn visit_ts_type(&mut self, it: &TSType<'a>) {
+        self.in_type(|this| walk::walk_ts_type(this, it));
+    }
+
+    fn visit_ts_interface_heritage(&mut self, it: &TSInterfaceHeritage<'a>) {
+        self.in_type(|this| walk::walk_ts_interface_heritage(this, it));
+    }
+
+    fn visit_ts_class_implements(&mut self, it: &TSClassImplements<'a>) {
+        self.in_type(|this| walk::walk_ts_class_implements(this, it));
+    }
+
+    // `declare module "x" { ... }` and `declare global { ... }` compile to nothing.
+    fn visit_ts_module_declaration(&mut self, it: &TSModuleDeclaration<'a>) {
+        if it.declare {
+            self.in_type(|this| walk::walk_ts_module_declaration(this, it));
+        } else {
+            walk::walk_ts_module_declaration(self, it);
+        }
+    }
+
+    // `export type { a }` and `export { type a }` re-export a name without
+    // reading it as a value.
+    fn visit_export_named_declaration(&mut self, it: &ExportNamedDeclaration<'a>) {
+        if it.export_kind.is_type() {
+            return;
+        }
+        if let Some(declaration) = &it.declaration {
+            self.visit_declaration(declaration);
+        }
+        for specifier in &it.specifiers {
+            if specifier.export_kind.is_type() || it.source.is_some() {
+                continue;
+            }
+            self.visit_module_export_name(&specifier.local);
+        }
+    }
+
+    fn visit_import_declaration(&mut self, _it: &ImportDeclaration<'a>) {}
 }
 
-fn collect_from_statement(statement: &Statement<'_>) -> Option<StaticImportRecord> {
+fn import_is_type_only(decl: &ImportDeclaration<'_>, value_names: &HashSet<String>) -> bool {
+    if decl.import_kind.is_type() {
+        return true;
+    }
+    // `import "./x"` runs the module for its side effects, and `import {} from
+    // "./x"` is kept the same way.
+    let Some(specifiers) = &decl.specifiers else {
+        return false;
+    };
+    if specifiers.is_empty() {
+        return false;
+    }
+    specifiers.iter().all(|specifier| match specifier {
+        ImportDeclarationSpecifier::ImportSpecifier(named) => {
+            named.import_kind.is_type() || !value_names.contains(named.local.name.as_str())
+        }
+        ImportDeclarationSpecifier::ImportDefaultSpecifier(default) => {
+            !value_names.contains(default.local.name.as_str())
+        }
+        ImportDeclarationSpecifier::ImportNamespaceSpecifier(namespace) => {
+            !value_names.contains(namespace.local.name.as_str())
+        }
+    })
+}
+
+// A re-export with a source is only known to be erased when it says so: whether
+// `export { a } from "./x"` names a type is the imported module's business.
+fn named_export_is_type_only(decl: &ExportNamedDeclaration<'_>) -> bool {
+    decl.export_kind.is_type()
+        || (!decl.specifiers.is_empty()
+            && decl
+                .specifiers
+                .iter()
+                .all(|specifier| specifier.export_kind.is_type()))
+}
+
+fn collect_from_statement(
+    statement: &Statement<'_>,
+    value_names: &HashSet<String>,
+) -> Option<StaticImportRecord> {
     match statement {
-        Statement::ImportDeclaration(decl) => Some(collect_from_import_decl(decl)),
-        Statement::ExportNamedDeclaration(decl) => collect_from_named_export(decl),
+        Statement::ImportDeclaration(decl) => Some(span_to_record(
+            &decl.source,
+            import_is_type_only(decl, value_names),
+        )),
+        Statement::ExportNamedDeclaration(decl) => decl
+            .source
+            .as_ref()
+            .map(|source| span_to_record(source, named_export_is_type_only(decl))),
         Statement::ExportAllDeclaration(decl) => Some(collect_from_export_all(decl)),
         _ => None,
     }
 }
 
-fn collect_from_program(program: &oxc_ast::ast::Program<'_>) -> Vec<StaticImportRecord> {
-    let mut records = Vec::new();
+fn collect_from_export_all(decl: &ExportAllDeclaration<'_>) -> StaticImportRecord {
+    span_to_record(&decl.source, decl.export_kind.is_type())
+}
 
+fn collect_from_program(program: &oxc_ast::ast::Program<'_>) -> Vec<StaticImportRecord> {
+    let mut references = ValueReferences::default();
+    references.visit_program(program);
+
+    let mut records = Vec::new();
     for statement in &program.body {
-        if let Some(record) = collect_from_statement(statement) {
+        if let Some(record) = collect_from_statement(statement, &references.names) {
             records.push(record);
         }
     }
@@ -210,6 +331,55 @@ mod tests {
             specifiers(source),
             vec!["./type-import".to_string(), "./type-export".to_string()]
         );
+    }
+
+    fn type_only_flags(source: &str) -> Vec<(String, bool)> {
+        collect_static_imports(Path::new("src/shared/probe.tsx"), source)
+            .unwrap()
+            .into_iter()
+            .map(|entry| (entry.specifier, entry.type_only))
+            .collect()
+    }
+
+    #[test]
+    fn marks_imports_typescript_erases_as_type_only() {
+        let source = r#"
+            import type { A } from "./type-import";
+            import { type B, type C } from "./all-type-specifiers";
+            import { D } from "./only-in-types";
+            import * as Ns from "./namespace-in-types";
+            import Default from "./default-in-types";
+            import { Base } from "./heritage";
+            import { Unused } from "./unused";
+            export type { E } from "./type-reexport";
+            export { type F } from "./type-specifier-reexport";
+            export type * from "./type-star";
+            type Uses = [A, B, C, D, Ns.Thing, Default, typeof Default];
+            interface I extends Base {}
+            class K implements Base {}
+            declare module "./augmented" { const x: D; }
+        "#;
+        assert!(type_only_flags(source).iter().all(|(_, type_only)| *type_only));
+    }
+
+    #[test]
+    fn keeps_imports_read_as_values_as_runtime_imports() {
+        let source = r#"
+            import { type T, value } from "./mixed";
+            import Default from "./default-value";
+            import * as Ns from "./namespace-value";
+            import { Component } from "./jsx";
+            import { reexported } from "./local-reexport";
+            import "./side-effect";
+            import {} from "./empty";
+            export { named } from "./reexport";
+            export * from "./star";
+            export { reexported };
+            const read = [value, Default, Ns.thing];
+            const view = <Component />;
+            class Derived extends Default {}
+        "#;
+        assert!(type_only_flags(source).iter().all(|(_, type_only)| !*type_only));
     }
 
     #[test]

@@ -1,0 +1,39 @@
+[
+  {
+    "from": "src/client/main.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../domains/combat/model",
+    "to": "src/domains/combat/model.ts"
+  },
+  {
+    "from": "src/client/main.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../server/session",
+    "to": "src/server/session.ts",
+    "typeOnly": true
+  },
+  {
+    "from": "src/domains/combat/model.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../../server/session",
+    "to": "src/server/session.ts",
+    "typeOnly": true
+  },
+  {
+    "from": "src/domains/combat/model.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "../economy/model",
+    "to": "src/domains/economy/model.ts"
+  },
+  {
+    "from": "src/domains/economy/model.ts",
+    "kind": "static",
+    "resolved": true,
+    "specifier": "./server/store",
+    "to": "src/domains/economy/server/store.ts"
+  }
+]

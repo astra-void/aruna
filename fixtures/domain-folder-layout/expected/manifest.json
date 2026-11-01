@@ -70,7 +70,8 @@
       "kind": "static",
       "resolved": true,
       "specifier": "../model",
-      "to": "src/domains/shop/model.ts"
+      "to": "src/domains/shop/model.ts",
+      "typeOnly": true
     }
   ],
   "modules": [

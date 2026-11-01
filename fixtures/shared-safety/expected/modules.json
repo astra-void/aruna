@@ -1,0 +1,38 @@
+[
+  {
+    "id": "src/client/main.ts",
+    "kind": "client",
+    "path": "src/client/main.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/combat/model.ts",
+    "kind": "shared",
+    "path": "src/domains/combat/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/economy/model.ts",
+    "kind": "shared",
+    "path": "src/domains/economy/model.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/domains/economy/server/store.ts",
+    "kind": "server",
+    "path": "src/domains/economy/server/store.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/server/session.ts",
+    "kind": "server",
+    "path": "src/server/session.ts",
+    "reason": "path"
+  },
+  {
+    "id": "src/shared/save.ts",
+    "kind": "shared",
+    "path": "src/shared/save.ts",
+    "reason": "path"
+  }
+]
