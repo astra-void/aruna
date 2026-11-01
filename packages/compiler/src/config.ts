@@ -984,7 +984,13 @@ function loadTsConfig(
     };
   }
 
-  const result = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  // TypeScript works on forward-slash paths. Its JSON parser stamps diagnostics
+  // with the normalized name but keeps the given one on the source file, so a
+  // native Windows path turns any syntax error into a thrown debug assertion
+  // ("Expected C:/… === C:\…") instead of `result.error`. Diagnostics below
+  // keep using the native path.
+  const tsconfigFile = tsconfigPath.split(path.sep).join("/");
+  const result = ts.readConfigFile(tsconfigFile, ts.sys.readFile);
   if (result.error) {
     return {
       options: {},
@@ -1001,7 +1007,7 @@ function loadTsConfig(
     };
   }
 
-  const parsed = ts.parseJsonConfigFileContent(result.config, ts.sys, path.dirname(tsconfigPath));
+  const parsed = ts.parseJsonConfigFileContent(result.config, ts.sys, path.dirname(tsconfigFile));
   // A missing generated fragment (`extends: ./<generatedDir>/tsconfig.aruna.json`,
   // which older builds wrote) is a self-healing state, not a broken tsconfig:
   // `aruna build` / `aruna doctor --fix` drop the reference and write the
