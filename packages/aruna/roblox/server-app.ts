@@ -1,8 +1,10 @@
 // Aruna roblox-ts native runtime — server app wiring.
 
 import { actionError } from "./action-error";
+import type { NetworkMetrics } from "./network-metrics";
 import {
 	createActionRegistry,
+	type DispatchSettledInfo,
 	type ActionErrorHandler,
 	type ActionMap,
 	type ActionMiddleware,
@@ -99,6 +101,47 @@ export function requireStores<TPlayer = unknown>(...names: string[]): ActionMidd
 		}
 		return nextLayer();
 	};
+}
+
+// One refused or failed dispatch, as `onReject` sees it: names and timing, no
+// payload. `kind` sorts the error name into what refused the call.
+export type ActionRejectionKind =
+	| "validation"
+	| "rate-limit"
+	| "serialization"
+	| "not-found"
+	| "declared"
+	| "public"
+	| "internal";
+
+export interface ActionRejectionInfo<TPlayer> {
+	readonly actionId: string;
+	readonly player: TPlayer;
+	readonly kind: ActionRejectionKind;
+	readonly errorName: string;
+	readonly fromClient: boolean;
+	readonly durationMs: number;
+}
+
+function rejectionKind(info: DispatchSettledInfo<unknown>): ActionRejectionKind {
+	if (info.declared === true) {
+		return "declared";
+	}
+	switch (info.errorName) {
+		case "ActionValidationError":
+			return "validation";
+		case "ActionRateLimitError":
+			return "rate-limit";
+		case "ActionSerializationError":
+			return "serialization";
+		case "ActionNotFoundError":
+			return "not-found";
+		case "ActionInternalError":
+		case undefined:
+			return "internal";
+		default:
+			return "public";
+	}
 }
 
 export interface AppDispatchOptions {
@@ -245,6 +288,17 @@ export interface CreateServerAppOptions<
 	// set by `createTestServerApp`, which freezes it so a spec steps past a
 	// window with `advance(ms)` rather than waiting one out.
 	readonly nowMs?: () => number;
+	// Opt-in traffic metrics (`createNetworkMetrics()`): per-action counts,
+	// rejections, and server time, signal and resource volume, abuse reasons, and
+	// estimated frame sizes. Off unless given; bounded when on.
+	readonly metrics?: NetworkMetrics;
+	// Told about every dispatch that did not succeed — validation, rate limit,
+	// serialization, an unknown action, a declared or public error, an internal
+	// failure — after it settled, from clients and in-process alike. Names only;
+	// what the client was sent is unchanged. (`onError` still sees the thrown
+	// value of a failing `run`; envelopes dropped before dispatch go to
+	// `onAbuse`.)
+	readonly onReject?: (info: ActionRejectionInfo<TPlayer>) => void;
 	// Per-player limits in front of dispatch, for every envelope a client sends:
 	// a token bucket (`burst` envelopes, refilled at `perSecond`) charged before
 	// the transport reads the payload, and a cap on dispatches running at once
@@ -367,8 +421,46 @@ export function createServerApp<
 						: {}),
 					...(getStores !== undefined ? { getStores } : {}),
 					...(options.onResourceError !== undefined ? { onResourceError: options.onResourceError } : {}),
+					...(options.metrics !== undefined ? { observer: options.metrics.resourceObserver } : {}),
 				})
 			: undefined;
+
+	const metrics = options.metrics;
+	const onReject = options.onReject;
+	const observer =
+		metrics !== undefined || onReject !== undefined
+			? {
+					onSettled: (info: DispatchSettledInfo<TPlayer>) => {
+						if (metrics !== undefined) {
+							metrics.dispatchObserver.onSettled(info as DispatchSettledInfo<unknown>);
+						}
+						if (onReject !== undefined && !info.ok) {
+							onReject({
+								actionId: info.actionId,
+								player: info.player,
+								kind: rejectionKind(info as DispatchSettledInfo<unknown>),
+								errorName: info.errorName !== undefined ? info.errorName : "ActionInternalError",
+								fromClient: info.fromClient,
+								durationMs: info.durationMs,
+							});
+						}
+					},
+				}
+			: undefined;
+	const userOnAbuse = options.onAbuse;
+	const onAbuse: RequestAbuseHandler<TPlayer> | undefined =
+		metrics !== undefined
+			? (player, info) => {
+					metrics.onAbuse(player, info);
+					if (userOnAbuse !== undefined) {
+						userOnAbuse(player, info);
+					}
+				}
+			: userOnAbuse;
+	const detachWire = metrics !== undefined ? metrics.attachWire() : undefined;
+	if (metrics !== undefined && resources !== undefined) {
+		metrics.bindResources((resourceId) => resources.subscriberCount(resourceId));
+	}
 
 	const registryOptions: ActionRegistryOptions<TPlayer> = {
 		...(options.defaultRateLimit !== undefined
@@ -400,7 +492,8 @@ export function createServerApp<
 			: {}),
 		...(options.nowMs !== undefined ? { nowMs: options.nowMs } : {}),
 		...(options.requestBudget !== undefined ? { requestBudget: options.requestBudget } : {}),
-		...(options.onAbuse !== undefined ? { onAbuse: options.onAbuse } : {}),
+		...(onAbuse !== undefined ? { onAbuse } : {}),
+		...(observer !== undefined ? { observer } : {}),
 	};
 	const registry = createActionRegistry<TPlayer>(options.actions, registryOptions);
 
@@ -587,6 +680,9 @@ export function createServerApp<
 			}
 			if (resources !== undefined) {
 				resources.dispose();
+			}
+			if (detachWire !== undefined) {
+				detachWire();
 			}
 			for (const cleanup of lifecycleCleanups) {
 				cleanup();

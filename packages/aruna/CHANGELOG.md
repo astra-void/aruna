@@ -17,6 +17,25 @@ the game build like any other module.
 
 ### Added
 
+- **Network observability** ([observability.md](docs/observability.md)).
+  `createNetworkMetrics()` (`aruna/server`) is an opt-in, bounded collector:
+  per-action requests, rejections by error name, server time and pre-`run`
+  check time (P50/P95/P99/max over a ring of samples), client round trips via
+  `metrics.clientMiddleware()`, signal and resource volume (snapshots,
+  invalidations, resyncs, load errors, live subscribers), abuse reasons, and
+  frames with estimated sizes by Aruna's size accounting. Keys are capped
+  (`"(other)"` past `maxKeys`) and no payload is kept. `formatNetworkReport`
+  prints it; `estimateWireBytes` exposes the estimator. Off, it costs nothing;
+  on, about 12 µs per dispatch in the Lune benchmark.
+  `createServerApp({ onReject })` is told about every dispatch that did not
+  succeed, with a `kind` (`validation`, `rate-limit`, `serialization`,
+  `not-found`, `declared`, `public`, `internal`) and no payload. The action
+  registry takes a `DispatchObserver`.
+- **`aruna inspect network`**: the declared traffic policy — per action
+  delivery, idempotency, the effective rate limit and its source, input bounds,
+  declared errors; per signal remote, encoding, and schema-bound size; per
+  resource scope — explicitly labelled static, not measured.
+
 - **Several player stores per app**: `createServerApp({ playerStores: { progress,
   inventory } })` loads each on join, releases each on leave (independently:
   one store's failure, or a throwing `onPlayerRemoving`/`onPlayerAdded` hook,

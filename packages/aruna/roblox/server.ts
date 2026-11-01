@@ -282,6 +282,18 @@ export type {
 	ResourceRef,
 	ResourceScope,
 } from "./resource";
+// Opt-in traffic metrics (docs/observability.md).
+export { createNetworkMetrics, estimateWireBytes, formatNetworkReport } from "./network-metrics";
+export type {
+	ActionMetrics,
+	LatencySummary,
+	NetworkMetrics,
+	NetworkMetricsOptions,
+	NetworkMetricsReport,
+	ResourceMetrics,
+	SignalMetrics,
+	WireMetrics,
+} from "./network-metrics";
 // Domain runtimes: the boot sequence the compiler resolves from `after` edges.
 export * from "./define-runtime";
 export * from "./domain-runtime";

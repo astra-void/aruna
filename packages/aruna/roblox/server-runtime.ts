@@ -148,6 +148,32 @@ export type ActionErrorHandler<TPlayer = unknown> = (
 	},
 ) => void;
 
+// How a settled dispatch went, for observability (`createServerApp({ onReject
+// })`, `createNetworkMetrics`). Names and timings only: never the input, the
+// output, or an error's message or data.
+export interface DispatchSettledInfo<TPlayer = unknown> {
+	readonly actionId: string;
+	readonly player: TPlayer;
+	readonly ok: boolean;
+	// The error name the caller is sent (`ActionValidationError`, a declared
+	// error's name, `ActionInternalError`, ...), when not ok.
+	readonly errorName?: string;
+	// True when `errorName` is one the action declares in `errors`.
+	readonly declared?: boolean;
+	// From the dispatch's start to its settling, in milliseconds: server time
+	// only (validation, middleware, run, output checks) — not a round trip.
+	readonly durationMs: number;
+	// The part of it spent before `run`: wire safety, defaults, validation, and
+	// the rate limit. Absent when the call was refused before getting there.
+	readonly checkMs?: number;
+	// A client's envelope (true) or trusted in-process dispatch (false).
+	readonly fromClient: boolean;
+}
+
+export interface DispatchObserver<TPlayer = unknown> {
+	readonly onSettled: (info: DispatchSettledInfo<TPlayer>) => void;
+}
+
 export interface ActionRegistryOptions<TPlayer = unknown> {
 	// Applied to any action that does not declare its own `rateLimit`. A
 	// per-action `rateLimit` always takes precedence over this fallback.
@@ -192,6 +218,9 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
 	// is refused (too many in flight, invalid input, rate limited). For logging,
 	// or a kick. Never told about in-process dispatch.
 	readonly onAbuse?: RequestAbuseHandler<TPlayer>;
+	// Told about every dispatch once it settles. Absent, dispatch reads no clock
+	// for it.
+	readonly observer?: DispatchObserver<TPlayer>;
 }
 
 // A schema failure at the action boundary.
@@ -327,6 +356,9 @@ export function createActionRegistry<TPlayer>(
 	// `fromClient` is set for a client's envelope, which the transport charged
 	// to the request budget: its refusals are reported through `onAbuse`, and
 	// its token is given back once its action's rate limit admits it.
+	const observer = options?.observer;
+	const readClock = (): number => (nowMs !== undefined ? nowMs() : os.clock() * 1000);
+
 	const dispatchDefined = (
 		definition: AnyActionDefinition<TPlayer>,
 		player: TPlayer,
@@ -334,6 +366,7 @@ export function createActionRegistry<TPlayer>(
 		input: unknown,
 		progress: { ran: boolean } | undefined,
 		fromClient: boolean,
+		timing?: { checkedAt?: number },
 	): Promise<ActionDispatchResult> => {
 		return new Promise<ActionDispatchResult>((resolve) => {
 			// Reject non-wire-safe input before anything else reads it. The input
@@ -502,6 +535,9 @@ export function createActionRegistry<TPlayer>(
 			if (progress !== undefined) {
 				progress.ran = true;
 			}
+			if (timing !== undefined) {
+				timing.checkedAt = readClock();
+			}
 
 			invoke().then(
 				(output) => {
@@ -550,6 +586,7 @@ export function createActionRegistry<TPlayer>(
 		actionId: string,
 		input: unknown,
 		progress: { ran: boolean } | undefined,
+		timing: { checkedAt?: number } | undefined,
 	): Promise<ActionDispatchResult> => {
 		const definition = actionsById.get(actionId);
 		if (definition === undefined) {
@@ -566,7 +603,7 @@ export function createActionRegistry<TPlayer>(
 				resetAtMs: now + IN_FLIGHT_RETRY_AFTER_MS,
 			});
 		}
-		const settled = dispatchDefined(definition, player, actionId, input, progress, true);
+		const settled = dispatchDefined(definition, player, actionId, input, progress, true, timing);
 		settled.finally(() => {
 			guard.finish(player);
 		});
@@ -579,12 +616,13 @@ export function createActionRegistry<TPlayer>(
 		actionId: string,
 		input: unknown,
 		progress: { ran: boolean } | undefined,
+		timing: { checkedAt?: number } | undefined,
 	): Promise<ActionDispatchResult> => {
 		const definition = actionsById.get(actionId);
 		if (definition === undefined) {
 			return notFound(actionId);
 		}
-		return dispatchDefined(definition, player, actionId, input, progress, false);
+		return dispatchDefined(definition, player, actionId, input, progress, false, timing);
 	};
 
 	type DispatchOnce = typeof dispatchCapped;
@@ -594,13 +632,54 @@ export function createActionRegistry<TPlayer>(
 		actionId: string,
 		input: unknown,
 		idempotencyKey: unknown,
+		timing: { checkedAt?: number } | undefined,
 	): Promise<ActionDispatchResult> => {
 		if (isIdempotencyKey(idempotencyKey)) {
 			return idempotency.run(player, actionId, idempotencyKey, (progress) =>
-				dispatchOnce(player, actionId, input, progress),
+				dispatchOnce(player, actionId, input, progress, timing),
 			);
 		}
-		return dispatchOnce(player, actionId, input, undefined);
+		return dispatchOnce(player, actionId, input, undefined, timing);
+	};
+
+	// The entry both dispatch paths share: with an observer, one clock read at
+	// the start and one at the settle, and a report of names and timings. A
+	// throwing observer is contained; it never costs a caller its response.
+	const observed = (
+		dispatchOnce: DispatchOnce,
+		fromClient: boolean,
+		player: TPlayer,
+		actionId: string,
+		input: unknown,
+		idempotencyKey: unknown,
+	): Promise<ActionDispatchResult> => {
+		if (observer === undefined) {
+			return withIdempotency(dispatchOnce, player, actionId, input, idempotencyKey, undefined);
+		}
+		const startedAt = readClock();
+		const timing: { checkedAt?: number } = {};
+		return withIdempotency(dispatchOnce, player, actionId, input, idempotencyKey, timing).then((result) => {
+			const durationMs = readClock() - startedAt;
+			const errorName = result.ok ? undefined : result.errorName;
+			const errors = actionsById.get(actionId)?.errors;
+			const declared = errorName !== undefined && errors !== undefined && errors[errorName] !== undefined;
+			const checkedAt = timing.checkedAt;
+			const info: DispatchSettledInfo<TPlayer> = {
+				actionId,
+				player,
+				ok: result.ok,
+				...(errorName !== undefined ? { errorName } : {}),
+				...(declared ? { declared: true } : {}),
+				durationMs,
+				...(checkedAt !== undefined ? { checkMs: checkedAt - startedAt } : {}),
+				fromClient,
+			};
+			const [reported, failure] = pcall(() => observer.onSettled(info));
+			if (!reported) {
+				warn(`Aruna dispatch observer threw: ${tostring(failure)}`);
+			}
+			return result;
+		});
 	};
 
 	return {
@@ -620,9 +699,9 @@ export function createActionRegistry<TPlayer>(
 		},
 		refuseFrame: (player, reason) => refuseFrame(guard, player, reason),
 		dispatch: (player, actionId, input, idempotencyKey) =>
-			withIdempotency(dispatchCapped, player, actionId, input, idempotencyKey),
+			observed(dispatchCapped, true, player, actionId, input, idempotencyKey),
 		dispatchInProcess: (player, actionId, input, idempotencyKey) =>
-			withIdempotency(dispatchUncapped, player, actionId, input, idempotencyKey),
+			observed(dispatchUncapped, false, player, actionId, input, idempotencyKey),
 		forgetPlayer: (player) => {
 			idempotency.forget(player);
 			guard.forget(player);

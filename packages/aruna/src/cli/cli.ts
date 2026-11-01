@@ -27,6 +27,7 @@ import { doctorExitCode, formatDoctorReport, runDoctor } from "./doctor.js";
 import { formatInitReport, runInit } from "./init.js";
 import { buildActionContractSnapshot } from "./action-contracts.js";
 import { formatActionContractInspection } from "./inspect-contract.js";
+import { buildNetworkInspectionReport, formatNetworkInspection } from "./inspect-network.js";
 import { runMigrateCommand } from "./migrate.js";
 import { PRIMITIVES } from "./primitives.js";
 import { runContractDiffCommand, type ContractDiffEntry } from "./contract-diff.js";
@@ -1215,6 +1216,21 @@ export async function main(): Promise<number> {
           writeText(diagnostics);
         }
       }
+      process.exitCode = output.ok ? 0 : 1;
+    });
+
+  inspect
+    .command("network")
+    .description("show the declared traffic policy: rate limits, budgets, payload bounds (static, not measured)")
+    .action(async () => {
+      const options = program.optsWithGlobals<CliOptions>();
+      const output = await runInspect(options);
+      if (options.json) {
+        writeJson(buildNetworkInspectionReport(output));
+        process.exitCode = output.ok ? 0 : 1;
+        return;
+      }
+      writeText(formatNetworkInspection(output, resolveColorMode(options)));
       process.exitCode = output.ok ? 0 : 1;
     });
 

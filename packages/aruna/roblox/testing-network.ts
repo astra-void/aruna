@@ -28,7 +28,7 @@
 //   * A disconnect drops whatever is in flight both ways, then the player leaves.
 
 import { createClientApp, type ClientApp } from "./client";
-import type { ActionInvokeOptions } from "./client-runtime";
+import type { ActionInvokeOptions, ClientMiddleware } from "./client-runtime";
 import { bindRemoteActions, createRemoteActionInvoker } from "./roblox";
 import { createServerApp, type CreateServerAppOptions, type ServerApp } from "./server-app";
 import type { ActionRegistry } from "./server-runtime";
@@ -77,6 +77,9 @@ export type CreateTestNetworkOptions<TSignals extends SignalMap = SignalMap, TSe
 	// The seed for loss rates. The same seed and the same calls give the same
 	// drops.
 	readonly seed?: number;
+	// Middleware every client app runs (a metrics collector's
+	// `clientMiddleware()`, for one).
+	readonly clientMiddleware?: readonly ClientMiddleware[];
 };
 
 // One direction of one player's link.
@@ -566,6 +569,7 @@ export function createTestNetwork<TSignals extends SignalMap = SignalMap, TSessi
 				delay: virtualDelay,
 			}),
 			resources,
+			...(options.clientMiddleware !== undefined ? { middleware: options.clientMiddleware } : {}),
 			...(signals !== undefined
 				? {
 						signals,

@@ -94,10 +94,29 @@ export interface WireResourceSubscription {
 // has a hole.
 export type WireFrame = Array<defined>;
 
+// Told about every frame this runtime builds to send, when set: what
+// `createNetworkMetrics` counts frames and estimated bytes from. Unset (the
+// default), building a frame costs one nil check. One per Luau VM, which is one
+// per server or client in a game.
+export type WireFrameObserver = (frame: WireFrame) => void;
+
+let frameObserver: WireFrameObserver | undefined;
+
+export function setWireFrameObserver(observer: WireFrameObserver | undefined): void {
+	frameObserver = observer;
+}
+
+export function currentWireFrameObserver(): WireFrameObserver | undefined {
+	return frameObserver;
+}
+
 export function createWireFrame(items: ReadonlyArray<defined>): WireFrame {
 	const frame: WireFrame = [WIRE_PROTOCOL_VERSION];
 	for (const item of items) {
 		frame.push(item);
+	}
+	if (frameObserver !== undefined) {
+		frameObserver(frame);
 	}
 	return frame;
 }

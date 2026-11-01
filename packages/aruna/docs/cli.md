@@ -17,7 +17,9 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna inspect actions` | List discovered actions and contract metadata. |
 | `aruna inspect signals` | List discovered server → client signals. |
 | `aruna inspect stores` | List discovered stores, their version, scope, and persisted shape. |
-| `aruna inspect contract` | Print a deterministic contract snapshot: actions, signals, and stores. |
+| `aruna inspect resources` | List discovered resources: scope, value shape, and whether subscriptions are authorized. |
+| `aruna inspect network` | Print the declared traffic policy: rate limits, budgets, input bounds, signal remotes and schema-bound sizes, resource scopes. Static, not measured — see [observability.md](observability.md). |
+| `aruna inspect contract` | Print a deterministic contract snapshot: actions, signals, stores, and resources. |
 | `aruna inspect modules` | Print how each file is classified (client/server/shared). |
 | `aruna inspect graph` | Print the import graph. |
 | `aruna contract diff` | Compare contract snapshots — actions, signals, and stores (`--baseline`, `--from`, `--to`; with none, the committed snapshot). |

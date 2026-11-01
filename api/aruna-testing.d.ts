@@ -6,6 +6,7 @@ export type CreateTestNetworkOptions<TSignals extends SignalMap = SignalMap, TSe
     readonly latencyMs?: number | TestNetworkLatency;
     readonly requestTimeoutMs?: number;
     readonly seed?: number;
+    readonly clientMiddleware?: readonly ClientMiddleware[];
 };
 
 export interface CreateTestPlayerOptions {
@@ -297,6 +298,19 @@ type ActionMap<TPlayer> = {
     readonly [actionId: string]: AnyActionDefinition<TPlayer>;
 };
 
+interface ActionMetrics {
+    readonly requests: number;
+    readonly fromClient: number;
+    readonly ok: number;
+    readonly rejected: number;
+    readonly rejections: {
+        readonly [errorName: string]: number;
+    };
+    readonly server: LatencySummary;
+    readonly checks: LatencySummary;
+    readonly client: LatencySummary;
+}
+
 type ActionMiddleware<TPlayer = unknown> = (info: {
     readonly actionId: string;
     readonly ctx: ActionContext<TPlayer>;
@@ -336,6 +350,17 @@ interface ActionRegistry<TPlayer = unknown> {
     }) => void;
     readonly isFireAndForget: (actionId: string) => boolean;
 }
+
+interface ActionRejectionInfo<TPlayer> {
+    readonly actionId: string;
+    readonly player: TPlayer;
+    readonly kind: ActionRejectionKind;
+    readonly errorName: string;
+    readonly fromClient: boolean;
+    readonly durationMs: number;
+}
+
+type ActionRejectionKind = "validation" | "rate-limit" | "serialization" | "not-found" | "declared" | "public" | "internal";
 
 type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer, SignalMap, ActionErrorMap>;
 
@@ -382,12 +407,20 @@ interface CancelToken {
     readonly onCancel: (listener: () => void) => () => void;
 }
 
+type ClientActionInfo = {
+    readonly actionId: string;
+    readonly input: unknown;
+    readonly options?: ActionInvokeOptions;
+};
+
 interface ClientApp<TSignals extends SignalMap = SignalMap> {
     readonly invoke: (actionId: string, input?: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
     readonly subscriber?: SignalSubscriber<TSignals>;
     readonly resources?: ResourceClient;
     readonly dispose: () => void;
 }
+
+type ClientMiddleware = (info: ClientActionInfo, next: () => Promise<unknown>) => Promise<unknown>;
 
 interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap, TSession = unknown> {
     readonly actions: ActionMap<TPlayer>;
@@ -408,9 +441,26 @@ interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = SignalMap
     readonly onPlayerAdded?: (player: TPlayer, session: TSession) => void;
     readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
     readonly nowMs?: () => number;
+    readonly metrics?: NetworkMetrics;
+    readonly onReject?: (info: ActionRejectionInfo<TPlayer>) => void;
     readonly requestBudget?: RequestBudgetOptions;
     readonly onAbuse?: RequestAbuseHandler<TPlayer>;
     readonly players?: PlayersSource<TPlayer>;
+}
+
+interface DispatchObserver<TPlayer = unknown> {
+    readonly onSettled: (info: DispatchSettledInfo<TPlayer>) => void;
+}
+
+interface DispatchSettledInfo<TPlayer = unknown> {
+    readonly actionId: string;
+    readonly player: TPlayer;
+    readonly ok: boolean;
+    readonly errorName?: string;
+    readonly declared?: boolean;
+    readonly durationMs: number;
+    readonly checkMs?: number;
+    readonly fromClient: boolean;
 }
 
 type FailContextFor<TErrors extends ActionErrorMap> = keyof TErrors extends never ? {} : ActionFailContext<TErrors>;
@@ -423,10 +473,46 @@ type InferOutput<S> = S extends Schema ? Infer<S> : unknown;
 
 type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;
 
+interface LatencySummary {
+    readonly samples: number;
+    readonly p50?: number;
+    readonly p95?: number;
+    readonly p99?: number;
+    readonly max?: number;
+}
+
 interface MemoryStoreBackend extends StoreBackend {
     readonly snapshot: () => Map<string, unknown>;
     readonly reset: () => void;
     readonly memory: true;
+}
+
+interface NetworkMetrics {
+    readonly dispatchObserver: DispatchObserver<unknown>;
+    readonly resourceObserver: ResourceObserver;
+    readonly onAbuse: (player: unknown, info: RequestAbuseInfo) => void;
+    readonly bindResources: (subscriberCount: (resourceId: string) => number) => void;
+    readonly attachWire: () => () => void;
+    readonly clientMiddleware: () => ClientMiddleware;
+    readonly report: () => NetworkMetricsReport;
+    readonly reset: () => void;
+}
+
+interface NetworkMetricsReport {
+    readonly windowMs: number;
+    readonly actions: {
+        readonly [actionId: string]: ActionMetrics;
+    };
+    readonly signals: {
+        readonly [signalId: string]: SignalMetrics;
+    };
+    readonly resources: {
+        readonly [resourceId: string]: ResourceMetrics;
+    };
+    readonly abuse: {
+        readonly [reason: string]: number;
+    };
+    readonly wire: WireMetrics;
 }
 
 type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
@@ -543,6 +629,26 @@ type ResourceMap = {
     readonly [resourceId: string]: AnyResourceDefinition;
 };
 
+interface ResourceMetrics {
+    readonly snapshots: number;
+    readonly recipients: number;
+    readonly estimatedBytes: number;
+    readonly invalidations: number;
+    readonly subscribes: number;
+    readonly resyncs: number;
+    readonly unsubscribes: number;
+    readonly loadErrors: number;
+    readonly subscribers?: number;
+}
+
+interface ResourceObserver {
+    readonly onSnapshot?: (resourceId: string, recipients: number) => void;
+    readonly onInvalidate?: (resourceId: string) => void;
+    readonly onSubscribe?: (resourceId: string, resync: boolean) => void;
+    readonly onUnsubscribe?: (resourceId: string) => void;
+    readonly onLoadError?: (resourceId: string) => void;
+}
+
 type ResourceRef = string | {
     readonly id: string;
 };
@@ -638,6 +744,11 @@ type SignalMap = {
     readonly [signalId: string]: SignalDefinition<Schema | undefined>;
 };
 
+interface SignalMetrics {
+    readonly items: number;
+    readonly estimatedBytes: number;
+}
+
 type SignalPayloadOf<TSignals extends SignalMap, TId extends SignalId<TSignals>> = TSignals[TId] extends SignalDefinition<infer TPayload> ? InferSignalPayload<TPayload> : unknown;
 
 interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
@@ -726,4 +837,16 @@ interface StoreSnapshot<TValue> {
 interface StoreSuccess<TValue> {
     readonly ok: true;
     readonly value: TValue;
+}
+
+interface WireMetrics {
+    readonly frames: number;
+    readonly items: {
+        readonly calls: number;
+        readonly responses: number;
+        readonly signals: number;
+        readonly resourceStates: number;
+        readonly resourceSubscriptions: number;
+    };
+    readonly estimatedBytes: number;
 }

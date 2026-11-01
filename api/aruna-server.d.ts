@@ -62,6 +62,19 @@ export type ActionMap<TPlayer> = {
     readonly [actionId: string]: AnyActionDefinition<TPlayer>;
 };
 
+export interface ActionMetrics {
+    readonly requests: number;
+    readonly fromClient: number;
+    readonly ok: number;
+    readonly rejected: number;
+    readonly rejections: {
+        readonly [errorName: string]: number;
+    };
+    readonly server: LatencySummary;
+    readonly checks: LatencySummary;
+    readonly client: LatencySummary;
+}
+
 export type ActionMiddleware<TPlayer = unknown> = (info: {
     readonly actionId: string;
     readonly ctx: ActionContext<TPlayer>;
@@ -117,7 +130,19 @@ export interface ActionRegistryOptions<TPlayer = unknown> {
     readonly nowMs?: () => number;
     readonly requestBudget?: RequestBudgetOptions;
     readonly onAbuse?: RequestAbuseHandler<TPlayer>;
+    readonly observer?: DispatchObserver<TPlayer>;
 }
+
+export interface ActionRejectionInfo<TPlayer> {
+    readonly actionId: string;
+    readonly player: TPlayer;
+    readonly kind: ActionRejectionKind;
+    readonly errorName: string;
+    readonly fromClient: boolean;
+    readonly durationMs: number;
+}
+
+export type ActionRejectionKind = "validation" | "rate-limit" | "serialization" | "not-found" | "declared" | "public" | "internal";
 
 export interface AnyPlayerStore<TPlayer = Player> {
     readonly id: string;
@@ -176,6 +201,8 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
     readonly onPlayerAdded?: (player: TPlayer, session: TSession) => void;
     readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
     readonly nowMs?: () => number;
+    readonly metrics?: NetworkMetrics;
+    readonly onReject?: (info: ActionRejectionInfo<TPlayer>) => void;
     readonly requestBudget?: RequestBudgetOptions;
     readonly onAbuse?: RequestAbuseHandler<TPlayer>;
     readonly players?: PlayersSource<TPlayer>;
@@ -195,6 +222,21 @@ export declare const DEFAULT_STORE_SESSION: {
     readonly acquireDelayMs: 3000;
 };
 
+export interface DispatchObserver<TPlayer = unknown> {
+    readonly onSettled: (info: DispatchSettledInfo<TPlayer>) => void;
+}
+
+export interface DispatchSettledInfo<TPlayer = unknown> {
+    readonly actionId: string;
+    readonly player: TPlayer;
+    readonly ok: boolean;
+    readonly errorName?: string;
+    readonly declared?: boolean;
+    readonly durationMs: number;
+    readonly checkMs?: number;
+    readonly fromClient: boolean;
+}
+
 export interface DomainRuntimeDefinition {
     readonly id: string;
     readonly after?: readonly string[];
@@ -207,10 +249,52 @@ export type InferOutput<S> = S extends Schema ? Infer<S> : unknown;
 
 export type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;
 
+export interface LatencySummary {
+    readonly samples: number;
+    readonly p50?: number;
+    readonly p95?: number;
+    readonly p99?: number;
+    readonly max?: number;
+}
+
 export interface MemoryStoreBackend extends StoreBackend {
     readonly snapshot: () => Map<string, unknown>;
     readonly reset: () => void;
     readonly memory: true;
+}
+
+export interface NetworkMetrics {
+    readonly dispatchObserver: DispatchObserver<unknown>;
+    readonly resourceObserver: ResourceObserver;
+    readonly onAbuse: (player: unknown, info: RequestAbuseInfo) => void;
+    readonly bindResources: (subscriberCount: (resourceId: string) => number) => void;
+    readonly attachWire: () => () => void;
+    readonly clientMiddleware: () => ClientMiddleware;
+    readonly report: () => NetworkMetricsReport;
+    readonly reset: () => void;
+}
+
+export interface NetworkMetricsOptions {
+    readonly samples?: number;
+    readonly maxKeys?: number;
+    readonly nowMs?: () => number;
+}
+
+export interface NetworkMetricsReport {
+    readonly windowMs: number;
+    readonly actions: {
+        readonly [actionId: string]: ActionMetrics;
+    };
+    readonly signals: {
+        readonly [signalId: string]: SignalMetrics;
+    };
+    readonly resources: {
+        readonly [resourceId: string]: ResourceMetrics;
+    };
+    readonly abuse: {
+        readonly [reason: string]: number;
+    };
+    readonly wire: WireMetrics;
 }
 
 export interface PlayerStore<TSchema extends Schema = Schema, TPlayer = Player> {
@@ -369,6 +453,18 @@ export type ResourceMap = {
     readonly [resourceId: string]: AnyResourceDefinition;
 };
 
+export interface ResourceMetrics {
+    readonly snapshots: number;
+    readonly recipients: number;
+    readonly estimatedBytes: number;
+    readonly invalidations: number;
+    readonly subscribes: number;
+    readonly resyncs: number;
+    readonly unsubscribes: number;
+    readonly loadErrors: number;
+    readonly subscribers?: number;
+}
+
 export interface ResourcePlayerContext<TPlayer = unknown> {
     readonly player: TPlayer;
     readonly session?: unknown;
@@ -438,6 +534,11 @@ export interface SignalDefinition<TPayload extends Schema | undefined = undefine
 export type SignalMap = {
     readonly [signalId: string]: SignalDefinition<Schema | undefined>;
 };
+
+export interface SignalMetrics {
+    readonly items: number;
+    readonly estimatedBytes: number;
+}
 
 export interface SignalPublisher<TSignals extends SignalMap, TPlayer> {
     readonly to: <TId extends SignalId<TSignals>>(player: TPlayer, signalId: TId, payload: SignalPayloadOf<TSignals, TId>) => void;
@@ -671,6 +772,18 @@ export interface StoreSuccess<TValue> {
     readonly value: TValue;
 }
 
+export interface WireMetrics {
+    readonly frames: number;
+    readonly items: {
+        readonly calls: number;
+        readonly responses: number;
+        readonly signals: number;
+        readonly resourceStates: number;
+        readonly resourceSubscriptions: number;
+    };
+    readonly estimatedBytes: number;
+}
+
 export declare function actionError(name: string, message: string): PublicActionError;
 
 export declare function classifyStoreError(cause: unknown): StoreErrorClassification;
@@ -682,6 +795,8 @@ export declare function createActionDefiner<TSignals extends SignalMap, TPlayer 
 export declare function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>, options?: ActionRegistryOptions<TPlayer>): ActionRegistry<TPlayer>;
 
 export declare function createMemoryStoreBackend(initial?: Map<string, unknown>): MemoryStoreBackend;
+
+export declare function createNetworkMetrics(options?: NetworkMetricsOptions): NetworkMetrics;
 
 export declare function createPlayerStore<TSchema extends Schema, TPlayer = Player>(definition: PlayerStoreDefinition<TSchema, TPlayer>, options?: PlayerStoreOptions<TPlayer>): PlayerStore<TSchema, TPlayer>;
 
@@ -719,7 +834,11 @@ export declare function encodeStoreValue(definition: {
     readonly version?: number;
 }, value: unknown, nowMs: number, lock?: StoreLockState, meta?: StoreMeta): StoreResult<StoreEnvelope>;
 
+export declare function estimateWireBytes(value: unknown): number;
+
 export declare function findStoreValueViolation(value: unknown, path?: string, seen?: Set<object>): string | undefined;
+
+export declare function formatNetworkReport(report: NetworkMetricsReport): string;
 
 export declare function hasStoreReceipt(meta: StoreMeta, receiptId: string): boolean;
 
@@ -761,7 +880,27 @@ export declare function validateStoreKey(key: string): StoreResult<string>;
 
 // Referenced by the exports above, not exported from this entry:
 
+interface ActionInvokeOptions {
+    readonly fireAndForget?: boolean;
+    readonly signal?: CancelToken;
+    readonly idempotent?: boolean;
+    readonly idempotencyKey?: string;
+}
+
 type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer, SignalMap, ActionErrorMap>;
+
+interface CancelToken {
+    readonly isCancelled: boolean;
+    readonly onCancel: (listener: () => void) => () => void;
+}
+
+type ClientActionInfo = {
+    readonly actionId: string;
+    readonly input: unknown;
+    readonly options?: ActionInvokeOptions;
+};
+
+type ClientMiddleware = (info: ClientActionInfo, next: () => Promise<unknown>) => Promise<unknown>;
 
 type FailContextFor<TErrors extends ActionErrorMap> = keyof TErrors extends never ? {} : ActionFailContext<TErrors>;
 
@@ -772,6 +911,14 @@ type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
 interface Refinement {
     readonly check: (value: unknown) => boolean;
     readonly message: string;
+}
+
+interface ResourceObserver {
+    readonly onSnapshot?: (resourceId: string, recipients: number) => void;
+    readonly onInvalidate?: (resourceId: string) => void;
+    readonly onSubscribe?: (resourceId: string, resync: boolean) => void;
+    readonly onUnsubscribe?: (resourceId: string) => void;
+    readonly onLoadError?: (resourceId: string) => void;
 }
 
 interface ResourceSink<TPlayer> {

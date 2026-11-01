@@ -169,6 +169,8 @@ export interface WireClientRemote {
 
 export type WireFrame = Array<defined>;
 
+export type WireFrameObserver = (frame: WireFrame) => void;
+
 export type WireFrameRead = {
     readonly ok: true;
     readonly items: ReadonlyArray<defined>;
@@ -268,6 +270,8 @@ export declare function createWireFrame(items: ReadonlyArray<defined>): WireFram
 
 export declare function createWireOutbox<TTarget>(send: (target: TTarget, frame: WireFrame) => void, sendAll: ((frame: WireFrame) => void) | undefined, options?: WireBatchOptions): WireOutbox<TTarget>;
 
+export declare function currentWireFrameObserver(): WireFrameObserver | undefined;
+
 export declare function defaultWireProtocolErrorHandler(channel: string, reason: WireFrameRejection): void;
 
 export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = Player, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
@@ -289,6 +293,8 @@ export declare function robloxDataStore(options?: RobloxDataStoreBackendOptions)
 export declare function robloxDataStoreBackend(target: StoreBackendTarget, options?: RobloxDataStoreBackendOptions): StoreBackend;
 
 export declare function robloxRemoteEvent<TPlayer = Player>(options?: RobloxRemoteEventOptions): ServerTransport<TPlayer>;
+
+export declare function setWireFrameObserver(observer: WireFrameObserver | undefined): void;
 
 // Referenced by the exports above, not exported from this entry:
 
