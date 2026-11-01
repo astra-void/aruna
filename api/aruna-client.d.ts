@@ -18,6 +18,19 @@ export interface ActionInvokeOptions {
 
 export type ActionInvoker = (actionId: string, input: unknown, options?: ActionInvokeOptions) => Promise<unknown>;
 
+export interface ActionMetrics {
+    readonly requests: number;
+    readonly fromClient: number;
+    readonly ok: number;
+    readonly rejected: number;
+    readonly rejections: {
+        readonly [errorName: string]: number;
+    };
+    readonly server: LatencySummary;
+    readonly checks: LatencySummary;
+    readonly client: LatencySummary;
+}
+
 export type ActionStub<TInput, TOutput, TErrors extends ActionErrorTypes = {}> = (undefined extends TInput ? (input?: TInput) => Promise<TOutput> : (input: TInput) => Promise<TOutput>) & {
     readonly __arunaErrors?: TErrors;
 };
@@ -80,6 +93,48 @@ export interface DeclaredActionFailure<TName extends string, TData> {
     readonly data: TData;
 }
 
+export interface LatencySummary {
+    readonly samples: number;
+    readonly p50?: number;
+    readonly p95?: number;
+    readonly p99?: number;
+    readonly max?: number;
+}
+
+export interface NetworkMetrics {
+    readonly dispatchObserver: DispatchObserver<unknown>;
+    readonly resourceObserver: ResourceObserver;
+    readonly onAbuse: (player: unknown, info: RequestAbuseInfo) => void;
+    readonly bindResources: (subscriberCount: (resourceId: string) => number) => void;
+    readonly attachWire: () => () => void;
+    readonly clientMiddleware: () => ClientMiddleware;
+    readonly report: () => NetworkMetricsReport;
+    readonly reset: () => void;
+}
+
+export interface NetworkMetricsOptions {
+    readonly samples?: number;
+    readonly maxKeys?: number;
+    readonly nowMs?: () => number;
+}
+
+export interface NetworkMetricsReport {
+    readonly windowMs: number;
+    readonly actions: {
+        readonly [actionId: string]: ActionMetrics;
+    };
+    readonly signals: {
+        readonly [signalId: string]: SignalMetrics;
+    };
+    readonly resources: {
+        readonly [resourceId: string]: ResourceMetrics;
+    };
+    readonly abuse: {
+        readonly [reason: string]: number;
+    };
+    readonly wire: WireMetrics;
+}
+
 export interface RemoteSignalConnection {
     readonly disconnect: () => void;
 }
@@ -100,6 +155,18 @@ export interface ResourceClient<TResources = {
 }
 
 export type ResourceListener<TValue> = (value: TValue, info: ResourceUpdateInfo) => void;
+
+export interface ResourceMetrics {
+    readonly snapshots: number;
+    readonly recipients: number;
+    readonly estimatedBytes: number;
+    readonly invalidations: number;
+    readonly subscribes: number;
+    readonly resyncs: number;
+    readonly unsubscribes: number;
+    readonly loadErrors: number;
+    readonly subscribers?: number;
+}
 
 export type ResourceStatus = "loading" | "ready" | "error";
 
@@ -128,6 +195,11 @@ export type SignalMap = {
     readonly [signalId: string]: SignalDefinition<Schema | undefined>;
 };
 
+export interface SignalMetrics {
+    readonly items: number;
+    readonly estimatedBytes: number;
+}
+
 export interface SignalSubscriber<TSignals extends SignalMap> {
     readonly on: <TId extends SignalId<TSignals>>(signalId: TId, handler: SignalHandler<SignalPayloadOf<TSignals, TId>>) => RemoteSignalConnection;
     readonly dispose: () => void;
@@ -142,11 +214,29 @@ export interface VersionMismatchInfo {
     readonly actual: string;
 }
 
+export interface WireMetrics {
+    readonly frames: number;
+    readonly items: {
+        readonly calls: number;
+        readonly responses: number;
+        readonly signals: number;
+        readonly resourceStates: number;
+        readonly resourceSubscriptions: number;
+    };
+    readonly estimatedBytes: number;
+}
+
 export declare function clearActionInvoker(): void;
 
 export declare function createCancelToken(): CancelTokenSource;
 
 export declare function createClientApp<TSignals extends SignalMap = SignalMap>(options?: CreateClientAppOptions<TSignals>): ClientApp<TSignals>;
+
+export declare function createNetworkMetrics(options?: NetworkMetricsOptions): NetworkMetrics;
+
+export declare function estimateWireBytes(value: unknown): number;
+
+export declare function formatNetworkReport(report: NetworkMetricsReport): string;
 
 export declare function invokeAction(actionId: string, input?: unknown, options?: ActionInvokeOptions): Promise<unknown>;
 
@@ -166,6 +256,21 @@ export declare function withRetry(invoker: ActionInvoker, policy: ClientRetryPol
 
 // Referenced by the exports above, not exported from this entry:
 
+interface DispatchObserver<TPlayer = unknown> {
+    readonly onSettled: (info: DispatchSettledInfo<TPlayer>) => void;
+}
+
+interface DispatchSettledInfo<TPlayer = unknown> {
+    readonly actionId: string;
+    readonly player: TPlayer;
+    readonly ok: boolean;
+    readonly errorName?: string;
+    readonly declared?: boolean;
+    readonly durationMs: number;
+    readonly checkMs?: number;
+    readonly fromClient: boolean;
+}
+
 type Infer<S> = S extends Schema<infer T> ? T : never;
 
 type InferSignalPayload<S> = S extends Schema ? Infer<S> : unknown;
@@ -175,6 +280,22 @@ type NumberFormat = "f64" | "f32" | "u8" | "u16" | "u32" | "i8" | "i16" | "i32";
 interface Refinement {
     readonly check: (value: unknown) => boolean;
     readonly message: string;
+}
+
+interface RequestAbuseInfo {
+    readonly reason: RequestAbuseReason;
+    readonly actionId?: string;
+    readonly count: number;
+}
+
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
+
+interface ResourceObserver {
+    readonly onSnapshot?: (resourceId: string, recipients: number) => void;
+    readonly onInvalidate?: (resourceId: string) => void;
+    readonly onSubscribe?: (resourceId: string, resync: boolean) => void;
+    readonly onUnsubscribe?: (resourceId: string) => void;
+    readonly onLoadError?: (resourceId: string) => void;
 }
 
 interface Schema<T = unknown> {

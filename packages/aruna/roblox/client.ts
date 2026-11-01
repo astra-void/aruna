@@ -186,5 +186,20 @@ export type {
 	ResourceUpdateInfo,
 } from "./resource";
 
+// Opt-in traffic metrics (docs/observability.md): a client collects its own
+// round trips with `metrics.clientMiddleware()`. The same collector as on
+// `aruna/server`, so a client need not load the server runtime for it.
+export { createNetworkMetrics, estimateWireBytes, formatNetworkReport } from "./network-metrics";
+export type {
+	ActionMetrics,
+	LatencySummary,
+	NetworkMetrics,
+	NetworkMetricsOptions,
+	NetworkMetricsReport,
+	ResourceMetrics,
+	SignalMetrics,
+	WireMetrics,
+} from "./network-metrics";
+
 // Re-exported so `aruna/client` is the single client entry.
 export * from "./client-runtime";

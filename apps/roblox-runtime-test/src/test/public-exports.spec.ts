@@ -2,7 +2,7 @@
 // transport dispatches into a server app, the schema builders, and the Roblox
 // remote helpers. Ported from packages/aruna/test/public-exports.test.ts, which
 // exercised the same contract through the (now retired) Node runtime.
-import { clearActionInvoker, createClientApp, invokeAction } from "aruna/client";
+import { clearActionInvoker, createClientApp, createNetworkMetrics, invokeAction } from "aruna/client";
 import {
   REMOTE_NAME,
   SIGNAL_UNRELIABLE_REMOTE_NAME,
@@ -20,6 +20,25 @@ const player = { Name: "Ada", UserId: 1 } as unknown as Player;
 describe("public exports", () => {
   afterEach(() => {
     clearActionInvoker();
+  });
+
+  it("lets a client collect its own round trips from aruna/client alone", async () => {
+    const actions = {
+      "debug.ping": defineAction({
+        id: "debug.ping",
+        run() {
+          return "pong";
+        },
+      }),
+    };
+    const serverApp = createServerApp({ actions });
+    const metrics = createNetworkMetrics();
+    createClientApp({
+      transport: (actionId, input) => serverApp.dispatch(actionId, { player }, input),
+      middleware: [metrics.clientMiddleware()],
+    });
+    expect(await invokeAction("debug.ping")).toBe("pong");
+    expect(metrics.report().actions["debug.ping"]?.client.samples).toBe(1);
   });
 
   it("keeps the stable entrypoints wired together", async () => {

@@ -83,9 +83,12 @@ Resource: quests.progress
 Percentiles are nearest-rank over the last `samples` values; the text report leaves P95
 out below 20 samples rather than print a number that means nothing.
 
-On a client:
+On a client (`aruna/client` exports the same collector, so a client does not load the
+server runtime for it):
 
 ```ts
+import { createClientApp, createNetworkMetrics } from "aruna/client";
+
 const metrics = createNetworkMetrics();
 createClientApp({ resources: true, middleware: [metrics.clientMiddleware()] });
 ```

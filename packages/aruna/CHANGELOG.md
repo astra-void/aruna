@@ -17,6 +17,12 @@ the game build like any other module.
 
 ### Added
 
+- **Network metrics on `aruna/client`.** `createNetworkMetrics`,
+  `formatNetworkReport`, and `estimateWireBytes` (and their types) are exported
+  from `aruna/client` as well as `aruna/server`, so a client collecting its own
+  round trips (`metrics.clientMiddleware()`) no longer has to load the server
+  runtime. observability.md showed client use without saying where to import it.
+
 - **`aruna add domain` scaffolds a signal** (`signals.ts`, published by the
   starter action and asserted by its spec), and `--with resource` adds a
   player-scoped resource. The build summary counts signals, stores, and
