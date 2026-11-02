@@ -4,11 +4,16 @@ name: publish
 # @arunajs/compiler + @arunajs/aruna + create-aruna-app) to npm, on two channels:
 #
 #   - stable: a pushed v* tag publishes the version in package.json under the
-#     `latest` dist-tag.
-#   - canary: a manual run (workflow_dispatch, channel: canary, the default)
-#     publishes `<next patch>-canary.<sha7>.<run>` under the `canary` dist-tag
+#     `latest` dist-tag. The tag must name that version and point at a commit
+#     on main; this is the only way to publish stable.
+#   - canary: a manual run (workflow_dispatch) publishes
+#     `<next patch>-canary.<sha7>.<run>` under the `canary` dist-tag
 #     (scripts/canary-version.ts sets it in every job). No guarantees beyond
 #     "built from the commit it was run on" — see docs/stability.md.
+#
+# Nothing is built for release until the commit passes the whole of ci.yaml
+# (`verify`, called as a reusable workflow) and, for a tag, the release-ref
+# checks. A red commit cannot reach npm on either channel.
 #
 # The 8 native targets are built in parallel, one job per target, each on the
 # cheapest runner that can build it:
@@ -28,31 +33,66 @@ on:
   push:
     tags:
       - "v*"
+  # Canary only: stable goes through a v* tag, so a manual run can never publish
+  # `latest` from an arbitrary branch.
   workflow_dispatch:
-    inputs:
-      channel:
-        description: "Release channel"
-        type: choice
-        options:
-          - canary
-          - stable
-        default: canary
 
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
+# Only the publish job gets id-token: write; everything before it (including
+# the called ci.yaml) runs with read-only contents.
 permissions:
   contents: read
-  id-token: write # required for npm provenance + OIDC trusted publishing
 
 env:
-  # canary for a manual canary run; stable for a v* tag or a manual stable run.
-  CHANNEL: ${{ (github.event_name == 'workflow_dispatch' && inputs.channel == 'canary') && 'canary' || 'stable' }}
+  # canary for a manual run; stable for a v* tag.
+  CHANNEL: ${{ github.event_name == 'workflow_dispatch' && 'canary' || 'stable' }}
 
 jobs:
+  verify:
+    name: verify
+    uses: ./.github/workflows/ci.yaml
+
+  release-ref:
+    name: release ref
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The tag is the release: it must name the lockstep version every package
+      # manifest carries, or npm would get a version nobody tagged.
+      - name: Tag matches the package versions
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          status=0
+          for manifest in packages/compiler/package.json packages/core/package.json packages/aruna/package.json packages/create-aruna-app/package.json; do
+            version="$(node -p "require('./${manifest}').version")"
+            if [ "$version" != "$tag_version" ]; then
+              echo "::error file=${manifest}::version ${version} does not match tag ${GITHUB_REF_NAME}"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Tag points at a commit on main
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::${GITHUB_REF_NAME} (${GITHUB_SHA}) is not on main; stable releases are cut from main only"
+            exit 1
+          fi
+
   build-native:
     name: build ${{ matrix.target }}
+    needs: [verify, release-ref]
     runs-on: ${{ matrix.runner }}
     strategy:
       # Don't publish a partial graph: if any native target fails to build, the
@@ -147,6 +187,9 @@ jobs:
   publish:
     needs: build-native
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm provenance + OIDC trusted publishing
     steps:
       - uses: actions/checkout@v4
 

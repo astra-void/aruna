@@ -1,6 +1,8 @@
 name: ci
 
-# Verifies every pull request and every push to main.
+# Verifies every pull request and every push to main. publish.yaml also calls it
+# (workflow_call) on the exact commit it is about to release, so nothing reaches
+# npm without passing these jobs.
 #
 # Three jobs, split by what they need rather than by what they check:
 #
@@ -29,9 +31,13 @@ on:
     branches:
       - main
   workflow_dispatch:
+  workflow_call:
 
+# github.workflow is the caller's name when publish.yaml calls this, so a release
+# run gets its own group: a push to main never cancels the gate of a canary
+# published from main, and the group never collides with publish's own.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

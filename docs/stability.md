@@ -79,7 +79,7 @@ below. Minors add; patches fix. A bug fix that changes behavior someone could de
 with a CHANGELOG entry, never in a patch.
 
 **Canary releases** (`x.y.(z+1)-canary.<sha7>.<run>`, npm tag `canary`) are published
-from manual runs of the publish workflow (`workflow_dispatch`, channel `canary`), with no
+from manual runs of the publish workflow (`workflow_dispatch`, canary-only), with no
 guarantees beyond "built from the commit it was run on". They exist to try a change before it is released —
 `npm install @arunajs/aruna@canary` — never to depend on from a project you ship.
 
