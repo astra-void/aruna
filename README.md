@@ -871,7 +871,7 @@ Already shipped, and so no longer on this list: resources and resource invalidat
 
 - production Studio validation for remoting
 - full schema compiler
-- remote/action codegen beyond action stubs, the signal registry, and generated entry scripts
+- remote/action codegen beyond action stubs, the signal registry, the resource modules, and generated entry scripts
 - generated Roblox Instance creation
 - LSP
 - VSCode extension

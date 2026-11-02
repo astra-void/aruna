@@ -1,8 +1,13 @@
 # Aruna Spec Alignment
 
+> **Historical record.** This page tracked the implementation against the RFC while the
+> framework was being built, and parts of it describe that time. For what Aruna does now, read
+> the [README](../README.md) and [packages/aruna/docs](../packages/aruna/docs); for the
+> compatibility rules, [stability.md](stability.md).
+
 ## Current status
 
-Aruna is aligned with the compiler-first direction of the RFC, and the core MVP contract — serialization boundary, fixed-window rate limits, the contract snapshot, contract diff, and package-consumption validation — is now implemented and aligned. Two primitives have since been added on top of the action surface — the `defineSignal` server→client push channel and a schema-driven binary codec with numeric width hints (see [Added beyond Phase 1 action transport](#added-beyond-phase-1-action-transport)). Signals are compiler-discovered (recorded in `manifest.signals`, listed by `aruna inspect signals`, and included in the contract snapshot). The remaining compiler-side work is stabilization and a create-app starter contract, not a policy/capability system.
+Aruna is aligned with the compiler-first direction of the RFC, and the core MVP contract — serialization boundary, fixed-window rate limits, the contract snapshot, contract diff, and package-consumption validation — is now implemented and aligned. Two primitives have since been added on top of the action surface — the `defineSignal` server→client push channel and a schema-driven binary codec with numeric width hints (see [Added beyond Phase 1 action transport](#added-beyond-phase-1-action-transport)). Signals are compiler-discovered (recorded in `manifest.signals`, listed by `aruna inspect signals`, and included in the contract snapshot). The remaining compiler-side work is stabilization, not a policy/capability system; the starter ships as `create-aruna-app`.
 
 `apps/rbxts-harness` now intentionally mirrors Recommended Layout v0 closely enough to serve as the realistic starter/reference harness, while still remaining harness metadata rather than generated Rojo output or create-app scaffolding.
 
@@ -63,8 +68,8 @@ Two primitives extend the surface past the original action-only transport. They 
 | ---------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | README framing                     | Keep        | The README documents the rbxts harness running the turnkey `aruna build` (stub generation + `rbxtsc` Luau compile) over a single `out` Rojo mount; the temporary partition layout shim has been removed.                                                                                                                                                                                                                                                                                                     |
 | Harness generatedDir               | Keep        | The private rbxts harness keeps generated files under `src/.aruna` and lets the turnkey `aruna build` drive `rbxtsc` directly (no partition staging into `shared/.aruna`/`server/.aruna`). The workspace `aruna` package mount remains in `rbxts_include` as private harness-only glue. |
-| Recommended layout starter harness | In progress | The rbxts harness now mirrors the recommended layout, but create-app and generated Rojo remain deferred.                                                                                                                                                                                                                                                                                                                  |
-| Package consumption foundation     | Keep        | The first-party package-consumption harness is in place, and the packed smoke installs the local tarballs without registry fetches, installs the generated aliases and vendored runtime, validates public package subpaths, passes TypeScript, and compiles to Luau with `rbxtsc`. The publish-like package story is closed for package-layout and rbxtsc compile; runtime execution tests and production Studio validation are later work.                                                                                                          |
+| Recommended layout starter harness | In progress | The rbxts harness mirrors the recommended layout, and `create-aruna-app` scaffolds it (including `default.project.json`) for new projects.                                                                                                                                                                                                                                                                                                                  |
+| Package consumption foundation     | Keep        | The first-party package-consumption harness is in place, and the packed smoke installs the local tarballs without registry fetches, installs the generated aliases and vendored runtime, validates public package subpaths, passes TypeScript, and compiles to Luau with `rbxtsc`. The publish-like package story is closed for package-layout and rbxtsc compile; runtime execution runs under Lune (`apps/roblox-runtime-test`); production Studio validation is later work.                                                                                                          |
 
 ## Next cutline
 
@@ -73,7 +78,7 @@ The serialization boundary, fixed-window rate limits, the contract snapshot, con
 1. Stabilize current compiler, action, runtime, and package-consumption behavior.
 2. **Done**: runtime execution tests for the roblox-ts-native runtime now run through a Lune/Luau harness (`apps/roblox-runtime-test`), compiling the runtime to Luau and executing it under Lune.
 3. Refine thin authority inspection without adding a full policy/capability system.
-4. Write the create-app RFC / starter contract.
+4. **Done**: the create-app starter contract ([create-app-plan.md](create-app-plan.md)) shipped as `create-aruna-app`.
 5. **Done**: resources and invalidation were designed (docs/rfcs/resources.md) and
    implemented. The deferral held until the one ordered reliable channel and the
    primitive registry existed; with both, a resource is one compiler primitive and one

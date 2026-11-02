@@ -4,7 +4,9 @@
 
 ## Document Status
 
-Draft
+Draft, written before implementation. Kept as the record of the original design
+intent; where it disagrees with the [README](../README.md) or
+[packages/aruna/docs](../packages/aruna/docs), those describe what Aruna does now.
 
 ## Implementation Status
 

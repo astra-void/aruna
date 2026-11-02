@@ -9,7 +9,7 @@ steps: `aruna init` → `aruna add domain shop --with ui` → `aruna build`.
 
 Status: create-app RFC / planning is now unblocked. The packed package-consumption smoke installs the local tarballs, runs `doctor --fix` and `build`, generates `src/.aruna` action files, vendors the native runtime, passes TypeScript, and compiles to Luau with `rbxtsc` (see [package-consumption.md](package-consumption.md)). The earlier `rbxtsc` package-layout blocker is resolved by the vendored-runtime model, so the prior gate on create-app planning is lifted.
 
-Create-app **implementation** stays deferred until the starter contract is written. Writing this RFC / starter contract is the planning step that unblocks implementation; generated Rojo and generated Roblox Instances remain out of scope.
+The rest of this note is the plan as it was written before implementation; where it says "deferred", read it as the state at the time. Generated Roblox Instances remain out of scope.
 
 ## Intended starter output
 
