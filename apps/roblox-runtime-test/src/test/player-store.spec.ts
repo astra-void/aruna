@@ -403,6 +403,73 @@ describe("documents", () => {
     expect(storedCoins(backend)).toBe(0);
   });
 
+  // The takeover above is caught because server-b's lock is still on the record.
+  // Once server-b releases, the record carries no lock at all, and a stale
+  // session must still not write: its value is older than what server-b saved.
+  it("refuses to write once another server has taken the lock and released it", async () => {
+    const backend = createMemoryStoreBackend();
+    let clock = 1_000;
+    const first = createPlayerStore(definition(), {
+      backend,
+      owner: "server-a",
+      nowMs: () => clock,
+      scheduler: parkedHeartbeats(),
+    });
+    const stale = await first.load(player);
+    if (!stale.ok) {
+      throw "expected the load to succeed";
+    }
+
+    clock = 30_000;
+    const second = createPlayerStore(definition(), {
+      backend,
+      owner: "server-b",
+      nowMs: () => clock,
+      scheduler: parkedHeartbeats(),
+    });
+    const fresh = await second.load(player);
+    if (!fresh.ok) {
+      throw "expected the takeover to succeed";
+    }
+    fresh.value.update((current: Profile) => ({ ...current, coins: 50 }));
+    const released = await second.release(player);
+    expect(released.ok).toBe(true);
+    expect(storedCoins(backend)).toBe(50);
+
+    stale.value.update((current: Profile) => ({ ...current, coins: 100 }));
+    const saved = await stale.value.save();
+    expect(saved.ok === false && saved.error.name).toBe("StoreLockedError");
+    expect(storedCoins(backend)).toBe(50);
+  });
+
+  // A save (or a heartbeat) that runs after the release used to write the
+  // document again, putting this server's lock back on a record nobody would
+  // heartbeat: the next server could not load the player until the TTL ran out.
+  it("does not lock a record again when a released document is saved", async () => {
+    const backend = createMemoryStoreBackend();
+    const store = createPlayerStore(definition(), {
+      backend,
+      owner: "server-a",
+      nowMs: () => 1_000,
+      scheduler: parkedHeartbeats(),
+    });
+    const loaded = await store.load(player);
+    if (!loaded.ok) {
+      throw "expected the load to succeed";
+    }
+    loaded.value.update((current: Profile) => ({ ...current, coins: 7 }));
+    const document = loaded.value;
+    const queuedSave = document.save();
+    const released = await store.release(player);
+    expect(released.ok).toBe(true);
+    await queuedSave;
+
+    const late = await document.save();
+    expect(late.ok === false && late.error.name).toBe("StoreClosedError");
+    expect(storedLock(backend)).toBeUndefined();
+    expect(storedCoins(backend)).toBe(7);
+  });
+
   it("never writes back a record a newer Aruna marked must-understand, even holding the lock", async () => {
     const backend = createMemoryStoreBackend();
     const store = createPlayerStore(definition(), {

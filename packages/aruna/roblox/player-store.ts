@@ -488,6 +488,23 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 							);
 							return undefined;
 						}
+						// Every write of an open document happens under our lock, so a
+						// readable record with no lock means it is not ours any more:
+						// another server took it over and has since released it, and its
+						// saves are newer than our value. Our own release is the one write
+						// that removes the lock, and the record still has it then — unless
+						// that release was retried after a first attempt that did land, in
+						// which case the record already holds exactly our value.
+						if (decoded.ok && currentLock === undefined) {
+							if (fingerprint(decoded.value.value) === fingerprint(value)) {
+								return undefined;
+							}
+							failure = storeFail(
+								"StoreLockedError",
+								`Store ${definition.id} key ${state.key} no longer carries this server's lock; another session saved it since. Refusing to overwrite it.`,
+							);
+							return undefined;
+						}
 						writtenMeta = decoded.ok ? decoded.value.meta : state.meta;
 						return createStoreEnvelope(version, value, at, lock, writtenMeta);
 					},
@@ -583,6 +600,12 @@ export function createPlayerStore<TSchema extends Schema, TPlayer = Player>(
 		// the lock over.
 		const flush = (operation: StoreOperation, heartbeat: boolean): Promise<StoreResult<unknown>> =>
 			enqueue(() => {
+				// A heartbeat or save queued behind the release runs after it: the
+				// document is closed, and writing now would put our lock back on a
+				// record nobody will heartbeat again.
+				if (!state.active) {
+					return Promise.resolve(closed());
+				}
 				const at = nowMs();
 				const clean = fingerprint(state.value) === state.persisted;
 				const lockDue = heartbeat && at - state.lockWrittenAtMs >= session.lockTtlMs / 2;

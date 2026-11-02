@@ -140,6 +140,14 @@ The lifecycle:
 3. **Release** writes one final time and clears the lock, so the player's next server can
    load immediately instead of waiting out the TTL.
 
+**A session that lost its lock never writes again.** Every write of an open document
+checks that the record still carries this server's lock. If another server took the lock
+over (this server's heartbeats failed past the TTL), the write is refused with
+`StoreLockedError` and the document closes, whether that server still holds the lock or
+has already released it: its saves are newer than this server's value. A save or
+heartbeat that runs after the document's own release is refused with `StoreClosedError`
+instead of putting the lock back.
+
 **One session per key on a server.** A player who rejoins the same server is a new
 `Player` with the same key, and a server's own lock never blocks it. So a load ends the
 key's previous session on this server first: a departed player's document (still

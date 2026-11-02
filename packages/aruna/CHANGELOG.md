@@ -961,6 +961,14 @@ the game build like any other module.
 
 ### Security
 
+- **A player-store session that lost its lock can no longer overwrite newer
+  data.** A write was refused only while another server's lock was on the
+  record. Once that server released the player, the record carried no lock, so a
+  stale session (one whose heartbeats had failed past the TTL) could save its
+  older value over the newer server's progress and put its lock back. A readable
+  record without this server's lock now refuses the write with
+  `StoreLockedError`, and a save or heartbeat queued behind a release returns
+  `StoreClosedError` instead of re-locking the record.
 - **Optimistic-call tags are capped per caller.** A tag lives until a load that
   started after it finishes, not until its call settles, so a client could add
   one per call to a key whose load stayed open, without bound. One caller now
