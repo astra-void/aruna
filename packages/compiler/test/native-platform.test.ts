@@ -123,4 +123,10 @@ describe("native target helpers", () => {
       }),
     ).toThrow(/freebsd\/x64/);
   });
+
+  it("names the supported targets when the platform is not one of them", () => {
+    expect(() =>
+      resolveNativeTarget({ platform: "win32", arch: "ia32" as NodeJS.Architecture }),
+    ).toThrow(/win32\/ia32\. Prebuilt binaries exist for: darwin-arm64, .*linux-arm64-musl\./);
+  });
 });

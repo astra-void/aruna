@@ -139,7 +139,10 @@ const NATIVE_TARGETS: NativeTargetMap = {
 };
 
 function unsupportedPlatformMessage(platform: string, arch: string): string {
-  return `Aruna native compiler is not available for ${platform}/${arch}.`;
+  return (
+    `Aruna native compiler is not available for ${platform}/${arch}. ` +
+    `Prebuilt binaries exist for: ${SUPPORTED_NATIVE_TARGETS.join(", ")}.`
+  );
 }
 
 function isNativeTarget(target: string): target is NativeTarget {
