@@ -22,7 +22,7 @@ The `aruna` binary drives the compiler. Run it via your package manager (e.g.
 | `aruna inspect contract` | Print a deterministic contract snapshot: actions, signals, stores, and resources. |
 | `aruna inspect modules` | Print how each file is classified (client/server/shared). |
 | `aruna inspect graph` | Print the import graph. |
-| `aruna contract diff` | Compare contract snapshots — actions, signals, and stores (`--baseline`, `--from`, `--to`; with none, the committed snapshot). |
+| `aruna contract diff` | Compare contract snapshots — actions, signals, stores, and resources (`--baseline`, `--from`, `--to`; with none, the committed snapshot). |
 | `aruna contract update` | Write the current contract to the committed snapshot (`contract.snapshot`); refuses a store change that leaves saved records unreadable. `--check` writes nothing and exits 1 when the snapshot is out of date. |
 | `aruna migrate <name>` | Run a codemod for one of Aruna's breaking changes (`--list` to see them, `--dry-run` for a unified diff that writes nothing). See [Codemods](https://github.com/astra-void/aruna/blob/main/docs/codemods.md). |
 
@@ -149,6 +149,21 @@ unreadableRecordChanges }`.
 and **prunes stale artifacts** a previous build emitted and this one does not (a removed
 signal's generated file, for example). Pruning is confined to the `generatedDir` and
 the owned ledger, so hand-written files are never touched.
+
+## Exit codes
+
+Every command exits 0 when it succeeds. Beyond that:
+
+| Command | Exits non-zero when |
+| --- | --- |
+| `check`, `build`, `inspect …` | the compiler reports an error (`1`), or, with `--warnings-as-errors`, a warning |
+| `doctor` | config or tsconfig problems remain, or the Rojo project does not mount `out/` (`1`) |
+| `contract diff` | a change is **breaking** (`1`); the comparison could not run, because the project has compiler errors or a snapshot is unreadable (`2`) |
+| `contract update` | it refused to write (a store change that leaves records unreadable, or a project that does not compile), or with `--check`, the snapshot is out of date (`1`) |
+| `test` | a spec failed or the suite could not run (`1`) |
+| `migrate` | the codemod could not run (`1`) |
+
+`--json` changes the output, not the exit code.
 
 ## Global flags
 
