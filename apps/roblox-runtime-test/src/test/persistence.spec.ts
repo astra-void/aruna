@@ -417,3 +417,102 @@ describe("player stores: failure paths", () => {
     harness.dispose();
   });
 });
+
+describe("player stores: retries, migrations, and final writes", () => {
+  it("refuses a record its migration turns into a value the schema rejects, writing nothing", async () => {
+    const s = stores();
+    const player = createTestPlayer({ userId: 30 });
+    // u16 holds at most 65535: the migrated level does not fit.
+    s.progressBackend.seed("player_30", { lvl: 70_000 }, { version: 1 });
+    const result = await s.progress.load(player);
+    expect(result.ok === false && result.error.name).toBe("StoreMigrationError");
+    expect(result.ok === false && result.error.message.find("migrated a record", 1, true)[0] !== undefined).toBe(
+      true,
+    );
+    expect(s.progressBackend.writes()).toBe(0);
+    const record = s.progressBackend.record("player_30");
+    expect(record.kind === "envelope" && record.value).toEqual({ lvl: 70_000 });
+  });
+
+  it("retries a throttled lock claim and loads", async () => {
+    // Backoffs run on the next frame; the 30 s heartbeat stays parked.
+    const soon: StoreScheduler = {
+      delay: (ms, callback) => {
+        if (ms < 10_000) {
+          task.defer(callback);
+        }
+        return { cancel: () => {} };
+      },
+    };
+    const backend = createTestStoreBackend(() => 1_000_000);
+    const store = createPlayerStore(
+      definePlayerStore({
+        id: "player.throttled",
+        schema: schema.object({ level: schema.u16() }),
+        defaultValue: () => ({ level: 1 }),
+        retry: { attempts: 3 },
+        session: { acquireAttempts: 1 },
+      }),
+      { backend, owner: "server-a", scheduler: soon, nowMs: () => 1_000_000 },
+    );
+    const player = createTestPlayer({ userId: 31 });
+    backend.failNext("update", 2, "429: Too many requests (test throttle)");
+    const result = await store.load(player);
+    expect(result.ok).toBe(true);
+    expect(backend.requests("update")).toBe(3);
+  });
+
+  it("keeps the record and its lock when the final write of a release fails", async () => {
+    const s = stores();
+    const player = createTestPlayer({ userId: 32 });
+    await s.progress.load(player);
+    s.progress.get(player)!.set({ level: 9, xp: 0 });
+    s.progressBackend.failAll("update", OUTAGE);
+    const released = await s.progress.release(player);
+    expect(released.ok).toBe(false);
+    const record = s.progressBackend.record("player_32");
+    // Nothing was written: the saved level is the old one, and the lock is still
+    // this server's, so another server waits out the TTL rather than reading a
+    // record this one may yet write.
+    expect(record.kind === "envelope" && (record.value as { level: number }).level).toBe(1);
+    expect(record.kind === "envelope" && record.lock !== undefined && record.lock.owner).toBe("server-a");
+    s.progressBackend.heal();
+  });
+
+  it("loads once another server's lock is released, on a later attempt", async () => {
+    const queued = new Array<() => void>();
+    const manual: StoreScheduler = {
+      delay: (_ms, callback) => {
+        queued.push(callback);
+        return { cancel: () => {} };
+      },
+    };
+    const backend = createTestStoreBackend(() => 1_000_000);
+    const definition = definePlayerStore({
+      id: "player.contended",
+      schema: schema.object({ level: schema.u16() }),
+      defaultValue: () => ({ level: 1 }),
+      retry: { attempts: 1 },
+      session: { acquireAttempts: 3 },
+    });
+    const first = createPlayerStore(definition, { backend, owner: "server-a", scheduler: parked, nowMs: () => 1_000_000 });
+    const second = createPlayerStore(definition, { backend, owner: "server-b", scheduler: manual, nowMs: () => 1_000_000 });
+    const player = createTestPlayer({ userId: 33 });
+    expect((await first.load(player)).ok).toBe(true);
+
+    let loaded: boolean | undefined;
+    second.load(player).then((result) => (loaded = result.ok));
+    await frame();
+    expect(loaded).toBe(undefined);
+
+    expect((await first.release(player)).ok).toBe(true);
+    // Run the lock retry the second server scheduled while it waited.
+    while (loaded === undefined && queued.size() > 0) {
+      queued.remove(0)!();
+      await frame();
+    }
+    expect(loaded).toBe(true);
+    const record = backend.record("player_33");
+    expect(record.kind === "envelope" && record.lock !== undefined && record.lock.owner).toBe("server-b");
+  });
+});

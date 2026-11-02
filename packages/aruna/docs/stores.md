@@ -140,6 +140,14 @@ The lifecycle:
 3. **Release** writes one final time and clears the lock, so the player's next server can
    load immediately instead of waiting out the TTL.
 
+**Edit a player's data through their session.** `playerStore.store` is the plain `Store`
+underneath: its `get`, `save`, and `update` read and write the record directly and carry
+the session lock forward without checking it. Used on a player whose session is open on
+any server, such a write lands, and the session's next heartbeat or save writes its own
+value over it. Change an online player's data through their document (`ctx.store`, or
+`playerStore.get(player)` on the server that holds them); use `playerStore.store` only for
+players who are offline (no lock in the record), such as admin tools or migrations.
+
 **A session that lost its lock never writes again.** Every write of an open document
 checks that the record still carries this server's lock. If another server took the lock
 over (this server's heartbeats failed past the TTL), the write is refused with
