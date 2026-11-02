@@ -71,6 +71,7 @@ describe("native staging helpers", () => {
     expect(packageJson).toEqual({
       name: "@arunajs/compiler-darwin-arm64",
       version: "0.1.0",
+      license: "MIT",
       repository: {
         type: "git",
         url: "git+https://github.com/astra-void/aruna.git",

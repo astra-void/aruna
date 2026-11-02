@@ -20,6 +20,7 @@ type SourcePackageJson = {
   name?: string;
   version?: string;
   type?: string;
+  license?: string;
   repository?: unknown;
   bin?: string | Record<string, string>;
   main?: string;
@@ -120,6 +121,7 @@ export async function stageWorkspacePackage(
     name: sourcePackageJson.name,
     version: options.version,
     type: sourcePackageJson.type,
+    license: sourcePackageJson.license,
     repository: sourcePackageJson.repository,
     bin: sourcePackageJson.bin,
     main: sourcePackageJson.main,

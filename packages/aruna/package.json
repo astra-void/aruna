@@ -2,6 +2,7 @@
   "name": "@arunajs/aruna",
   "version": "0.6.0",
   "private": false,
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/astra-void/aruna.git"

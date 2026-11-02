@@ -68,6 +68,7 @@ async function stageCompilerPackageStub(options: {
       {
         name: "@arunajs/compiler",
         version,
+        license: "MIT",
         type: "module",
         main: "./dist/index.js",
         module: "./dist/index.js",
@@ -214,6 +215,53 @@ describe("release orchestrator", () => {
     for (const packageJsonText of stagedPackageJsons) {
       expect(packageJsonText).not.toContain("workspace:*");
     }
+
+    // Every package in the graph declares the license and ships the LICENSE file.
+    const repositoryLicense = await fsp.readFile(path.join(workspaceRoot, "LICENSE"), "utf8");
+    for (const packageName of [
+      `compiler-${hostTarget}`,
+      "compiler",
+      "core",
+      "aruna",
+      "create-aruna-app",
+    ]) {
+      const packageDirectory = path.join(stagingRoot, ".npm", packageName);
+      const packageJson = JSON.parse(
+        await fsp.readFile(path.join(packageDirectory, "package.json"), "utf8"),
+      ) as { license?: string };
+      expect(packageJson.license, packageName).toBe("MIT");
+      expect(await fsp.readFile(path.join(packageDirectory, "LICENSE"), "utf8")).toBe(
+        repositoryLicense,
+      );
+    }
+  });
+
+  it("refuses to stage a package without the release license", async () => {
+    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget }) => ({
+      targetInfo: nativeTargetInfo(options.target),
+      profile: "release",
+      sourceArtifactPath: await createNativeArtifact(options.target),
+      command: "cargo",
+      args: [],
+    }));
+
+    await expect(
+      prepareRelease(
+        { mode: "local" },
+        {
+          spawnSync: vi.fn(() => ({ status: 0, error: undefined })),
+          buildNativeArtifact,
+          stageCompilerPackage: async (options) => {
+            const staged = await stageCompilerPackageStub(options);
+            const packageJson = JSON.parse(await fsp.readFile(staged.packageJsonPath, "utf8"));
+            delete packageJson.license;
+            await fsp.writeFile(staged.packageJsonPath, JSON.stringify(packageJson));
+            return staged;
+          },
+          stagingRoot,
+        },
+      ),
+    ).rejects.toThrow(/must declare license MIT, found none/);
   });
 
   it("includes all host-buildable targets in full mode", () => {

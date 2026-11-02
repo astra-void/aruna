@@ -46,6 +46,7 @@ export async function stageNativePackage(
       {
         name: nativePackageName(options.target),
         version: options.version,
+        license: "MIT",
         repository: {
           type: "git",
           url: "git+https://github.com/astra-void/aruna.git",

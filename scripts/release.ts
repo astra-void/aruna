@@ -81,6 +81,9 @@ const compilerPackageJsonPath = path.join(compilerPackageRoot, "package.json");
 const corePackageRoot = path.join(workspaceRoot, "packages", "core");
 const arunaPackageRoot = path.join(workspaceRoot, "packages", "aruna");
 const createArunaPackageRoot = path.join(workspaceRoot, "packages", "create-aruna-app");
+// The repository LICENSE ships inside every package of the graph; npm includes a
+// LICENSE file whatever `files` says.
+const licensePath = path.join(workspaceRoot, "LICENSE");
 const releaseProfile: NativeBuildProfile = "release";
 
 export type StagingLayout = {
@@ -228,6 +231,45 @@ async function readCompilerVersion(): Promise<string> {
   return packageJson.version;
 }
 
+// The compiler manifest's license is the one every staged package must carry.
+async function readReleaseLicense(): Promise<string> {
+  const packageJson = JSON.parse(await fs.readFile(compilerPackageJsonPath, "utf8")) as {
+    license?: string;
+  };
+  if (typeof packageJson.license !== "string" || packageJson.license.length === 0) {
+    throw new Error(`The compiler package has no license field: ${compilerPackageJsonPath}`);
+  }
+
+  return packageJson.license;
+}
+
+async function copyLicense(packageDirectory: string): Promise<void> {
+  await fs.copyFile(licensePath, path.join(packageDirectory, "LICENSE"));
+}
+
+async function validateLicense(packageDirectory: string, expectedLicense: string): Promise<void> {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(packageDirectory, "package.json"), "utf8"),
+  ) as { license?: string };
+  if (packageJson.license !== expectedLicense) {
+    throw new Error(
+      `Package ${workspaceRelative(packageDirectory)} must declare license ${expectedLicense}, found ${
+        packageJson.license ?? "none"
+      }.`,
+    );
+  }
+
+  const [staged, source] = await Promise.all([
+    fs.readFile(path.join(packageDirectory, "LICENSE"), "utf8").catch(() => undefined),
+    fs.readFile(licensePath, "utf8"),
+  ]);
+  if (staged !== source) {
+    throw new Error(
+      `Package ${workspaceRelative(packageDirectory)} must ship the repository LICENSE file.`,
+    );
+  }
+}
+
 function runCommand(
   spawn: typeof spawnSync,
   command: string,
@@ -277,7 +319,7 @@ async function validateNativePackage(
   const expectedArtifact = nativeTargetInfo(target).artifactName;
   const expectedTargetInfo = nativeTargetInfo(target);
   const entries = (await fs.readdir(packageDirectory)).filter((entry) => !entry.startsWith("."));
-  const expectedEntries = ["package.json", expectedArtifact];
+  const expectedEntries = ["package.json", "LICENSE", expectedArtifact];
 
   if (
     entries.length !== expectedEntries.length ||
@@ -434,6 +476,17 @@ async function validateStagedRelease(
   await ensureNoWorkspaceProtocols(path.join(staging.coreDirectory, "package.json"));
   await ensureNoWorkspaceProtocols(path.join(staging.arunaDirectory, "package.json"));
   await ensureNoWorkspaceProtocols(path.join(staging.createArunaDirectory, "package.json"));
+
+  const expectedLicense = await readReleaseLicense();
+  for (const packageDirectory of [
+    ...stagedNativePackages.map((entry) => entry.packageDirectory),
+    compilerPackageDirectory,
+    staging.coreDirectory,
+    staging.arunaDirectory,
+    staging.createArunaDirectory,
+  ]) {
+    await validateLicense(packageDirectory, expectedLicense);
+  }
 }
 
 type StagedNativePackage = { packageDirectory: string; target: NativeTarget };
@@ -512,6 +565,7 @@ async function buildAndStageNativeTargets(
       target,
       sourceArtifactPath: buildResult.sourceArtifactPath,
     });
+    await copyLicense(staged.packageDirectory);
     stagedNativePackages.push({ packageDirectory: staged.packageDirectory, target });
     nativeTargets.push(target);
   }
@@ -549,6 +603,15 @@ async function stagePublishablePackages(
     stagedPackageDirectory: staging.createArunaDirectory,
     version,
   });
+
+  for (const packageDirectory of [
+    compilerPackage.packageDirectory,
+    staging.coreDirectory,
+    staging.arunaDirectory,
+    staging.createArunaDirectory,
+  ]) {
+    await copyLicense(packageDirectory);
+  }
 
   return { compilerPackageDirectory: compilerPackage.packageDirectory };
 }
