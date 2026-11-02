@@ -144,3 +144,4 @@ raw RemoteEvent. Pass `createClientApp({ transport })` to customize it (request 
 timeouts).
 
 Next: [actions.md](./actions.md), [signals.md](./signals.md), [resources.md](./resources.md), [stores.md](./stores.md), [schema.md](./schema.md), [testing.md](./testing.md), [shared-safety.md](./shared-safety.md), [observability.md](./observability.md).
+If something does not build or load: [troubleshooting.md](./troubleshooting.md).
