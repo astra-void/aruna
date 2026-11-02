@@ -9,8 +9,14 @@ here rather than left to each CHANGELOG entry.
 The [Versioning](#versioning) and [Deprecation](#deprecation) rules below take effect at
 the **first public release**.
 
-> **TODO:** the first public release is not defined yet (which version, and what makes a
-> release "public"). Define it here before it ships.
+A release is **public** once it is announced: release notes, a post, or documentation that
+points people at it to install. Being on npm is not enough. 0.1.0 through 0.6.0 are on npm,
+0.6.0 under `latest`, but none was announced, so they are pre-public releases and carry
+none of the guarantees below; neither do canaries. The first announced release is the first
+public release.
+
+> **TODO:** the first public release's version is not chosen yet. Name it here before it
+> ships.
 
 Until then Aruna has no users to keep working, so compatibility has no value:
 
