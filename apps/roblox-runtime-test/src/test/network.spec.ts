@@ -348,6 +348,43 @@ describe("test network: hostile and broken clients", () => {
     net.dispose();
   });
 
+  // Items a client never sends: a response, a state item, an unknown kind, a
+  // bare string, a kind that is a string. Each is dropped unanswered, reported,
+  // and runs nothing; the server keeps serving the same client.
+  it("drops items of a kind a client never sends, and keeps serving", async () => {
+    const g = makeGame();
+    const reports = new Array<string>();
+    const net = createTestNetwork({
+      actions: g.actions,
+      resources: g.resources,
+      players: [101],
+      onAbuse: (_player, info) => reports.push(info.reason),
+    });
+    const alice = net.client(101);
+    for (const item of [
+      { t: 2, i: "r", r: { ok: true } },
+      { t: 4, r: "economy.wallet", v: 1, d: { coins: 9 } },
+      { t: 99 },
+      "x",
+      { t: "1", i: "s", a: "economy.earn", d: { amount: 1 } },
+    ] as ReadonlyArray<defined>) {
+      net.link(101).up.inject(createWireFrame([item]));
+    }
+    net.flush();
+    expect(g.runsOf("earn:101")).toBe(0);
+    expect(reports).toEqual([
+      "malformed-envelope",
+      "malformed-envelope",
+      "malformed-envelope",
+      "malformed-envelope",
+      "malformed-envelope",
+    ]);
+    const after = alice.invoke("economy.earn", { amount: 2 });
+    net.flush();
+    expect(await after).toBe(2);
+    net.dispose();
+  });
+
   it("runs a duplicated call twice, and an idempotent one once", async () => {
     const g = makeGame();
     const net = network(g);

@@ -389,6 +389,17 @@ describe("resources: authority and isolation", () => {
     send(alice, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: "quests.progress", o: 1 });
     expect(reports[reports.size() - 1]).toBe("101:budget-exhausted");
     expect(host.isSubscribed("quests.progress", alice)).toBe(false);
+
+    // Bob leaves (what the app does on PlayerRemoving), then a subscription of
+    // his still arrives: it creates no state, loads nothing, and is not reported.
+    const reportsBefore = reports.size();
+    registry.forgetPlayer(bob);
+    host.forgetPlayer(bob);
+    send(bob, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: "quests.progress", o: 1 });
+    send(bob, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: "quests.progress", o: 0 });
+    expect(host.isSubscribed("quests.progress", bob)).toBe(false);
+    expect(world.loadsOf(bob)).toBe(0);
+    expect(reports.size()).toBe(reportsBefore);
     binding.disconnect();
     host.dispose();
   });
