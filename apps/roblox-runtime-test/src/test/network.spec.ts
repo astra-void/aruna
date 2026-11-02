@@ -172,6 +172,54 @@ describe("test network: hostile and broken clients", () => {
     net.dispose();
   });
 
+  // The optimistic flag (`o`, docs/rfcs/ui-bindings.md) is honoured only as `1`
+  // with a valid key. Anything else must leave the call an ordinary one: run once,
+  // charged once, never reported as abuse, and the server keeps serving.
+  it("treats a malformed optimistic flag as an ordinary call", async () => {
+    const g = makeGame();
+    const reports = new Array<string>();
+    const net = createTestNetwork({
+      actions: g.actions,
+      resources: g.resources,
+      players: [101],
+      onAbuse: (_player, info) => reports.push(info.reason),
+    });
+    const alice = net.client(101);
+    const call = (i: string, extra: object) =>
+      net.link(101).up.inject(createWireFrame([{ t: WIRE_ITEM_CALL, i, a: "economy.earn", d: { amount: 1 }, ...extra }]));
+    call("m1", { k: "k1", o: true });
+    call("m2", { k: "k2", o: "1" });
+    call("m3", { o: 1 });
+    call("m4", { k: "k".rep(65), o: 1 });
+    call("m5", { k: "k5", o: 2 });
+    net.flush();
+    expect(g.runsOf("earn:101")).toBe(5);
+    expect(reports).toEqual([]);
+    const after = alice.invoke("economy.earn", { amount: 1 });
+    net.flush();
+    expect(await after).toBe(6);
+    net.dispose();
+  });
+
+  it("runs a replayed optimistic call once", async () => {
+    const g = makeGame();
+    const net = createTestNetwork({ actions: g.actions, resources: g.resources, players: [101] });
+    const alice = net.client(101);
+    const replay = () =>
+      net.link(101).up.inject(
+        createWireFrame([{ t: WIRE_ITEM_CALL, i: "r", a: "economy.earn", d: { amount: 3 }, k: "r1", o: 1 }]),
+      );
+    replay();
+    net.flush();
+    replay();
+    net.flush();
+    expect(g.runsOf("earn:101")).toBe(1);
+    const after = alice.invoke("economy.earn", { amount: 1 });
+    net.flush();
+    expect(await after).toBe(4);
+    net.dispose();
+  });
+
   it("runs a duplicated call twice, and an idempotent one once", async () => {
     const g = makeGame();
     const net = network(g);
