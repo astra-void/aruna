@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+To be released as **0.7.0, the first public release**. 0.6.0 and earlier were published
+to npm but never announced; the compatibility rules in
+[docs/stability.md](../../docs/stability.md) start with 0.7.0, so this release lists its
+changes from 0.6.0 without migration notes.
+
 The testing release. A project could always exercise an action in-process — the
 runtime has had `app.dispatch` for that since 0.1 — but nothing shipped that a
 consumer could actually run: the harness lived in this repo's own `apps/`, the

@@ -14,8 +14,9 @@ Its product value comes from compiler-discovered server actions, server-owned [r
 
 ## Status
 
-Aruna is pre-1.0 and has not had its first public release: any release may still break
-things ([docs/stability.md](docs/stability.md)). What exists today, and how far each part has
+Aruna is pre-1.0. Its first public release will be 0.7.0; until then any release may
+still break things, and from 0.7.0 the pre-1.0 rules in [docs/stability.md](docs/stability.md)
+apply. What exists today, and how far each part has
 been checked:
 
 | Feature | What it is | Checked by | Guide |

@@ -15,8 +15,9 @@ points people at it to install. Being on npm is not enough. 0.1.0 through 0.6.0 
 none of the guarantees below; neither do canaries. The first announced release is the first
 public release.
 
-> **TODO:** the first public release's version is not chosen yet. Name it here before it
-> ships.
+**The first public release is 0.7.0.** The rules below apply from 0.7.0 on. 0.7.0 itself
+may change anything from 0.6.0 without a deprecation period; its CHANGELOG lists the
+changes without migration notes.
 
 Until then Aruna has no users to keep working, so compatibility has no value:
 
@@ -78,6 +79,14 @@ From the first public release.
 marked **Breaking** in the CHANGELOG with migration notes, and a codemod when the
 migration is mechanical. A **patch** release (`0.x.y`) contains no breaking changes. A
 project that wants no surprises pins the minor (`~0.7.0`).
+
+For example, renaming an export of `aruna/server` after 0.7.0:
+
+- It cannot ship in 0.7.1: a patch never breaks.
+- It can ship in 0.8.0. The old name keeps working in 0.8.0 with a warning that names the
+  new one ([Deprecation](#deprecation)), an `aruna migrate` codemod does the rename, and
+  the CHANGELOG lists it under `Deprecated`. The old name is removed in 0.9.0 at the
+  earliest, listed under `Removed` and marked **Breaking**.
 
 **From 1.0**: breaking changes only in a **major** release, after the deprecation period
 below. Minors add; patches fix. A bug fix that changes behavior someone could depend on

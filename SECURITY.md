@@ -31,7 +31,9 @@ Roblox, roblox-ts, or Rojo themselves (report those upstream).
 
 ## Supported versions
 
-Aruna has not had its first public release yet ([docs/stability.md](docs/stability.md)).
-Until then, fixes land on `main` and ship in the next release; older versions and canaries
-are not patched. This section will name the supported release lines once the first public
-release is defined.
+The first public release is 0.7.0 ([docs/stability.md](docs/stability.md)). Until it
+ships, fixes land on `main` and go out in 0.7.0; 0.6.0 and earlier, which were never
+announced, and canaries are not patched.
+
+From 0.7.0, security fixes ship as a patch release of the latest minor (`0.x.y`).
+Older minors are not patched; upgrading to the latest minor is the fix.
