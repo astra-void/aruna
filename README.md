@@ -12,6 +12,40 @@ Its product value comes from compiler-discovered server actions, server-owned [r
 > changes (resources, shared safety, multi-store, the test network, metrics, incremental
 > builds) and what, if anything, to change.
 
+## Status
+
+Aruna is pre-1.0 and has not had its first public release: any release may still break
+things ([docs/stability.md](docs/stability.md)). What exists today, and how far each part has
+been checked:
+
+| Feature | What it is | Checked by | Guide |
+| --- | --- | --- | --- |
+| Actions | client → server request/response, schema-validated, rate-limited | Lune runtime specs, conformance table, compiler fixtures | [actions.md](packages/aruna/docs/actions.md) |
+| Signals | server → client push | Lune runtime specs | [signals.md](packages/aruna/docs/signals.md) |
+| Resources | server-owned state clients observe, per player or global | Lune runtime specs, test network | [resources.md](packages/aruna/docs/resources.md) |
+| UI bindings | `aruna/ui` for React and Vide, with optimistic updates | Lune runtime specs | [ui.md](packages/aruna/docs/ui.md) |
+| Stores | DataStore persistence with session locks and migrations | Lune specs against a DataStore fake | [stores.md](packages/aruna/docs/stores.md) |
+| Testing | `aruna test`, specs under Lune with a simulated network | its own specs | [testing.md](packages/aruna/docs/testing.md) |
+| Schema and binary codec | `aruna/schema`, JSON and binary wire encodings | Lune runtime specs, golden frames | [schema.md](packages/aruna/docs/schema.md) |
+| CLI | `build`, `check`, `inspect`, `dev`, `doctor`, `contract diff`, `test` | CLI tests, packed-package consumption | [cli.md](packages/aruna/docs/cli.md) |
+| Starter | `create-aruna-app` | `verify:starter`, packed-package consumption | [getting-started.md](packages/aruna/docs/getting-started.md) |
+
+**Not yet checked in Roblox Studio.** Every runtime check above runs the compiled Luau
+under Lune, not in a real Studio server/client session or against the real DataStore
+service. Treat production use accordingly until that validation lands.
+
+The native compiler ships prebuilt for macOS (arm64, x64), Linux (x64, arm64; glibc and
+musl), and Windows (x64, arm64). Other platforms get an error naming these.
+
+### Install
+
+```bash
+npm create aruna-app@latest my-game
+```
+
+Then follow [getting-started.md](packages/aruna/docs/getting-started.md). To add Aruna to an
+existing roblox-ts project, install `@arunajs/aruna` and run `aruna init`.
+
 ## Recommended Layout v0
 
 This is the recommended project shape for starters, examples, docs, and MVP fixtures:
