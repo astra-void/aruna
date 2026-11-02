@@ -11,7 +11,11 @@ import { createCompilerSession, inspectProject } from "../src/index.ts";
 let roots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(roots.map((root) => fs.rm(root, { recursive: true, force: true })));
+  // Retried: on Windows a worker that is still releasing its handles makes the
+  // first removal fail with ENOTEMPTY.
+  await Promise.all(
+    roots.map((root) => fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })),
+  );
   roots = [];
 });
 
@@ -39,7 +43,9 @@ async function project(domains: number): Promise<string> {
   return root;
 }
 
-describe("compiler session", () => {
+// The session compiles a 400-file project on a worker; Windows runners take
+// well past vitest's 5 s default to write and compile it.
+describe("compiler session", { timeout: 60_000 }, () => {
   it("matches the one-shot compiler before and after edits", async () => {
     const root = await project(6);
     const session = createCompilerSession({ root }, "inspect");

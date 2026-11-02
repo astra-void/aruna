@@ -95,7 +95,9 @@ async function stageCompilerPackageStub(options: {
   return { packageDirectory, packageJsonPath };
 }
 
-describe("release orchestrator", () => {
+// Staging copies the real packages' dist/, which takes Windows runners past
+// vitest's 5 s default.
+describe("release orchestrator", { timeout: 60_000 }, () => {
   const hostTarget = resolveNativeTarget();
 
   beforeEach(async () => {
@@ -104,7 +106,7 @@ describe("release orchestrator", () => {
   });
 
   afterEach(async () => {
-    await fsp.rm(stagingRoot, { recursive: true, force: true });
+    await fsp.rm(stagingRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     vi.restoreAllMocks();
   });
 
@@ -321,13 +323,16 @@ describe("release orchestrator", () => {
   });
 
   it("skips missing cross-target tools without staging fake packages when allowed", async () => {
+    // A Linux target that is not the host: on a linux-x64-gnu host (CI) that
+    // target is a plain host build, which needs no Zig and would not be skipped.
+    const crossTarget: NativeTarget = hostTarget === "linux-x64-gnu" ? "linux-arm64-gnu" : "linux-x64-gnu";
     const buildNativeArtifact = vi.fn();
     const stageNativePackage = vi.fn();
     const spawnSync = vi.fn(() => ({ status: 0, error: undefined }));
     const prepared = await prepareRelease(
       {
         mode: "cross",
-        targets: "linux-x64-gnu",
+        targets: crossTarget,
         allowMissingTools: true,
       },
       {
@@ -347,7 +352,7 @@ describe("release orchestrator", () => {
     expect(prepared.nativeTargets).toEqual([]);
     expect(prepared.skippedTargets).toHaveLength(1);
     expect(prepared.skippedTargets[0]).toMatchObject({
-      target: "linux-x64-gnu",
+      target: crossTarget,
     });
     expect(buildNativeArtifact).not.toHaveBeenCalled();
     expect(stageNativePackage).not.toHaveBeenCalled();
@@ -360,7 +365,7 @@ describe("release orchestrator", () => {
     expect(compilerPackageJson.optionalDependencies).toEqual({});
 
     await expect(
-      fsp.access(path.join(stagingRoot, ".npm", "compiler-linux-x64-gnu")),
+      fsp.access(path.join(stagingRoot, ".npm", `compiler-${crossTarget}`)),
     ).rejects.toThrow();
     const rootEntries = (await fsp.readdir(path.join(stagingRoot, ".npm"))).filter(
       (entry) => !entry.startsWith("."),
