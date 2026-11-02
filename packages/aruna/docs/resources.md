@@ -96,6 +96,14 @@ app.resources!.invalidate(bossHealth);            // a global resource: once, to
   player, at most one more follows it, and a batched channel sends one snapshot per
   resource per player per frame.
 
+### What a resync costs
+
+A resync (`refresh()`, or a client re-sending `subscribe`) always loads fresh, and for a
+global resource the result goes to every subscriber. Each resync is charged to the sender's
+request budget like a call, so one client can cause at most its budget's worth of loads
+(30 per second by default), each sent to everyone subscribed. Keep a global `load` cheap,
+or serve it from a cache you invalidate yourself.
+
 ### Load timeouts
 
 While a load is running, its key waits on it: later invalidations queue one follow-up

@@ -135,6 +135,22 @@ synchronous and cheap: it is the check, not the work. `aruna inspect actions` sh
 actions have one, the contract records it, and `contract diff` reports adding or removing
 it as info. An `authorize` that is not a function is `aruna::591 invalid-action-authorize`.
 
+### What the schema does not check
+
+An input schema says what shape a value has. A few things it leaves to you:
+
+- **String size.** A `schema.string()` with no `maxLength` accepts any string the frame
+  can carry. Bound every string a client sends (`.maxLength(n)` in bytes, `.maxChars(n)`
+  in characters), and every record's entries (`.maxEntries(n)`).
+- **Unknown fields.** `schema.object({ ... })` checks the fields it declares and passes
+  any others through to `run` untouched. Read only the fields you declared; never spread
+  `input` into stored data.
+- **Instances.** `schema.instance()` accepts any `Instance`: another player's character,
+  a part in the workspace, anything the client can name. Check its class and that the
+  caller may act on it (`authorize` or `run`) before using it.
+- **Rate-limit keys.** A `rateLimit.key` function gets the input. A key built only from
+  client input lets the client pick its own bucket; combine it with `ctx.player`.
+
 ## Server registration
 
 The generated `$aruna/actions/server` module exports `actions` (the registry of every
