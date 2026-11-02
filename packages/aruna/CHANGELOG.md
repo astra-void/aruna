@@ -961,6 +961,15 @@ the game build like any other module.
 
 ### Security
 
+- **Toggling a resource subscription no longer starts a load per toggle.**
+  Unsubscribing dropped a player-scoped key even while its load ran, so the
+  next subscribe started another one; a client alternating the two could run a
+  load per item it sent, around the one-load-per-key rule. The key now stays
+  while its load runs, and subscribing again joins that load.
+- **A throwing schema refinement no longer leaves a call unanswered.** A
+  `refine` callback that threw on client input rejected the dispatch, so no
+  response went out and the caller waited for its timeout. It now fails the
+  call with `ActionValidationError` and is reported as `invalid-input`.
 - **A player-store session that lost its lock can no longer overwrite newer
   data.** A write was refused only while another server's lock was on the
   record. Once that server released the player, the record carried no lock, so a

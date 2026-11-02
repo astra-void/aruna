@@ -220,6 +220,44 @@ describe("test network: hostile and broken clients", () => {
     net.dispose();
   });
 
+  // A schema refinement is user code run on client input. One that throws on a
+  // hostile value used to reject the dispatch, so no response went out and the
+  // caller waited for its timeout.
+  it("answers a call whose input refinement throws as invalid input", async () => {
+    let runs = 0;
+    const picky = defineAction({
+      id: "debug.picky",
+      input: schema.string().refine((value) => {
+        if (value === "boom") {
+          throw "refinement exploded";
+        }
+        return true;
+      }, "not boom"),
+      run() {
+        runs += 1;
+        return true;
+      },
+    });
+    const reports = new Array<string>();
+    const net = createTestNetwork({
+      actions: { [picky.id]: picky },
+      players: [101],
+      onAbuse: (_player, info) => reports.push(info.reason),
+    });
+    const alice = net.client(101);
+    let rejection: unknown;
+    alice.invoke("debug.picky", "boom").catch((err: unknown) => (rejection = err));
+    net.flush();
+    expect((rejection as { name: string }).name).toBe("ActionValidationError");
+    expect(runs).toBe(0);
+    expect(reports).toEqual(["invalid-input"]);
+
+    const fine = alice.invoke("debug.picky", "ok");
+    net.flush();
+    expect(await fine).toBe(true);
+    net.dispose();
+  });
+
   it("runs a duplicated call twice, and an idempotent one once", async () => {
     const g = makeGame();
     const net = network(g);

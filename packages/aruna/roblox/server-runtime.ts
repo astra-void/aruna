@@ -236,7 +236,10 @@ function validationFailure(
 	schema: Schema,
 	value: unknown,
 ): PublicActionError {
-	const issue = firstSchemaIssue(schema, value);
+	// The walk re-runs `refine` callbacks, which may throw; the message then
+	// names no path, but the failure is still a validation failure.
+	const [walked, found] = pcall(() => firstSchemaIssue(schema, value));
+	const issue = walked ? found : undefined;
 	const prefix = `Aruna action ${actionId} ${role} validation failed`;
 	return actionError("ActionValidationError", issue !== undefined ? `${prefix}: ${issue}` : prefix);
 }
@@ -395,7 +398,23 @@ export function createActionRegistry<TPlayer>(
 			}
 
 			const inputSchema = definition.input;
-			if (inputSchema !== undefined && !inputSchema.validate(input)) {
+			// A schema's `refine` callbacks are user code run on client input: one
+			// that throws on a hostile value must fail the call like any invalid
+			// input, not reject the dispatch and leave the caller unanswered.
+			const [validated, valid] =
+				inputSchema !== undefined ? pcall(() => inputSchema.validate(input)) : [true, true];
+			if (!validated) {
+				if (fromClient) {
+					guard.report(player, { reason: "invalid-input", actionId });
+				}
+				resolve({
+					ok: false,
+					error: `Aruna action ${actionId} input validation failed: a refinement threw`,
+					errorName: "ActionValidationError",
+				});
+				return;
+			}
+			if (inputSchema !== undefined && valid !== true) {
 				// The boolean validate stays the cheap gate; the metadata walk runs
 				// only on failure to attach the first failing path + reason.
 				const failure = validationFailure(actionId, "input", inputSchema, input);
