@@ -4,6 +4,13 @@ An **action** is a client → server request/response RPC. You define it once wi
 `defineAction`; the compiler generates a server registry and a typed client call
 function.
 
+> **Every registered action is callable by every client.** There is no server-only flag
+> and no per-action `authorize`: a client can send any action id in the registry,
+> whatever the generated stubs expose. Do not put an action in `actions` because you only
+> mean to call it with `app.dispatch`; call a plain function instead. Check who may call
+> an action inside `run` (`ctx.player`) or in a middleware
+> ([below](#middleware--error-observability)), and treat `input` as hostile.
+
 ## `defineAction`
 
 `defineAction` is an identity helper — it returns the definition unchanged but pins the

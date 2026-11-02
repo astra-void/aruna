@@ -4,7 +4,7 @@
 // limits, idempotency, signals, and resources.
 import { defineAction, defineResource } from "aruna/roblox";
 import { schema } from "aruna/schema";
-import { defineSignal } from "aruna/server";
+import { actionError, defineSignal, type ActionMiddleware } from "aruna/server";
 import { createTestNetwork, describe, expect, it } from "aruna/testing";
 import { createWireFrame, WIRE_ITEM_CALL, WIRE_ITEM_RESOURCE_SUBSCRIPTION } from "aruna/internal/wire";
 
@@ -255,6 +255,34 @@ describe("test network: hostile and broken clients", () => {
     const fine = alice.invoke("debug.picky", "ok");
     net.flush();
     expect(await fine).toBe(true);
+    net.dispose();
+  });
+
+  // Every registered action is callable by any client (docs/actions.md): a
+  // hostile client sends the id whether or not a stub exposes it. The guard a
+  // game writes as middleware must hold for a raw frame, not only for stubs.
+  it("refuses a privileged action through middleware, even from a raw frame", () => {
+    let granted = 0;
+    const grant = defineAction({
+      id: "admin.grantCoins",
+      input: schema.object({ amount: schema.u32() }),
+      run() {
+        granted += 1;
+        return true;
+      },
+    });
+    const requireAdmin: ActionMiddleware<Player> = (info, proceed) => {
+      if (info.actionId.sub(1, 6) === "admin.") {
+        throw actionError("NotAuthorized", "not authorized");
+      }
+      return proceed();
+    };
+    const net = createTestNetwork({ actions: { [grant.id]: grant }, players: [101], middleware: [requireAdmin] });
+    net.link(101).up.inject(
+      createWireFrame([{ t: WIRE_ITEM_CALL, i: "x", a: "admin.grantCoins", d: { amount: 1_000_000 } }]),
+    );
+    net.flush();
+    expect(granted).toBe(0);
     net.dispose();
   });
 
