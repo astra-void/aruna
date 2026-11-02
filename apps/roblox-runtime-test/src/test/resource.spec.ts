@@ -608,6 +608,87 @@ describe("resources: failure paths", () => {
   // docs/resources.md "A load must settle": no timeout is applied, so a load that
   // waits on something outside should reject past its own bound. The rejection
   // must free the key for everyone waiting on it.
+  // Unsubscribing used to drop a player-scoped key even while its load ran, so
+  // the next subscribe started another load: a client toggling the two could
+  // run one load per item it sent, around the one-load-per-key rule.
+  it("does not start a load per subscribe and unsubscribe toggle while one is running", () => {
+    const pending = new Array<(value: Progress) => void>();
+    const slow = defineResource({
+      id: "quests.toggled",
+      schema: progressSchema,
+      load() {
+        return new Promise<Progress>((resolve) => {
+          pending.push(resolve);
+        });
+      },
+    });
+    const host = createResourceHost<Player>({ [slow.id]: slow });
+    const received = new Array<defined>();
+    host.attach(
+      createServerChannel<Player>(
+        {
+          FireClient: (_player, frame) => {
+            const read = readWireFrame(frame);
+            if (read.ok) {
+              for (const item of read.items) {
+                received.push(item);
+              }
+            }
+          },
+          FireAllClients: () => {},
+        },
+        { batching: false },
+      ),
+    );
+    const player = createTestPlayer({ userId: 9 });
+    for (let toggle = 0; toggle < 10; toggle += 1) {
+      host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 1 });
+      host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 0 });
+    }
+    expect(pending.size()).toBe(1);
+
+    // Subscribed again at the end: the running load answers it.
+    host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 1 });
+    expect(pending.size()).toBe(1);
+    pending[0]!({ quest: "intro", step: 2 });
+    expect(received.size()).toBe(1);
+    expect(host.isSubscribed(slow.id, player)).toBe(true);
+
+    // Unsubscribed while nothing runs: the key goes, and the next subscribe loads.
+    host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 0 });
+    host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 1 });
+    expect(pending.size()).toBe(2);
+    host.dispose();
+  });
+
+  it("drops a key whose last subscriber left while its load ran, once the load lands", () => {
+    const pending = new Array<(value: Progress) => void>();
+    const slow = defineResource({
+      id: "quests.abandoned",
+      schema: progressSchema,
+      load() {
+        return new Promise<Progress>((resolve) => {
+          pending.push(resolve);
+        });
+      },
+    });
+    const host = createResourceHost<Player>({ [slow.id]: slow });
+    let sent = 0;
+    host.attach(createServerChannel<Player>({ FireClient: () => (sent += 1), FireAllClients: () => {} }, { batching: false }));
+    const player = createTestPlayer({ userId: 9 });
+    host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 1 });
+    host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 0 });
+    host.invalidate(slow.id, player);
+    pending[0]!({ quest: "intro", step: 1 });
+    // Nothing sent, and the invalidation's follow-up does not run for nobody.
+    expect(sent).toBe(0);
+    expect(pending.size()).toBe(1);
+    // The key is gone: a new subscription loads fresh.
+    host.receive(player, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: slow.id, o: 1 });
+    expect(pending.size()).toBe(2);
+    host.dispose();
+  });
+
   it("frees a global key when a load that bounds itself rejects", () => {
     const loads = new Array<{ resolve: (value: Progress) => void; reject: (reason: unknown) => void }>();
     const board = defineResource({

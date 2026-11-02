@@ -396,8 +396,15 @@ export function createResourceHost<TPlayer>(
 		const finish = (item: WireResourceState): void => {
 			state.loading = false;
 			// Nobody left to tell (unsubscribed, left, disposed): the result is
-			// dropped, and the state with it.
+			// dropped, and the state with it. A player-scoped state stays linked
+			// while its load runs (see `unsubscribe`), so it is unlinked here.
 			if (disposed || state.subscribers.size() === 0) {
+				if (!disposed && player !== undefined && isPlayerScoped(definition)) {
+					const byPlayer = perPlayer.get(definition.id);
+					if (byPlayer !== undefined && byPlayer.get(player) === state) {
+						byPlayer.delete(player);
+					}
+				}
 				return;
 			}
 			// Overtaken by a load that started later and already went out.
@@ -504,7 +511,12 @@ export function createResourceHost<TPlayer>(
 		if (observer !== undefined && observer.onUnsubscribe !== undefined) {
 			observer.onUnsubscribe(definition.id);
 		}
-		if (isPlayerScoped(definition)) {
+		// A player-scoped state is dropped with its last subscriber, unless a load
+		// is still running for it: then it stays linked until that load finishes,
+		// so subscribing again joins the running load instead of starting another.
+		// Otherwise toggling subscribe and unsubscribe would start a new load per
+		// toggle, around the one-load-per-key coalescing.
+		if (isPlayerScoped(definition) && !state.loading) {
 			const byPlayer = perPlayer.get(definition.id);
 			if (byPlayer !== undefined) {
 				byPlayer.delete(player);
