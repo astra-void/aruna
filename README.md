@@ -6,7 +6,7 @@ The model is intentionally closer to Svelte-style compile-time transforms than t
 
 Aruna owns boundaries, actions, generated output, and diagnostics. Users own domain taxonomy.
 Aruna complements roblox-ts and TypeScript; it does not replace them.
-Its product value comes from compiler-discovered server actions, an inspectable action contract, and boundary-aware diagnostics, not from a typed remote wrapper alone. Server-owned resources and policy metadata are the intended direction, not yet implemented.
+Its product value comes from compiler-discovered server actions, server-owned [resources](#resources-server-owned-state-clients-observe), an inspectable contract with per-action policy metadata (serialization, rate limits, declared errors), and boundary-aware diagnostics, not from a typed remote wrapper alone.
 
 > **Upgrading?** See [docs/migration-2026-11.md](docs/migration-2026-11.md) for this round's
 > changes (resources, shared safety, multi-store, the test network, metrics, incremental
