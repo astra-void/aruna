@@ -96,7 +96,9 @@ describe("json output", () => {
   });
 });
 
-describe("store contract gate", () => {
+// Each case spawns the built CLI several times; on Windows runners that alone
+// runs past vitest's 5 s default.
+describe("store contract gate", { timeout: 60_000 }, () => {
   function runCli(args: string[], cwd?: string): ReturnType<typeof spawnSync> {
     expect(fs.existsSync(builtCliPath)).toBe(true);
     const env = { ...process.env };
