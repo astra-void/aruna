@@ -506,6 +506,27 @@ export function createActionRegistry<TPlayer>(
 				};
 			}
 
+			// `authorize(ctx, input)`: who may call, decided with the context `run`
+			// would get. It is user code run on every call, so a throw refuses the
+			// call like a `false` instead of escaping the dispatch; only `true`
+			// lets it through.
+			// Read as a plain field: roblox-ts refuses to index a method without
+			// calling it, and `authorize` is a method (like `run`) for variance.
+			if ((definition as unknown as { readonly authorize?: unknown }).authorize !== undefined) {
+				const [checked, allowed] = pcall(() => definition.authorize!(context as never, input as never));
+				if (!checked || allowed !== true) {
+					if (fromClient) {
+						guard.report(player, { reason: "forbidden", actionId });
+					}
+					resolve({
+						ok: false,
+						error: `Aruna action ${actionId} refused the call: not authorized`,
+						errorName: "ActionForbiddenError",
+					});
+					return;
+				}
+			}
+
 			// Invoke the handler inside a pcall so a *synchronous* throw becomes
 			// a result payload rather than rejecting the dispatch promise. A
 			// rejection would leave the transport's `.then` success handler

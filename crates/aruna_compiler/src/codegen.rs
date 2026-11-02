@@ -1417,6 +1417,7 @@ mod tests {
             has_run: true,
             fire_and_forget: false,
             idempotent: false,
+            has_authorize: false,
             serialization: Default::default(),
             rate_limit: None,
             input_schema: None,
@@ -1926,6 +1927,7 @@ mod tests {
             has_run: true,
             fire_and_forget: false,
             idempotent: false,
+            has_authorize: false,
             serialization: Default::default(),
             rate_limit: None,
             input_schema: Some(ArunaSchemaMetadata {

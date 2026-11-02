@@ -323,6 +323,7 @@ interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutpu
     readonly input?: TInput;
     readonly output?: TOutput;
     readonly errors?: TErrors;
+    authorize?(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): boolean;
     run(context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
 
@@ -453,7 +454,7 @@ interface RemoteSignalConnection {
     readonly disconnect: () => void;
 }
 
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "forbidden" | "unknown-resource";
 
 interface ResourceCallTag<TPlayer = unknown> {
     readonly caller: TPlayer;

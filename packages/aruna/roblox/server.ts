@@ -186,6 +186,12 @@ export interface ActionDefinition<
 	// Must be an object literal of `{ data?: schema }` objects (the compiler reads
 	// it into the manifest and the contract).
 	readonly errors?: TErrors;
+	// Who may call. Runs on every dispatch, after the input is validated and
+	// before middleware and `run`, with the same context `run` gets. Anything but
+	// `true` (a `false`, a throw) refuses the call with ActionForbiddenError. A
+	// method, like `run`, so a definition typed for one player type still fits a
+	// registry of another.
+	authorize?(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): boolean;
 	run(
 		context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>,
 		input: InferInput<TInput>,

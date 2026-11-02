@@ -104,6 +104,7 @@ export type ActionRejectionKind =
 	| "rate-limit"
 	| "serialization"
 	| "not-found"
+	| "forbidden"
 	| "declared"
 	| "public"
 	| "internal";
@@ -130,6 +131,8 @@ function rejectionKind(info: DispatchSettledInfo<unknown>): ActionRejectionKind 
 			return "serialization";
 		case "ActionNotFoundError":
 			return "not-found";
+		case "ActionForbiddenError":
+			return "forbidden";
 		case "ActionInternalError":
 		case undefined:
 			return "internal";

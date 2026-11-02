@@ -10,6 +10,7 @@ export type ActionRecord = {
     hasRun: boolean;
     fireAndForget?: boolean | undefined;
     idempotent?: boolean | undefined;
+    hasAuthorize?: boolean | undefined;
     serialization: {
         policy: "plain-data-v1";
     };

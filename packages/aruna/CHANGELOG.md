@@ -22,6 +22,17 @@ the game build like any other module.
 
 ### Added
 
+- **`authorize(ctx, input)` on actions** ([actions.md](docs/actions.md#authorize)).
+  Every registered action was callable by every client, with middleware the only
+  place to say who may call. `authorize` runs on every dispatch, after the input
+  passes its schema and before middleware and `run`, with the context `run` gets;
+  anything but `true`, or a throw, refuses the call with the new
+  `ActionForbiddenError`, reported to `onAbuse` as `forbidden` (rejection kind
+  `forbidden`). The compiler records it (`hasAuthorize` in the manifest,
+  `authorized` in the contract, reported as info by `contract diff`, shown by
+  `aruna inspect actions`); an `authorize` that is not a function is
+  `aruna::591 invalid-action-authorize`, and `ActionForbiddenError` is reserved
+  against declared error names.
 - **UI bindings: `aruna/ui`** ([ui.md](docs/ui.md), RFC
   `docs/rfcs/ui-bindings.md`). A renderer-agnostic core (`observeResource`,
   `peekResource`, `observeAction`) and two adapters that take the renderer as an

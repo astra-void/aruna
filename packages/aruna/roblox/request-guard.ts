@@ -117,6 +117,9 @@ export type RequestAbuseReason =
 	// (ActionRateLimitError). A well-behaved client can get here too, by
 	// calling faster than the limit; whether that is abuse is the game's call.
 	| "rate-limited"
+	// A call its action's `authorize` refused. Answered as usual
+	// (ActionForbiddenError).
+	| "forbidden"
 	// A resource subscription naming a resource this server does not define.
 	// Dropped with no answer, like an unknown action.
 	| "unknown-resource";

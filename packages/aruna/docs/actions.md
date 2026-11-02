@@ -4,12 +4,11 @@ An **action** is a client → server request/response RPC. You define it once wi
 `defineAction`; the compiler generates a server registry and a typed client call
 function.
 
-> **Every registered action is callable by every client.** There is no server-only flag
-> and no per-action `authorize`: a client can send any action id in the registry,
-> whatever the generated stubs expose. Do not put an action in `actions` because you only
-> mean to call it with `app.dispatch`; call a plain function instead. Check who may call
-> an action inside `run` (`ctx.player`) or in a middleware
-> ([below](#middleware--error-observability)), and treat `input` as hostile.
+> **Every registered action is callable by every client.** A client can send any action
+> id in the registry, whatever the generated stubs expose. Give an action that not every
+> player may call an [`authorize`](#authorize) check, do not put an action in `actions`
+> because you only mean to call it with `app.dispatch` (call a plain function instead),
+> and treat `input` as hostile.
 
 ## `defineAction`
 
@@ -110,6 +109,31 @@ import { defineAction } from "aruna/roblox";
 
 `ctx.player` is **always present**: every wire dispatch carries the calling player, and
 in-process dispatches (`app.dispatch`, tests) supply one in the context they pass.
+
+## `authorize`
+
+`authorize(ctx, input)` decides who may call an action. It runs on every dispatch (a
+client's call, a raw frame, and `app.dispatch` alike) after the input passed its schema
+and before middleware and `run`, with the same `ctx` that `run` would get:
+
+```ts
+export const grantCoins = defineAction({
+  id: "admin.grantCoins",
+  input: schema.object({ userId: schema.u32(), amount: schema.u32() }),
+  authorize(ctx, input) {
+    return isAdmin(ctx.player) && input.amount <= 10_000;
+  },
+  run(ctx, input) {
+    // only reached when authorize returned true
+  },
+});
+```
+
+Only `true` lets the call through. `false`, any other value, or a throw refuses it with
+`ActionForbiddenError`, reported to `onAbuse` as `forbidden`; `run` never starts. Keep it
+synchronous and cheap: it is the check, not the work. `aruna inspect actions` shows which
+actions have one, the contract records it, and `contract diff` reports adding or removing
+it as info. An `authorize` that is not a function is `aruna::591 invalid-action-authorize`.
 
 ## Server registration
 
@@ -226,7 +250,7 @@ takes `strategy` too.
 
 **Failures are typed across the wire.** A rejected invoke carries a structured error:
 `err.message` plus `err.name` (`"ActionRateLimitError"`, `"ActionValidationError"`,
-`"ActionSerializationError"`, `"ActionNotFoundError"`, `"ActionTimeoutError"`,
+`"ActionSerializationError"`, `"ActionNotFoundError"`, `"ActionForbiddenError"`, `"ActionTimeoutError"`,
 `"ActionInternalError"`, or a name your action chose). Rate-limit rejections also carry
 `err.retryAfterMs` / `err.resetAtMs`, so clients can back off precisely instead of
 string-matching messages.
@@ -291,6 +315,7 @@ createServerApp({
 | `too-many-in-flight` | the player was at the in-flight cap | `ActionRateLimitError` |
 | `invalid-input` | the input failed wire safety or its schema | `ActionSerializationError` / `ActionValidationError` |
 | `rate-limited` | the action's rate limit refused it | `ActionRateLimitError` |
+| `forbidden` | the action's `authorize` refused it | `ActionForbiddenError` |
 
 `RequestAbuseReason`, `RequestAbuseInfo`, `RequestAbuseHandler`, and `RequestBudgetOptions`
 are exported from `aruna/server` for a handler typed on its own.
@@ -526,6 +551,7 @@ and output server → client, so the same edit can mean opposite things on each 
 | The rate limit's throughput lowered / raised | **breaking** / non-breaking | |
 | The rate limit's `strategy` changed | info | |
 | `idempotent` dropped / added | **breaking** / non-breaking | |
+| `authorize` added / removed | info | |
 | A declared error added | | non-breaking — an old client reads it as any other failure |
 | A declared error removed | | info — an old client's handling of it goes unused |
 | An error's `data` changed | | as an output: a field removed or retyped is **breaking**, one added non-breaking; data appearing is non-breaking, data dropped **breaking** |

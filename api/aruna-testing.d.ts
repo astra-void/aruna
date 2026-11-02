@@ -250,6 +250,7 @@ interface ActionDefinition<TInput extends Schema | undefined = undefined, TOutpu
     readonly input?: TInput;
     readonly output?: TOutput;
     readonly errors?: TErrors;
+    authorize?(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): boolean;
     run(context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
 
@@ -362,7 +363,7 @@ interface ActionRejectionInfo<TPlayer> {
     readonly durationMs: number;
 }
 
-type ActionRejectionKind = "validation" | "rate-limit" | "serialization" | "not-found" | "declared" | "public" | "internal";
+type ActionRejectionKind = "validation" | "rate-limit" | "serialization" | "not-found" | "forbidden" | "declared" | "public" | "internal";
 
 type AnyActionDefinition<TPlayer> = ActionDefinition<Schema | undefined, Schema | undefined, TPlayer, SignalMap, ActionErrorMap>;
 
@@ -593,7 +594,7 @@ interface RequestAbuseInfo {
     readonly count: number;
 }
 
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "forbidden" | "unknown-resource";
 
 interface RequestBudgetOptions {
     readonly burst?: number;

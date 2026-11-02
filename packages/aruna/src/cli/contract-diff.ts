@@ -68,6 +68,7 @@ export type ContractDiffKind =
   | "resource-source-changed"
   | "resource-scope-changed"
   | "resource-authorize-changed"
+  | "action-authorize-changed"
   | "resource-value-changed"
   | "resource-value-field-added"
   | "resource-value-field-removed"
@@ -553,6 +554,7 @@ export function parseActionRecord(value: unknown, location: string): ParsedActio
         ? null
         : parseRateLimit(value["rateLimit"], `${location}.rateLimit`),
     ...(value["idempotent"] === true ? { idempotent: true as const } : {}),
+    ...(value["authorized"] === true ? { authorized: true as const } : {}),
     ...(value["errors"] !== undefined
       ? { errors: parseActionErrors(value["errors"], `${location}.errors`) }
       : {}),
@@ -1146,6 +1148,22 @@ export function diffActions(
 
     diffRateLimit(actionId, previous.rateLimit, current.rateLimit, entries);
     diffIdempotent(actionId, previous.idempotent === true, current.idempotent === true, entries);
+    // Who may call is the server's own policy: neither side of the wire is
+    // built against it, so a change is reported, not judged.
+    if ((previous.authorized === true) !== (current.authorized === true)) {
+      makeEntry(
+        {
+          severity: "info",
+          kind: "action-authorize-changed",
+          actionId,
+          path: "authorized",
+          message: current.authorized === true
+            ? `${actionId} now authorizes calls.`
+            : `${actionId} no longer authorizes calls.`,
+        },
+        entries,
+      );
+    }
     diffSchema("input", actionId, previous.input.schema, current.input.schema, entries);
     diffSchema("output", actionId, previous.output.schema, current.output.schema, entries);
     diffErrors(actionId, previous.errors ?? [], current.errors ?? [], entries);

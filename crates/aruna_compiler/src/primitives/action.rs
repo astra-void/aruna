@@ -47,6 +47,10 @@ pub struct ArunaActionRecord {
     // a timeout. Omitted from JSON when false, like fire_and_forget.
     #[serde(default, skip_serializing_if = "is_false")]
     pub idempotent: bool,
+    // Whether every call goes through an `authorize(ctx, input)` check before
+    // `run`. Omitted from JSON when false, like fire_and_forget.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub has_authorize: bool,
     pub serialization: ArunaActionSerializationMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit: Option<ArunaActionRateLimitMetadata>,
@@ -377,6 +381,33 @@ pub(crate) fn extract_action_fire_and_forget(
 // boolean literal only: the flag decides whether a timed-out call may be sent
 // again, so a value the compiler cannot read must not quietly become `false`
 // (or `true`).
+pub(crate) fn extract_action_authorize(
+    file: &str,
+    action_id: &str,
+    export_name: &str,
+    object: &ObjectExpression<'_>,
+    diagnostics: &mut Vec<ArunaDiagnostic>,
+) -> bool {
+    let Some(property) = find_object_property(object, "authorize") else {
+        return false;
+    };
+    if has_valid_run_handler(property) {
+        return true;
+    }
+    diagnostics.push(create_diagnostic(
+        "aruna::591",
+        format!("Server action {action_id} has an authorize option that is not a function."),
+        Some(file.to_string()),
+        Some(DiagnosticSpan {
+            start: property.span.start as usize,
+            end: property.span.end as usize,
+        }),
+        Some(format!("export name: {export_name}")),
+        Some("Make authorize a function: authorize: (ctx, input) => boolean.".to_string()),
+    ));
+    false
+}
+
 pub(crate) fn extract_action_idempotent(
     file: &str,
     action_id: &str,
@@ -411,6 +442,7 @@ pub(crate) fn extract_action_idempotent(
 // could not tell the action's failure from Aruna's.
 const RESERVED_ERROR_NAMES: &[&str] = &[
     "ActionCancelledError",
+    "ActionForbiddenError",
     "ActionInternalError",
     "ActionNotFoundError",
     "ActionRateLimitError",
@@ -656,6 +688,7 @@ pub(crate) fn analyze_define_action_call<'a>(
     let fire_and_forget =
         extract_action_fire_and_forget(file, &id, export_name, object, diagnostics);
     let idempotent = extract_action_idempotent(file, &id, export_name, object, diagnostics);
+    let has_authorize = extract_action_authorize(file, &id, export_name, object, diagnostics);
     let mut errors = extract_action_errors(file, &id, export_name, object, scope, diagnostics);
     // A one-way action sends no response, so a declared error would never
     // reach a client.
@@ -691,6 +724,7 @@ pub(crate) fn analyze_define_action_call<'a>(
             has_run: false,
             fire_and_forget,
             idempotent,
+            has_authorize,
             serialization: ArunaActionSerializationMetadata::default(),
             rate_limit,
             input_schema,
@@ -723,6 +757,7 @@ pub(crate) fn analyze_define_action_call<'a>(
         has_run,
         fire_and_forget,
         idempotent,
+        has_authorize,
         serialization: ArunaActionSerializationMetadata::default(),
         rate_limit,
         input_schema,

@@ -862,6 +862,22 @@ describe("contract diff", () => {
     ]);
   });
 
+  it("reports adding or dropping authorize as info, and keeps it through JSON", () => {
+    const added = diffActionContractSnapshots(snapshot([action()]), snapshot([action({ authorized: true })]));
+    const removed = diffActionContractSnapshots(snapshot([action({ authorized: true })]), snapshot([action()]));
+
+    expect(added.entries).toEqual([
+      expect.objectContaining({ severity: "info", kind: "action-authorize-changed", path: "authorized" }),
+    ]);
+    expect(added.entries[0]?.message).toBe("shop.purchaseItem now authorizes calls.");
+    expect(removed.entries[0]?.message).toBe("shop.purchaseItem no longer authorizes calls.");
+
+    const parsed = parseActionContractSnapshotJson(
+      JSON.parse(JSON.stringify(snapshot([action({ authorized: true })]))),
+    );
+    expect(parsed.actions[0]?.authorized).toBe(true);
+  });
+
   it("keeps idempotent when a snapshot round-trips through JSON", () => {
     const parsed = parseActionContractSnapshotJson(
       JSON.parse(JSON.stringify(snapshot([action({ idempotent: true })]))),

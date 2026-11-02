@@ -309,7 +309,7 @@ interface RequestAbuseInfo {
     readonly count: number;
 }
 
-type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
+type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "forbidden" | "unknown-resource";
 
 interface ResourceObserver {
     readonly onSnapshot?: (resourceId: string, recipients: number) => void;

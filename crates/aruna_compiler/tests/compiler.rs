@@ -1324,6 +1324,83 @@ export const demo = defineAction({
 }
 
 #[test]
+fn captures_authorize_metadata() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const grant = defineAction({
+  id: "admin.grant",
+  authorize: (ctx) => ctx.player !== undefined,
+  run() {
+    return null;
+  },
+});
+
+export const ping = defineAction({
+  id: "debug.ping",
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert!(output.ok);
+    let grant = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "admin.grant")
+        .expect("expected authorized action metadata");
+    assert!(grant.has_authorize);
+
+    let ping = output
+        .manifest
+        .actions
+        .iter()
+        .find(|action| action.id == "debug.ping")
+        .expect("expected plain action metadata");
+    assert!(!ping.has_authorize);
+    let json = serde_json::to_string(ping).unwrap();
+    assert!(!json.contains("hasAuthorize"));
+}
+
+#[test]
+fn rejects_an_authorize_that_is_not_a_function() {
+    let temp = TempDir::new().unwrap();
+    let root = temp.path();
+
+    write_file(
+        root,
+        "src/server/actions.ts",
+        r#"
+import { defineAction } from "aruna/server";
+
+export const demo = defineAction({
+  id: "demo.authorize",
+  authorize: true,
+  run() {
+    return null;
+  },
+});
+"#,
+    );
+
+    let output = check_project(compiler_input(root));
+
+    assert_eq!(diagnostic_codes(&output), vec!["aruna::591".to_string()]);
+    assert!(!output.ok);
+}
+
+#[test]
 fn rejects_invalid_rate_limit_metadata() {
     let temp = TempDir::new().unwrap();
     let root = temp.path();

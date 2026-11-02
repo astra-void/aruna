@@ -20,6 +20,7 @@ export interface ActionDefinition<TInput extends Schema | undefined = undefined,
     readonly input?: TInput;
     readonly output?: TOutput;
     readonly errors?: TErrors;
+    authorize?(context: ActionContext<TPlayer, TSignals>, input: InferInput<TInput>): boolean;
     run(context: ActionContext<TPlayer, TSignals> & FailContextFor<TErrors>, input: InferInput<TInput>): InferOutput<TOutput> | Promise<InferOutput<TOutput>>;
 }
 
@@ -142,7 +143,7 @@ export interface ActionRejectionInfo<TPlayer> {
     readonly durationMs: number;
 }
 
-export type ActionRejectionKind = "validation" | "rate-limit" | "serialization" | "not-found" | "declared" | "public" | "internal";
+export type ActionRejectionKind = "validation" | "rate-limit" | "serialization" | "not-found" | "forbidden" | "declared" | "public" | "internal";
 
 export interface AnyPlayerStore<TPlayer = Player> {
     readonly id: string;
@@ -404,7 +405,7 @@ export interface RequestAbuseInfo {
     readonly count: number;
 }
 
-export type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "unknown-resource";
+export type RequestAbuseReason = "budget-exhausted" | "malformed-envelope" | "too-many-in-flight" | "unknown-protocol-version" | "oversize-batch" | "unknown-action" | "invalid-input" | "rate-limited" | "forbidden" | "unknown-resource";
 
 export interface RequestBudgetOptions {
     readonly burst?: number;

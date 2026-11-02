@@ -286,6 +286,68 @@ describe("test network: hostile and broken clients", () => {
     net.dispose();
   });
 
+  it("refuses a call its authorize rejects, before run, with the validated input", async () => {
+    let runs = 0;
+    const seen = new Array<number>();
+    const grant = defineAction({
+      id: "admin.grant",
+      input: schema.object({ amount: schema.u32() }),
+      authorize(ctx, input) {
+        seen.push(input.amount);
+        if (input.amount === 13) {
+          throw "authorize exploded";
+        }
+        return ctx.player.UserId === 101 && input.amount <= 100;
+      },
+      run(_ctx, input) {
+        runs += 1;
+        return input.amount;
+      },
+    });
+    const reports = new Array<string>();
+    const net = createTestNetwork({
+      actions: { [grant.id]: grant },
+      players: [101, 202],
+      onAbuse: (_player, info) => reports.push(info.reason),
+    });
+    const outcome = (userId: number, amount: number) => {
+      let settled: unknown;
+      net
+        .client(userId)
+        .invoke("admin.grant", { amount })
+        .then(
+          (value) => (settled = value),
+          (err: unknown) => (settled = (err as { name: string }).name),
+        );
+      net.flush();
+      return settled;
+    };
+
+    expect(outcome(101, 5)).toBe(5);
+    expect(outcome(202, 5)).toBe("ActionForbiddenError");
+    expect(outcome(101, 500)).toBe("ActionForbiddenError");
+    expect(outcome(101, 13)).toBe("ActionForbiddenError");
+    // Invalid input never reaches authorize.
+    expect(outcome(101, -1)).toBe("ActionValidationError");
+    expect(seen).toEqual([5, 5, 500, 13]);
+    expect(runs).toBe(1);
+    expect(reports).toEqual(["forbidden", "forbidden", "forbidden", "invalid-input"]);
+
+    // A hostile client's raw frame goes through the same check.
+    net.link(202).up.inject(createWireFrame([{ t: WIRE_ITEM_CALL, i: "x", a: "admin.grant", d: { amount: 1 } }]));
+    net.flush();
+    expect(runs).toBe(1);
+
+    // So does in-process dispatch: authorize guards run, whoever calls.
+    let inProcess: unknown;
+    await net.app
+      .dispatch("admin.grant", { player: net.player(202) }, { amount: 1 })
+      .catch((err: unknown) => (inProcess = (err as { name: string }).name));
+    expect(inProcess).toBe("ActionForbiddenError");
+    expect(runs).toBe(1);
+    net.dispose();
+  });
+
   it("runs a duplicated call twice, and an idempotent one once", async () => {
     const g = makeGame();
     const net = network(g);

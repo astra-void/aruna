@@ -101,6 +101,9 @@ export type ActionRecord = {
   // Declared safe to run twice, so a timed-out invoke may be retried. Omitted
   // from the manifest JSON when false.
   idempotent?: boolean | undefined;
+  // Every call goes through `authorize(ctx, input)` before `run`. Omitted from
+  // the manifest JSON when false.
+  hasAuthorize?: boolean | undefined;
   serialization: {
     policy: "plain-data-v1";
   };

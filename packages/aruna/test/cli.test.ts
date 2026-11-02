@@ -987,7 +987,7 @@ describe("human formatting", () => {
     expect(rateLimitView).toContain("output: object { ok: boolean }");
     expect(rateLimitView).toContain("serialization: plain-data-v1");
     expect(rateLimitView).toContain("rate limit: player, max 5 / 1000ms");
-    expect(rateLimitView).toContain("authority: server-owned, client callable");
+    expect(rateLimitView).toContain("authority: server-owned, callable by every client");
     expect(rateLimitView).toContain("Use --json for machine-readable output.");
     expect(rateLimitView).not.toMatch(ANSI_PATTERN);
 

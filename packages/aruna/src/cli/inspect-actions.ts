@@ -83,7 +83,9 @@ function renderActionBlock(action: ActionInspectionEntry, colors: CliColorMode):
     `    serialization: ${action.serialization.policy}`,
     renderRateLimit(action.rateLimit, colors),
     `    idempotent: ${action.idempotent === true ? "yes (timeouts are retried)" : "no"}`,
-    `    authority: server-owned, client callable`,
+    action.authorized === true
+      ? `    authority: server-owned, client callable through authorize(ctx, input)`
+      : `    authority: server-owned, callable by every client`,
   ];
 
   lines.push(...renderActionWarnings(action.warnings, colors));

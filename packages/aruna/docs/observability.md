@@ -121,7 +121,7 @@ createServerApp({
 ```
 
 Called for every dispatch that did not succeed, after it settled: `kind` is
-`"validation"`, `"rate-limit"`, `"serialization"`, `"not-found"`, `"declared"` (an error
+`"validation"`, `"rate-limit"`, `"serialization"`, `"not-found"`, `"forbidden"`, `"declared"` (an error
 the action declares), `"public"` (another `actionError`), or `"internal"`. It carries
 names, never the input or the error's message, and changes nothing about what the client
 is sent. `onError` still receives the thrown value of a failing `run`, and envelopes

@@ -51,6 +51,8 @@ export type ActionContractRecord = {
   // Present (and true) only for an action declared `idempotent: true`, so the
   // snapshot of every other action is byte-stable with older baselines.
   readonly idempotent?: true;
+  // Present (and true) only when calls go through `authorize(ctx, input)`.
+  readonly authorized?: true;
   // The errors the action declares, by name; present only when it declares
   // some. `data` is null for an error that carries none.
   readonly errors?: readonly ActionContractError[];
@@ -220,6 +222,7 @@ function summarizeAction(
     },
     rateLimit: action.rateLimit ?? null,
     ...(action.idempotent === true ? { idempotent: true as const } : {}),
+    ...(action.hasAuthorize === true ? { authorized: true as const } : {}),
     ...(errors.length > 0
       ? { errors: errors.map((error) => ({ name: error.name, data: error.data })) }
       : {}),

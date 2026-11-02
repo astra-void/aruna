@@ -148,6 +148,9 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
             "generated-resource-name-collision",
             DiagnosticSeverity::Error,
         )),
+        // An error, like 569: whether a call is checked must not depend on a
+        // value the compiler cannot read.
+        "aruna::591" => Some(("invalid-action-authorize", DiagnosticSeverity::Error)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((
