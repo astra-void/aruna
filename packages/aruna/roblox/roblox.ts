@@ -11,6 +11,7 @@ import type { ActionDefinition, ActionErrorMap } from "./server";
 import type { ActionRegistry } from "./server-runtime";
 import type { ServerAppBinding, ServerTransport } from "./server-app";
 import type { Schema } from "./schema";
+import { isIdempotencyKey } from "./idempotency";
 import {
 	admitResourceItem,
 	answerOptimisticCall,
@@ -660,7 +661,7 @@ export function bindRemoteActions<TPlayer>(
 					return;
 				}
 				const pending =
-					optimistic && resources !== undefined && typeIs(key, "string")
+					optimistic && resources !== undefined && isIdempotencyKey(key)
 						? resources.pendingTags(sender, key)
 						: undefined;
 				channel.push(sender, {

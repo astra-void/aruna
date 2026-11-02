@@ -369,6 +369,96 @@ describe("optimistic updates on the server", () => {
     expect(host.pendingTags(alice, "a1")).toEqual([]);
     host.dispose();
   });
+
+  // A tag lives until a load that started after it finishes, and a load can stay
+  // open indefinitely, so the tags one caller holds on one key are capped (32).
+  it("caps the tags one caller holds on a key while its load stays open", () => {
+    const waiting = new Array<() => void>();
+    const board = defineResource({
+      id: "arena.slowBoard",
+      scope: "global",
+      schema: schema.object({ round: schema.u16() }),
+      load() {
+        return new Promise<{ round: number }>((resolve) => {
+          waiting.push(() => resolve({ round: 1 }));
+        });
+      },
+    });
+    const host = createResourceHost<Player>({ [board.id]: board });
+    host.attach(createServerChannel<Player>({ FireClient: () => {}, FireAllClients: () => {} }, { batching: false }));
+    const alice = createTestPlayer({ userId: 101 });
+    const bob = createTestPlayer({ userId: 202 });
+    host.receive(alice, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: board.id, o: 1 });
+    host.receive(bob, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: board.id, o: 1 });
+
+    for (let call = 1; call <= 40; call++) {
+      host.invalidateForCall(board.id, undefined, { caller: alice, key: `a${call}` });
+    }
+    let held = 0;
+    for (let call = 1; call <= 40; call++) {
+      if (host.pendingTags(alice, `a${call}`).size() > 0) {
+        held += 1;
+      }
+    }
+    expect(held).toBe(32);
+    expect(host.pendingTags(alice, "a32")).toEqual([board.id]);
+    expect(host.pendingTags(alice, "a33")).toEqual([]);
+
+    // The cap is per caller: alice's tags leave bob room.
+    host.invalidateForCall(board.id, undefined, { caller: bob, key: "b1" });
+    expect(host.pendingTags(bob, "b1")).toEqual([board.id]);
+    host.dispose();
+  });
+
+  it("never tags another player's key for the caller", () => {
+    const wallet = defineResource({
+      id: "economy.ownWallet",
+      schema: schema.object({ coins: schema.u32() }),
+      load() {
+        return new Promise<{ coins: number }>(() => {});
+      },
+    });
+    const host = createResourceHost<Player>({ [wallet.id]: wallet });
+    host.attach(createServerChannel<Player>({ FireClient: () => {}, FireAllClients: () => {} }, { batching: false }));
+    const alice = createTestPlayer({ userId: 101 });
+    const bob = createTestPlayer({ userId: 202 });
+    host.receive(alice, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: wallet.id, o: 1 });
+    host.receive(bob, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: wallet.id, o: 1 });
+
+    host.invalidateForCall(wallet.id, bob, { caller: alice, key: "a1" });
+    expect(host.pendingTags(alice, "a1")).toEqual([]);
+    expect(host.pendingTags(bob, "a1")).toEqual([]);
+    host.dispose();
+  });
+
+  it("drops a caller's tags when it unsubscribes or leaves, and tags nothing after", () => {
+    const board = defineResource({
+      id: "arena.openBoard",
+      scope: "global",
+      schema: schema.object({ round: schema.u16() }),
+      load() {
+        return new Promise<{ round: number }>(() => {});
+      },
+    });
+    const host = createResourceHost<Player>({ [board.id]: board });
+    host.attach(createServerChannel<Player>({ FireClient: () => {}, FireAllClients: () => {} }, { batching: false }));
+    const alice = createTestPlayer({ userId: 101 });
+    host.receive(alice, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: board.id, o: 1 });
+
+    host.invalidateForCall(board.id, undefined, { caller: alice, key: "a1" });
+    expect(host.pendingTags(alice, "a1")).toEqual([board.id]);
+    host.receive(alice, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: board.id, o: 0 });
+    expect(host.pendingTags(alice, "a1")).toEqual([]);
+
+    host.receive(alice, { t: WIRE_ITEM_RESOURCE_SUBSCRIPTION, r: board.id, o: 1 });
+    host.invalidateForCall(board.id, undefined, { caller: alice, key: "a2" });
+    expect(host.pendingTags(alice, "a2")).toEqual([board.id]);
+    host.forgetPlayer(alice);
+    expect(host.pendingTags(alice, "a2")).toEqual([]);
+    host.invalidateForCall(board.id, undefined, { caller: alice, key: "a3" });
+    expect(host.pendingTags(alice, "a3")).toEqual([]);
+    host.dispose();
+  });
 });
 
 describe("invokeOptimistic and the bindings", () => {

@@ -424,9 +424,12 @@ reader follows the server's intermediate values, and never shows the update appl
 - An optimistic call adds `o` to its call item, its key (at most 64 bytes) to one state
   item per resource it invalidates, and resource ids to its response, the last only while a
   delivering item is still on its way.
-- Server: one tag per pair of call and invalidated key the caller is subscribed to. Tags
-  are bounded by the 32 dispatches a player may have in flight and are dropped with the
-  player.
+- Server: one tag per pair of call and invalidated key the caller is subscribed to. A tag
+  lives until a load that started after it finishes, not until its call settles, so the
+  in-flight cap does not bound them: a load that stays open would let a client add one per
+  call. One caller holds at most 32 tags on one key; past that a call is not tagged, its
+  response leaves the resource out of `p`, and the client settles that update at the
+  response. Tags are dropped when the caller unsubscribes or leaves.
 - Client: one function per pending update; a recompute runs each pending update once.
 
 ## Edge cases

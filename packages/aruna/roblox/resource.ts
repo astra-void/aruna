@@ -111,6 +111,13 @@ export const RESOURCE_FORBIDDEN_ERROR_NAME = "ResourceForbiddenError";
 // The longest resource id a subscription item may carry.
 export const MAX_RESOURCE_ID_LENGTH = 128;
 
+// The most optimistic-call tags one caller may hold on one key. A tag lives until
+// a load that started after it finishes, and loads have no timeout, so without a
+// cap a client could grow a key's tags at its request rate for as long as a load
+// stays open. Past the cap a call is simply not tagged: its response leaves the
+// resource out of `p`, and the client settles that update at the response.
+const MAX_OPTIMISTIC_TAGS_PER_CALLER = 32;
+
 export interface ResourceErrorInfo<TPlayer = unknown> {
 	readonly resourceId: string;
 	// The player the load ran for; absent for a global resource.
@@ -593,12 +600,20 @@ export function createResourceHost<TPlayer>(
 					: undefined;
 			// Tagged before the load starts: a synchronous load finishes inside
 			// `invalidate`, and its item must carry the tag.
-			if (
-				state !== undefined &&
-				state.subscribers.has(call.caller) &&
-				!state.tags.some((tag) => tag.key === call.key && tag.caller === call.caller)
-			) {
-				state.tags.push({ caller: call.caller, key: call.key });
+			if (state !== undefined && state.subscribers.has(call.caller)) {
+				let held = 0;
+				let alreadyTagged = false;
+				for (const tag of state.tags) {
+					if (tag.caller === call.caller) {
+						held += 1;
+						if (tag.key === call.key) {
+							alreadyTagged = true;
+						}
+					}
+				}
+				if (!alreadyTagged && held < MAX_OPTIMISTIC_TAGS_PER_CALLER) {
+					state.tags.push({ caller: call.caller, key: call.key });
+				}
 			}
 			host.invalidate(resource, player);
 		},

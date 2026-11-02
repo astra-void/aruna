@@ -956,6 +956,11 @@ the game build like any other module.
 
 ### Security
 
+- **Optimistic-call tags are capped per caller.** A tag lives until a load that
+  started after it finishes, not until its call settles, so a client could add
+  one per call to a key whose load stayed open, without bound. One caller now
+  holds at most 32 tags on one key; a call past that is not tagged and its
+  update settles at its response.
 - **Unreliable size checks count the `{ signalId, payload }` envelope.** The
   message Roblox measures against its ~900-byte limit is the whole envelope,
   but `aruna::511` compared only the payload, so a payload just under the limit
