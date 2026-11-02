@@ -605,6 +605,44 @@ describe("resources: global scope and backpressure", () => {
 });
 
 describe("resources: failure paths", () => {
+  // docs/resources.md "A load must settle": no timeout is applied, so a load that
+  // waits on something outside should reject past its own bound. The rejection
+  // must free the key for everyone waiting on it.
+  it("frees a global key when a load that bounds itself rejects", () => {
+    const loads = new Array<{ resolve: (value: Progress) => void; reject: (reason: unknown) => void }>();
+    const board = defineResource({
+      id: "arena.bounded",
+      scope: "global",
+      schema: progressSchema,
+      load() {
+        return new Promise<Progress>((resolve, reject) => {
+          loads.push({ resolve, reject });
+        });
+      },
+    });
+    const harness = createTestServerApp({ actions: {}, resources: { [board.id]: board } });
+    const first = createTestPlayer({ userId: 1 });
+    const second = createTestPlayer({ userId: 2 });
+    harness.join(first);
+    harness.join(second);
+    const early = harness.client(first).resources!.subscribe("arena.bounded");
+    const late = harness.client(second).resources!.subscribe("arena.bounded");
+    // The second subscriber joined the running load instead of starting one.
+    expect(loads.size()).toBe(1);
+    expect(late.status()).toBe("loading");
+
+    loads[0]!.reject("timed out");
+    expect(early.status()).toBe("error");
+    expect(late.status()).toBe("error");
+
+    harness.app.resources!.invalidate("arena.bounded");
+    expect(loads.size()).toBe(2);
+    loads[1]!.resolve({ quest: "intro", step: 4 });
+    expect(early.status()).toBe("ready");
+    expect(late.status()).toBe("ready");
+    harness.dispose();
+  });
+
   it("answers a returning subscriber of a global resource from its cache, past a revision it already saw", () => {
     let allowed = false;
     let loads = 0;

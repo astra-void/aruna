@@ -96,6 +96,34 @@ app.resources!.invalidate(bossHealth);            // a global resource: once, to
   player, at most one more follows it, and a batched channel sends one snapshot per
   resource per player per frame.
 
+### A load must settle
+
+Aruna puts no timeout on `load`. While a load is running, its key waits on it: later
+invalidations queue one follow-up behind it, and a resync joins it. A load that never
+settles therefore stalls its key:
+
+- **Global resource:** every player who subscribes from then on waits on that load, even
+  when an earlier value was already sent to others, for as long as the server runs.
+- **Player-scoped resource:** that player's value stays where it was until the client
+  unsubscribes and subscribes again (or rejoins). `refresh()` does not help, because it
+  joins the running load.
+
+A `load` that waits on something outside the server (a DataStore, `HttpService`, another
+service) should bound itself, and reject when the bound passes. A rejection is an
+ordinary load error: subscribers get `ResourceLoadError`, the key is free, and the next
+invalidation or resync loads again.
+
+```ts
+export const leaderboard = defineResource({
+  id: "arena.leaderboard",
+  scope: "global",
+  schema: leaderboardSchema,
+  load() {
+    return fetchLeaderboard().timeout(10, "leaderboard load timed out");
+  },
+});
+```
+
 ## Subscribing on the client
 
 ```ts
