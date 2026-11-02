@@ -21,6 +21,12 @@ name: publish
 #   - linux-*  → ubuntu-latest via cargo-zigbuild (gnu + musl)
 #   - win32-*  → ubuntu-latest via cargo-xwin (MSVC ABI)
 # Each build job stages `.npm/compiler-<target>` and uploads it as an artifact.
+#
+# Most of those are cross builds, so before anything is published each binary is
+# loaded on hardware of its own OS, CPU and libc (`load-native`): an Intel Mac,
+# arm64 Linux and Windows runners, and Alpine containers for musl. A binary that
+# does not load blocks the release instead of shipping as a supported target.
+#
 # The publish job downloads every native artifact, builds the TypeScript
 # packages, stages the compiler/core/aruna/create-aruna-app manifests around the pre-built
 # natives (--assemble), and publishes the whole graph in dependency order.
@@ -184,8 +190,67 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish:
+  load-native:
+    name: load ${{ matrix.target }}
     needs: build-native
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-x64-gnu
+            runner: ubuntu-latest
+          - target: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+          - target: linux-x64-musl
+            runner: ubuntu-latest
+            alpine: true
+          - target: linux-arm64-musl
+            runner: ubuntu-24.04-arm
+            alpine: true
+          - target: win32-x64-msvc
+            runner: windows-latest
+          - target: win32-arm64-msvc
+            runner: windows-11-arm
+    env:
+      # Loads the addon and calls into it, so a binary that links but cannot run
+      # (wrong libc, missing runtime, wrong CPU) fails here.
+      SMOKE: >-
+        const m = require(require("node:path").resolve(process.argv[1]));
+        const d = m.primitiveDescriptors();
+        if (d == null) throw new Error("primitiveDescriptors returned nothing");
+        console.log("loaded on", process.platform, process.arch, "-", Object.keys(m).length, "exports");
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: compiler-${{ matrix.target }}
+          path: native
+
+      - uses: actions/setup-node@v4
+        if: ${{ !matrix.alpine }}
+        with:
+          node-version: 22
+
+      - name: Load the addon
+        if: ${{ !matrix.alpine }}
+        shell: bash
+        run: node -e "$SMOKE" "native/compiler.${{ matrix.target }}.node"
+
+      # JavaScript actions cannot run inside an Alpine container on arm64, so
+      # musl is checked with a plain docker run on the host instead.
+      - name: Load the addon (Alpine)
+        if: ${{ matrix.alpine }}
+        shell: bash
+        run: |
+          docker run --rm -e SMOKE -v "$PWD/native:/native:ro" node:22-alpine \
+            sh -c 'node -e "$SMOKE" "/native/compiler.${{ matrix.target }}.node"'
+
+  publish:
+    needs: [build-native, load-native]
     runs-on: ubuntu-latest
     permissions:
       contents: read
