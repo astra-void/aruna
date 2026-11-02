@@ -28,6 +28,8 @@ touches:
 - Refusing undecodable records in writeDocument too: that would reverse the deliberate "lock holder overwrites a corrupt non-version-ahead record" policy, so only readable records are checked.
 
 ## Watch out
-- A hung resource load wedges a global resource for the server's lifetime (new subscribers wait on the running load, even with a cached value). No framework timeout yet; docs tell users to bound load with Promise.timeout. Decision pending (DEV-25).
-- Every registered action is callable by any client; there is no authorize/server-only. Decision pending (DEV-23).
+- A hung resource load would wedge a global resource for the server's lifetime (new subscribers wait on the running load, even with a cached value); `loadTimeoutMs` (default 30 s, timers from `createServerApp({ delay })`) now bounds async loads. In the test network, `flush()` runs the virtual clock up to pending timers, so a timeout spec must move time with `advance()`.
+- Every registered action is callable by any client; `authorize(ctx, input)` is the guard. It is a method (variance, like `run`), and roblox-ts refuses `definition.authorize` without a call, so the runtime reads it as a plain field (`(definition as unknown as { authorize?: unknown }).authorize`) before calling `definition.authorize!(...)`.
+- Mutation checks with a constant like `&& false` can fail to compile under roblox-ts and look like a pass; replace the value (e.g. `const timeoutMs = 0`) instead.
+- A loaded machine (load average 60+) makes real-time Lune specs exceed `aruna test`'s 120 s suite timeout; rerun before blaming a change.
 - In the test network, invoke() needs net.flush() before await, or the spec hangs until aruna test's 120 s timeout.
