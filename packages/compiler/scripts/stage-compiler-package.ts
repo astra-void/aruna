@@ -5,6 +5,7 @@ import {
   stagedCompilerPackageDirectory,
   type NativeTarget,
 } from "./native-targets.js";
+import { isPublishableFile } from "./stage-package.js";
 
 export type StageCompilerPackageOptions = {
   workspaceRoot: string;
@@ -87,7 +88,10 @@ export async function stageCompilerPackage(
   }
 
   await fs.mkdir(packageDirectory, { recursive: true });
-  await fs.cp(sourceDistDirectory, path.join(packageDirectory, "dist"), { recursive: true });
+  await fs.cp(sourceDistDirectory, path.join(packageDirectory, "dist"), {
+    recursive: true,
+    filter: isPublishableFile,
+  });
 
   const stagedPackageJson = {
     name: sourcePackageJson.name ?? "@arunajs/compiler",

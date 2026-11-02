@@ -233,7 +233,31 @@ describe("release orchestrator", () => {
       expect(await fsp.readFile(path.join(packageDirectory, "LICENSE"), "utf8")).toBe(
         repositoryLicense,
       );
+      // tsc's incremental bookkeeping stays out of the tarball.
+      const stagedFiles = await fsp.readdir(packageDirectory, { recursive: true });
+      expect(
+        stagedFiles.filter((entry) => path.basename(entry) === ".tsbuildinfo"),
+        packageName,
+      ).toEqual([]);
     }
+
+    // The TypeScript packages build from empty dist/ directories, uncached, so a
+    // module whose source is gone cannot ride along. The removal goes through the
+    // (stubbed) spawn, so this test never touches the repository's dist/.
+    const calls = spawnSync.mock.calls as unknown as Array<[string, string[]]>;
+    const clearIndex = calls.findIndex(([command]) => command === process.execPath);
+    const buildIndex = calls.findIndex(([, args]) => args.includes("turbo"));
+    expect(clearIndex).toBeGreaterThanOrEqual(0);
+    expect(clearIndex).toBeLessThan(buildIndex);
+    expect(calls[clearIndex][1]).toEqual(
+      expect.arrayContaining([
+        path.join(workspaceRoot, "packages", "core", "dist"),
+        path.join(workspaceRoot, "packages", "compiler", "dist"),
+        path.join(workspaceRoot, "packages", "aruna", "dist"),
+        path.join(workspaceRoot, "packages", "create-aruna-app", "dist"),
+      ]),
+    );
+    expect(calls[buildIndex][1]).toContain("--force");
   });
 
   it("refuses to stage a package without the release license", async () => {
@@ -262,6 +286,32 @@ describe("release orchestrator", () => {
         },
       ),
     ).rejects.toThrow(/must declare license MIT, found none/);
+  });
+
+  it("refuses to stage a package whose entry point is missing", async () => {
+    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget }) => ({
+      targetInfo: nativeTargetInfo(options.target),
+      profile: "release",
+      sourceArtifactPath: await createNativeArtifact(options.target),
+      command: "cargo",
+      args: [],
+    }));
+
+    await expect(
+      prepareRelease(
+        { mode: "local" },
+        {
+          spawnSync: vi.fn(() => ({ status: 0, error: undefined })),
+          buildNativeArtifact,
+          stageCompilerPackage: async (options) => {
+            const staged = await stageCompilerPackageStub(options);
+            await fsp.rm(path.join(staged.packageDirectory, "dist", "index.d.ts"));
+            return staged;
+          },
+          stagingRoot,
+        },
+      ),
+    ).rejects.toThrow(/points at \.\/dist\/index\.d\.ts, which is not in the staged package/);
   });
 
   it("includes all host-buildable targets in full mode", () => {

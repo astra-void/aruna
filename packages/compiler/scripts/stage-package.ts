@@ -33,6 +33,12 @@ type SourcePackageJson = {
   peerDependencies?: Record<string, string>;
 };
 
+// tsc's incremental state: build bookkeeping with the build machine's paths, not
+// something a consumer can use.
+export function isPublishableFile(source: string): boolean {
+  return path.basename(source) !== ".tsbuildinfo";
+}
+
 async function exists(absolutePath: string): Promise<boolean> {
   try {
     await fs.access(absolutePath);
@@ -89,7 +95,10 @@ async function copyPackageFiles(
 
     const source = path.join(sourceDirectory, entry);
     if (await exists(source)) {
-      await fs.cp(source, path.join(stagedDirectory, entry), { recursive: true });
+      await fs.cp(source, path.join(stagedDirectory, entry), {
+        recursive: true,
+        filter: isPublishableFile,
+      });
     }
   }
 }

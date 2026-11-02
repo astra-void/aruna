@@ -270,6 +270,40 @@ async function validateLicense(packageDirectory: string, expectedLicense: string
   }
 }
 
+// Every path a consumer's resolver can be sent to (main, module, types, bin, and
+// each exports condition) must be in the staged package, or the install
+// succeeds and the first import fails.
+async function validateEntryPoints(packageDirectory: string): Promise<void> {
+  const packageJson = JSON.parse(
+    await fs.readFile(path.join(packageDirectory, "package.json"), "utf8"),
+  ) as Record<string, unknown>;
+  const targets: string[] = [];
+  const collect = (value: unknown): void => {
+    if (typeof value === "string") {
+      targets.push(value);
+    } else if (value && typeof value === "object") {
+      Object.values(value).forEach(collect);
+    }
+  };
+  for (const field of ["main", "module", "types", "bin", "exports"]) {
+    collect(packageJson[field]);
+  }
+
+  for (const target of targets) {
+    // A subpath pattern names no single file.
+    if (target.includes("*")) {
+      continue;
+    }
+    try {
+      await fs.access(path.join(packageDirectory, target));
+    } catch {
+      throw new Error(
+        `Package ${workspaceRelative(packageDirectory)} points at ${target}, which is not in the staged package.`,
+      );
+    }
+  }
+}
+
 function runCommand(
   spawn: typeof spawnSync,
   command: string,
@@ -487,6 +521,14 @@ async function validateStagedRelease(
   ]) {
     await validateLicense(packageDirectory, expectedLicense);
   }
+  for (const packageDirectory of [
+    compilerPackageDirectory,
+    staging.coreDirectory,
+    staging.arunaDirectory,
+    staging.createArunaDirectory,
+  ]) {
+    await validateEntryPoints(packageDirectory);
+  }
 }
 
 type StagedNativePackage = { packageDirectory: string; target: NativeTarget };
@@ -496,6 +538,25 @@ function buildPublishableTypeScriptPackages(spawn: typeof spawnSync): void {
   // also builds the apps/* harnesses, which require the `aruna` binary on PATH
   // and per-app node_modules — neither is present in the publish job, so they
   // fail. The `^build` dependency pulls in their workspace deps anyway.
+  //
+  // From empty dist/ directories, and past turbo's cache: tsc never deletes the
+  // output of a source file that is gone, and a cached build restores whatever
+  // dist/ held when it ran, so a dev checkout would otherwise publish retired
+  // modules. Removal goes through the spawn too, so tests that stub it never
+  // touch the repository's own dist/.
+  runCommand(
+    spawn,
+    process.execPath,
+    [
+      "-e",
+      "for (const d of process.argv.slice(1)) require('node:fs').rmSync(d, { recursive: true, force: true });",
+      ...[corePackageRoot, compilerPackageRoot, arunaPackageRoot, createArunaPackageRoot].map(
+        (packageRoot) => path.join(packageRoot, "dist"),
+      ),
+    ],
+    workspaceRoot,
+    "Failed to clear the TypeScript packages' dist directories",
+  );
   runCommand(
     spawn,
     PNPM_BIN,
@@ -504,6 +565,7 @@ function buildPublishableTypeScriptPackages(spawn: typeof spawnSync): void {
       "turbo",
       "run",
       "build",
+      "--force",
       "--filter=@arunajs/core",
       "--filter=@arunajs/compiler",
       "--filter=@arunajs/aruna",

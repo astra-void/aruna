@@ -15,6 +15,9 @@
     "test": {
       "dependsOn": ["build", "^build"]
     },
+    "@arunajs/compiler#test": {
+      "dependsOn": ["build", "^build", "@arunajs/aruna#build", "create-aruna-app#build"]
+    },
     "lint": {
       "dependsOn": ["^build"]
     },
