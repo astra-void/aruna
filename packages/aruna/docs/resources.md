@@ -39,9 +39,9 @@ export const bossHealth = defineResource({
 
 | Field | |
 | --- | --- |
-| `id` | Static string literal, unique (`aruna::586`, `aruna::587`). |
+| `id` | Static string literal, unique (`aruna::586`, `aruna::587`). The export name, and the value type it generates, must be unique too (`aruna::590`). |
 | `scope` | `"player"`: one value per player; a client only ever receives its own. `"global"`: one value, loaded once per change, sent to every subscriber. |
-| `schema` | Required (`aruna::589`). A loaded value that fails it — or is not wire-safe — is never sent. |
+| `schema` | Required (`aruna::589`). A loaded value that fails it — or is not wire-safe — is never sent. A schema the compiler cannot read statically (`aruna::588`, warning) still validates, but the generated value type is `unknown` and the contract omits the shape. |
 | `load(ctx)` | The authoritative read, run on subscribe and on every invalidation. `ctx.player`, `ctx.session`, `ctx.store` for a player-scoped resource. |
 | `authorize` | Optional, a property (`authorize: (ctx) => boolean`). Runs on every subscription; `false` or a throw refuses it with `ResourceForbiddenError`. |
 

@@ -73,6 +73,26 @@ same runtime. The server
 registry is emitted under `server/` so it is server-classified; stubs, signals, and the
 runtime are `shared/`.
 
+### Generated entries (`entries: "generated"`)
+
+With `entries: "user"` (the default) your `src/server.ts` and `src/client.tsx` are the
+Script and LocalScript, and you call `createServerApp` / `createClientApp` yourself. With
+`entries: "generated"` in `aruna.config.ts`, `aruna build` writes the entries instead:
+`server/main.server.ts` creates the server app from the generated registries (actions,
+`defaultRateLimit`, signals, resources, domain runtimes) with the RemoteEvent transport,
+and `client/main.client.ts` creates the client app. Your `src/server.ts` and
+`src/client.tsx`, when present, become **hook modules** the generated entries import.
+They export only these names; any other export is `aruna::568 unknown-hook-export`
+(warning), because nothing would ever read it:
+
+| Module | Export | What the generated entry does with it |
+| --- | --- | --- |
+| `src/server.ts` | `middleware` | passes it to `createServerApp({ middleware })` |
+| | `onError` | passes it to `createServerApp({ onError })` |
+| | `configure(app)` | calls it with the created server app |
+| `src/client.tsx` | `createRequestId` | passes it to `createActionInvoker({ createRequestId })` |
+| | `onStart(app)` | calls it with the created client app |
+
 ## The partition (Roblox DataModel mapping)
 
 `aruna build` partitions the compiled output into client / server / shared subtrees by
