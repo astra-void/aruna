@@ -288,6 +288,9 @@ export interface CreateServerAppOptions<
 	// set by `createTestServerApp`, which freezes it so a spec steps past a
 	// window with `advance(ms)` rather than waiting one out.
 	readonly nowMs?: () => number;
+	// Schedules the app's own timers (resource load timeouts) and returns a
+	// cancel. Defaults to `task.delay`; the test network passes its virtual clock.
+	readonly delay?: (delayMs: number, callback: () => void) => () => void;
 	// Opt-in traffic metrics (`createNetworkMetrics()`): per-action counts,
 	// rejections, and server time, signal and resource volume, abuse reasons, and
 	// estimated frame sizes. Off unless given; bounded when on.
@@ -422,6 +425,7 @@ export function createServerApp<
 					...(getStores !== undefined ? { getStores } : {}),
 					...(options.onResourceError !== undefined ? { onResourceError: options.onResourceError } : {}),
 					...(options.metrics !== undefined ? { observer: options.metrics.resourceObserver } : {}),
+					...(options.delay !== undefined ? { delay: options.delay } : {}),
 				})
 			: undefined;
 

@@ -477,6 +477,7 @@ interface ResourceDefinition<TSchema extends Schema = Schema, TId extends string
     readonly schema: TSchema;
     load(context: ResourceLoadContext<TScope, TPlayer>): Infer<TSchema> | Promise<Infer<TSchema>>;
     readonly authorize?: (context: ResourcePlayerContext<TPlayer>) => boolean;
+    readonly loadTimeoutMs?: number;
 }
 
 interface ResourceGlobalContext {

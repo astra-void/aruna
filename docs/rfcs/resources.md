@@ -159,9 +159,10 @@ read is the only source of what a client sees.
   whatever was queued between the two items (a response, a signal): a client can apply
   state that already reflects a call before the call's response arrives. It never
   applies older state after newer.
-- **A load that never settles** holds its key: later invalidations mark it dirty and
-  wait behind it, and new subscribers to a global resource wait on it. There is no load
-  timeout; a `load` that can hang (an external request) should bound itself.
+- **A load that never settles** would hold its key: later invalidations mark it dirty and
+  wait behind it, and new subscribers to a global resource wait on it. So an async load
+  times out after `loadTimeoutMs` (default 30 s; `0` disables it): it fails like a
+  rejected load, frees the key, and its late result is dropped.
 - **Read-your-writes.** When `load` returns synchronously, an `invalidate` inside an
   action's `run` queues the new state before the action's response, on the same
   channel, so the client applies it before the caller's `await` resumes. An async

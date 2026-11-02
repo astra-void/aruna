@@ -165,6 +165,7 @@ export type AnyResourceDefinition = {
     readonly schema: Schema;
     load(context: never): unknown;
     readonly authorize?: (context: never) => boolean;
+    readonly loadTimeoutMs?: number;
 };
 
 export interface AnyStoreDocument {
@@ -203,12 +204,15 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
     readonly onPlayerAdded?: (player: TPlayer, session: TSession) => void;
     readonly onPlayerRemoving?: (player: TPlayer, session: TSession | undefined) => void;
     readonly nowMs?: () => number;
+    readonly delay?: (delayMs: number, callback: () => void) => () => void;
     readonly metrics?: NetworkMetrics;
     readonly onReject?: (info: ActionRejectionInfo<TPlayer>) => void;
     readonly requestBudget?: RequestBudgetOptions;
     readonly onAbuse?: RequestAbuseHandler<TPlayer>;
     readonly players?: PlayersSource<TPlayer>;
 }
+
+export declare const DEFAULT_RESOURCE_LOAD_TIMEOUT_MS = 30000;
 
 export declare const DEFAULT_STORE_RETRY: {
     readonly attempts: 4;
@@ -424,6 +428,7 @@ export interface ResourceDefinition<TSchema extends Schema = Schema, TId extends
     readonly schema: TSchema;
     load(context: ResourceLoadContext<TScope, TPlayer>): Infer<TSchema> | Promise<Infer<TSchema>>;
     readonly authorize?: (context: ResourcePlayerContext<TPlayer>) => boolean;
+    readonly loadTimeoutMs?: number;
 }
 
 export type ResourceErrorHandler<TPlayer = unknown> = (failure: unknown, info: ResourceErrorInfo<TPlayer>) => void;

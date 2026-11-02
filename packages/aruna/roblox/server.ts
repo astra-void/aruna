@@ -273,7 +273,7 @@ export type {
 } from "./request-guard";
 // Server-owned resources (docs/resources.md). `defineResource` here leaves the
 // player type open, like `defineAction`; `aruna/roblox`'s defaults it to Player.
-export { defineResource } from "./resource";
+export { DEFAULT_RESOURCE_LOAD_TIMEOUT_MS, defineResource } from "./resource";
 export type {
 	AnyResourceDefinition,
 	ResourceContext,

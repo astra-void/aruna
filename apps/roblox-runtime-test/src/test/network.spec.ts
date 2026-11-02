@@ -387,6 +387,74 @@ describe("test network: hostile and broken clients", () => {
 });
 
 describe("test network: ordering and timing", () => {
+  // A load that never settles used to hold its key for good: for a global
+  // resource, every later subscriber waited on it. loadTimeoutMs bounds it.
+  it("fails a load that outlives its timeout, frees the key, and drops the late result", () => {
+    const loads = new Array<(value: { round: number }) => void>();
+    const errors = new Array<string>();
+    const board = defineResource({
+      id: "arena.slowBoard",
+      scope: "global",
+      schema: schema.object({ round: schema.u16() }),
+      loadTimeoutMs: 1000,
+      load() {
+        return new Promise<{ round: number }>((resolve) => {
+          loads.push(resolve);
+        });
+      },
+    });
+    const net = createTestNetwork({
+      actions: {},
+      resources: { [board.id]: board },
+      players: [101, 202],
+      onResourceError: (failure) => errors.push(tostring(failure)),
+    });
+    // `flush` would run the clock up to the pending timeout, so time moves by
+    // `advance` alone here.
+    const early = net.client(101).resources.subscribe("arena.slowBoard");
+    net.advance(100);
+    expect(loads.size()).toBe(1);
+    expect(early.status()).toBe("loading");
+
+    net.advance(800);
+    expect(early.status()).toBe("loading");
+    net.advance(300);
+    expect(early.status()).toBe("error");
+    expect(errors.size()).toBe(1);
+    expect(errors[0]!.find("timed out after 1000ms")[0] !== undefined).toBe(true);
+
+    // The key is free: a new subscriber starts a fresh load instead of waiting.
+    const late = net.client(202).resources.subscribe("arena.slowBoard");
+    net.advance(100);
+    expect(loads.size()).toBe(2);
+    loads[1]!({ round: 7 });
+    net.advance(100);
+    expect(late.status()).toBe("ready");
+
+    // The first load's result, long after its timeout, is dropped.
+    loads[0]!({ round: 1 });
+    net.advance(100);
+    expect((late.get() as { round: number }).round).toBe(7);
+    net.dispose();
+  });
+
+  it("waits forever when loadTimeoutMs is 0", () => {
+    const board = defineResource({
+      id: "arena.patientBoard",
+      scope: "global",
+      schema: schema.object({ round: schema.u16() }),
+      loadTimeoutMs: 0,
+      load() {
+        return new Promise<{ round: number }>(() => {});
+      },
+    });
+    const net = createTestNetwork({ actions: {}, resources: { [board.id]: board }, players: [101] });
+    const subscription = net.client(101).resources.subscribe("arena.patientBoard");
+    net.advance(120_000);
+    expect(subscription.status()).toBe("loading");
+    net.dispose();
+  });
+
   it("keeps one player's calls, state, and responses in order", async () => {
     const g = makeGame();
     const net = network(g, { latencyMs: 30 });

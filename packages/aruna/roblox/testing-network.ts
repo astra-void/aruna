@@ -65,7 +65,7 @@ export interface TestNetworkLatency {
 
 export type CreateTestNetworkOptions<TSignals extends SignalMap = SignalMap, TSession = unknown> = Omit<
 	CreateServerAppOptions<Player, TSignals, TSession>,
-	"transport" | "createPublisher" | "players" | "nowMs"
+	"transport" | "createPublisher" | "players" | "nowMs" | "delay"
 > & {
 	// Players who join (and get a client) when the network is created.
 	readonly players?: ReadonlyArray<number | TestNetworkPlayerSpec>;
@@ -508,6 +508,7 @@ export function createTestNetwork<TSignals extends SignalMap = SignalMap, TSessi
 		...options,
 		exposeInternalErrors: options.exposeInternalErrors ?? true,
 		nowMs: () => clock,
+		delay: virtualDelay,
 		...(signals !== undefined
 			? {
 					createPublisher: (registry: TSignals) =>

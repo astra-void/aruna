@@ -96,33 +96,33 @@ app.resources!.invalidate(bossHealth);            // a global resource: once, to
   player, at most one more follows it, and a batched channel sends one snapshot per
   resource per player per frame.
 
-### A load must settle
+### Load timeouts
 
-Aruna puts no timeout on `load`. While a load is running, its key waits on it: later
-invalidations queue one follow-up behind it, and a resync joins it. A load that never
-settles therefore stalls its key:
-
-- **Global resource:** every player who subscribes from then on waits on that load, even
-  when an earlier value was already sent to others, for as long as the server runs.
-- **Player-scoped resource:** that player's value stays where it was until the client
-  unsubscribes and subscribes again (or rejoins). `refresh()` does not help, because it
-  joins the running load.
-
-A `load` that waits on something outside the server (a DataStore, `HttpService`, another
-service) should bound itself, and reject when the bound passes. A rejection is an
-ordinary load error: subscribers get `ResourceLoadError`, the key is free, and the next
-invalidation or resync loads again.
+While a load is running, its key waits on it: later invalidations queue one follow-up
+behind it, a resync joins it, and for a global resource every new subscriber waits on it.
+So an async `load` is bounded: after `loadTimeoutMs` (default 30 000 ms,
+`DEFAULT_RESOURCE_LOAD_TIMEOUT_MS`) it counts as failed. Subscribers get
+`ResourceLoadError`, `onResourceError` is told the load timed out, the key is free, and
+the next invalidation or resync loads again. A result that arrives after the timeout is
+dropped, and the load's promise is cancelled.
 
 ```ts
 export const leaderboard = defineResource({
   id: "arena.leaderboard",
   scope: "global",
   schema: leaderboardSchema,
+  loadTimeoutMs: 10_000, // fail sooner than the default
   load() {
-    return fetchLeaderboard().timeout(10, "leaderboard load timed out");
+    return fetchLeaderboard();
   },
 });
 ```
+
+`loadTimeoutMs: 0` waits forever, as before. Then a load that never settles stalls its key:
+a global resource stays loading for everyone who subscribes until the server stops, and a
+player-scoped one until the client unsubscribes and subscribes again (`refresh()` joins
+the running load). A synchronous `load` has no timeout; it finishes before anything else
+runs.
 
 ## Subscribing on the client
 

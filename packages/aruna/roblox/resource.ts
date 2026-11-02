@@ -73,7 +73,16 @@ export interface ResourceDefinition<
 	// Refuses a subscription when it returns false (or throws). A property, not a
 	// method, so that it can be left out: `authorize: (ctx) => ...`.
 	readonly authorize?: (context: ResourcePlayerContext<TPlayer>) => boolean;
+	// How long an async `load` may run before it counts as failed
+	// (ResourceLoadError, `onResourceError` told why) and its key is free again.
+	// Default DEFAULT_RESOURCE_LOAD_TIMEOUT_MS; 0 waits forever. A result that
+	// arrives after the timeout is dropped.
+	readonly loadTimeoutMs?: number;
 }
+
+// A load that waits on something outside the server (a DataStore, HttpService)
+// can hang; without a bound, a hung load would stall its key for good.
+export const DEFAULT_RESOURCE_LOAD_TIMEOUT_MS = 30_000;
 
 // `defineResource` lives on `aruna/server` with the player erased, like
 // `defineAction`; `aruna/roblox`'s defaults the player to `Player`.
@@ -94,6 +103,7 @@ export type AnyResourceDefinition = {
 	readonly schema: Schema;
 	load(context: never): unknown;
 	readonly authorize?: (context: never) => boolean;
+	readonly loadTimeoutMs?: number;
 };
 
 export type ResourceMap = { readonly [resourceId: string]: AnyResourceDefinition };
@@ -164,6 +174,9 @@ export interface ResourceHostOptions<TPlayer> {
 	readonly getStores?: (player: TPlayer) => { readonly [name: string]: StoreDocument<unknown> | undefined };
 	readonly onResourceError?: ResourceErrorHandler<TPlayer>;
 	readonly observer?: ResourceObserver;
+	// Schedules a load timeout; returns a cancel. Defaults to `task.delay`. The
+	// test network passes its virtual clock.
+	readonly delay?: (delayMs: number, callback: () => void) => () => void;
 }
 
 // The server side of every resource in an app: `app.resources`.
@@ -261,6 +274,15 @@ export function createResourceHost<TPlayer>(
 	let revision = 0;
 	let sink: ResourceSink<TPlayer> | undefined;
 	let disposed = false;
+	const delay =
+		options !== undefined && options.delay !== undefined
+			? options.delay
+			: (delayMs: number, callback: () => void): (() => void) => {
+					const thread = task.delay(delayMs / 1000, callback);
+					return () => task.cancel(thread);
+				};
+	// Load timeouts still armed, so `dispose` leaves no timer behind.
+	const timers = new Set<() => void>();
 	const perPlayer = new Map<string, Map<TPlayer, KeyState<TPlayer>>>();
 	const global = new Map<string, KeyState<TPlayer>>();
 
@@ -445,7 +467,40 @@ export function createResourceHost<TPlayer>(
 			return;
 		}
 		if (Promise.is(result)) {
-			result.then(settle, (rejection) => finish(fail(definition, state, at, rejection, player)));
+			// Whichever comes first, the result or the timeout, settles the load;
+			// the other is dropped.
+			let settled = false;
+			let cancelTimeout: (() => void) | undefined;
+			const once = (settleWith: () => void): void => {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				if (cancelTimeout !== undefined) {
+					cancelTimeout();
+					timers.delete(cancelTimeout);
+				}
+				settleWith();
+			};
+			const timeoutMs = definition.loadTimeoutMs ?? DEFAULT_RESOURCE_LOAD_TIMEOUT_MS;
+			if (timeoutMs > 0) {
+				const cancel = delay(timeoutMs, () => {
+					timers.delete(cancel);
+					once(() => {
+						finish(
+							fail(definition, state, at, `Aruna resource ${definition.id}: load timed out after ${timeoutMs}ms`, player),
+						);
+						// Stops the work too, when the load's promise can be cancelled.
+						result.cancel();
+					});
+				});
+				cancelTimeout = cancel;
+				timers.add(cancel);
+			}
+			result.then(
+				(value) => once(() => settle(value)),
+				(rejection) => once(() => finish(fail(definition, state, at, rejection, player))),
+			);
 			return;
 		}
 		settle(result);
@@ -702,6 +757,10 @@ export function createResourceHost<TPlayer>(
 		},
 		dispose: () => {
 			disposed = true;
+			for (const cancel of timers) {
+				cancel();
+			}
+			timers.clear();
 			perPlayer.clear();
 			global.clear();
 			sink = undefined;

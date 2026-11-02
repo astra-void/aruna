@@ -22,6 +22,14 @@ the game build like any other module.
 
 ### Added
 
+- **Resource load timeouts: `loadTimeoutMs`** ([resources.md](docs/resources.md#load-timeouts)).
+  A load that never settled held its key for good; for a global resource every
+  later subscriber waited on it until the server stopped. An async load now fails
+  after `loadTimeoutMs` (default 30 000 ms, `DEFAULT_RESOURCE_LOAD_TIMEOUT_MS`;
+  `0` waits forever): subscribers get `ResourceLoadError`, `onResourceError` is
+  told it timed out, the key is free, the late result is dropped, and the load's
+  promise is cancelled. `createServerApp({ delay })` schedules the timers; the
+  test network drives them on its virtual clock.
 - **`authorize(ctx, input)` on actions** ([actions.md](docs/actions.md#authorize)).
   Every registered action was callable by every client, with middleware the only
   place to say who may call. `authorize` runs on every dispatch, after the input
