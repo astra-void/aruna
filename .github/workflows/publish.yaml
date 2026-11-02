@@ -266,8 +266,12 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
-      # Publishing goes through `pnpm publish`; pnpm 11.5.1 (pinned via the
-      # packageManager field) supports OIDC trusted publishing and provenance.
+      # Publishing goes through `npm publish` (scripts/release.ts): under OIDC
+      # trusted publishing npm attaches the provenance attestation, which pnpm
+      # did not. Trusted publishing needs npm 11.5.1 or later; Node 22 ships an
+      # older npm, so install a current 11.x first. release.ts checks the version.
+      - name: Install npm with trusted publishing
+        run: npm install -g npm@11
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

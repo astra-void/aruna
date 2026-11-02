@@ -185,10 +185,16 @@ function npmCacheDirectory(): string {
 // resolves. Spawning either as a process image fails (ENOENT / EINVAL since the
 // CVE-2024-27980 fix), so name the shim and let `runCommand` route it.
 const PNPM_BIN = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+// Publishing goes through the npm CLI, not pnpm: under OIDC trusted publishing
+// npm attaches a provenance attestation, which pnpm 11.5 did not (0.6.0 went out
+// through OIDC with none). Same `.cmd` rule on Windows.
+const NPM_BIN = process.platform === "win32" ? "npm.cmd" : "npm";
+// The first npm with OIDC trusted publishing.
+const MIN_TRUSTED_PUBLISHING_NPM = [11, 5, 1] as const;
 
 async function resolvePnpmInvocation(): Promise<{ command: string; args: string[] }> {
-  // pnpm is the workspace package manager and always on PATH; it proxies
-  // `pack`, `publish`, `whoami`, and `view` to the npm registry tooling.
+  // pnpm is the workspace package manager and always on PATH; it packs the
+  // staged packages. Publishing (and `whoami` / `view`) goes through NPM_BIN.
   return {
     command: PNPM_BIN,
     args: [],
@@ -844,15 +850,42 @@ async function packRelease(prepared: PreparedRelease, deps: ReleaseDeps): Promis
 }
 
 async function ensurePublishCredentials(spawn: typeof spawnSync): Promise<void> {
-  const pnpmInvocation = await resolvePnpmInvocation();
   runCommand(
     spawn,
-    pnpmInvocation.command,
-    [...pnpmInvocation.args, "whoami"],
+    NPM_BIN,
+    ["whoami"],
     workspaceRoot,
-    "npm credentials are required to publish. Run `pnpm login` first.",
+    "npm credentials are required to publish. Run `npm login` first.",
     { npm_config_cache: npmCacheDirectory() },
   );
+}
+
+// Trusted publishing (no credentials, an OIDC token instead) needs npm 11.5.1 or
+// later; an older npm would fail to authenticate, so say why up front.
+function ensureTrustedPublishingNpm(spawn: typeof spawnSync): void {
+  const result = spawn(NPM_BIN, ["--version"], {
+    cwd: workspaceRoot,
+    encoding: "utf8",
+    shell: process.platform === "win32",
+  });
+  const version = typeof result.stdout === "string" ? result.stdout.trim() : "";
+  const parts = version.split(".").map((part) => Number.parseInt(part, 10));
+  let supported = parts.length >= 3 && parts.every((part) => Number.isFinite(part));
+  if (supported) {
+    for (let index = 0; index < MIN_TRUSTED_PUBLISHING_NPM.length; index += 1) {
+      if (parts[index] !== MIN_TRUSTED_PUBLISHING_NPM[index]) {
+        supported = parts[index]! > MIN_TRUSTED_PUBLISHING_NPM[index]!;
+        break;
+      }
+    }
+  }
+  if (!supported) {
+    throw new Error(
+      `OIDC trusted publishing needs npm ${MIN_TRUSTED_PUBLISHING_NPM.join(".")} or later; found ${
+        version.length > 0 ? version : "no npm"
+      }. Install a newer npm (npm install -g npm@11) before publishing.`,
+    );
+  }
 }
 
 async function readStagedPackageName(packageDirectory: string): Promise<string> {
@@ -865,21 +898,13 @@ async function readStagedPackageName(packageDirectory: string): Promise<string> 
   return packageJson.name;
 }
 
-function isAlreadyPublished(
-  spawn: typeof spawnSync,
-  pnpmInvocation: { command: string; args: string[] },
-  name: string,
-  version: string,
-): boolean {
-  const result = spawn(
-    pnpmInvocation.command,
-    [...pnpmInvocation.args, "view", `${name}@${version}`, "version"],
-    {
-      cwd: workspaceRoot,
-      encoding: "utf8",
-      env: { ...process.env, npm_config_cache: npmCacheDirectory() },
-    },
-  );
+function isAlreadyPublished(spawn: typeof spawnSync, name: string, version: string): boolean {
+  const result = spawn(NPM_BIN, ["view", `${name}@${version}`, "version"], {
+    cwd: workspaceRoot,
+    encoding: "utf8",
+    shell: process.platform === "win32",
+    env: { ...process.env, npm_config_cache: npmCacheDirectory() },
+  });
   return (
     result.status === 0 &&
     typeof result.stdout === "string" &&
@@ -889,29 +914,21 @@ function isAlreadyPublished(
 
 async function publishPackage(
   spawn: typeof spawnSync,
-  pnpmInvocation: { command: string; args: string[] },
   packageDirectory: string,
   options: ReleaseOptions,
   version: string,
 ): Promise<void> {
   const name = await readStagedPackageName(packageDirectory);
   // Idempotent: a re-run after a partial failure skips what already landed.
-  if (!options.dryRun && isAlreadyPublished(spawn, pnpmInvocation, name, version)) {
+  if (!options.dryRun && isAlreadyPublished(spawn, name, version)) {
     console.log(`Skipping ${name}@${version} (already published).`);
     return;
   }
 
   // Scoped @arunajs/* packages default to restricted (private) access on npm;
-  // publish them publicly. `--no-git-checks` keeps pnpm from refusing to publish
-  // off a detached tag checkout in CI.
-  const args = [
-    ...pnpmInvocation.args,
-    "publish",
-    packageDirectory,
-    "--access",
-    "public",
-    "--no-git-checks",
-  ];
+  // publish them publicly. The staged manifest has no workspace protocols left
+  // (validateStagedRelease), so npm needs no pnpm rewriting.
+  const args = ["publish", packageDirectory, "--access", "public"];
   if (options.dryRun) {
     args.push("--dry-run");
   }
@@ -923,7 +940,7 @@ async function publishPackage(
   }
   runCommand(
     spawn,
-    pnpmInvocation.command,
+    NPM_BIN,
     args,
     workspaceRoot,
     `Failed to publish ${workspaceRelative(packageDirectory)}`,
@@ -937,12 +954,15 @@ async function publishRelease(
   deps: ReleaseDeps,
 ): Promise<void> {
   const spawn = deps.spawnSync ?? spawnSync;
-  // OIDC trusted publishing has no logged-in identity, so `pnpm whoami` would fail;
-  // CI skips the check with --no-verify-credentials.
+  // OIDC trusted publishing has no logged-in identity, so `npm whoami` would fail;
+  // CI skips the check with --no-verify-credentials, and then needs an npm that
+  // can authenticate through OIDC.
   if (!options.dryRun && options.verifyCredentials !== false) {
     await ensurePublishCredentials(spawn);
   }
-  const pnpmInvocation = await resolvePnpmInvocation();
+  if (!options.dryRun && options.verifyCredentials === false) {
+    ensureTrustedPublishingNpm(spawn);
+  }
 
   // Dependency order: native binaries → core → compiler → aruna → create-aruna-app
   // (the scaffolder installs @arunajs/aruna, so it publishes last).
@@ -955,7 +975,7 @@ async function publishRelease(
   ];
 
   for (const packageDirectory of orderedDirectories) {
-    await publishPackage(spawn, pnpmInvocation, packageDirectory, options, prepared.version);
+    await publishPackage(spawn, packageDirectory, options, prepared.version);
   }
 }
 

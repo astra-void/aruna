@@ -68,6 +68,18 @@ export function rewriteWorkspaceDependencies(
   );
 }
 
+// npm normalizes a `bin` path that starts with "./" on publish and warns about
+// it; stage the form it would write.
+export function normalizeBin(
+  bin: string | Record<string, string> | undefined,
+): string | Record<string, string> | undefined {
+  const clean = (target: string) => (target.startsWith("./") ? target.slice(2) : target);
+  if (bin === undefined || typeof bin === "string") {
+    return bin === undefined ? undefined : clean(bin);
+  }
+  return Object.fromEntries(Object.entries(bin).map(([name, target]) => [name, clean(target)]));
+}
+
 /**
  * Copies the entries declared in package `files` into the staging directory.
  * Handles literal files, directories (recursively), and the root-level `*.ext`
@@ -132,7 +144,7 @@ export async function stageWorkspacePackage(
     type: sourcePackageJson.type,
     license: sourcePackageJson.license,
     repository: sourcePackageJson.repository,
-    bin: sourcePackageJson.bin,
+    bin: normalizeBin(sourcePackageJson.bin),
     main: sourcePackageJson.main,
     module: sourcePackageJson.module,
     types: sourcePackageJson.types,

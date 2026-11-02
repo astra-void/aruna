@@ -548,6 +548,56 @@ describe("release orchestrator", { timeout: 60_000 }, () => {
     expect(rootEntries).toEqual([`compiler-${hostTarget}`]);
   });
 
+  // CI publishes with OIDC trusted publishing (--no-verify-credentials) through
+  // the npm CLI, which attaches provenance; npm before 11.5.1 cannot use OIDC.
+  it("publishes through npm with provenance, and refuses an npm too old for OIDC", async () => {
+    const buildNativeArtifact = vi.fn(async (options: { target: NativeTarget }) => ({
+      targetInfo: nativeTargetInfo(options.target),
+      profile: "release",
+      sourceArtifactPath: await createNativeArtifact(options.target),
+      command: "cargo",
+      args: [],
+    }));
+    await buildNativeRelease(
+      { mode: "cross", targets: hostTarget },
+      { spawnSync: vi.fn(() => ({ status: 0, error: undefined })), buildNativeArtifact, stagingRoot },
+    );
+    const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+    const publishWith = (npmVersion: string) => {
+      const calls: Array<{ command: string; args: string[] }> = [];
+      const spawnSync = vi.fn((command: string, args: string[]) => {
+        calls.push({ command, args });
+        if (args.includes("--version")) {
+          return { status: 0, error: undefined, stdout: `${npmVersion}\n` };
+        }
+        // `npm view` finds nothing published yet.
+        if (args.includes("view")) {
+          return { status: 1, error: undefined, stdout: "" };
+        }
+        return { status: 0, error: undefined };
+      });
+      const run = publishPreparedRelease(
+        { mode: "full", assemble: true, provenance: true, verifyCredentials: false, tag: "canary" },
+        { spawnSync, stageCompilerPackage: stageCompilerPackageStub, stagingRoot },
+      );
+      return { run, calls };
+    };
+
+    const old = publishWith("10.9.8");
+    await expect(old.run).rejects.toThrow(/needs npm 11\.5\.1 or later; found 10\.9\.8/);
+    expect(old.calls.some((call) => call.args.includes("publish"))).toBe(false);
+
+    const current = publishWith("11.6.2");
+    await current.run;
+    const published = current.calls.filter((call) => call.args[0] === "publish");
+    expect(published.length).toBe(5);
+    for (const call of published) {
+      expect(call.command).toBe(npmBin);
+      expect(call.args).toEqual(expect.arrayContaining(["--access", "public", "--provenance", "--tag", "canary"]));
+    }
+    expect(current.calls.some((call) => call.args.includes("whoami"))).toBe(false);
+  });
+
   it("assembles and publishes from a pre-staged native package", async () => {
     const buildNativeArtifact = vi.fn(
       async (options: { target: NativeTarget; [key: string]: unknown }) => {
