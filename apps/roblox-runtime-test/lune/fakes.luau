@@ -110,6 +110,11 @@ local function makeDataStoreService()
 	local budgets = {}
 	local pendingFailures = {}
 	local calls = { get = 0, set = 0, update = 0, remove = 0 }
+	-- What the last write to each key carried in the user-ids slot: SetAsync's
+	-- third argument, or the second value an UpdateAsync transform returned.
+	-- `count` is how many values the transform returned, since an omitted slot
+	-- and an explicit nil are different tuples to the real service.
+	local userIds = {}
 
 	local function consumeFailure(kind)
 		local queued = pendingFailures[kind]
@@ -136,13 +141,14 @@ local function makeDataStoreService()
 				end
 				return entries[entryKey], { Version = "1" }
 			end,
-			SetAsync = function(_self, entryKey, value)
+			SetAsync = function(_self, entryKey, value, ids)
 				calls.set += 1
 				local failure = consumeFailure("set")
 				if failure ~= nil then
 					error(failure, 0)
 				end
 				entries[entryKey] = value
+				userIds[entryKey] = { ids = ids }
 				return "version"
 			end,
 			UpdateAsync = function(_self, entryKey, transform)
@@ -151,12 +157,14 @@ local function makeDataStoreService()
 				if failure ~= nil then
 					error(failure, 0)
 				end
-				local nextValue = transform(entries[entryKey], { Version = "1" })
+				local results = table.pack(transform(entries[entryKey], { Version = "1" }))
+				local nextValue = results[1]
 				if nextValue == nil then
 					-- A nil result cancels the write, exactly like the real service.
 					return entries[entryKey], { Version = "1" }
 				end
 				entries[entryKey] = nextValue
+				userIds[entryKey] = { ids = results[2], count = results.n }
 				return nextValue, { Version = "1" }
 			end,
 			RemoveAsync = function(_self, entryKey)
@@ -186,6 +194,7 @@ local function makeDataStoreService()
 		service = service,
 		stores = stores,
 		calls = calls,
+		userIds = userIds,
 		setBudget = function(requestType, amount)
 			budgets[requestType] = amount
 		end,

@@ -69,6 +69,16 @@ return function(ctx)
 		return if entries ~= nil then entries[key] else nil
 	end
 
+	-- A heartbeat's write settles on its own, with no promise a spec can await,
+	-- so wait for its visible effect instead.
+	local function waitFor(predicate, timeoutSeconds)
+		local deadline = os.clock() + (timeoutSeconds or 3)
+		while not predicate() and os.clock() < deadline do
+			task.wait()
+		end
+		return predicate()
+	end
+
 	t.describe("store persistence", function()
 		t.it("round-trips a value through a versioned envelope", function()
 			local store = storeModule.createStore(definition({ version = 3 }), {
@@ -193,6 +203,101 @@ return function(ctx)
 		end)
 	end)
 
+	-- The adapter by itself, against the fake service: what each call hands the
+	-- DataStore API and what comes back.
+	t.describe("DataStore adapter", function()
+		local function adapter(id, options)
+			return datastore.robloxDataStoreBackend({ id = id }, options)
+		end
+
+		t.it("returns user ids from the UpdateAsync transform, and omits the slot without them", function()
+			local backend = adapter("adapter.userids")
+			t.await(backend.update("with", function()
+				return { coins = 1 }
+			end, { 7 }))
+			t.await(backend.update("without", function()
+				return { coins = 2 }
+			end, nil))
+
+			local recorded = fakes.dataStores.userIds
+			t.eq(recorded["with"].count, 2, "value and user ids")
+			t.eq(recorded["with"].ids[1], 7, "user id")
+			t.eq(recorded["without"].count, 1, "no user-ids slot at all")
+			t.eq(fakes.dataStores.entriesFor("adapter.userids")["with"].coins, 1, "value written")
+		end)
+
+		t.it("passes user ids to SetAsync", function()
+			local backend = adapter("adapter.set")
+			t.await(backend.set("k", { coins = 3 }, { 8 }))
+			t.eq(fakes.dataStores.userIds["k"].ids[1], 8, "user id")
+			t.eq(fakes.dataStores.entriesFor("adapter.set")["k"].coins, 3, "value written")
+		end)
+
+		t.it("cancels the write when the transform returns nil", function()
+			local backend = adapter("adapter.cancel")
+			t.await(backend.set("k", { coins = 4 }))
+			local _, ok, result = t.await(backend.update("k", function()
+				return nil
+			end))
+			t.isTrue(ok, "a cancelled update still resolves")
+			t.eq(result.coins, 4, "resolves with the record as it stands")
+			t.eq(fakes.dataStores.entriesFor("adapter.cancel")["k"].coins, 4, "record untouched")
+		end)
+
+		t.it("removes a key", function()
+			local backend = adapter("adapter.remove")
+			t.await(backend.set("k", { coins = 5 }))
+			t.await(backend.remove("k"))
+			local _, _, value = t.await(backend.get("k"))
+			t.eq(value, nil, "key is gone")
+		end)
+
+		t.it("reads each request kind's budget from its DataStore request type", function()
+			local backend = adapter("adapter.budget")
+			fakes.dataStores.setBudget("GetAsync", 11)
+			fakes.dataStores.setBudget("UpdateAsync", 12)
+			fakes.dataStores.setBudget("SetIncrementAsync", 13)
+
+			t.eq(backend.getBudget("get"), 11, "get")
+			t.eq(backend.getBudget("update"), 12, "update")
+			t.eq(backend.getBudget("set"), 13, "set")
+			t.eq(backend.getBudget("remove"), 13, "remove shares the set budget")
+
+			fakes.dataStores.setBudget("GetAsync", nil)
+			fakes.dataStores.setBudget("UpdateAsync", nil)
+			fakes.dataStores.setBudget("SetIncrementAsync", nil)
+		end)
+
+		t.it("rejects with the DataStore error unchanged", function()
+			local backend = adapter("adapter.errors")
+			fakes.dataStores.queueFailure("update", "429: too many requests")
+			local settled, ok, reason = t.await(backend.update("k", function()
+				return { coins = 6 }
+			end))
+			t.isTrue(settled, "the request settles")
+			t.isFalse(ok, "the request rejects")
+			t.eq(reason, "429: too many requests", "classification is left to the core")
+		end)
+
+		t.it("does not probe or fall back in Studio when studioFallback is false", function()
+			fakes.studio.enabled = true
+			local before = fakes.dataStores.calls.get
+			local fellBack = false
+			local backend = adapter("adapter.nofallback", {
+				studioFallback = false,
+				onFallback = function()
+					fellBack = true
+				end,
+			})
+			fakes.studio.enabled = false
+			t.eq(fakes.dataStores.calls.get, before, "no probe request")
+			t.isFalse(fellBack, "no fallback")
+
+			t.await(backend.set("k", { coins = 9 }))
+			t.eq(fakes.dataStores.entriesFor("adapter.nofallback")["k"].coins, 9, "writes reach the DataStore")
+		end)
+	end)
+
 	t.describe("session locking", function()
 		local function playerStoreFor(owner, nowMs, overrides)
 			local settings = overrides or {}
@@ -205,6 +310,7 @@ return function(ctx)
 						acquireAttempts = 1,
 						acquireDelayMs = 1,
 					},
+					retry = settings.retry,
 				}),
 				{
 					createBackend = backendFor,
@@ -213,7 +319,7 @@ return function(ctx)
 						return nowMs()
 					end,
 					onLoadFailed = function() end,
-					onSaveFailed = function() end,
+					onSaveFailed = if settings.onSaveFailed ~= nil then settings.onSaveFailed else function() end,
 					scheduler = if settings.scheduler ~= nil then settings.scheduler else manualScheduler(),
 				}
 			)
@@ -369,6 +475,101 @@ return function(ctx)
 			t.eq(entry.d.coins, 12, "pending changes flushed")
 			t.eq(entry.l.h, 5_000, "lock refreshed")
 			t.await(store.release(player), 3)
+		end)
+
+		t.it("keeps the document open and writes on the next tick after a failed heartbeat", function()
+			local player = { UserId = 110 }
+			local scheduler = manualScheduler()
+			local failures = {}
+			local store = playerStoreFor("server-a", function()
+				return 1_000
+			end, {
+				scheduler = scheduler,
+				-- One attempt per write: a retry backoff would wait on the parked scheduler.
+				retry = { attempts = 1 },
+				onSaveFailed = function(_player, err)
+					table.insert(failures, err.name)
+				end,
+			})
+
+			local _, _, loaded = t.await(store.load(player))
+			t.isTrue(loaded.ok, "load should succeed")
+			loaded.value.update(function(current)
+				return { coins = 7, name = current.name }
+			end)
+
+			fakes.dataStores.queueFailure("update", "502: service unavailable")
+			scheduler.runAll()
+			t.isTrue(
+				waitFor(function()
+					return #failures > 0
+				end),
+				"the failed heartbeat is reported"
+			)
+			t.eq(failures[1], "StoreRequestError", "error name")
+			t.isTrue(loaded.value.isActive(), "a transient failure keeps the document")
+			t.isTrue(loaded.value.isDirty(), "the change is still pending")
+			t.eq(storedEntry("player_110").d.coins, 0, "nothing was written")
+			t.eq(scheduler.count(), 1, "the next heartbeat is armed")
+
+			scheduler.runAll()
+			t.isTrue(
+				waitFor(function()
+					return storedEntry("player_110").d.coins == 7
+				end),
+				"the next heartbeat writes the change"
+			)
+			t.isFalse(loaded.value.isDirty(), "nothing left to flush")
+			t.eq(#failures, 1, "no further failures")
+			t.await(store.release(player), 3)
+		end)
+
+		t.it("closes the document when a heartbeat finds another server's lock", function()
+			local player = { UserId = 111 }
+			local scheduler = manualScheduler()
+			local clock = { ms = 1_000 }
+			local failures = {}
+			local first = playerStoreFor("server-a", function()
+				return clock.ms
+			end, {
+				scheduler = scheduler,
+				onSaveFailed = function(_player, err)
+					table.insert(failures, err.name)
+				end,
+			})
+
+			local _, _, loaded = t.await(first.load(player))
+			t.isTrue(loaded.ok, "load should succeed")
+
+			-- server-a's heartbeats stop landing long enough for its lock to go
+			-- stale, and server-b takes the player over.
+			clock.ms = 40_000
+			local second = playerStoreFor("server-b", function()
+				return clock.ms
+			end)
+			local _, _, taken = t.await(second.load(player), 3)
+			t.isTrue(taken.ok, "server-b takes over")
+			taken.value.set({ coins = 50, name = "taker" })
+			t.await(taken.value.save(), 3)
+
+			-- server-a's next heartbeat carries an older value.
+			loaded.value.update(function(current)
+				return { coins = 999, name = current.name }
+			end)
+			scheduler.runAll()
+			t.isTrue(
+				waitFor(function()
+					return #failures > 0
+				end),
+				"the refused heartbeat is reported"
+			)
+			t.eq(failures[1], "StoreLockedError", "error name")
+			t.isFalse(loaded.value.isActive(), "losing the lock closes the document")
+			t.eq(scheduler.count(), 0, "no further heartbeats")
+			local entry = storedEntry("player_111")
+			t.eq(entry.d.coins, 50, "the taker's value survives")
+			t.eq(entry.l.o, "server-b", "the taker keeps the lock")
+			t.await(second.release(player), 3)
 		end)
 
 		t.it("rejects a write through a released document", function()

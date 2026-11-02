@@ -137,6 +137,8 @@ The lifecycle:
    interval. A tick with nothing to flush writes only once the lock is half `lockTtlMs`
    old, since then the write's only job is keeping the lock alive
    ([cost](#where-the-session-lock-lives)).
+   A heartbeat write that still fails after its retries goes to `onSaveFailed`; the
+   document stays open with the change pending, and the next tick writes it again.
 3. **Release** writes one final time and clears the lock, so the player's next server can
    load immediately instead of waiting out the TTL.
 
