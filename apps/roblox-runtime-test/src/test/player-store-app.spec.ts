@@ -288,3 +288,46 @@ describe("createServerApp with a player store", () => {
     app.dispose();
   });
 });
+
+// createServerApp registers a BindToClose handler when it owns a player store.
+// The fake game records handlers without exposing them, so the spec swaps the
+// method for the duration of one app.
+function captureCloseHandlers(): { readonly handlers: Array<() => void>; readonly restore: () => void } {
+  const target = game as unknown as { [key: string]: unknown };
+  const original = rawget(target, "BindToClose");
+  const handlers = new Array<() => void>();
+  rawset(target, "BindToClose", (_self: unknown, handler: () => void) => {
+    handlers.push(handler);
+  });
+  return { handlers, restore: () => rawset(target, "BindToClose", original) };
+}
+
+describe("createServerApp shutdown", () => {
+  it("flushes every open document and clears its lock when the server closes", async () => {
+    const close = captureCloseHandlers();
+    try {
+      const backend = createMemoryStoreBackend();
+      const seen = new Array<defined>();
+      const { app, players, playerStore } = createApp(backend, seen);
+      expect(close.handlers.size()).toBe(1);
+
+      const player: FakePlayer = { UserId: 7 };
+      players.emitAdded(player);
+      await playerStore.waitFor(player);
+      await app.dispatch("shop.buy", { player }, {});
+      const before = backend.snapshot().get("player_7") as { d: Profile; l?: unknown };
+      expect(before.d.coins).toBe(0);
+      expect(before.l !== undefined).toBe(true);
+
+      // What Roblox runs at shutdown: it yields until the releases land.
+      close.handlers[0]!();
+
+      const after = backend.snapshot().get("player_7") as { d: Profile; l?: unknown };
+      expect(after.d.coins).toBe(1);
+      expect(after.l).toBeUndefined();
+      app.dispose();
+    } finally {
+      close.restore();
+    }
+  });
+});
