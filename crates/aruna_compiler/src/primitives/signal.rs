@@ -68,7 +68,7 @@ pub(crate) fn extract_signal_unreliable(
         Expression::BooleanLiteral(literal) => literal.value,
         _ => {
             diagnostics.push(create_diagnostic(
-                "aruna::560",
+                "aruna::592",
                 format!("Signal {signal_id} has an invalid unreliable option."),
                 Some(file.to_string()),
                 Some(DiagnosticSpan {
@@ -92,7 +92,7 @@ pub(crate) fn analyze_define_signal_call<'a>(
 ) -> Option<ArunaSignalRecord> {
     let Some(Argument::ObjectExpression(object)) = call.arguments.first() else {
         diagnostics.push(create_diagnostic(
-            "aruna::560",
+            "aruna::592",
             format!("Signal {export_name} in {file} has an invalid defineSignal definition."),
             Some(file.to_string()),
             Some(call_span(call)),
@@ -104,7 +104,7 @@ pub(crate) fn analyze_define_signal_call<'a>(
 
     let Some(id_property) = find_object_property(object, "id") else {
         diagnostics.push(create_diagnostic(
-            "aruna::560",
+            "aruna::592",
             format!("Signal {export_name} in {file} is missing an id."),
             Some(file.to_string()),
             Some(object_span(object)),
@@ -119,7 +119,7 @@ pub(crate) fn analyze_define_signal_call<'a>(
         _ => None,
     }) else {
         diagnostics.push(create_diagnostic(
-            "aruna::560",
+            "aruna::592",
             format!("Signal {export_name} in {file} has an invalid id."),
             Some(file.to_string()),
             Some(DiagnosticSpan {

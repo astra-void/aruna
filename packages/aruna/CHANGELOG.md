@@ -22,6 +22,11 @@ the game build like any other module.
 
 ### Added
 
+- **A diagnostics reference: [diagnostics.md](docs/diagnostics.md).** Every
+  code with its name, default severity, meaning and the `strict` option that
+  changes it. A test checks it against the compiler's table, the CLI's own codes
+  and the `DiagnosticCode` type, so a code cannot ship undocumented.
+
 - **Resource load timeouts: `loadTimeoutMs`** ([resources.md](docs/resources.md#load-timeouts)).
   A load that never settled held its key for good; for a global resource every
   later subscriber waited on it until the server stopped. An async load now fails
@@ -485,6 +490,16 @@ the game build like any other module.
 
 ### Changed
 
+- **Breaking: an invalid `defineSignal` is `aruna::592 invalid-signal-definition`**
+  ([diagnostics.md](docs/diagnostics.md)). A call that is not an object literal,
+  has no static `id`, or has an `unreliable` that is not a boolean literal was
+  reported as `aruna::560 invalid-action-rate-limit`. A `diagnostics.ignore` entry
+  for 560 no longer hides these.
+
+- **`DiagnosticCode` (exported from `aruna`) lists exactly the codes Aruna
+  reports.** It was missing 306–309, 570–577, 580–582 and 586–592, and still
+  listed the retired `aruna::109`.
+
 - **Builds write only what changed.** The compiler leaves a generated file (and
   the manifest) alone when its bytes are already on disk, the build skips
   re-vendoring a runtime that matches its source, and the compiled `out/` and
@@ -891,6 +906,10 @@ the game build like any other module.
   outside this repo's own tests.
 
 ### Fixed
+
+- **A duplicate signal id was reported as `internal-compiler-error`.** The
+  compiler emitted `aruna::563` without a name for it, so the lookup fell back to
+  the internal-error name. It is `duplicate-signal-id` now.
 
 - **A rejoin on the same server could read a stale record or be overwritten by the
   departed session.** The player store keyed documents by `Player`, and a server's own

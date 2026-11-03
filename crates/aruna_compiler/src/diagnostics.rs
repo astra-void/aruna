@@ -98,6 +98,7 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         "aruna::554" => Some(("action-output-schema-invalid", DiagnosticSeverity::Warning)),
         "aruna::559" => Some(("invalid-action-fire-and-forget", DiagnosticSeverity::Error)),
         "aruna::560" => Some(("invalid-action-rate-limit", DiagnosticSeverity::Error)),
+        "aruna::563" => Some(("duplicate-signal-id", DiagnosticSeverity::Error)),
         "aruna::564" => Some(("signal-payload-schema-invalid", DiagnosticSeverity::Warning)),
         // An identifier used as a schema that resolves to nothing — locally or
         // through one import hop. An Error (unlike the shape warnings above):
@@ -151,6 +152,10 @@ pub fn diagnostic_meta(code: &str) -> Option<(&'static str, DiagnosticSeverity)>
         // An error, like 569: whether a call is checked must not depend on a
         // value the compiler cannot read.
         "aruna::591" => Some(("invalid-action-authorize", DiagnosticSeverity::Error)),
+        // A defineSignal call the compiler cannot read: not an object literal, no
+        // static id, or an `unreliable` that is not a boolean literal. These were
+        // reported as 560 (an action rate-limit code) before it had its own.
+        "aruna::592" => Some(("invalid-signal-definition", DiagnosticSeverity::Error)),
         "aruna::555" => Some(("duplicate-action-id", DiagnosticSeverity::Error)),
         "aruna::556" => Some(("action-imported-from-invalid-environment", DiagnosticSeverity::Error)),
         "aruna::557" => Some((

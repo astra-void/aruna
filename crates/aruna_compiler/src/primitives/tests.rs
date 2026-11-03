@@ -498,7 +498,7 @@ export const broken = defineSignal({});
     );
 
     assert!(result.signals.is_empty());
-    assert!(result.diagnostics.iter().any(|d| d.code == "aruna::560"));
+    assert!(result.diagnostics.iter().any(|d| d.code == "aruna::592"));
 }
 
 fn schema(kind: &str) -> ArunaSchemaMetadata {

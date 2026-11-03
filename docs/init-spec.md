@@ -3683,6 +3683,11 @@ Move shared logic into `shared/`, or expose this operation through a server acti
 
 ## 12.6 Diagnostic Code Ranges
 
+> The codes this spec proposes are candidates, and some were later allocated
+> differently. What ships is `crates/aruna_compiler/src/diagnostics.rs`, documented
+> in [packages/aruna/docs/diagnostics.md](../packages/aruna/docs/diagnostics.md).
+> The ranges below still hold.
+
 | Range | Area | Purpose |
 | --- | --- | --- |
 | `aruna::100`-`aruna::199` | project / config / resolver | Project setup, config loading, tsconfig handling, path aliases, package exports, and import resolution. |

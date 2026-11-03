@@ -162,7 +162,8 @@ Every command exits 0 when it succeeds. Beyond that:
 | `test` | a spec failed or the suite could not run (`1`) |
 | `migrate` | the codemod could not run (`1`) |
 
-`--json` changes the output, not the exit code.
+`--json` changes the output, not the exit code. Every diagnostic code, its default
+severity and meaning are listed in [diagnostics.md](./diagnostics.md).
 
 ## JSON output
 

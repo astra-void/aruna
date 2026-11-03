@@ -9,6 +9,7 @@ npx aruna doctor
 npx aruna doctor --fix
 ```
 
+For a compiler diagnostic (`aruna::NNN`), see [diagnostics.md](./diagnostics.md).
 The rest of this page goes by the message you see: problems installing and building
 first, then problems in the running game.
 
