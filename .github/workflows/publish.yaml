@@ -10,6 +10,10 @@ name: publish
 #     `<next patch>-canary.<sha7>.<run>` under the `canary` dist-tag
 #     (scripts/canary-version.ts sets it in every job). No guarantees beyond
 #     "built from the commit it was run on" — see docs/stability.md.
+#   - rehearsal: a manual run with `dry_run` checked runs every job below on the
+#     canary version, but the last step is `npm publish --dry-run`: nothing
+#     reaches npm, and no trusted publisher is needed. Use it to prove the
+#     whole graph builds, loads and packs before the first real publish.
 #
 # Nothing is built for release until the commit passes the whole of ci.yaml
 # (`verify`, called as a reusable workflow) and, for a tag, the release-ref
@@ -42,6 +46,11 @@ on:
   # Canary only: stable goes through a v* tag, so a manual run can never publish
   # `latest` from an arbitrary branch.
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Rehearse: run every job, but publish with --dry-run (nothing reaches npm)"
+        type: boolean
+        default: false
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -289,4 +298,11 @@ jobs:
         run: pnpm exec tsx scripts/canary-version.ts
 
       - name: Publish
+        if: ${{ !inputs.dry_run }}
         run: pnpm release:publish --assemble --provenance --no-verify-credentials --tag ${{ env.CHANNEL == 'canary' && 'canary' || 'latest' }}
+
+      # `npm publish --dry-run` prints each tarball's files and size, so the
+      # job log is the record of what the graph would ship.
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        run: pnpm release:dry-run --assemble --no-verify-credentials --tag canary

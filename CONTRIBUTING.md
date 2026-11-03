@@ -77,7 +77,10 @@ check (a platform, a Studio session).
 Maintainers publish through `.github/workflows/publish.yaml`. Every package in the graph
 is released in lockstep at one version. A manual run publishes a canary; a `v*` tag on main
 publishes stable. Either way the workflow first runs all of CI on the commit being
-released. See [docs/stability.md](docs/stability.md) for what each release may change.
+released. A manual run with **dry_run** checked rehearses a canary: every job runs, including
+the 8 native builds and load checks, but the last step is `npm publish --dry-run`, so
+nothing reaches npm. See [docs/stability.md](docs/stability.md) for what each release may
+change.
 
 ## Reporting a bug
 
