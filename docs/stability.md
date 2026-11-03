@@ -51,7 +51,7 @@ CHANGELOG entry, and a breaking one follows the rules in [Versioning](#versionin
 | --- | --- | --- |
 | **Subpath exports**: `aruna` (config and compiler), `aruna/server`, `aruna/client`, `aruna/roblox`, `aruna/schema`, `aruna/testing`, `aruna/ui` — every exported name, its type, and its runtime behavior | `packages/aruna/src/index.ts`, `packages/aruna/roblox/*.ts` | the API report (`api/`, below) |
 | **Config schema**: every key `defineConfig` accepts, its type, default, and meaning | `@arunajs/core` (`Config`), `packages/compiler/src/config.ts` | the API report (`api/aruna.d.ts`) |
-| **CLI**: command names, flags, their defaults, exit codes, and `--json` output shapes | `packages/aruna/src/cli/cli.ts` | the compiler output guard (`--json` outputs), CLI tests |
+| **CLI**: command names, flags, their defaults, exit codes, and `--json` output shapes | `packages/aruna/src/cli/cli.ts`, documented in [cli.md](../packages/aruna/docs/cli.md#json-output) | the compiler output guard (`--json` outputs), CLI tests (`--json output shapes`) |
 | **Diagnostic codes and names**: `aruna::NNN`, the kebab-case name, the default severity, and what a config `diagnostics.ignore` entry matches | `crates/aruna_compiler/src/diagnostics.rs` | the output guard, `diagnostics.rs` tests |
 | **Manifest format** (`manifest.json`, `version: 1`) | `crates/aruna_compiler/src/manifest.rs` and the record types in `primitives/` | the output guard |
 | **Contract snapshot format** (`aruna.contract.json`, `version: 2`; a `version: 1` file is still read as a baseline) and `contract diff` severities | `packages/aruna/src/cli/action-contracts.ts`, `contract-diff.ts` | the output guard, `contract-diff` tests |

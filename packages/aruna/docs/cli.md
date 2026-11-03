@@ -142,8 +142,7 @@ jobs:
 `check` and `update --check` catch different things: `check` fails on an unreadable store
 change whether or not the snapshot was touched, and `update --check` fails on any
 contract change — an action's input, a signal's payload, a compatible store change — that
-was not recorded. `--json` prints `{ ok, snapshot, outOfDate, committed,
-unreadableRecordChanges }`.
+was not recorded. For what `--json` prints, see [JSON output](#json-output).
 
 `aruna build` tracks the files it emits in a `.aruna-build.json` ledger inside `generatedDir`
 and **prunes stale artifacts** a previous build emitted and this one does not (a removed
@@ -164,6 +163,43 @@ Every command exits 0 when it succeeds. Beyond that:
 | `migrate` | the codemod could not run (`1`) |
 
 `--json` changes the output, not the exit code.
+
+## JSON output
+
+With `--json`, a command prints one JSON document on stdout and nothing else there.
+The shapes are part of the [stable surface](../../../docs/stability.md): a key is not
+renamed or removed outside a major version, and new keys may appear, so ignore keys you
+do not know.
+
+| Command | Prints |
+| --- | --- |
+| `inspect` | The compiler output (`CompilerOutput`, exported from `aruna`): `{ ok, projectRoot, config, diagnostics, manifest, summary }` |
+| `check` | The compiler output plus `manifestPath` |
+| `build` | The compiler output plus `manifestPath` and `generatedFiles`, and when they apply `tsconfig` (what the upkeep wrote), `pruned` (stale artifacts removed), `rbxtsc` (the Luau compile) and `timings` (with `--timings`) |
+| `inspect actions` / `signals` / `stores` / `resources` | `{ actions \| signals \| stores \| resources, diagnostics, summary }` |
+| `inspect contract` | The contract snapshot, the same document `contract update` writes |
+| `inspect network` | `{ kind: "static", note, requestBudget, defaultRateLimit, actions, signals, resources }` |
+| `inspect modules` / `graph` | `{ modules \| imports, diagnostics, summary }` |
+| `contract diff` | `{ version: 1, summary: { breaking, warning, nonBreaking, info }, entries }` |
+| `contract update` | Written: `{ ok: true, snapshot }`, plus `acceptedUnreadableRecordChanges` with `--accept-unreadable-records`. Refused: `{ ok: false, snapshot, committed, unreadableRecordChanges }` |
+| `contract update --check` | `{ ok, snapshot, outOfDate, committed, unreadableRecordChanges }` |
+| `doctor` | `{ projectRoot, configPath?, tsconfigPath, generatedDir, generatedDirResolved, manifestOutput, manifestOutputResolved, configDiagnostics, tsconfigDiagnostics, tsconfig, aliases, toolchain, rojoProject, fixable, fix? }` |
+| `init` | `{ projectRoot, created, overwritten, skipped, tsconfig, rojoProject }` |
+| `add domain` | `{ name, domainDir, created, skipped }` |
+| `migrate --list` | `[{ name, description }]` |
+| `migrate <name>` | `{ codemod, dryRun, filesScanned, changed: [{ file, diff }], unhandled: [{ file, line, column, message }] }` |
+
+`committed` is `"ok"`, `"missing"` or `"invalid"`. `contract diff` and
+`contract update`, when the project has compiler errors, print the compiler output
+instead of their own report, so a tool can read `diagnostics`.
+
+When a command fails before it has anything to report, it prints nothing on stdout and
+writes the message to stderr. Examples are `contract diff` with no snapshot to compare
+against, an invalid domain name, or a codemod that cannot run. Check the exit code before
+parsing stdout.
+
+`build --watch`, `dev` and `test` do not take `--json`. They exit 1 with a message on
+stderr.
 
 ## Global flags
 

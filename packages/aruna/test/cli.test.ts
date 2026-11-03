@@ -30,6 +30,19 @@ const fixturesRoot = path.resolve(
 );
 const builtCliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist/cli.js");
 
+function runCli(args: string[], cwd?: string): ReturnType<typeof spawnSync> {
+  expect(fs.existsSync(builtCliPath)).toBe(true);
+  const env = { ...process.env };
+  delete env.CI;
+  delete env.NO_COLOR;
+  delete env.INIT_CWD;
+  return spawnSync(process.execPath, [builtCliPath, ...args], {
+    encoding: "utf8",
+    env,
+    ...(cwd !== undefined ? { cwd } : {}),
+  });
+}
+
 function makeTempRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "aruna-cli-"));
 }
@@ -99,18 +112,6 @@ describe("json output", () => {
 // Each case spawns the built CLI several times; on Windows runners that alone
 // runs past vitest's 5 s default.
 describe("store contract gate", { timeout: 60_000 }, () => {
-  function runCli(args: string[], cwd?: string): ReturnType<typeof spawnSync> {
-    expect(fs.existsSync(builtCliPath)).toBe(true);
-    const env = { ...process.env };
-    delete env.CI;
-    delete env.NO_COLOR;
-    delete env.INIT_CWD;
-    return spawnSync(process.execPath, [builtCliPath, ...args], {
-      encoding: "utf8",
-      env,
-      ...(cwd !== undefined ? { cwd } : {}),
-    });
-  }
 
   function gateDiagnostics(stdout: string): Array<{ code: string; severity: string; message: string }> {
     const parsed = JSON.parse(stdout) as {
@@ -413,6 +414,109 @@ describe("store contract gate", { timeout: 60_000 }, () => {
 
     expect(result.status).toBe(1);
     expect(fs.existsSync(path.join(root, "aruna.contract.json"))).toBe(false);
+  });
+});
+
+// The top-level shape of every --json output the compiler output guard does not
+// record (docs/cli.md, "JSON output"). `check`, `build`, `contract diff` and the
+// per-primitive `inspect` commands are pinned byte for byte by the guard.
+describe("--json output shapes", { timeout: 60_000 }, () => {
+  function keysOf(stdout: string | Buffer): string[] {
+    return Object.keys(JSON.parse(String(stdout)) as object).sort();
+  }
+
+  it("inspect prints the compiler output", () => {
+    const result = runCli(["inspect", "--json", "--project", copyFixtureInput("store-basic")]);
+    expect(keysOf(result.stdout)).toEqual(
+      ["config", "diagnostics", "manifest", "ok", "projectRoot", "summary"],
+    );
+  });
+
+  it("inspect network", () => {
+    const result = runCli(["inspect", "network", "--json", "--project", copyFixtureInput("store-basic")]);
+    expect(keysOf(result.stdout)).toEqual(
+      ["actions", "defaultRateLimit", "kind", "note", "requestBudget", "resources", "signals"],
+    );
+  });
+
+  it("doctor", () => {
+    const result = runCli(["doctor", "--json", "--project", copyFixtureInput("store-basic")]);
+    expect(keysOf(result.stdout)).toEqual([
+      "aliases",
+      "configDiagnostics",
+      "fixable",
+      "generatedDir",
+      "generatedDirResolved",
+      "manifestOutput",
+      "manifestOutputResolved",
+      "projectRoot",
+      "rojoProject",
+      "toolchain",
+      "tsconfig",
+      "tsconfigDiagnostics",
+      "tsconfigPath",
+    ]);
+  });
+
+  it("init and add domain", () => {
+    const init = runCli(["init", "--json", "--project", makeTempRoot()]);
+    expect(keysOf(init.stdout)).toEqual(
+      ["created", "overwritten", "projectRoot", "rojoProject", "skipped", "tsconfig"],
+    );
+
+    const add = runCli(["add", "domain", "shop", "--json", "--project", copyFixtureInput("store-basic")]);
+    expect(keysOf(add.stdout)).toEqual(["created", "domainDir", "name", "skipped"]);
+  });
+
+  it("migrate --list prints an array of codemods", () => {
+    const parsed = JSON.parse(String(runCli(["migrate", "--list", "--json"]).stdout)) as object[];
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed.length).toBeGreaterThan(0);
+    for (const codemod of parsed) {
+      expect(Object.keys(codemod).sort()).toEqual(["description", "name"]);
+    }
+  });
+
+  it("contract update: written, checked, refused, and accepted", () => {
+    const compatible = copyFixtureInput("store-contract-compatible");
+    const written = runCli(["contract", "update", "--json", "--project", compatible]);
+    expect(written.status).toBe(0);
+    expect(keysOf(written.stdout)).toEqual(["ok", "snapshot"]);
+
+    const checked = runCli(["contract", "update", "--check", "--json", "--project", compatible]);
+    expect(keysOf(checked.stdout)).toEqual(
+      ["committed", "ok", "outOfDate", "snapshot", "unreadableRecordChanges"],
+    );
+
+    const incompatible = copyFixtureInput("store-contract-incompatible");
+    const refused = runCli(["contract", "update", "--json", "--project", incompatible]);
+    expect(refused.status).toBe(1);
+    expect(keysOf(refused.stdout)).toEqual(["committed", "ok", "snapshot", "unreadableRecordChanges"]);
+
+    const accepted = runCli([
+      "contract",
+      "update",
+      "--accept-unreadable-records",
+      "--json",
+      "--project",
+      incompatible,
+    ]);
+    expect(accepted.status).toBe(0);
+    expect(keysOf(accepted.stdout)).toEqual(["acceptedUnreadableRecordChanges", "ok", "snapshot"]);
+  });
+
+  it("prints no JSON when a command fails before it has a report", () => {
+    const root = copyFixtureInput("store-contract-compatible");
+    fs.rmSync(path.join(root, "aruna.contract.json"));
+    const diff = runCli(["contract", "diff", "--json", "--project", root]);
+    expect(diff.status).toBe(2);
+    expect(String(diff.stdout)).toBe("");
+    expect(String(diff.stderr)).toContain("no committed contract snapshot");
+
+    const watch = runCli(["build", "--watch", "--json", "--project", root]);
+    expect(watch.status).toBe(1);
+    expect(String(watch.stdout)).toBe("");
+    expect(String(watch.stderr)).toContain("does not support --json");
   });
 });
 
