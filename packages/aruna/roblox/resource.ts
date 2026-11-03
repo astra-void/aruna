@@ -19,7 +19,8 @@
 // nothing else, and a player-scoped resource is always the sender's own.
 
 import type { StoreDocument } from "./player-store";
-import { firstSchemaIssue, type Infer, type Schema } from "./schema";
+import type { Infer, Schema } from "./schema";
+import { firstSchemaIssue } from "./schema-check";
 import { isWireSafe } from "./serialization";
 import { createErrorId } from "./action-error";
 import {

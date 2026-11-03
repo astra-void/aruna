@@ -153,9 +153,12 @@ for _, spec in specs do
 	loader.require(node)
 end
 
--- The project's compiled `aruna/testing`, vendored under the generated dir.
+-- The project's compiled test framework, vendored under the generated dir. The
+-- runner entry points (`runTests`) live in `testing-framework`, not in the public
+-- `aruna/testing` module, which only re-exports what a spec writes.
 local sharedRoot = loader.trees.shared
-local testingModule = sharedRoot:WaitForChild(generatedDir):WaitForChild("runtime"):WaitForChild("testing")
+local testingModule =
+	sharedRoot:WaitForChild(generatedDir):WaitForChild("runtime"):WaitForChild("testing-framework")
 local testing = loader.require(testingModule)
 
 local report = nil

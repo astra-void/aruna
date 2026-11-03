@@ -497,6 +497,45 @@ export function createTestServerApp<
 }
 
 // Re-exported so `aruna/testing` is the single entry a spec imports from.
-export * from "./testing-framework";
-export * from "./testing-network";
-export * from "./testing-store";
+export {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	itSkip,
+} from "./testing-framework";
+export type {
+	Expectation,
+	NegatableExpectation,
+	RejectsExpectation,
+	RunTestsOptions,
+	TestBody,
+	TestHook,
+	TestOutcome,
+	TestReport,
+} from "./testing-framework";
+export {
+	createTestNetwork,
+	TEST_NETWORK_FRAME_MS,
+} from "./testing-network";
+export type {
+	CreateTestNetworkOptions,
+	TestLink,
+	TestLinkDirection,
+	TestLinkStats,
+	TestNetwork,
+	TestNetworkClient,
+	TestNetworkLatency,
+	TestNetworkPlayerSpec,
+	TestNetworkSignalRecord,
+	TestReliableDirection,
+} from "./testing-network";
+export {
+	createTestStoreBackend,
+} from "./testing-store";
+export type {
+	TestStoreBackend,
+	TestStoreRecord,
+	TestStoreRecordOptions,
+} from "./testing-store";

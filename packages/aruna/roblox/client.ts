@@ -209,4 +209,32 @@ export type {
 } from "./network-metrics";
 
 // Re-exported so `aruna/client` is the single client entry.
-export * from "./client-runtime";
+export {
+	ACTION_CANCELLED_ERROR_NAME,
+	ACTION_VERSION_MISMATCH_ERROR_NAME,
+	createCancelToken,
+	invokeAction,
+	isActionCancelledError,
+	isActionError,
+	isActionVersionMismatchError,
+	withClientMiddleware,
+	withRetry,
+} from "./client-runtime";
+export type {
+	ActionCall,
+	ActionErrorTypes,
+	ActionInvokeOptions,
+	ActionInvoker,
+	ActionStub,
+	ActionStubInput,
+	ActionStubOutput,
+	AnyActionStub,
+	CancelToken,
+	CancelTokenSource,
+	ClientActionInfo,
+	ClientMiddleware,
+	ClientRetryPolicy,
+	ContractHandshakeOptions,
+	DeclaredActionFailure,
+	VersionMismatchInfo,
+} from "./client-runtime";

@@ -6,6 +6,13 @@ import { schema } from "aruna/schema";
 import {
   createMemoryStoreBackend,
   createStore,
+  STORE_MAX_PRESERVED_META_BYTES,
+  type StoreBackend,
+  type StoreDefinition,
+  type StoreMeta,
+  type StoreScheduler,
+} from "aruna/server";
+import {
   decodeStoreValue,
   encodeStoreValue,
   findStoreValueViolation,
@@ -13,15 +20,10 @@ import {
   readStoreRecord,
   recordStoreReceipt,
   runStoreRequest,
-  STORE_MAX_PRESERVED_META_BYTES,
   STORE_MAX_RECEIPTS,
   storeRetryDelayMs,
   validateStoreKey,
-  type StoreBackend,
-  type StoreDefinition,
-  type StoreMeta,
-  type StoreScheduler,
-} from "aruna/server";
+} from "aruna/internal/store";
 import { describe, expect, it } from "aruna/testing";
 
 const profileSchema = schema.object({

@@ -5,7 +5,8 @@
 // The Node fake Players source maps onto the native `players` option
 // (`PlayersSource`), which takes the same `PlayerAdded` / `PlayerRemoving` /
 // `GetPlayers` shape.
-import { clearActionInvoker, createClientApp, invokeAction } from "aruna/client";
+import { createClientApp, invokeAction } from "aruna/client";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
 import { schema } from "aruna/schema";
 import { createServerApp, defineAction, type ServerTransport } from "aruna/server";
 import { afterEach, beforeEach, describe, expect, it } from "aruna/testing";

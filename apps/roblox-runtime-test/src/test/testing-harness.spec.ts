@@ -5,7 +5,7 @@
 //
 // Port of packages/aruna/test/testing-harness.test.ts. The native harness exposes
 // `published` / `players` as functions rather than properties.
-import { clearActionInvoker } from "aruna/client";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
 import { defineAction, defineSignal } from "aruna/roblox";
 import { schema } from "aruna/schema";
 import { createActionDefiner, type ActionMiddleware } from "aruna/server";

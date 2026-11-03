@@ -8,7 +8,8 @@
 // segments joined with ".", array/tuple indices as "[n]", no prefix at the root).
 // `validated` below returns both, so every case checks they agree.
 import { defineAction } from "aruna/roblox";
-import { applyDefaults, firstSchemaIssue, schema } from "aruna/schema";
+import { schema } from "aruna/schema";
+import { applyDefaults, firstSchemaIssue } from "aruna/internal/schema-check";
 import type { Infer, Schema, SchemaLiteral } from "aruna/schema";
 import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";
 import { rejectionOf } from "./support";

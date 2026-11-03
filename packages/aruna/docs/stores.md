@@ -149,6 +149,8 @@ any server, such a write lands, and the session's next heartbeat or save writes 
 value over it. Change an online player's data through their document (`ctx.store`, or
 `playerStore.get(player)` on the server that holds them); use `playerStore.store` only for
 players who are offline (no lock in the record), such as admin tools or migrations.
+`defaultPlayerStoreKey(userId)` from `aruna/server` gives the key a player store uses
+when it has no `key` of its own (`player_<UserId>`), as a `StoreResult<string>`.
 
 **A session that lost its lock never writes again.** Every write of an open document
 checks that the record still carries this server's lock. If another server took the lock
@@ -311,7 +313,8 @@ const app = createServerApp<Player>({
   parameter: `createActionDefiner<Signals, Player, Session, Profile, { progress:
   Progress; inventory: Inventory }>()`.
 - **`requireStores("progress", "inventory")`** is middleware that refuses an action with
-  `StoreNotReadyError` (a public error the client sees, and can retry) until the named
+  `StoreNotReadyError` (a public error the client sees, and can retry; the name is
+  exported as `STORE_NOT_READY_ERROR_NAME`) until the named
   documents are open, so a sensitive mutation never runs against data that has not
   loaded. `requireStores()` with no names means the single `playerStore` (`ctx.store`).
 - **Partial failure** is explicit: `onStoresReady(player, report)` runs once every load

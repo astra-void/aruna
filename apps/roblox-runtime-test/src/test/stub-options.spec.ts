@@ -2,7 +2,8 @@
 // declares spread over them. The three stubs below are the shapes codegen emits
 // (crates/aruna_compiler/src/codegen.rs, `client_stub_lines`) for a plain, an
 // idempotent, and a fire-and-forget action; no harness compiles the last two.
-import { clearActionInvoker, invokeAction, setActionInvoker, type ActionInvokeOptions } from "aruna/client";
+import { invokeAction, type ActionInvokeOptions } from "aruna/client";
+import { clearActionInvoker, setActionInvoker } from "aruna/internal/client-runtime";
 import { afterEach, describe, expect, it } from "aruna/testing";
 
 const look = (input?: number, options?: ActionInvokeOptions): Promise<void> => {

@@ -245,8 +245,6 @@ export interface WireMetrics {
     readonly estimatedBytes: number;
 }
 
-export declare function clearActionInvoker(): void;
-
 export declare function createCancelToken(): CancelTokenSource;
 
 export declare function createClientApp<TSignals extends SignalMap = SignalMap>(options?: CreateClientAppOptions<TSignals>): ClientApp<TSignals>;
@@ -268,8 +266,6 @@ export declare function isActionError<TErrors extends ActionErrorTypes, TName ex
 export declare function isActionVersionMismatchError(value: unknown): boolean;
 
 export declare function resourceBinding<TValue>(resourceId: string): ResourceBinding<TValue>;
-
-export declare function setActionInvoker(invoker: ActionInvoker): void;
 
 export declare function withClientMiddleware(invoker: ActionInvoker, middleware: readonly ClientMiddleware[]): ActionInvoker;
 

@@ -8,7 +8,8 @@
 // rejects with the structured error. The Node in-memory invoker
 // (`createInMemoryActionInvoker`) is replaced by the test harness's
 // `client(player)`, whose transport dispatches into the server app in process.
-import { clearActionInvoker, invokeAction, setActionInvoker } from "aruna/client";
+import { invokeAction } from "aruna/client";
+import { clearActionInvoker, setActionInvoker } from "aruna/internal/client-runtime";
 import { schema } from "aruna/schema";
 import {
   createServerApp,
@@ -22,11 +23,11 @@ import {
   beforeEach,
   createTestPlayer,
   createTestServerApp,
-  deepEquals,
   describe,
   expect,
   it,
 } from "aruna/testing";
+import { deepEquals } from "aruna/internal/testing-framework";
 import { rejectionOf } from "./support";
 
 interface DispatchOptions {

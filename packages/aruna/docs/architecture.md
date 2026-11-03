@@ -93,6 +93,19 @@ They export only these names; any other export is `aruna::568 unknown-hook-expor
 | `src/client.tsx` | `createRequestId` | passes it to `createActionInvoker({ createRequestId })` |
 | | `onStart(app)` | calls it with the created client app |
 
+### Domain runtimes (`defineRuntime`)
+
+A domain's `runtime.ts` holds long-lived server work: a loop, a `PlayerAdded` handler.
+`defineRuntime({ id, after?, start })` declares it, and `after` names the runtimes that
+must start first. The build sorts them (an unknown id, a self-edge or a cycle is
+`aruna::582`, a duplicate id `aruna::581`, a runtime without `start` `aruna::580`), and
+with `entries: "generated"` the server entry starts them in that order, after the app is
+created, by calling `startRuntimes([...])` from `aruna/server`.
+
+With `entries: "user"`, nothing starts them for you. Call `startRuntimes([a, b, c])` from
+your server entry after `createServerApp`, in the order you want; it calls each `start`
+and names the runtime if one throws.
+
 ## The partition (Roblox DataModel mapping)
 
 `aruna build` partitions the compiled output into client / server / shared subtrees by
@@ -131,6 +144,24 @@ Resource state travels the same ordered stream (item kind 4), and resource subsc
 travel with calls (kind 5), admitted like a call. Unreliable signals use their own
 `UnreliableRemoteEvent`. There is no transport to select: the RemoteEvent transport is
 the transport ([wire protocol](../../../docs/wire-protocol.md)).
+
+`createServerApp` and `createClientApp` do this wiring. To do it yourself, for example a
+separately batched channel or a spec that steps frames by hand, `aruna/roblox` exports
+the pieces they are built from:
+
+- **Server.** `createRemoteEventChannel(batchOptions?)` is a separately batched channel
+  over the default remote, and `createServerChannel(remote, batchOptions?)` one over a
+  remote you supply. `bindRemoteActions(registry, remote, channel, resources?)` reads calls
+  from `remote` and answers through `channel`; `bindActions(registry, options?)` is the
+  same over the default remote. Pass a channel to `robloxRemoteEvent({ channel })` to keep
+  `createServerApp` and use your own channel.
+- **Client.** `createClientChannel(remote, name)` is one connection to a remote, and
+  `createRemoteActionInvoker(sender, channel, options?)` sends calls over it.
+  `createResourceClient(options?)` is the resource client `createClientApp({ resources:
+  true })` creates over the default remote.
+
+Everything else on the wire (frame layout, item kinds, protocol version) is internal and
+described in the [wire protocol](../../../docs/wire-protocol.md).
 
 ## Observing it
 

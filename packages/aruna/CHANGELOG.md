@@ -807,6 +807,44 @@ the game build like any other module.
 
 ### Removed
 
+- **Breaking: runtime internals are no longer exported.** Several entry points
+  re-exported whole modules with `export *`, so the store core, the wire codec
+  and the test runner's own functions were public API by accident. None of them
+  was documented, and none is needed to use Aruna. They are internal now:
+  - `aruna/server`: `createActionRegistry`, `DEFAULT_STORE_RETRY`,
+    `DEFAULT_STORE_SESSION`, the `STORE_*` constants except
+    `STORE_MAX_PRESERVED_META_BYTES`, and the store envelope, request and receipt
+    helpers (`encodeStoreValue`, `decodeStoreValue`, `createStoreEnvelope`,
+    `readStoreRecord`, `isStoreEnvelope`, `runStoreRequest`, `classifyStoreError`,
+    `storeOk`, `storeFail`, `storeDelay`, `storeRetryDelayMs`,
+    `defaultStoreScheduler`, `emptyStoreMeta`, `recordStoreReceipt`,
+    `hasStoreReceipt`, `measureStoreValueBytes`, `findStoreValueViolation`,
+    `validateStoreKey`, `resolveStoreDefault`, `resolveStoreVersion`,
+    `isMemoryStoreBackend`).
+  - `aruna/roblox`: the frame codec (`createWireFrame`, `readWireFrame`,
+    `createWireOutbox`, `WIRE_ITEM_*`, `WIRE_PROTOCOL_VERSION`,
+    `WIRE_MAX_FRAME_ITEMS`, `setWireFrameObserver`, `currentWireFrameObserver`,
+    `heartbeatFrameScheduler`, `defaultWireProtocolErrorHandler`) and the
+    constants `REMOTE_NAME`, `SIGNAL_UNRELIABLE_REMOTE_NAME`,
+    `CONTRACT_HASH_ATTRIBUTE_NAME` and `DEFAULT_ACTION_REQUEST_TIMEOUT_MS`. The
+    remote and attribute names themselves do not change.
+  - `aruna/schema`: `applyDefaults`, `firstSchemaIssue`, `schemaFingerprint`.
+  - `aruna/testing`: `runTests`, `resetTests`, `collectedTestCount`,
+    `deepEquals`, `describeThrown`. The `aruna test` runner calls the test
+    framework module directly.
+  - `aruna/client`: `setActionInvoker`, `clearActionInvoker`. Pass a transport to
+    `createClientApp({ transport })` instead.
+
+  The types those modules export are unchanged. What stays public is now
+  documented: custom wiring (`bindRemoteActions`, `createRemoteEventChannel`,
+  `createServerChannel`, `createClientChannel`, `createRemoteActionInvoker`,
+  `createResourceClient`) in [architecture.md](docs/architecture.md#transport),
+  `startRuntimes` and `defineRuntime` in
+  [architecture.md](docs/architecture.md#domain-runtimes-defineruntime),
+  `defaultPlayerStoreKey` and `STORE_NOT_READY_ERROR_NAME` in
+  [stores.md](docs/stores.md), and `estimateWireBytes` in
+  [observability.md](docs/observability.md).
+
 - **`aruna::109 strict-option-not-enforced`** is retired: `strict.sharedSafety`
   has checks behind it now.
 

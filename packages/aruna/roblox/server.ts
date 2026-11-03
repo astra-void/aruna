@@ -258,9 +258,38 @@ export function createActionDefiner<
 
 // Re-exported so `aruna/server` is the single server entry. The imports these
 // modules take back from this file are type-only, so the Luau require graph has
-// no cycle.
-export * from "./server-runtime";
-export * from "./server-app";
+// no cycle. Every value is named, never `export *`: what is listed here is public
+// API (docs/stability.md), and helpers the modules share with each other stay
+// internal.
+export type {
+	ActionDispatchResult,
+	ActionErrorHandler,
+	ActionMap,
+	ActionMiddleware,
+	ActionRegistry,
+	ActionRegistryOptions,
+	DispatchObserver,
+	DispatchSettledInfo,
+} from "./server-runtime";
+export {
+	createServerApp,
+	requireStores,
+	STORE_NOT_READY_ERROR_NAME,
+} from "./server-app";
+export type {
+	ActionRejectionInfo,
+	ActionRejectionKind,
+	AppDispatchOptions,
+	CreateServerAppOptions,
+	PlayersSource,
+	PlayerStoreMap,
+	PlayerStoreSet,
+	PlayerStoresReport,
+	ServerApp,
+	ServerAppBinding,
+	ServerSignalPublisherFactory,
+	ServerTransport,
+} from "./server-app";
 // The error an action throws when the client should see its name and message.
 export { actionError } from "./action-error";
 export type { PublicActionError } from "./action-error";
@@ -301,9 +330,75 @@ export type {
 	WireMetrics,
 } from "./network-metrics";
 // Domain runtimes: the boot sequence the compiler resolves from `after` edges.
-export * from "./define-runtime";
-export * from "./domain-runtime";
+export {
+	defineRuntime,
+} from "./define-runtime";
+export {
+	startRuntimes,
+} from "./domain-runtime";
+export type {
+	DomainRuntimeDefinition,
+} from "./domain-runtime";
 // Persistence: the safe DataStore core and the session-locked player document.
-export * from "./define-store";
-export * from "./store";
-export * from "./player-store";
+export {
+	definePlayerStore,
+	defineStore,
+} from "./define-store";
+export {
+	createMemoryStoreBackend,
+	createStore,
+	describeStoreError,
+	STORE_MAX_PRESERVED_META_BYTES,
+	STORE_MUST_UNDERSTAND_PREFIX,
+} from "./store";
+export type {
+	MemoryStoreBackend,
+	Store,
+	StoreBackend,
+	StoreBackendFactory,
+	StoreBackendRequestKind,
+	StoreBackendTarget,
+	StoreBackendTransform,
+	StoreCodecDefinition,
+	StoreDefinition,
+	StoreEnvelope,
+	StoreEnvelopeLock,
+	StoreEnvelopeMeta,
+	StoreError,
+	StoreErrorClassification,
+	StoreErrorInfo,
+	StoreErrorName,
+	StoreErrorReporter,
+	StoreFailDetails,
+	StoreFailure,
+	StoreHandoff,
+	StoreLockState,
+	StoreMeta,
+	StoreMigrate,
+	StoreOperation,
+	StoreRecord,
+	StoreRequestOptions,
+	StoreResult,
+	StoreRetryOptions,
+	StoreRuntimeOptions,
+	StoreScheduler,
+	StoreSchedulerHandle,
+	StoreSnapshot,
+	StoreSuccess,
+} from "./store";
+export {
+	createPlayerStore,
+	defaultPlayerStoreKey,
+	isPlayerStoreReady,
+} from "./player-store";
+export type {
+	AnyPlayerStore,
+	AnyStoreDocument,
+	PlayerStore,
+	PlayerStoreDefinition,
+	PlayerStoreOptions,
+	PlayerStoreState,
+	PlayerStoreStatus,
+	StoreDocument,
+	StoreSessionOptions,
+} from "./player-store";

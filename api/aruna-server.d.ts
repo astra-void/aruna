@@ -214,20 +214,6 @@ export interface CreateServerAppOptions<TPlayer, TSignals extends SignalMap = Si
 
 export declare const DEFAULT_RESOURCE_LOAD_TIMEOUT_MS = 30000;
 
-export declare const DEFAULT_STORE_RETRY: {
-    readonly attempts: 4;
-    readonly baseDelayMs: 250;
-    readonly maxDelayMs: 8000;
-    readonly jitter: 0.25;
-};
-
-export declare const DEFAULT_STORE_SESSION: {
-    readonly lockTtlMs: 120000;
-    readonly heartbeatMs: 30000;
-    readonly acquireAttempts: 5;
-    readonly acquireDelayMs: 3000;
-};
-
 export interface DispatchObserver<TPlayer = unknown> {
     readonly onSettled: (info: DispatchSettledInfo<TPlayer>) => void;
 }
@@ -489,19 +475,7 @@ export type ResourceRef = string | {
 
 export type ResourceScope = "player" | "global";
 
-export declare const STORE_ENVELOPE_FORMAT = 1;
-
-export declare const STORE_ENVELOPE_MARKER = "$aruna";
-
-export declare const STORE_MAX_KEY_LENGTH = 50;
-
-export declare const STORE_MAX_META_ID_BYTES = 128;
-
 export declare const STORE_MAX_PRESERVED_META_BYTES = 4096;
-
-export declare const STORE_MAX_RECEIPTS = 100;
-
-export declare const STORE_MAX_VALUE_BYTES = 4194304;
 
 export declare const STORE_MUST_UNDERSTAND_PREFIX = "!";
 
@@ -795,13 +769,9 @@ export interface WireMetrics {
 
 export declare function actionError(name: string, message: string): PublicActionError;
 
-export declare function classifyStoreError(cause: unknown): StoreErrorClassification;
-
 export declare function createActionDefiner<TSignals extends SignalMap, TPlayer = Player, TSession = unknown, TStore = unknown, TStores = {
     readonly [name: string]: unknown;
 }>(): <TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TErrors extends ActionErrorMap = {}>(definition: PublishingActionDefinition<TInput, TOutput, TPlayer, TSignals, TSession, TStore, TErrors, TStores>) => ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
-
-export declare function createActionRegistry<TPlayer>(actions: ActionMap<TPlayer>, options?: ActionRegistryOptions<TPlayer>): ActionRegistry<TPlayer>;
 
 export declare function createMemoryStoreBackend(initial?: Map<string, unknown>): MemoryStoreBackend;
 
@@ -813,13 +783,7 @@ export declare function createServerApp<TPlayer = unknown, TSignals extends Sign
 
 export declare function createStore<TSchema extends Schema>(definition: StoreDefinition<TSchema>, options?: StoreRuntimeOptions): Store<TSchema>;
 
-export declare function createStoreEnvelope(version: number, data: unknown, nowMs: number, lock?: StoreLockState, meta?: StoreMeta): StoreEnvelope;
-
-export declare function decodeStoreValue(definition: StoreCodecDefinition, raw: unknown): StoreResult<StoreSnapshot<unknown>>;
-
 export declare function defaultPlayerStoreKey(player: unknown): StoreResult<string>;
-
-export declare const defaultStoreScheduler: StoreScheduler;
 
 export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = unknown, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
@@ -835,57 +799,15 @@ export declare function defineStore<TSchema extends Schema>(definition: StoreDef
 
 export declare function describeStoreError(failure: StoreError, info?: StoreErrorInfo): string;
 
-export declare function emptyStoreMeta(): StoreMeta;
-
-export declare function encodeStoreValue(definition: {
-    readonly id: string;
-    readonly schema: Schema;
-    readonly version?: number;
-}, value: unknown, nowMs: number, lock?: StoreLockState, meta?: StoreMeta): StoreResult<StoreEnvelope>;
-
 export declare function estimateWireBytes(value: unknown): number;
-
-export declare function findStoreValueViolation(value: unknown, path?: string, seen?: Set<object>): string | undefined;
 
 export declare function formatNetworkReport(report: NetworkMetricsReport): string;
 
-export declare function hasStoreReceipt(meta: StoreMeta, receiptId: string): boolean;
-
-export declare function isMemoryStoreBackend(backend: StoreBackend): boolean;
-
 export declare function isPlayerStoreReady(status: PlayerStoreStatus): boolean;
-
-export declare function isStoreEnvelope(value: unknown): value is StoreEnvelope;
-
-export declare function measureStoreValueBytes(value: unknown): number;
-
-export declare function readStoreRecord(raw: unknown): StoreRecord;
-
-export declare function recordStoreReceipt(meta: StoreMeta, receiptId: string): StoreResult<StoreMeta>;
 
 export declare function requireStores<TPlayer = unknown>(...names: string[]): ActionMiddleware<TPlayer>;
 
-export declare function resolveStoreDefault(definition: {
-    readonly defaultValue: unknown;
-}): unknown;
-
-export declare function resolveStoreVersion(definition: {
-    readonly version?: number;
-}): number;
-
-export declare function runStoreRequest<TValue>(request: () => Promise<TValue>, options: StoreRequestOptions): Promise<StoreResult<TValue>>;
-
 export declare function startRuntimes(runtimes: readonly DomainRuntimeDefinition[]): void;
-
-export declare function storeDelay(scheduler: StoreScheduler, ms: number): Promise<void>;
-
-export declare function storeFail(name: StoreErrorName, message: string, details?: StoreFailDetails): StoreFailure;
-
-export declare function storeOk<TValue>(value: TValue): StoreSuccess<TValue>;
-
-export declare function storeRetryDelayMs(attempt: number, options: StoreRetryOptions | undefined, random?: () => number): number;
-
-export declare function validateStoreKey(key: string): StoreResult<string>;
 
 // Referenced by the exports above, not exported from this entry:
 

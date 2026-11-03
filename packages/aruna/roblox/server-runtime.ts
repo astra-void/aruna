@@ -3,7 +3,8 @@
 import type { ActionContext, ActionDefinition, ActionErrorMap, ActionRateLimitOptions } from "./server";
 import type { StoreDocument } from "./player-store";
 import type { ResourceCallTag, ResourceContext, ResourceHost } from "./resource";
-import { applyDefaults, firstSchemaIssue, type Schema } from "./schema";
+import type { Schema } from "./schema";
+import { applyDefaults, firstSchemaIssue } from "./schema-check";
 import type { SignalMap, SignalPublisher } from "./signal-runtime";
 import { createActionRateLimiter, resolveRateLimitKey } from "./rate-limit";
 import { isWireSafe } from "./serialization";

@@ -10,8 +10,6 @@ export interface ActionError {
     readonly data?: unknown;
 }
 
-export declare const CONTRACT_HASH_ATTRIBUTE_NAME = "ArunaContractHash";
-
 export interface ClientChannel {
     readonly on: (kind: number, handler: (item: object) => void) => () => void;
     readonly onProtocolError: (handler: WireProtocolErrorHandler) => () => void;
@@ -21,15 +19,11 @@ export interface ClientChannel {
 export interface CreateActionInvokerOptions extends ContractHandshakeOptions, RemoteActionInvokerOptions {
 }
 
-export declare const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10000;
-
 export interface PublicActionError {
     readonly name: string;
     readonly message: string;
     readonly __arunaActionError: true;
 }
-
-export declare const REMOTE_NAME = "ArunaRemoteEvent";
 
 export interface RemoteActionInvokerOptions extends WireBatchOptions {
     readonly createRequestId?: () => string;
@@ -93,8 +87,6 @@ export interface RobloxRemoteEventOptions {
     readonly channel?: ServerChannel<Player>;
 }
 
-export declare const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemoteEvent";
-
 export type ServerChannel<TPlayer> = WireOutbox<TPlayer>;
 
 export type SignalClientLike = WireClientRemote;
@@ -120,22 +112,6 @@ export interface SignalSubscriber<TSignals extends SignalMap> {
 export interface SignalSubscriberOptions {
     readonly onProtocolError?: WireProtocolErrorHandler;
 }
-
-export declare const WIRE_ITEM_CALL = 1;
-
-export declare const WIRE_ITEM_RESOURCE = 4;
-
-export declare const WIRE_ITEM_RESOURCE_PATCH = 4;
-
-export declare const WIRE_ITEM_RESOURCE_SUBSCRIPTION = 5;
-
-export declare const WIRE_ITEM_RESPONSE = 2;
-
-export declare const WIRE_ITEM_SIGNAL = 3;
-
-export declare const WIRE_MAX_FRAME_ITEMS = 64;
-
-export declare const WIRE_PROTOCOL_VERSION = 1;
 
 export interface WireBatchOptions {
     readonly batching?: boolean;
@@ -272,14 +248,6 @@ export declare function createSignalPublisher<TSignals extends SignalMap>(signal
 
 export declare function createSignalSubscriber<TSignals extends SignalMap>(signals: TSignals): SignalSubscriber<TSignals>;
 
-export declare function createWireFrame(items: ReadonlyArray<defined>): WireFrame;
-
-export declare function createWireOutbox<TTarget>(send: (target: TTarget, frame: WireFrame) => void, sendAll: ((frame: WireFrame) => void) | undefined, options?: WireBatchOptions): WireOutbox<TTarget>;
-
-export declare function currentWireFrameObserver(): WireFrameObserver | undefined;
-
-export declare function defaultWireProtocolErrorHandler(channel: string, reason: WireFrameRejection): void;
-
 export declare function defineAction<TInput extends Schema | undefined = undefined, TOutput extends Schema | undefined = undefined, TPlayer = Player, TSignals extends SignalMap = SignalMap, TErrors extends ActionErrorMap = {}>(definition: ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>): ActionDefinition<TInput, TOutput, TPlayer, TSignals, TErrors>;
 
 export declare function definePlayerStore<TSchema extends Schema, TPlayer = Player>(definition: PlayerStoreDefinition<TSchema, TPlayer>): PlayerStoreDefinition<TSchema, TPlayer>;
@@ -290,17 +258,11 @@ export declare function defineSignal<TId extends string, TPayload extends Schema
 
 export declare function defineStore<TSchema extends Schema>(definition: StoreDefinition<TSchema>): StoreDefinition<TSchema>;
 
-export declare const heartbeatFrameScheduler: WireFrameScheduler;
-
-export declare function readWireFrame(frame: unknown): WireFrameRead;
-
 export declare function robloxDataStore(options?: RobloxDataStoreBackendOptions): (target: StoreBackendTarget) => StoreBackend;
 
 export declare function robloxDataStoreBackend(target: StoreBackendTarget, options?: RobloxDataStoreBackendOptions): StoreBackend;
 
 export declare function robloxRemoteEvent<TPlayer = Player>(options?: RobloxRemoteEventOptions): ServerTransport<TPlayer>;
-
-export declare function setWireFrameObserver(observer: WireFrameObserver | undefined): void;
 
 // Referenced by the exports above, not exported from this entry:
 
@@ -677,3 +639,13 @@ interface VersionMismatchInfo {
     readonly expected: string;
     readonly actual: string;
 }
+
+declare const WIRE_ITEM_CALL = 1;
+
+declare const WIRE_ITEM_RESOURCE = 4;
+
+declare const WIRE_ITEM_RESOURCE_SUBSCRIPTION = 5;
+
+declare const WIRE_ITEM_RESPONSE = 2;
+
+declare const WIRE_ITEM_SIGNAL = 3;

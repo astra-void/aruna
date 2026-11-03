@@ -107,13 +107,13 @@ return function(ctx)
 		end)
 
 		t.it("reports the constraint message via firstSchemaIssue", function()
-			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local firstSchemaIssue = ctx.load("schema-check").firstSchemaIssue
 			t.eq(firstSchemaIssue(schema.number().min(10), 5), "expected a number >= 10")
 			t.eq(firstSchemaIssue(schema.string().minLength(3), "ab"), "expected length >= 3 bytes")
 		end)
 
 		t.it("counts maxLength / minLength / length in UTF-8 bytes", function()
-			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local firstSchemaIssue = ctx.load("schema-check").firstSchemaIssue
 			-- "가나다" is 3 characters and 9 bytes; "😀" is 1 character and 4 bytes.
 			t.isTrue(schema.string().maxLength(9).validate("가나다"))
 			t.eq(firstSchemaIssue(schema.string().maxLength(8), "가나다"), "expected length <= 8 bytes")
@@ -123,7 +123,7 @@ return function(ctx)
 		end)
 
 		t.it("counts maxChars / minChars in code points", function()
-			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local firstSchemaIssue = ctx.load("schema-check").firstSchemaIssue
 			local name = schema.string().minChars(2).maxChars(3)
 			t.isTrue(name.validate("가나다"))
 			t.isTrue(name.validate("😀😀"))
@@ -164,7 +164,7 @@ return function(ctx)
 		end)
 
 		t.it("reports the discriminated member's field via firstSchemaIssue", function()
-			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local firstSchemaIssue = ctx.load("schema-check").firstSchemaIssue
 			local event = schema.discriminatedUnion("type", {
 				schema.object({ type = schema.literal("move"), dx = schema.number() }),
 			})
@@ -172,7 +172,7 @@ return function(ctx)
 		end)
 
 		t.it("rejects NaN and infinities for every number format", function()
-			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local firstSchemaIssue = ctx.load("schema-check").firstSchemaIssue
 			for _, build in { schema.number, schema.f32, schema.i32, schema.u32 } do
 				local s = build()
 				t.isTrue(s.validate(1))
@@ -186,7 +186,7 @@ return function(ctx)
 		end)
 
 		t.it("rejects Roblox value types with a non-finite component", function()
-			local firstSchemaIssue = ctx.load("schema").firstSchemaIssue
+			local firstSchemaIssue = ctx.load("schema-check").firstSchemaIssue
 			local nan = 0 / 0
 			local cases = {
 				{ schema.vector3(), roblox.Vector3.new(1, 2, 3), roblox.Vector3.new(1, nan, 3), "expected Vector3 { x, y, z }" },
@@ -221,7 +221,7 @@ return function(ctx)
 		end)
 
 		t.it("fills defaults via applyDefaults and validates absent defaulted fields", function()
-			local applyDefaults = ctx.load("schema").applyDefaults
+			local applyDefaults = ctx.load("schema-check").applyDefaults
 			local s = schema.object({ count = schema.number().default(10), name = schema.string() })
 			local filled = applyDefaults(s, { name = "a" })
 			t.eq(filled.count, 10)

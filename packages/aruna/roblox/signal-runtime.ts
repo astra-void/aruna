@@ -8,7 +8,8 @@
 // them; the client drops payloads that fail schema validation before invoking
 // handlers.
 
-import { firstSchemaIssue, type Schema } from "./schema";
+import type { Schema } from "./schema";
+import { firstSchemaIssue } from "./schema-check";
 import type { InferSignalPayload, SignalDefinition } from "./signal";
 import { isWireSafe } from "./serialization";
 import { decodeBinary, encodeBinary } from "./binary";

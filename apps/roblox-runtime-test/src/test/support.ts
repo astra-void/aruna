@@ -1,6 +1,6 @@
 // Helpers shared by the runtime specs. Not a spec itself: the runner loads every
 // compiled module under the test tree, and this one registers no tests.
-import { REMOTE_NAME } from "aruna/roblox";
+import { REMOTE_NAME } from "aruna/internal/roblox-constants";
 
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 

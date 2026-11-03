@@ -13,11 +13,11 @@ import { schema } from "aruna/schema";
 import {
   createTestPlayer,
   createTestServerApp,
-  deepEquals,
   describe,
   expect,
   it,
 } from "aruna/testing";
+import { deepEquals } from "aruna/internal/testing-framework";
 import { createActionRateLimiter } from "aruna/internal/rate-limit";
 import { rejectionOf, waitUntil, wireRemote } from "./support";
 

@@ -3,7 +3,7 @@
 // test harness's channel — batched where the order a client reads things in is
 // the point.
 import { bindRemoteActions, createRemoteResourceClient, defineAction, defineResource } from "aruna/roblox";
-import { createActionRegistry } from "aruna/server";
+import { createActionRegistry } from "aruna/internal/server-runtime";
 import { createResourceHost } from "aruna/internal/resource";
 import { schema } from "aruna/schema";
 import { createTestPlayer, createTestServerApp, describe, expect, it } from "aruna/testing";

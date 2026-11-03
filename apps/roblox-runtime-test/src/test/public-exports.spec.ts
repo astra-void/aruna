@@ -2,16 +2,17 @@
 // transport dispatches into a server app, the schema builders, and the Roblox
 // remote helpers. Ported from packages/aruna/test/public-exports.test.ts, which
 // exercised the same contract through the (now retired) Node runtime.
-import { clearActionInvoker, createClientApp, createNetworkMetrics, invokeAction } from "aruna/client";
+import { createClientApp, createNetworkMetrics, invokeAction } from "aruna/client";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
 import {
-  REMOTE_NAME,
-  SIGNAL_UNRELIABLE_REMOTE_NAME,
   bindActions,
   createActionInvoker,
   defineAction as defineActionRoblox,
   robloxRemoteEvent,
 } from "aruna/roblox";
-import { decodeBinary, encodeBinary, schema, schemaFingerprint } from "aruna/schema";
+import { REMOTE_NAME, SIGNAL_UNRELIABLE_REMOTE_NAME } from "aruna/internal/roblox-constants";
+import { decodeBinary, encodeBinary, schema } from "aruna/schema";
+import { schemaFingerprint } from "aruna/internal/binary";
 import { createServerApp, defineAction } from "aruna/server";
 import { afterEach, describe, expect, it } from "aruna/testing";
 
@@ -90,6 +91,8 @@ describe("public exports", () => {
   });
 
   it("exposes the default Roblox action remote helpers", () => {
+    // The remote names are internal constants, but a game sees them in the
+    // DataModel, so they must not change by accident.
     expect(REMOTE_NAME).toBe("ArunaRemoteEvent");
     expect(SIGNAL_UNRELIABLE_REMOTE_NAME).toBe("ArunaSignalUnreliableRemoteEvent");
     expect(typeIs(robloxRemoteEvent, "function")).toBe(true);

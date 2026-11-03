@@ -232,7 +232,7 @@ import { createCancelToken, isActionCancelledError } from "aruna/client";
 
 const token = createCancelToken();
 purchaseItem({ itemId: "sword", quantity: 1 }, { signal: token }).catch((err) => {
-  if (isActionCancelledError(err)) return; // name: "ActionCancelledError"
+  if (isActionCancelledError(err)) return; // name: ACTION_CANCELLED_ERROR_NAME
   warn(err);
 });
 
@@ -289,7 +289,8 @@ createClientApp({
 
 The client compares the hashes once, when `createClientApp` runs. On a mismatch it calls
 `onVersionMismatch`. With `rejectOnMismatch`, every call then rejects with
-`ActionVersionMismatchError` (`isActionVersionMismatchError(err)`) without being sent.
+`ActionVersionMismatchError` (`isActionVersionMismatchError(err)`, or compare with
+`ACTION_VERSION_MISMATCH_ERROR_NAME`) without being sent.
 Without it, calls go out as usual. A server that advertises no hash is treated as
 unknown, not as a mismatch. The check needs the default transport; with your own
 `transport`, these options are ignored.

@@ -6,7 +6,8 @@
 // from `createActionInvoker` through `robloxRemoteEvent()` and back.
 import { defineAction, createActionInvoker, robloxRemoteEvent } from "aruna/roblox";
 import { createServerApp, type ActionMap } from "aruna/server";
-import { clearActionInvoker, createClientApp, invokeAction } from "aruna/client";
+import { createClientApp, invokeAction } from "aruna/client";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
 import { afterEach, describe, expect, it } from "aruna/testing";
 import { rejectionOf } from "./support";
 

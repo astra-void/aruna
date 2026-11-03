@@ -13,6 +13,12 @@ import type { ServerAppBinding, ServerTransport } from "./server-app";
 import type { Schema } from "./schema";
 import { isIdempotencyKey } from "./idempotency";
 import {
+	CONTRACT_HASH_ATTRIBUTE_NAME,
+	DEFAULT_ACTION_REQUEST_TIMEOUT_MS,
+	REMOTE_NAME,
+	SIGNAL_UNRELIABLE_REMOTE_NAME,
+} from "./roblox-constants";
+import {
 	admitResourceItem,
 	answerOptimisticCall,
 	createResourceClient as createChannelResourceClient,
@@ -98,7 +104,31 @@ export type {
 export * from "./datastore";
 // The wire protocol the transports speak (docs/wire-protocol.md): the frame
 // codec and the per-frame outbox, for a remote you wire yourself.
-export * from "./wire";
+export {
+	createClientChannel,
+	createServerChannel,
+} from "./wire";
+export type {
+	ClientChannel,
+	ServerChannel,
+	WireBatchOptions,
+	WireCall,
+	WireCallReceiver,
+	WireCallSender,
+	WireClientRemote,
+	WireFrame,
+	WireFrameObserver,
+	WireFrameRead,
+	WireFrameRejection,
+	WireFrameScheduler,
+	WireOutbox,
+	WireProtocolErrorHandler,
+	WireResourceState,
+	WireResourceSubscription,
+	WireResponse,
+	WireServerRemote,
+	WireSignal,
+} from "./wire";
 
 // `defineResource` with the player typed as `Player`, as `defineAction` here is.
 export function defineResource<
@@ -124,14 +154,6 @@ export function defineAction<
 	return definition;
 }
 
-// The one reliable remote: action calls one way; action responses and reliable
-// signals the other, through one ordered channel per player
-// (docs/wire-protocol.md).
-export const REMOTE_NAME = "ArunaRemoteEvent";
-export const SIGNAL_UNRELIABLE_REMOTE_NAME = "ArunaSignalUnreliableRemoteEvent";
-// Attribute on the remote where the server advertises its contract hash, so a
-// client with a mismatched compiled-in hash can detect a deploy skew.
-export const CONTRACT_HASH_ATTRIBUTE_NAME = "ArunaContractHash";
 
 interface ActionResponsePayload {
 	readonly ok: boolean;
@@ -292,10 +314,6 @@ function defaultRequestId(): string {
 	requestCounter += 1;
 	return `aruna-${requestCounter}`;
 }
-
-// The default request timeout, applied when requestTimeoutMs is not given.
-// Pass requestTimeoutMs: 0 to explicitly opt out (wait forever).
-export const DEFAULT_ACTION_REQUEST_TIMEOUT_MS = 10_000;
 
 // `batching` (default true) sends this invoker's calls once per frame.
 export interface RemoteActionInvokerOptions extends WireBatchOptions {

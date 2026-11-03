@@ -2,14 +2,15 @@
 // publisher (so the signal remote is ensured at boot), the client app owns the
 // subscriber and exposes an injection-friendly `invoke`, and the app-owned
 // publisher reaches every action as `ctx.publisher` on both dispatch paths.
-import { clearActionInvoker, createClientApp } from "aruna/client";
+import { createClientApp } from "aruna/client";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
 import {
   createActionDefiner,
   createSignalPublisher,
   createSignalSubscriber,
-  REMOTE_NAME,
   robloxRemoteEvent,
 } from "aruna/roblox";
+import { REMOTE_NAME } from "aruna/internal/roblox-constants";
 import { schema } from "aruna/schema";
 import { createServerApp, defineSignal } from "aruna/server";
 import { afterEach, describe, expect, it } from "aruna/testing";

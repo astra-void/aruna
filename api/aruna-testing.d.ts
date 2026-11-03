@@ -203,8 +203,6 @@ export declare function afterEach(hook: TestHook): void;
 
 export declare function beforeEach(hook: TestHook): void;
 
-export declare function collectedTestCount(): number;
-
 export declare function createTestNetwork<TSignals extends SignalMap = SignalMap, TSession = unknown>(options: CreateTestNetworkOptions<TSignals, TSession>): TestNetwork<TSignals>;
 
 export declare function createTestPlayer(options?: CreateTestPlayerOptions): Player;
@@ -213,21 +211,13 @@ export declare function createTestServerApp<TPlayer extends defined = Player, TS
 
 export declare function createTestStoreBackend(nowMs?: () => number): TestStoreBackend;
 
-export declare function deepEquals(actual: unknown, expected: unknown): boolean;
-
 export declare function describe(name: string, body: () => void): void;
-
-export declare function describeThrown(value: unknown): string;
 
 export declare function expect(actual: unknown): Expectation;
 
 export declare function it(name: string, body: TestBody): void;
 
 export declare function itSkip(name: string, body: TestBody): void;
-
-export declare function resetTests(): void;
-
-export declare function runTests(options?: RunTestsOptions): Promise<TestReport>;
 
 // Referenced by the exports above, not exported from this entry:
 

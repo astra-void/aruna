@@ -23,16 +23,18 @@
 import {
   afterEach as arunaAfterEach,
   beforeEach as arunaBeforeEach,
-  collectedTestCount,
-  deepEquals,
   describe as arunaDescribe,
-  describeThrown,
   expect as arunaExpect,
   it as arunaIt,
   itSkip as arunaItSkip,
+} from "aruna/testing";
+import {
+  collectedTestCount,
+  deepEquals,
+  describeThrown,
   resetTests,
   runTests,
-} from "aruna/testing";
+} from "aruna/internal/testing-framework";
 
 // The outer suite is written with the same framework; the aliases above are the
 // "under test" side, these the "asserting" side — mirroring the vitest file.

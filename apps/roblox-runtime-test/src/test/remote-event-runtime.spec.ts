@@ -15,16 +15,17 @@
 // There is no injectable timer scheduler (`task` is a frozen library under Lune),
 // so timeouts are observed with real, short timers.
 import {
-  REMOTE_NAME,
-  CONTRACT_HASH_ATTRIBUTE_NAME,
-  DEFAULT_ACTION_REQUEST_TIMEOUT_MS,
   bindActions,
   createActionInvoker,
   defineAction,
   robloxRemoteEvent,
 } from "aruna/roblox";
 import {
-  clearActionInvoker,
+  REMOTE_NAME,
+  CONTRACT_HASH_ATTRIBUTE_NAME,
+  DEFAULT_ACTION_REQUEST_TIMEOUT_MS,
+} from "aruna/internal/roblox-constants";
+import {
   createCancelToken,
   createClientApp,
   invokeAction,
@@ -36,7 +37,9 @@ import {
   type ClientMiddleware,
   type VersionMismatchInfo,
 } from "aruna/client";
-import { createActionRegistry, createServerApp, type ActionMap } from "aruna/server";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
+import { createServerApp, type ActionMap } from "aruna/server";
+import { createActionRegistry } from "aruna/internal/server-runtime";
 import { schema } from "aruna/schema";
 import { afterEach, beforeEach, describe, expect, it } from "aruna/testing";
 import { rejectionOf, waitUntil, wireRemote } from "./support";

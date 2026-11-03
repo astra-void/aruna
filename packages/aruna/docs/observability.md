@@ -80,6 +80,9 @@ Resource: quests.progress
 | Refused before dispatch | `onAbuse` | Envelopes dropped before any action ran (malformed, over budget, unknown action or resource). |
 | Est. bytes, frames, items | frames this runtime built | Aruna's [size accounting](../../../docs/wire-protocol.md#size-accounting): 8 bytes a value plus string bytes. **An estimate**: Roblox does not document its encoding. A broadcast counts once. |
 
+To size a value the same way, call `estimateWireBytes(value)` from `aruna/server` or
+`aruna/client`, for example to check a payload against Roblox's limits before sending it.
+
 Percentiles are nearest-rank over the last `samples` values; the text report leaves P95
 out below 20 samples rather than print a number that means nothing.
 

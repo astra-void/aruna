@@ -14,8 +14,10 @@ import {
   defineAction,
   robloxRemoteEvent,
 } from "aruna/roblox";
-import { clearActionInvoker, createClientApp } from "aruna/client";
-import { createActionRegistry, createServerApp, defineSignal, type ActionMap } from "aruna/server";
+import { createClientApp } from "aruna/client";
+import { clearActionInvoker } from "aruna/internal/client-runtime";
+import { createServerApp, defineSignal, type ActionMap } from "aruna/server";
+import { createActionRegistry } from "aruna/internal/server-runtime";
 import { schema } from "aruna/schema";
 import { afterEach, describe, expect, it } from "aruna/testing";
 import {

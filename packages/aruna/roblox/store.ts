@@ -18,7 +18,8 @@
 //   * Versioned payloads. Every write carries a version and a timestamp, so an
 //     older record can be migrated forward instead of silently reinterpreted.
 
-import { applyDefaults, firstSchemaIssue, type Infer, type Schema } from "./schema";
+import type { Infer, Schema } from "./schema";
+import { applyDefaults, firstSchemaIssue } from "./schema-check";
 
 export const STORE_MAX_KEY_LENGTH = 50;
 export const STORE_MAX_VALUE_BYTES = 4_194_304;

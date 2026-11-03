@@ -754,7 +754,7 @@ Requires `entries: "generated"` — the generated server entry is what runs them
 
 ## Binary serialization
 
-`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed Luau `buffer`, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint** (`schemaFingerprint(schema)`): decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
+`encodeBinary` / `decodeBinary` pack a schema-conforming value into a tightly packed Luau `buffer`, using the schema as the layout. Because both sides share the schema, no field names or type tags travel on the wire — only a 4-byte frame header plus the payload bytes. The header is a u32 **schema fingerprint**, a hash of the schema's layout: decoding is positional, so a peer holding a different schema version would silently mis-read the bytes — the fingerprint check turns that into an immediate typed error instead.
 
 ```ts
 import { decodeBinary, encodeBinary, schema } from "aruna/schema";

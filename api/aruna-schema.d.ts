@@ -71,13 +71,9 @@ export interface StringSchemaChain extends Schema<string> {
     readonly default: (value: string) => Schema<string>;
 }
 
-export declare function applyDefaults(schema: Schema, value: unknown): unknown;
-
 export declare function decodeBinary(schema: Schema, buf: buffer): unknown;
 
 export declare function encodeBinary(schema: Schema, value: unknown): buffer;
-
-export declare function firstSchemaIssue(schema: Schema, value: unknown, path?: string): string | undefined;
 
 export declare const schema: {
     string: () => StringSchemaChain;
@@ -109,8 +105,6 @@ export declare const schema: {
     brickColor: typeof brickColorSchema;
     instance: typeof instanceSchema;
 };
-
-export declare function schemaFingerprint(schema: Schema): number;
 
 // Referenced by the exports above, not exported from this entry:
 
