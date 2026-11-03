@@ -222,6 +222,78 @@ server crash mid-dispatch — rejects instead of hanging forever). Tune it with
 You can also call the low-level `invokeAction(actionId, input, options?)` from
 `aruna/client` directly, but prefer the generated typed stubs.
 
+### Cancelling a call
+
+Pass a cancel token as `signal` to stop waiting for a call, for example when the UI that
+made it closes:
+
+```ts
+import { createCancelToken, isActionCancelledError } from "aruna/client";
+
+const token = createCancelToken();
+purchaseItem({ itemId: "sword", quantity: 1 }, { signal: token }).catch((err) => {
+  if (isActionCancelledError(err)) return; // name: "ActionCancelledError"
+  warn(err);
+});
+
+token.cancel();
+```
+
+Cancelling only settles the call on the client. A request already sent still runs on
+the server, so a cancelled purchase may still go through. Use cancellation for calls whose
+result you no longer need, not to undo one. A token that is already cancelled rejects
+before anything is sent, and a fire-and-forget call ignores the token.
+
+### Client middleware
+
+`createClientApp({ middleware })` wraps every call the app makes, generated stubs
+included. A middleware gets the call and a `next` that sends it:
+
+```ts
+import { createClientApp, type ClientMiddleware } from "aruna/client";
+
+const timing: ClientMiddleware = (info, next) => {
+  const started = os.clock();
+  return next().finally(() => print(`${info.actionId}: ${os.clock() - started}s`));
+};
+
+createClientApp({ middleware: [timing] });
+```
+
+`info` is `{ actionId, input, options }`. The first middleware in the list is the
+outermost. With `retry` set as well, retry wraps the middleware, so every attempt runs
+the middleware again. For a transport you build yourself, `withClientMiddleware(invoker,
+middleware)` does the same wrapping.
+
+### Detecting a client built for another server
+
+Both generated modules export `contractHash`, a hash of what crosses the wire: every
+action's, signal's and resource's id, schemas and serialization (rate limits are not part
+of it). Give it to both sides, and a client whose build does not match the
+server's finds out when it starts, instead of sending payloads the server reads
+differently:
+
+```ts
+// server
+import { contractHash } from "$aruna/actions/server";
+createServerApp({ actions, transport: robloxRemoteEvent({ contractHash }) });
+
+// client
+import { contractHash } from "$aruna/actions/client";
+createClientApp({
+  expectedContractHash: contractHash,
+  onVersionMismatch: ({ expected, actual }) => warn(`client ${expected}, server ${actual}`),
+  rejectOnMismatch: true,
+});
+```
+
+The client compares the hashes once, when `createClientApp` runs. On a mismatch it calls
+`onVersionMismatch`. With `rejectOnMismatch`, every call then rejects with
+`ActionVersionMismatchError` (`isActionVersionMismatchError(err)`) without being sent.
+Without it, calls go out as usual. A server that advertises no hash is treated as
+unknown, not as a mismatch. The check needs the default transport; with your own
+`transport`, these options are ignored.
+
 ## Rate limiting
 
 Limits are keyed per player (`key: "player"`, the default) or server-wide

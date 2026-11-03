@@ -34,12 +34,16 @@ relative to the file, with no `baseUrl`. They are NOT the npm subpath exports
 - [Getting started](./docs/getting-started.md): install, project shape, the build loop, a full minimal action round-trip.
 - [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits (fixed window or token bucket), the request budget and `onAbuse`, declared `errors` and `ctx.fail`, fire-and-forget, `ctx.player`, `ctx.publisher`, contract change rules.
 - [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber, publishing from inside an action (`ctx.publisher` / `createActionDefiner`).
+- [Resources](./docs/resources.md): `defineResource`, server-loaded state a client subscribes to, invalidation, load timeouts, what is and is not guaranteed.
 - [Stores](./docs/stores.md): `defineStore` / `definePlayerStore`, `StoreResult` error taxonomy, session locking, migrations, `createServerApp({ playerStore })` and `ctx.store`.
 - [Schema](./docs/schema.md): every `schema.*` builder, numeric width hints, Roblox userdata (vector3/color3/cframe), inference.
 - [UI bindings](./docs/ui.md): `aruna/ui` for React and Vide — reading a resource, a call's pending/error state, `exclusive`, Vide's scope rules, per-call stub options.
+- [Observability](./docs/observability.md): `aruna inspect network`, `createNetworkMetrics()`, `onReject`.
+- [Shared safety](./docs/shared-safety.md): what code in shared modules may reach, and what the static check cannot see.
 - [Testing](./docs/testing.md): `aruna test`, `aruna/testing` (`createTestServerApp`, `createTestPlayer`, `describe`/`it`/`expect`), what the game build does with specs.
 - [CLI](./docs/cli.md): `aruna build`/`check`/`init`/`doctor`/`inspect`/`contract`, flags, what each generates.
-- [Troubleshooting](./docs/troubleshooting.md): what each common setup error means and how to fix it — native compiler not available or not loaded, TypeScript pin skew, missing rbxtsc, Rojo project not mounting out/, unresolved `$aruna/...` imports and `aruna::111`, Lune missing, Studio sync.
+- [Troubleshooting](./docs/troubleshooting.md): what each common setup error means and how to fix it — native compiler not available or not loaded, TypeScript pin skew, missing rbxtsc, Rojo project not mounting out/, unresolved `$aruna/...` imports and `aruna::111`, Lune missing, Studio sync — and runtime failures: the client waiting on `ArunaRemoteEvent`, `ActionTimeoutError`, masked `ActionInternalError`, rate limits, contract mismatch, the in-memory Studio store, `StoreLockedError`.
+- [Before you ship](./docs/production.md): a production checklist — authorization, rate limits, error logging, store readiness and budget, the contract snapshot in CI, deploy skew, and what is not implemented yet.
 - [Architecture](./docs/architecture.md): module boundaries, the client/server/shared partition, generated modules, the runtime, binary codec.
 
 ## Rules of thumb (read before writing Aruna code)

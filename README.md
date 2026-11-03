@@ -47,6 +47,10 @@ npm create aruna-app@latest my-game
 Then follow [getting-started.md](packages/aruna/docs/getting-started.md). To add Aruna to an
 existing roblox-ts project, install `@arunajs/aruna` and run `aruna init`.
 
+If something does not build or load, see
+[troubleshooting.md](packages/aruna/docs/troubleshooting.md). Before going live, go through
+[production.md](packages/aruna/docs/production.md).
+
 ## Recommended Layout v0
 
 This is the recommended project shape for starters, examples, docs, and MVP fixtures:
