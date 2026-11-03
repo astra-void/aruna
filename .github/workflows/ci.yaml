@@ -136,7 +136,33 @@ jobs:
       # Builds every package, then runs the vitest suites, the Luau execution
       # tests under Lune, and the harness specs through `aruna test`.
       - name: Test
+        if: runner.os != 'Windows'
         run: pnpm test
+
+      # Same as `pnpm test`, instrumented: on Windows turbo has exited 1 with no
+      # failing task, no task output and no summary (DEV-35; publish run
+      # 41585970426, attempt 1). Streamed logs print each task's lines as they
+      # happen, so the last task to speak before an exit shows; --continue keeps
+      # the other tasks running so one failure doesn't hide another; the run
+      # summary records every task's exit code when turbo gets that far.
+      - name: Test
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pnpm build:native
+          status=0
+          pnpm exec turbo run test --log-order=stream --continue --summarize || status=$?
+          echo "turbo exited with $status"
+          exit "$status"
+
+      - name: Upload the turbo run summary
+        if: failure() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: turbo-test-summary-windows
+          path: .turbo/runs/
+          if-no-files-found: warn
+          retention-days: 7
 
       # Every change to an exported name or type must show up in review as a
       # diff of api/*.d.ts (docs/stability.md). Fails when the committed report
