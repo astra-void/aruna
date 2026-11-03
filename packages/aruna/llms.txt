@@ -31,7 +31,7 @@ relative to the file, with no `baseUrl`. They are NOT the npm subpath exports
 
 ## Docs
 
-- [Getting started](./docs/getting-started.md): install, project shape, the build loop, a full minimal action round-trip.
+- [Getting started](./docs/getting-started.md): install, supported platforms and toolchain versions, project shape, the build loop, a full minimal action round-trip.
 - [Actions](./docs/actions.md): `defineAction`, server registration, client calls, rate limits (fixed window or token bucket), the request budget and `onAbuse`, declared `errors` and `ctx.fail`, fire-and-forget, `ctx.player`, `ctx.publisher`, contract change rules.
 - [Signals](./docs/signals.md): `defineSignal`, server publisher (`to`/`toMany`/`toAll`), client subscriber, publishing from inside an action (`ctx.publisher` / `createActionDefiner`).
 - [Resources](./docs/resources.md): `defineResource`, server-loaded state a client subscribes to, invalidation, load timeouts, what is and is not guaranteed.

@@ -36,7 +36,9 @@ under Lune, not in a real Studio server/client session or against the real DataS
 service. Treat production use accordingly until that validation lands.
 
 The native compiler ships prebuilt for macOS (arm64, x64), Linux (x64, arm64; glibc and
-musl), and Windows (x64, arm64). Other platforms get an error naming these.
+musl), and Windows (x64, arm64). Other platforms get an error naming these. What each
+target has been checked on is listed in
+[Supported platforms](packages/aruna/docs/getting-started.md#supported-platforms).
 
 ### Install
 

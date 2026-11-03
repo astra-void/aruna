@@ -6,6 +6,37 @@ push) once in TypeScript with schemas. The `aruna build` compiler classifies you
 generates typed stubs and a runtime, wires up tsconfig path aliases, and emits a
 Rojo-buildable project so server code lands in `ServerScriptService` (never replicated).
 
+## Supported platforms
+
+The compiler core is a native binary, published as one `@arunajs/compiler-<target>`
+package per target. npm installs the one that matches your machine. Every release builds
+all eight. Before publishing, each binary is loaded on a runner with the same OS, CPU and
+libc and called into, so a binary that can't run blocks the release.
+
+| Target | Loaded on | Full test suite runs on |
+| --- | --- | --- |
+| `darwin-arm64` | macOS 14, Apple silicon | maintainer machines |
+| `darwin-x64` | macOS 15, Intel | — |
+| `linux-x64-gnu` | Ubuntu, x64 | CI (every push) |
+| `linux-arm64-gnu` | Ubuntu 24.04, arm64 | — |
+| `linux-x64-musl` | Alpine (`node:22-alpine`), x64 | — |
+| `linux-arm64-musl` | Alpine (`node:22-alpine`), arm64 | — |
+| `win32-x64-msvc` | Windows, x64 | CI (every push) |
+| `win32-arm64-msvc` | Windows 11, arm64 | — |
+
+"Loaded on" means the binary loads in Node 22 there and answers a call into the
+compiler. A "—" means the whole CLI and test suite haven't run on that target yet. Other
+platforms (32-bit Windows, FreeBSD, …) get the [not available](./troubleshooting.md)
+error. There is no TypeScript fallback.
+
+**Toolchain.** Node 22 is the only version checked. `create-aruna-app` pins the rest:
+- roblox-ts 3.0.0 with TypeScript 5.5.3. `aruna doctor` warns when these two drift
+  apart.
+- Rojo 7.7.0 and Lune 0.10.0, through `rokit.toml`.
+
+**Roblox Studio:** not yet checked. Every runtime check runs the compiled Luau under
+Lune.
+
 ## Project shape
 
 A consumer project that uses Aruna looks roughly like this:
