@@ -4,11 +4,25 @@
 // limits, idempotency, signals, and resources.
 import { defineAction, defineResource } from "aruna/roblox";
 import { schema } from "aruna/schema";
-import { actionError, defineSignal, type ActionMiddleware } from "aruna/server";
+import {
+  actionError,
+  createMemoryStoreBackend,
+  createPlayerStore,
+  defineSignal,
+  type ActionMiddleware,
+  type StoreDocument,
+  type StoreScheduler,
+} from "aruna/server";
 import { createTestNetwork, describe, expect, it } from "aruna/testing";
 import { createWireFrame, WIRE_ITEM_CALL, WIRE_ITEM_RESOURCE_SUBSCRIPTION } from "aruna/internal/wire";
 
 type Wallet = { readonly coins: number };
+
+// Without a scheduler a player store arms its 30s heartbeat on a real
+// `task.delay`, which would keep Lune from draining.
+function parkedHeartbeats(): StoreScheduler {
+  return { delay: () => ({ cancel: () => undefined }) };
+}
 
 // A small game: coins per player behind a resource, an action that earns them,
 // a rate-limited action, a slow action, and two signals.
@@ -121,6 +135,70 @@ describe("test network: isolation", () => {
       expect(value).toBe(70);
     }
     expect(net.app.resources!.isSubscribed("economy.wallet", net.player(101))).toBe(false);
+    net.dispose();
+  });
+
+  it("does not let a client write another player's store by any field it sends", async () => {
+    const profile = schema.object({ coins: schema.number() });
+    const storeOptions = { backend: createMemoryStoreBackend(), owner: "server-a", scheduler: parkedHeartbeats() };
+    const playerStore = createPlayerStore<typeof profile, Player>(
+      { id: "player.profile", schema: profile, defaultValue: { coins: 0 } },
+      storeOptions,
+    );
+    const bank = createPlayerStore<typeof profile, Player>(
+      { id: "player.bank", schema: profile, defaultValue: { coins: 0 } },
+      storeOptions,
+    );
+    // The input names a target, and `run` writes whatever the app hands it:
+    // the only way to reach a document is ctx.store / ctx.stores.
+    const spend = defineAction({
+      id: "economy.spend",
+      input: schema.object({ userId: schema.u32() }),
+      run(ctx) {
+        const credit = (document: unknown) =>
+          (document as StoreDocument<{ readonly coins: number }> | undefined)?.update((current) => ({
+            coins: current.coins + 1,
+          }));
+        credit(ctx.store);
+        credit(ctx.stores?.["bank"]);
+        return true;
+      },
+    });
+    const net = createTestNetwork({
+      actions: { [spend.id]: spend },
+      players: [101, 202],
+      playerStore,
+      playerStores: { bank },
+    });
+    const alice = net.player(101);
+    const bob = net.player(202);
+    await playerStore.waitFor(alice);
+    await playerStore.waitFor(bob);
+    await bank.waitFor(alice);
+    await bank.waitFor(bob);
+
+    // Bob names Alice in the input, in undeclared input fields, and on the item.
+    const called = net.client(202).invoke("economy.spend", { userId: 101 });
+    net.link(202).up.inject(
+      createWireFrame([
+        {
+          t: WIRE_ITEM_CALL,
+          i: "forged",
+          a: "economy.spend",
+          d: { userId: 101, player: 101, UserId: 101, key: "player_101" },
+          userId: 101,
+          p: 101,
+        },
+      ]),
+    );
+    net.flush();
+    expect(await called).toBe(true);
+
+    const coins = (store: typeof playerStore, player: Player) => store.get(player)?.get().coins;
+    expect(coins(playerStore, alice)).toBe(0);
+    expect(coins(bank, alice)).toBe(0);
+    expect(coins(playerStore, bob)).toBe(2);
+    expect(coins(bank, bob)).toBe(2);
     net.dispose();
   });
 
