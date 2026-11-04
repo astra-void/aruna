@@ -162,6 +162,13 @@ return function(ctx)
 			t.contains(value.error, "n: expected finite number")
 		end)
 
+		-- A fixed window is aligned to the clock, so two calls on either side of a
+		-- window boundary land in different windows. On the real clock that happened
+		-- now and then in CI; a frozen clock keeps both calls in one window.
+		local function frozenClock()
+			return 1_000
+		end
+
 		t.it("enforces the rate limit", function()
 			local r = createActionRegistry({
 				limited = {
@@ -171,7 +178,7 @@ return function(ctx)
 						return true
 					end,
 				},
-			})
+			}, { nowMs = frozenClock })
 			local _, _, first = t.await(r.dispatch(player, "limited", nil))
 			t.isTrue(first.ok)
 			local _, _, second = t.await(r.dispatch(player, "limited", nil))
@@ -190,7 +197,7 @@ return function(ctx)
 						return true
 					end,
 				},
-			}, { defaultRateLimit = { key = "global", windowMs = 60_000, max = 1 } })
+			}, { defaultRateLimit = { key = "global", windowMs = 60_000, max = 1 }, nowMs = frozenClock })
 			local _, _, first = t.await(r.dispatch(player, "plain", nil))
 			t.isTrue(first.ok)
 			local _, _, second = t.await(r.dispatch(player, "plain", nil))
@@ -207,7 +214,7 @@ return function(ctx)
 						return true
 					end,
 				},
-			}, { defaultRateLimit = { key = "global", windowMs = 60_000, max = 1 } })
+			}, { defaultRateLimit = { key = "global", windowMs = 60_000, max = 1 }, nowMs = frozenClock })
 			local _, _, first = t.await(r.dispatch(player, "loose", nil))
 			t.isTrue(first.ok)
 			local _, _, second = t.await(r.dispatch(player, "loose", nil))

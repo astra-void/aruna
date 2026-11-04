@@ -164,7 +164,10 @@ describe("action rate limits", () => {
     const fixture = counter();
     const app = createServerApp({
       actions: { "shop.purchaseItem": fixture.action("shop.purchaseItem") },
-      defaultRateLimit: { key: "player", windowMs: 1000, max: 1 },
+      // An hour, not a second: this case runs on the real clock (no `nowMs`), and a
+      // fixed window is aligned to it, so two calls straddling a boundary would
+      // both pass. With a one-second window that happened often enough to matter.
+      defaultRateLimit: { key: "player", windowMs: 3_600_000, max: 1 },
     });
     const player = createTestPlayer();
 

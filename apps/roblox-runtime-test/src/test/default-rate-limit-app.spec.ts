@@ -40,6 +40,9 @@ describe("createServerApp defaultRateLimit reaches the RemoteEvent dispatch path
     const serverApp = createServerApp({
       actions,
       defaultRateLimit: { key: "player", windowMs: 60_000, max: 1 },
+      // A fixed window is aligned to the clock: on the real one, two calls can
+      // straddle a boundary and both pass. Frozen, they share one window.
+      nowMs: () => 1_000,
       transport: robloxRemoteEvent(),
     });
     const clientApp = createClientApp({ transport: createActionInvoker() });
