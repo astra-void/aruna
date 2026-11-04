@@ -142,7 +142,7 @@ the game build like any other module.
 - **Readiness**: `PlayerStore.status(player)` — `idle`, `loading`, `ready`
   (`isNew`, `memoryOnly`), `failed` (`locked`, `error`), `released` — and
   `app.stores` (`status`, `isReady`, `ready`). `MemoryStoreBackend` is marked
-  `memory: true` (`isMemoryStoreBackend`).
+  `memory: true`, which is what `memoryOnly` reports.
 - **`describeStoreError(error, info)`**: one log line per store failure with its
   store, operation, key, category, retryability, attempts, and retry delay, and
   none of the record's data.
@@ -835,7 +835,10 @@ the game build like any other module.
     `defaultStoreScheduler`, `emptyStoreMeta`, `recordStoreReceipt`,
     `hasStoreReceipt`, `measureStoreValueBytes`, `findStoreValueViolation`,
     `validateStoreKey`, `resolveStoreDefault`, `resolveStoreVersion`,
-    `isMemoryStoreBackend`).
+    `isMemoryStoreBackend`). To tell whether a player's data persists, read
+    `playerStore.status(player).memoryOnly` once the document is ready. It
+    covers both a backend you passed in and the Studio fallback, which
+    `isMemoryStoreBackend(backend)` alone missed.
   - `aruna/roblox`: the frame codec (`createWireFrame`, `readWireFrame`,
     `createWireOutbox`, `WIRE_ITEM_*`, `WIRE_PROTOCOL_VERSION`,
     `WIRE_MAX_FRAME_ITEMS`, `setWireFrameObserver`, `currentWireFrameObserver`,
