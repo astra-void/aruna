@@ -35,7 +35,8 @@ export function probeLune(bin = "lune"): LuneProbe {
       kind: "missing",
       reason:
         "lune was not found on PATH. Specs are compiled to Luau and run under Lune — " +
-        "install it with `rokit add lune-org/lune` (or see https://lune-org.github.io) and retry.",
+        "run `rokit install` (a create-aruna-app project pins it in rokit.toml; otherwise " +
+        "`rokit add lune-org/lune`, or see https://lune-org.github.io) and retry.",
     };
   }
   return { kind: "found", bin, version: (result.stdout ?? "").trim() };

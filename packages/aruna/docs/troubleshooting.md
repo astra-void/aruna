@@ -106,8 +106,14 @@ current layout does not emit, usually after upgrading Aruna. Run `aruna doctor -
 ## "lune was not found on PATH" from `aruna test`
 
 `aruna test` compiles specs to Luau and runs them under [Lune](https://lune-org.github.io).
-Install it with `rokit add lune-org/lune` (a `create-aruna-app` project already lists it in
-`rokit.toml`; run `rokit install`).
+In a `create-aruna-app` project it's already pinned in `rokit.toml`: run `rokit install`.
+Elsewhere, add it with `rokit add lune-org/lune`.
+
+## "rojo not found on PATH" from `aruna dev`
+
+`aruna dev` serves the place to Studio through `rojo serve`. In a `create-aruna-app` project
+Rojo is already pinned in `rokit.toml`: run `rokit install`. Elsewhere, add it with
+`rokit add rojo-rbx/rojo`, or pass `--no-rojo` to rebuild on save without serving.
 
 ## Studio does not pick up changes
 

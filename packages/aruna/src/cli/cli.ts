@@ -1062,7 +1062,7 @@ function spawnRojoServe(
   child.on("error", (error: NodeJS.ErrnoException) => {
     const detail =
       error.code === "ENOENT"
-        ? "rojo not found on PATH — install it (e.g. `rokit add rojo-rbx/rojo`) or pass --no-rojo"
+        ? "rojo not found on PATH — run `rokit install` (a create-aruna-app project pins it in rokit.toml; otherwise `rokit add rojo-rbx/rojo`) or pass --no-rojo"
         : error.message;
     process.stderr.write(`${formatWarning(`failed to launch rojo serve: ${detail}`, colors)}\n`);
   });

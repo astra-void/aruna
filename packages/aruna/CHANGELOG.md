@@ -910,6 +910,12 @@ the game build like any other module.
 
 ### Fixed
 
+- **A new project's next steps skipped installing Rojo and Lune.** The starter pins both
+  in `rokit.toml`, but `create-aruna-app` went straight to `npm run dev`, and the
+  "rojo not found" / "lune was not found" messages said `rokit add …`, which re-adds a tool
+  the project already pins. The next steps now include `rokit install`, and both messages
+  say to run it.
+
 - **A duplicate signal id was reported as `internal-compiler-error`.** The
   compiler emitted `aruna::563` without a name for it, so the lookup fell back to
   the internal-error name. It is `duplicate-signal-id` now.

@@ -302,8 +302,9 @@ aruna test --filter shop      # only specs whose path contains "shop"
 `aruna test` runs the full build first, so the generated stubs and the vendored runtime
 are current before anything compiles.
 
-**Lune is required.** It is not an npm package; install it with
-`rokit add lune-org/lune` (or see the Lune docs). Without it `aruna test` stops and says
+**Lune is required.** It is not an npm package. A `create-aruna-app` project pins it in
+`rokit.toml`, so `rokit install` is enough; elsewhere, `rokit add lune-org/lune` (or see the
+Lune docs). Without it `aruna test` stops and says
 so rather than pretending the suite passed — so a CI job that runs it has to install Lune
 too. If you would rather have CI skip the specs than fail on a machine without the Roblox
 toolchain, probe for Lune in your own script and call `aruna test` only when it is there

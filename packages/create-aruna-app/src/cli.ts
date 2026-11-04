@@ -42,6 +42,7 @@ function printNextSteps(appName: string, pm: PackageManager, fromStep: number): 
   for (const step of POST_INSTALL_ARUNA_STEPS.slice(Math.max(fromStep - 1, 0))) {
     lines.push(`  npx aruna ${step.args.join(" ")}   # ${step.description}`);
   }
+  lines.push("  rokit install   # Rojo and Lune, pinned in rokit.toml");
   lines.push(`  ${pm === "npm" ? "npm run" : pm} dev`);
   process.stdout.write(`\nnext steps\n${lines.join("\n")}\n`);
 }
